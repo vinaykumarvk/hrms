@@ -1,0 +1,5 @@
+﻿"Metric Name","Metric Code",Description,"Created On","Updated On"
+Percentage,DB_Default_Metric_Percentage,"Darwinbox default metric - Percentage"," 11-02-2024 01:33:02",
+Number,DB_Default_Metric_Number,"Darwinbox default metric - Number"," 11-02-2024 01:33:02",
+INR,DB_Default_Metric_INR,"Darwinbox default metric - INR"," 11-02-2024 01:33:02",
+USD,DB_Defualt_Metric_USD,"Darwinbox default metric - USD"," 11-02-2024 01:33:02",

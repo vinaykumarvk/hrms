@@ -1,0 +1,251 @@
+PrimeSoft HRMS ��� Foundation Functional Specification v1.6
+
+# PrimeSoft HRMS — Foundation Functional Specification
+|  |  |
+| Version | v1.6 (Manager-review R3 follow-up: employee-context reportee view, Admin-workspace exclusivity resolved (OPEN-FS-FND-05); prior v1.5 Manager-review: Team-appraisals rename, Performance heading folded, goal tasks, Workspace model; prior v1.4 Employee-review: Tasks/Notifications/Settings + AI Assistant menu rows; KB folded; catalogue within tickets; launcher trimmed) — was v1.3 |
+| Update | Adds Employee Directory + Org Chart to the standard menu entitlement (all roles; Recruiter limited) and registers the shared “Request change → approval” and read-only mini-profile UI states (Batch-1 Employee review). |
+| Reconciliation | v1.2 folds in M11 + M17 ids and the Org-Admin Master-Data and Configuration validation ids (master-unique + flow). v1.1 added M11/M17. Closes OPEN-FS-FND-04, OPEN-FS-ORG-03, OPEN-FS-CFG-06. |
+| Status | Draft for review |
+| Classification | Confidential |
+| Role | Hub FS. Holds only cross-cutting build content that must be singular. Every per-module FS (M01–M09, M11, …) and the Admin FS reference this document by id and section. |
+| References | BRD v7.5 (§3 RBAC, §4 data model, §6 API, §7 NFR, §9 Notifications, §10 Reporting); RBAC Design Document v1.1; Platform Specification (P01–P06, X.1–X.3, W.1–W.3 — to be authored); the eight module FS (M01, M02, M03, M04, M05, M08, M09 + M11). |
+| Source mining | IDs consolidated from the module FS as authored: 36 validation entries, 43 scheduled jobs, 67 notification + 27 error message ids. |
+
+
+## 0. Purpose & Non-Repetition Contract
+References: BRD (authoritative for requirements); functional-spec-author non-repetition protocol.
+This document is the single source of truth for the build-layer content shared across every module: API conventions, the validation library, the UI-state standard and component vocabulary, the scheduled-jobs index, the message catalogue, and the menu/navigation entitlement map. The governing rule is single source of truth — each fact lives in exactly one place. The BRD owns requirements, rules, the data model, the RBAC matrix, NFR targets, notification triggers, and state machines; this Foundation FS references them and authors only the build detail the BRD leaves out. Each module FS references the ids defined here and authors only what is unique to that module.
+Where the BRD or prototype leaves a genuine gap, this document uses flag-and-recommend: it proposes a spec marked PROPOSED — confirm before build in §8 Open Items, never silently in the body.
+
+## 1. API Conventions
+References: BRD §6.2 (Standard Response Format), §6.3 (Rate Limiting), §6.4 (endpoint inventory), §7.4 (security NFR). Authored here: only the conventions the BRD does not state.
+The standard success/error envelope is fixed by BRD §6.2 (JSON; 2xx with resource payload; 4xx/5xx with { error: { code, message, field, details } }) and rate limiting by BRD §6.3 — neither is restated here. This section adds the cross-cutting contract behaviour every module endpoint inherits and the BRD does not pin down.
+| Convention | Rule (authored) |
+| Versioning | All endpoints under /api/v1. Breaking changes ship under a new major prefix; additive fields are non-breaking. |
+| Idempotency | All unsafe POSTs that create a transaction accept an Idempotency-Key header; a repeat within 24h returns the original result, not a duplicate. Required for workflow-initiating POSTs (leave/attendance/separation/offer). |
+| Pagination | List endpoints use cursor pagination: ?limit= (default 25, max 100) + cursor=; response carries next_cursor. Offset paging is not used. |
+| Sorting / filtering | `?sort=field:asc |
+| Correlation id | Every request carries / is assigned X-Correlation-Id; it is echoed in the response and written to every audit and log line for the request (ties to BRD Appendix C). |
+| Standard error codes | VALIDATION_FAILED (422), UNAUTHENTICATED (401), FORBIDDEN (403), NOT_FOUND (404), CONFLICT (409, incl. idempotency replays and state conflicts), PRECONDITION_FAILED (412), RATE_LIMITED (429), INTERNAL (500). Message copy behind each is in the §5 Message Catalogue (ERR-* ids). |
+| Auth context | Bearer token carrying the session’s roles/entity scope (resolved per RBAC doc; enforced per Platform Spec P02). Endpoints never re-implement permission logic — they call the authorization service. |
+| Effective-dating | Endpoints that mutate effective-dated fields accept effective_from; the change is staged and applied by JOB-M01-EFFDATE (see §4), not written live. Governed by BRD §4 / FR-M01-002. |
+
+
+## 2. Shared Validation Library
+References: BRD §4 entity field definitions, §4.5 statutory identities, Appendix A (statutory), Appendix B (PII). Each entry is the single definition; module FS §5 cite the id and never restate the rule. Module-unique validations stay in the module FS.
+Catalogue ids are stable. A module FS that needs a rule writes validate per VAL-PAN; it never re-specifies the format. Statutory formats defer to the BRD where the BRD fixes them; the catalogue records the operative rule and the reference.
+| Id | Applies to | Rule / format (authored) | Source ref |
+| VAL-REQUIRED | any mandatory field | Non-empty after trim; for selects, a value other than the null placeholder. | — |
+| VAL-LEN | text fields | Min/max length per field; default max 255 for short text, 4000 for long text. | per field BRD §4 |
+| VAL-TEXT | free text | Unicode allowed; strip control chars; no leading/trailing whitespace stored. | — |
+| VAL-NAME | person/entity names | Letters, spaces, hyphen, apostrophe, dot; 2–100 chars; no digits. | — |
+| VAL-INT | integer inputs | Whole number within field min/max; no thousands separators stored. | — |
+| VAL-NO | numeric (decimal) | Decimal with field-defined precision; non-negative unless field allows negative. | — |
+| VAL-PCT / VAL-PERCENT | percentage inputs | 0–100, up to 2 dp. | — |
+| VAL-WEIGHTAGE / VAL-WSUM | goal/competency weightage | Each 0–100; the set must sum to exactly 100 within its group. | FR-M09 |
+| VAL-SUBWSUM | sub-goal weightage | Sub-items sum to exactly 100 within their parent. | FR-M09 |
+| VAL-DISTRIB | calibration distribution | Distribution buckets sum to 100%. | FR-M09 |
+| VAL-ACHV | achievement % | 0–(cap); cap per goal-plan score-validation setting. | FR-M09 |
+| VAL-DATE | date fields | ISO-8601 YYYY-MM-DD; not before system min date; range checks per field. | — |
+| VAL-DOB | date of birth | Valid past date; age ≥ 18 at date of joining (configurable floor). | BRD §4.4 |
+| VAL-EFFECTIVE | effective_from | Not before the record’s current effective date; future-dating allowed per field. | FR-M01-002 |
+| VAL-EMAIL | email addresses | RFC-5322 mailbox; lowercased domain; ≤ 254 chars. | BRD §4.4 |
+| VAL-MOBILE | mobile numbers | E.164 with country code; India default 10 digits after +91. | BRD §4.4 |
+| VAL-PINCODE | postal code | 6 digits (India); first digit 1–9. | geo master |
+| VAL-PAN | PAN | ^[A-Z]{5}[0-9]{4}[A-Z]$; 4th char entity-type code. | §4.5 / App A |
+| VAL-AADHAAR | Aadhaar | 12 digits, Verhoeff checksum; stored masked per Appendix B. | §4.5 / App B |
+| VAL-IFSC | bank IFSC | ^[A-Z]{4}0[A-Z0-9]{6}$. | §4.5 |
+| VAL-CURRENCY | money fields | Amount ≥ 0, 2 dp; currency from org master; display masked per PII tier. | App B |
+| VAL-ENUM | dropdowns/status | Value must be an active member of the bound master/enum. | per master |
+| VAL-DEPENDENT | dependent fields | Field B required/visible only when field A satisfies a stated condition. | per screen |
+| VAL-FILE | uploads | Allowed types (pdf/jpg/png/docx per field); max size 10 MB default; virus-scanned. | NFR §7 |
+| VAL-COMMENT | comment/message boxes | Required where the policy/setting makes message mandatory; VAL-LEN(4000). | BRD §9 governance |
+| VAL-NOMINEE | nominee percentage | Per nominee class, percentages sum to exactly 100 (cf. BRD §6.2 example). | §4.5 |
+| VAL-CONSENT | consent capture | Explicit affirmative; consent record written (DPDPA) per BRD Appendix C. | App C |
+| VAL-DEPENDENT, VAL-HOLD | hold/blackout | Application blocked when a blackout/hold window applies (M04). | FR-M04 |
+| VAL-LV | leave application | Balance/limit/notice checks per leave policy (rule in policy, not here). | FR-M04 |
+| VAL-AT | attendance request | Punch/shift/window consistency per attendance policy. | FR-M05 |
+| VAL-SEP | separation form | Notice/last-working-day consistency per notice policy. | FR-M03 |
+| VAL-FNF | full-and-final | FnF preconditions/gates satisfied before settlement. | FR-M03 |
+| VAL-GOALNAME | goal name | VAL-REQUIRED + VAL-LEN(120); unique within a goal plan. | FR-M09 |
+| VAL-M08 | recruitment-specific | Module-unique recruitment rules — authored in the M08 FS §5; listed here for index completeness. | M08 FS §5 |
+| VAL-M11-MERGE | letter templates | Every ${token} in a letter template resolves against the merge-field catalogue; unknown/unbound token blocks publish. | M11 FS §5 |
+| VAL-M11-RETENTION | vault documents | Disposal blocked before the document’s retention-class window (Req H.2). | M11 FS §5 |
+| VAL-M11-SIGNER | letter generation | Generate requires the template’s configured signer set to be resolvable (active signers w/ signatures). | M11 FS §5 |
+| VAL-AST-TAG | asset master | Asset tag unique within tenant; format per asset-category scheme. | M17 FS §5 |
+| VAL-AST-SERIAL | asset master | Serial number unique per manufacturer/model where applicable. | M17 FS §5 |
+| VAL-AST-CAP | asset assignment | Assignment respects category capacity / one-active-holder rules. | M17 FS §5 |
+| VAL-AST-STATE | asset lifecycle | Only valid asset state-machine transitions allowed (BRD §8.9). | M17 FS §5 |
+| VAL-TKT-DUP | service-desk ticket | Duplicate-ticket guard on raise. | M17 FS §5 |
+| VAL-TKT-ASSET | service-desk ticket | Asset-linked ticket references a valid assigned asset. | M17 FS §5 |
+| VAL-TKT-RESNOTE | ticket resolution | Resolution note required to resolve/close (else ERR-M17-RESNOTE). | M17 FS §5 |
+| VAL-CAT-JUST | service catalog | Justification required where the catalog item mandates it. | M17 FS §5 |
+| VAL-CSAT | ticket feedback | CSAT within the defined scale range. | M17 FS §5 |
+| VAL-ORG-NOCYCLE | dept/BU parent | Parent reference must not create a cycle. | Org Admin Master FS §5 |
+| VAL-MASTER-UNIQUE | any master | Code unique within type + tenant. | Org Admin Master FS §5 |
+| VAL-GRADE-BAND | grade | Grade maps to an active band. | Org Admin Master FS §5 |
+| VAL-REGION-STATE | region | Region states valid & non-overlapping. | Org Admin Master FS §5 |
+| VAL-HOL-RECUR | holiday | Recurrence fields (static/day-of-month) consistent. | Org Admin Master FS §5 |
+| VAL-UAG-CRITERIA | UAG | Criteria reference active masters; ranges valid; resolves without error. | Org Admin Master FS §5 |
+| VAL-MASTER-INUSE | any master | Deactivation blocked/warned when referenced by an active UAG/policy/employee. | Org Admin Master FS §5 |
+| VAL-FLOW-NOCYCLE | workflow/approval-flow | No circular stage reference on save (builder). | Org Admin Config FS §2–§3 |
+
+
+## 3. Global UI State Standard & Component Vocabulary
+Shared interaction states (Batch-1 additions). Approval-gated field change — fields marked E·AR (e.g., PAN/Aadhaar/Passport/DL, bank) render read-only with a “Request change” control that opens a request dialog and routes to the owning approval workflow (e.g., sensitive-changes queue), never a direct write. Read-only mini-profile — the directory/org-chart drill-down surface; shows directory fields only (RBAC §11.2), no edit, no PII/compensation. Masked-own-view — the record owner sees Tier-1 IDs masked on screen but may export the full record unmasked.
+References: BRD §7.7 (accessibility), §7.8 (browser/platform); the design system for visual tokens. Authored here: the behavioural standard every screen inherits.
+Every screen implements the five canonical states so module FS need not re-describe them: empty (no data — show purpose + primary action, never a blank panel), loading (skeleton, no layout shift), error (inline message from an ERR-* id + retry; never a raw stack/500), no-permission (the gating menu item is hidden per §6; a deep-linked forbidden resource shows ERR-FORBIDDEN, not a 404 leak), and partial-data (render what is authorised, mask the rest per RBAC field access — never fail the whole screen).
+Shared component vocabulary (referenced by id from module field tables): inline-edit field, effective-dated field (shows current + staged value), masked field (PII per RBAC §3.9 / Platform P02), multi-step wizard, list+filter+bulk-action toolbar, approval action bar (approve/reject/send-back/delegate, labels per workflow stage aliases), attachment control (VAL-FILE), comment box (VAL-COMMENT), date/effective-date picker, and the read-only audit trail panel. Visual styling is the design system’s job, not this document’s.
+
+## 4. Scheduled Jobs & Background Processing — Index & Shared Standard
+References: BRD §4.14 jobs, Appendix C (audit), Appendix D (workflow). The job RUNNER infrastructure (scheduler, retry, isolation) is owned by Platform Spec §X.1; each job’s CADENCE and LOGIC are owned by the module FS §7/§8 cited below. This Foundation section owns the consolidated INDEX and the shared failure/observability standard so nothing is scattered.
+Shared runner standard (authored once, inherited by every job): every job is idempotent (safe to re-run; duplicates prevented by a per-period run key in jobs); retries with exponential backoff up to 3 attempts; on terminal failure emits JOB-FAIL → alert MSG-SYS-JOBFAIL (§5) to the owning-module admin + platform ops; runs per-tenant in isolation; takes a period lock against concurrent user writes where it mutates balances or closes a period; and writes one audit row per run (correlation id, rows affected, outcome) per BRD Appendix C. Exact cron/timezone for each job lives in its module FS.
+| Job id | Owning module | Purpose (one line) | Cadence & logic |
+| JOB-M01-EFFDATE | M01 | Apply effective-dated profile/employment changes due today | M01 FS §8.1 |
+| JOB-M01-CONTRACT | M01 | Contract-end/expiry processing & reminders | M01 FS §8.1 |
+| JOB-M01-LWD | M01 | Last-working-day driven status transitions | M01 FS §8.1 |
+| JOB-M01-COMPLETE | M01 | Profile-completeness recompute | M01 FS §8.1 |
+| JOB-M01-ORGVIEW | M01 | Refresh org-chart / consolidated org view | M01 FS §8.1 |
+| JOB-M01-VISA-REMIND | M01 | Visa/work-permit expiry reminders | M01 FS §8.1 |
+| JOB-M02-AUTOINIT | M02 | Auto-initiate onboarding X days before DOJ | M02 FS §7.1 |
+| JOB-M02-REMINDER | M02 | Candidate onboarding reminder cadence | M02 FS §7.1 |
+| JOB-M02-DOJ-REJECT | M02 | DOJ-passed / no-show handling | M02 FS §7.1 |
+| JOB-M03-FNFWINDOW | M03 | Open/track FnF settlement window | M03 FS §8.1 |
+| JOB-M03-EXITINT | M03 | Exit-interview scheduling/reminders | M03 FS §8.1 |
+| JOB-M03-ABSCOND | M03 | Absconding detection for separation | M03 FS §8.1 |
+| JOB-M03-FORCESEP | M03 | Force-separation processing | M03 FS §8.1 |
+| JOB-M03-AUTOREVOKE | M03 | Auto-revoke leave beyond separation date | M03 FS §8.1 |
+| JOB-M03-SLA | M03 | Separation-stage SLA escalation | M03 FS §8.1 |
+| JOB-M04-ACCRUAL | M04 | Leave accrual | M04 FS §7.1 |
+| JOB-M04-CARRYFWD | M04 | Year-end carry-forward + expiry | M04 FS §7.1 |
+| JOB-M04-AUTOREJECT | M04 | Date-specific auto-approve/reject of pending leave | M04 FS §7.1 |
+| JOB-M04-SANDWICH | M04 | Sandwich-leave cron | M04 FS §7.1 |
+| JOB-M04-ESCALATE | M04 | Leave-request SLA escalation | M04 FS §7.1 |
+| JOB-M04-LOP | M04 | LOP computation | M04 FS §7.1 |
+| JOB-M04-DECISION-REEVAL | M04 | Decision-matrix re-evaluation | M04 FS §7.1 |
+| JOB-M04-SMART | M04 | Smart-suggestion (carry-forward/comp-off expiry) | M04 FS §7.1 |
+| JOB-M05-CLOSE | M05 | Daily attendance close | M05 FS §7.1 |
+| JOB-M05-ABSCOND | M05 | Absconding detection (attendance) | M05 FS §7.1 |
+| JOB-M05-LOCK | M05 | Period lock / freeze | M05 FS §7.1 |
+| JOB-M05-LOP | M05 | LOP report generation | M05 FS §7.1 |
+| JOB-M05-ESCALATE | M05 | Attendance-request SLA escalation | M05 FS §7.1 |
+| JOB-M08-OFFER-EXP | M08 | Offer expiry | M08 FS §6A.1 |
+| JOB-M08-PREOFFER-EXP | M08 | Pre-offer expiry | M08 FS §6A.1 |
+| JOB-M08-IVFB | M08 | Interview-feedback reminders | M08 FS §6A.1 |
+| JOB-M08-POS-ARCHIVE | M08 | Position/requisition archival | M08 FS §6A.1 |
+| JOB-M08-ONBOARD-INIT | M08 | Hand-off to onboarding on offer accept | M08 FS §6A.1 |
+| JOB-M08-SLA-ESC | M08 | Recruitment-stage SLA escalation | M08 FS §6A.1 |
+| JOB-M09-PLAN-OPEN | M09 | Open goal-plan window | M09 FS §7.1 |
+| JOB-M09-REVIEW-OPEN | M09 | Open review cycle | M09 FS §7.1 |
+| JOB-M09-CALIB → see CLOSE/NOTIFY | M09 | Calibration/close/notify jobs | M09 FS §7.1 |
+| JOB-M09-CLOSE | M09 | Close review cycle | M09 FS §7.1 |
+| JOB-M09-NOTIFY | M09 | Review/goal notifications | M09 FS §7.1 |
+| JOB-M09-AUTOACK | M09 | Auto-acknowledge after window | M09 FS §7.1 |
+| JOB-M09-PROBATION | M09 | Probation-due processing | M09 FS §7.1 |
+| JOB-M09-SLA | M09 | Performance-stage SLA escalation | M09 FS §7.1 |
+| JOB-M11-BULKLTR | M11 | Bulk letter generation → vault + notify issuer | M11 FS §8.1 |
+| JOB-M11-RETENTION | M11 | Flag documents reaching retention window for disposal | M11 FS §8.1 |
+| JOB-M11-DISPOSAL | M11 | Execute approved disposal / DPDPA erasure (redaction marker, P05) | M11 FS §8.1 |
+| JOB-M11-SIGNOFF-REMIND | M11 | Remind pending sign-off tasks | M11 FS §8.1 |
+| JOB-M17-SLA | M17 | Service-desk ticket SLA pre-breach/breach escalation → MSG-M17-SLA-* | M17 FS §8.1 |
+| JOB-M17-WARRANTY | M17 | Asset warranty / AMC expiry reminders | M17 FS §8.1 |
+| JOB-M17-AUDIT | M17 | Asset-audit cycle generation & certification reminders | M17 FS §8.1 |
+| JOB-M17-RECOVERY | M17 | Asset recovery at separation (FnF gate, FR-M17-004) | M17 FS §8.1 |
+| JOB-FAIL | Foundation | Shared terminal-failure handler → MSG-SYS-JOBFAIL | this §4 |
+
+
+## 5. Message Catalogue
+References: BRD §9 (who-notifies-whom — §9.2 M04, §9.3 M05, §9.4 M03, §9.5 M02/M08, §9.6 M01/M11, §9.7 M09), §9.1 (channels: IN_APP + EMAIL fire in parallel for approvals), §9.9 (governance). Authored here: the catalogue CONVENTIONS, the SHARED/SYSTEM messages used by every module, and the MASTER INDEX. Module-specific message COPY is authored in the module FS slice cited and referenced by id — not duplicated here.
+Conventions. Channels and recipients per BRD §9 (never restated). Id scheme: MSG-<module>-<n> for notifications, ERR-<area> for user-facing error copy; system messages use MSG-SYS-*. Templates carry typed merge fields {like_this}. Severity: info / warning / error. A screen state (§3) or API error code (§1) references an id; it never inlines copy.
+Shared / system messages (authored here — used across all modules):
+| Id | Where shown | Severity | Message text | Recovery |
+| ERR-FORBIDDEN | 403 / no-permission state | error | You don’t have permission to perform this action. | Contact your admin if you believe this is wrong. |
+| ERR-LOADFAIL | error state on any list/detail | error | We couldn’t load this right now. | Retry; if it persists, the correlation id is shown for support. |
+| ERR-PRECOND | 412 precondition | error | This can’t be done because a required condition isn’t met: {reason}. | Resolve {reason} and try again. |
+| ERR-DUP-INSTANCE | 409 on duplicate workflow start | warning | A request for this already exists and is in progress. | Open the existing request instead of creating a new one. |
+| ERR-PAST-DATED | 422 on disallowed back-date | warning | The selected date is outside the allowed window. | Choose a date within the permitted range. |
+| ERR-REASON-REQ | 422 when reason mandatory | warning | A reason is required to continue. | Enter a reason. |
+| ERR-REVOKE-FORBIDDEN | 403 on revoke | error | This item can’t be revoked. | Per policy; contact your approver/admin. |
+| MSG-SYS-JOBFAIL | ops alert (JOB-FAIL) | error | Scheduled job {job_id} failed for tenant {tenant} at {time}. | Auto-retried {n}×; manual re-run from the jobs console. |
+
+Master index (module-specific messages — copy authored in the module FS slice):
+| Family | Count | Authored in | Examples |
+| MSG-M01-N0x / E0x | 13 | M01 FS §8.2 | profile-change approval, effective-date applied |
+| MSG-OB-* | 11 | M02 FS §7.2 | auto-init, BGV result, buddy, completion |
+| MSG-SEP-, MSG-FNF-, MSG-EXITINT, MSG-LWD-* | 12 | M03 FS §8.2 | separation init/appr/rej, FnF pending/complete |
+| (leave) MSG ids | M04 FS §7.2 | M04 FS §7.2 | apply/approve/reject/revoke, accrual, OH |
+| MSG-AT-* | 10 | M05 FS §7.2 | window, GPS-deny, IP-block, late-sync, limit |
+| MSG-M08 / ERR-M08-* | per M08 | M08 FS §6A.2 | offer issued/accepted/expired, dup, pos-max |
+| MSG-M09-* | 15 | M09 FS §7.2 | cycle/goal/rating/calibration/PIP/MSF |
+| MSG-M11-* | 6 | M11 FS §8.2 | policy-published, letter-issued, sign-off assigned/remind/declined, disposal-due |
+| MSG-M17-* | 9 | M17 FS §8.2 | assign, ack-pending, ticket-assigned, SLA pre-breach/breach, catalog-approval, lost, write-off, PM-open |
+| ERR-M17-* | 2 | M17 FS §5 | ERR-M17-STATE (invalid asset transition), ERR-M17-RESNOTE (resolution note required) |
+| ERR-M09-, ERR-OH-CONFLICT, ERR-ENCASH-, ERR-BLACKOUT, ERR-NOPROCESS, ERR-ONEWAY, ERR-PROFILE, ERR-FNFGATE, ERR-ACTIVEONE, ERR-PAYROLL-LOCKED | module-specific errors | respective module FS §5/§7/§8 | module-unique error copy |
+
+
+## 6. Menu & Navigation Entitlement
+References: RBAC Design Document v1.1 (role taxonomy, §5.1 action matrix); BRD §3.7 (action permissions gating deep links). Authored here: the role→menu/section surface that sits ABOVE per-screen field/action permissions. Module FS reference this and add only screen-specific nav gating.
+Inactive modules are fully invisible (RBAC §1, four-layer model). A menu item appears only if the role holds the gating permission AND the module is active for the tenant.
+Employee launcher (Batch-1 Employee review). Apply-leave and Attendance-regularisation are actions inside the Leave and Attendance screens, not top-level launcher items. Link Accounts and the standalone Workspace link are removed from the employee surface.
+| Menu / section | Maps to (module) | Visible to roles | Gating permission (RBAC §5.1 / BRD §3.7) | Notes |
+| Home / Dashboard | cross | all | — | Role-composed widgets per module FS dashboards + BRD §10.2. |
+| Tasks | cross / P01 | all employees | — | Aggregates cross-module tasks (policy acks, document requests, performance, leave/attendance). Replaces the standalone “Pending acknowledgements” item. |
+| Notifications | cross / P01 | all | — | In-app notification centre (approvals, tasks, policy, leave/attendance outcomes, IT tickets). |
+| AI Assistant | P03 | all | — | Policy Q&A + role-scoped HRMS usage guidance + knowledge-base answers. Knowledge base is folded in — no separate KB menu item. |
+| Settings (Account) | P02 | all employees | own-record scope | Notification preferences, language, password/MFA, active sessions. |
+| My Profile | M01 | all employees | own-record scope | Sensitive fields masked per RBAC §7 / §3.9. |
+| Employee Directory | M01 | all (Recruiter = 4-field limited) | directory.view | Peer surface, distinct from full master. Standard fields only (RBAC §11.2); Active only; row → read-only mini-profile; PII excluded. |
+| Org Chart | M01 | all | orgchart.view | Name/photo/designation/department/reporting manager (RBAC §11.1); node → mini-profile. |
+| Consent & Privacy | M01 | all employees | own-record scope | DPDPA consent history (immutable) + optional-consent withdrawal → erasure (BRD FR-M01-003). |
+| My Team | M01/M04/M05 | L1 Mgr, HOD, UAG Head | manager-scope | Badge = pending approvals. |
+| Leave | M04 | all (self); approvers see team | leave.* per RBAC |  |
+| Attendance | M05 | all (self); approvers see team | attendance.* |  |
+| Performance | M09 | all (self); evaluators/reviewers | performance.* | Cycle-gated visibility. |
+| Recruitment | M08 | Recruiter, Recruitment Admin, hiring team, IJP applicants | recruitment.* | IJP/referral surfaces for employees. |
+| Onboarding | M02 | Onboarding Admin, HR Admin, candidate (pre-join surface) | onboarding.* |  |
+| Separation / Exits | M03 | HR Admin, Offboarding Admin, manager (initiate), employee (resign) | separation.* |  |
+| Documents | M11 | all (own); Document Admin (manage) | document.* |  |
+| Assets & IT Service Desk | M17 | all (My Assets, IT tickets); Manager (Team Assets); IT Admin / Asset Manager / Service Desk roles (IT workspace) | asset.* / servicedesk.* | Service Catalog is within Raise ticket (not a standalone menu item); knowledge base folded into AI Assistant. IT operational roles per BRD §3.7.6; Facilities/Office Admin → Office Assets |
+| Reports & Analytics | M16 | per role widget/report entitlement | analytics.* | Org Admin = cross-entity (RBAC §2.1). |
+| Settings / Configuration | Admin | Org Admin (build), HR Admin & module admins (bind) | per RBAC §2.1.1 | Builders vs binders split — see RBAC §2.1.1. |
+| Platform / Tenant Admin | Platform | Platform Super Admin | platform.* | Cross-tenant; provisioning, migration. |
+
+
+## 7. Reference Register (index)
+The master index that makes the whole FS set auditable for repetition: each module FS maintains its own screen → BRD FR → entity → prototype-id register; this table indexes those registers and the shared ids they draw on.
+| Module FS | Register location | Shared ids drawn from this Foundation FS |
+| M01 Employee Master | M01 FS §9 | VAL-EMAIL/MOBILE/PAN/AADHAAR/IFSC/DOB/EFFECTIVE/NOMINEE/CONSENT; JOB-M01-; MSG-M01- + shared ERR-* |
+| M02 Onboarding | M02 FS §1 reg | VAL-FILE/REQUIRED/CONSENT; JOB-M02-; MSG-OB- + shared |
+| M03 Exits & Offboarding | M03 FS §9 | VAL-SEP/FNF/DATE; JOB-M03-*; MSG-SEP/FNF/EXITINT/LWD + shared |
+| M04 Leave | M04 FS §1.3 / App A | VAL-LV/HOLD/DATE/COMMENT; JOB-M04-*; leave MSG + ERR-OH/ENCASH/BLACKOUT |
+| M05 Attendance | M05 FS §2.0 | VAL-AT/DATE; JOB-M05-; MSG-AT- + shared |
+| M08 Recruitment | M08 FS §1.2 | VAL-M08/EMAIL/FILE; JOB-M08-; MSG-M08/ERR-M08- |
+| M09 Performance | M09 FS §8 | VAL-WEIGHTAGE/WSUM/SUBWSUM/DISTRIB/ACHV/GOALNAME/PCT; JOB-M09-; MSG-M09- |
+| M11 Documents | M11 FS §9 | VAL-FILE/M11-MERGE/RETENTION/SIGNER; JOB-M11-; MSG-M11- + shared ERR-* |
+| M17 Assets & IT SM | M17 FS §1 / §6.1 | VAL-AST-/TKT-/CAT-JUST/CSAT; JOB-M17-; MSG-M17- + ERR-M17-* |
+
+
+## 8. Open Items, Conflicts & Recommendations
+Flag-and-recommend register from authoring this hub against the eight module FS. Each marked PROPOSED — confirm before build.
+| Id | Type | What’s missing / in conflict | Owner | PROPOSED resolution (confirm before build) |
+| OPEN-FS-FND-01 | Consolidation | Module FS each authored a “Message Catalogue (X slice)”; the catalogue is meant to be singular. | Architecture | RESOLVED (closed per Cross-Document Reconciliation Report §5). Adopt the split confirmed in §5: Foundation owns conventions + shared/system messages + the master index; module-specific copy stays in the module FS slice and is referenced by id. Confirm and stop any further re-copying upward. |
+| OPEN-FS-FND-02 | Consolidation | Validation ids are referenced by modules but were “defined in Foundation FS” which did not yet exist; some modules may have inlined a rule. | Architecture / module owners | RESOLVED (Foundation §2 is the single definition of the 36 VAL-* ids; the module §5 citation sweep is the residual mechanical action). Adopt §2 as the single definition for the 36 VAL-* ids; module FS replace any inlined rule with per VAL-*. Sweep each module FS §5. |
+| OPEN-FS-FND-03 | Boundary | Jobs: runner infra (Platform §X.1) vs per-job cadence/logic (module FS) vs the index (here). | Engineering | RESOLVED (three-way split confirmed). Confirm the three-way split in §4: Platform Spec X.1 = runner; module FS §7/§8 = cadence + logic; Foundation = index + shared failure/observability standard (JOB-FAIL / MSG-SYS-JOBFAIL). |
+| OPEN-FS-FND-04 | RESOLVED | M11 Document Management FS and M17 Assets & IT FS now authored; their VAL/JOB/MSG ids folded into §2/§4/§5 and reference registers added to §7. | — | Closed in v1.1. |
+| OPEN-FS-FND-05 | Convention | Several statutory validation formats (PAN/Aadhaar/IFSC) are authored here from standard formats; confirm against the BRD §4.5 / Appendix A definitions. | Compliance | Confirm each VAL-* statutory rule matches the BRD’s locked statutory definitions; where the BRD fixes it, the catalogue references rather than restates. |
+| OPEN-FS-FND-06 | Gap | API conventions (idempotency, cursor pagination, correlation id) are authored here as the standard; the BRD fixes only the response envelope (§6.2) and rate limiting (§6.3). | Architecture | Confirm the §1 conventions as the platform standard; mirror into the Platform Spec §0.4 service-contract conventions. |
+
+
+## Manager-role review (Round 3)
+Applied to the Manager (L1) experience and the global navigation model:
+Menu rename: Manager appraisal → Team appraisals (Tasks section).
+Performance heading removed; items folded: Goals & reviews (pending review/goal actions) moves into Tasks alongside Team appraisals; Probation confirmation and FnF clearance move into Team. The Manager menu now mirrors the Self structure: Workspace · Tasks · Team · Self.
+Goal-pending items in Tasks: goal-plan submission, quarterly check-in and review-stage actions surface as task types in the unified Tasks list for both Employee and Manager.
+Workspace model (role switching): the role picker becomes a Workspace switcher exposing only the workspaces a user holds — Me (always), My Team (if the user has reportees / is HOD), Admin (if the user holds admin permission roles). Employee + Manager co-exist as one experience (Manager is a superset of Self). Admin is exclusive — while acting as Admin the user sees only admin features. Workspace availability derives from RBAC role holdings + a has-reportees flag; each task routes to exactly one workspace to avoid duplicate action. Selecting a reportee from My team lands on the Team workspace employee view by default.
+OPEN-FS-FND-05: Admin-workspace exclusivity conflicts with the standing "every role keeps employee self-service" principle (BRD §3.4). Product decision pending: (a) retire §3.4 and make Admin strictly exclusive, or (b) keep self-service reachable from Admin. Prototype v2.2 keeps self-service reachable and surfaces the intended exclusive model in the switcher caption.
+
+## Manager-role review (Round 3 follow-up)
+Refines the Round-3 workspace model with two resolved open items and the manager employee-context model:
+OPEN-FS-FND-05 — RESOLVED (Admin exclusive). A user who holds an admin role selects that admin workspace and then sees only admin functions — the employee Self self-service section and self-service routing fallback are suppressed for admin workspaces. Employee, Manager (L1), HOD and CEO retain self-service. This retires the blanket "every role keeps self-service" reading of BRD §3.4: self-service is retained for the Me / My Team workspaces, not within an admin workspace.
+Manager employee-context model. When a manager selects a reportee, the application switches context to that employee: a persistent context banner ("acting in 's space"), breadcrumb My team › <Employee>, Team stays the active workspace. The reportee view mirrors the employee's own profile structure — Personal, Employment (incl. Project history), Statutory & benefits, Qualifications & experience, Documents — plus Attendance, Leave and Performance as tabs inside the employee view. No dilution of information versus the employee's own view except the intentional masks (full Aadhaar/PAN, bank account number, statutory IDs) which remain restricted for all but the employee and authorised HR/Finance roles. This supersedes the Round-3 item-6 tab relocation.
+OPEN-FS-CFG-08 — RESOLVED. has-reportees (a Workspace-model input) is a derived attribute (computed from the reporting structure), not a configurable flag.

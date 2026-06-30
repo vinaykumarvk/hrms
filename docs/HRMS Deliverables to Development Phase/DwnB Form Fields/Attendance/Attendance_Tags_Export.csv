@@ -1,0 +1,5 @@
+﻿"Tag Name","Tag Code","Tag Type"
+"Hyderabad Office","TAG_1","IP Restriction"
+"Mumbai Office","TAG_2","IP Restriction"
+"Bengaluru Office","TAG_3","IP Restriction"
+"Office","TAG_4","Geofencing"

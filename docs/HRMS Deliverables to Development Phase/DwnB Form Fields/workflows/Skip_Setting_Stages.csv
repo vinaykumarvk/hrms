@@ -1,0 +1,7 @@
+﻿"Code","Row Id","Skip Condition Subject","Skip Condition Rule","Initiator Roles","Reassign task to diffrenent role","Reassign to roles","Assignee Role","Status"
+"Skip_AF_1","R1","Assignee","Initiator","","No","","","Active"
+"Skip_AF_1","R2","Assignee","Earlier respondent","","No","","","Active"
+"Skip_AF_2","R1","Assignee","Initiator","","No","","","Active"
+"Skip_AF_3","R1","Assignee","Initiator","","No","","","Active"
+"Skip_AF_4","R1","Assignee","Initiator","","No","","","Draft"
+"Skip_AF_4","R2","Assignee","Not Available","","No","","","Draft"

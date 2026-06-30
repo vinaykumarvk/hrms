@@ -1,0 +1,528 @@
+﻿"Designation Name","Designation Code",Status,"Created On","Created By","Updated On","Updated By","Effective From"
+CEO,Des_1,Active,"16-06-2023 00:20:59",,,,
+Director,Des_2,Active,"16-06-2023 00:21:00",,,,
+"Program Manager",Des_3,Active,"16-06-2023 00:21:00",,,,
+"Senior HR Manager",Des_4,Active,"16-06-2023 00:21:00",,,,
+"Manager Systems Admin",Des_5,Active,"16-06-2023 00:21:01",,,,
+"Senior Manager",Des_6,Active,"16-06-2023 00:21:02",,,,
+"DevOps Manager",Des_7,Active,"16-06-2023 00:21:02",,,,
+"Technical Lead",Des_8,Active,"16-06-2023 00:21:03",,,,
+"Tech Lead",Des_9,Active,"16-06-2023 00:21:03",,,,
+"Senior Software Engineer",Des_10,Active,"16-06-2023 00:21:04",,,,
+"Vice President",Des_11,Active,"16-06-2023 00:21:04",,,,
+"Project Lead",Des_12,Active,"16-06-2023 00:21:05",,,,
+"Software Designer",Des_13,Active,"16-06-2023 00:21:05",,,,
+"QA Engineer",Des_14,Active,"16-06-2023 00:21:06",,,,
+"Team Lead",Des_15,Active,"16-06-2023 00:21:06",,,,
+"Lead QA Engineer",Des_16,Active,"16-06-2023 00:21:07",,,,
+"Manager Quality Assurance",Des_17,Active,"16-06-2023 00:21:07",,,,
+"Technical Manager",Des_18,Active,"16-06-2023 00:21:08",,,,
+"Admin Executive",Des_19,Active,"16-06-2023 00:21:08",,,,
+"DevOps Engineer",Des_20,Active,"16-06-2023 00:21:09",,,,
+"UI Architect",Des_21,Active,"16-06-2023 00:21:09",,,,
+"Senior Admin Executive",Des_22,Active,"16-06-2023 00:21:10",,,,
+"Manager IT Operations",Des_23,Active,"16-06-2023 00:21:10",,,,
+"Senior QA Engineer",Des_24,Active,"16-06-2023 00:21:11",,,,
+"Lead Developer",Des_25,Active,"16-06-2023 00:21:11",,,,
+"Senior Director",Des_26,Active,"16-06-2023 00:21:12",,"04-01-2024 16:12:44","[REDACTED]",16-06-2023
+"UI Designer",Des_27,Active,"16-06-2023 00:21:12",,,,
+"Senior UI Designer",Des_28,Active,"16-06-2023 00:21:13",,,,
+"Manager DevOps",Des_29,Active,"16-06-2023 00:21:13",,,,
+"Senior Manager Cloud and Automation",Des_30,Active,"16-06-2023 00:21:14",,,,
+"Senior DevOps Engineer",Des_31,Active,"16-06-2023 00:21:14",,,,
+"DevOps Lead",Des_32,Active,"16-06-2023 00:21:15",,,,
+"Senior HR Executive",Des_33,Active,"16-06-2023 00:21:15",,,,
+"Software Engineer",Des_34,Active,"16-06-2023 00:21:16",,,,
+"DevOps Support Engineer",Des_35,Active,"16-06-2023 00:21:16",,,,
+"Technical Architect",Des_36,Active,"16-06-2023 00:21:17",,,,
+"DevOps Support Lead ",Des_37,Active,"16-06-2023 00:21:17",,,,
+"UI Developer",Des_38,Active,"16-06-2023 00:21:18",,,,
+"Accounts Manager",Des_39,Active,"16-06-2023 00:21:18",,,,
+"Associate Engineer",Des_40,Active,"16-06-2023 00:21:19",,,,
+"Systems Admin",Des_41,Active,"16-06-2023 00:21:19",,,,
+"Support Engineer",Des_42,Active,"16-06-2023 00:21:20",,,,
+"DevOps System Engineer",Des_43,Active,"16-06-2023 00:21:20",,,,
+"Business Development Lead",Des_44,Active,"16-06-2023 00:21:21",,,,
+"Senior System Engineer",Des_45,Active,"16-06-2023 00:21:21",,,,
+"SEO Associate",Des_46,Active,"16-06-2023 00:21:22",,,,
+"HR Executive",Des_47,Active,"16-06-2023 00:21:22",,,,
+"Associate Creative Designer ",Des_48,Active,"16-06-2023 00:21:23",,,,
+"UI Lead",Des_49,Active,"16-06-2023 00:21:24",,,,
+"HR Recruiter",Des_50,Active,"16-06-2023 00:21:24",,,,
+"Content writer",Des_51,Active,"16-06-2023 00:21:25",,,,
+"FinOps Analyst",Des_52,Active,"16-06-2023 00:21:25",,,,
+"Senior Test Engineer",Des_53,Active,"16-06-2023 00:21:26",,,,
+"Android Developer",Des_54,Active,"16-06-2023 00:21:26",,,,
+"Accounts Executive",Des_55,Active,"16-06-2023 00:21:27",,,,
+"Senior SEO Specialist",Des_56,Active,"16-06-2023 00:21:27",,,,
+"System Administrator",Des_57,Active,"16-06-2023 00:21:28",,,,
+"Talent Acquisition Executive ",Des_58,Active,"16-06-2023 00:21:28",,,,
+"Performance Marketing Strategist",Des_59,Active,"16-06-2023 00:21:29",,,,
+"Inside Sales associate",Des_60,Active,"16-06-2023 00:21:29",,,,
+"Business Analyst",Des_61,Active,"16-06-2023 00:21:30",,,,
+"Senior Content Writer",Des_62,Active,"16-06-2023 00:21:30",,,,
+"Business Development ",Des_63,Active,"16-06-2023 00:21:31",,,,
+AVP,Des_64,Active,"16-06-2023 00:21:31",,,,
+"SEO Analyst",Des_65,Active,"16-06-2023 00:21:32",,,,
+"Application Network Engineer ",Des_66,Active,"16-06-2023 00:21:32",,,,
+"Director Operations",Des_67,Active,"16-06-2023 00:21:33",,,,
+Consultant,Des_68,Active,"16-06-2023 00:21:33",,,,
+"Inside Sales Executive",Des_69,Active,"16-06-2023 00:21:34",,,,
+"Human Resource Executive",Des_70,Active,"16-06-2023 00:21:34",,,,
+"Senior ManagerBusiness Development",Des_71,Active,"16-06-2023 00:21:35",,,,
+"Performance test engineer",Des_72,Active,"16-06-2023 00:21:35",,,,
+"Manager HR",Des_73,Active,"16-06-2023 00:21:36",,,,
+"Manager Presales",Des_74,Active,"16-06-2023 00:21:36",,,,
+"Senior Engineer Systems",Des_75,Active,"16-06-2023 00:21:37",,,,
+"Senior Software Engineer QA",Des_76,Active,"16-06-2023 00:21:37",,,,
+"Manager Business Development",Des_77,Active,"16-06-2023 00:21:38",,,,
+"Senior Executive PMO and HR",Des_78,Active,"16-06-2023 00:21:38",,,,
+"Lead Technology",Des_79,Active,"16-06-2023 00:21:39",,,,
+"Senior Executive Talent Acquisition",Des_80,Active,"16-06-2023 00:21:39",,,,
+"AVP Projects",Des_81,Active,"16-06-2023 00:21:40",,,,
+"AVP Compliance and Acccounts",Des_82,Active,"16-06-2023 00:21:40",,,,
+"Senior Software Engineer UI",Des_83,Active,"16-06-2023 00:21:41",,,,
+"Lead Product BA",Des_84,Active,"16-06-2023 00:21:41",,,,
+"Manager TA & PMO",Des_85,Active,"16-06-2023 00:21:42",,,,
+"Senior Executive Administration & Legal",Des_86,Active,"16-06-2023 00:21:42",,,,
+"Senior Engineer Application Support",Des_87,Active,"16-06-2023 00:21:43",,,,
+"Engineer Application Support",Des_88,Active,"16-06-2023 00:21:43",,,,
+"Associate HR",Des_89,Active,"16-06-2023 00:21:44",,,,
+"Software Engineer Oracle DBA",Des_90,Active,"16-06-2023 00:21:44",,,,
+"Executive Talent Acquisition",Des_91,Active,"16-06-2023 00:21:45",,,,
+"Senior Executive Product BA",Des_92,Active,"16-06-2023 00:21:45",,,,
+"Software Engineer QA",Des_93,Active,"16-06-2023 00:21:46",,,,
+"Manager Projects",Des_94,Active,"16-06-2023 00:21:46",,,,
+"Lead Application Support",Des_95,Active,"16-06-2023 00:21:47",,,,
+"Engineer Production Support",Des_96,Active,"16-06-2023 00:21:47",,,,
+"Executive Accounts",Des_97,Active,"16-06-2023 00:21:48",,,,
+"Senior Executive Product",Des_98,Active,"16-06-2023 00:21:48",,,,
+"Executive Assistant",Des_99,Active,"16-06-2023 00:21:49",,,,
+"AVP Compliance and Acccounts",Des_100,Archived,"04-07-2023 17:37:52",,,,
+"AVP Projects",Des_101,Archived,"04-07-2023 17:37:52",,,,
+"Accounts Executive",Des_102,Archived,"04-07-2023 17:37:53",,,,
+"Application Network Engineer ",Des_103,Archived,"04-07-2023 17:37:53",,,,
+"Associate Creative Designer ",Des_104,Archived,"04-07-2023 17:37:54",,,,
+"Business Development ",Des_105,Archived,"04-07-2023 17:37:54",,,,
+"Business Development Lead",Des_106,Archived,"04-07-2023 17:37:55",,,,
+CEO,Des_107,Archived,"04-07-2023 17:37:55",,,,
+"DevOps Manager",Des_108,Archived,"04-07-2023 17:37:56",,,,
+"Engineer Production Support",Des_109,Archived,"04-07-2023 17:37:56",,,,
+"Executive Assistant",Des_110,Archived,"04-07-2023 17:37:57",,,,
+"HR Recruiter",Des_111,Archived,"04-07-2023 17:37:58",,,,
+"Lead Application Support",Des_112,Archived,"04-07-2023 17:37:58",,,,
+"Lead Developer",Des_113,Archived,"04-07-2023 17:37:59",,,,
+"Lead Product BA",Des_114,Archived,"04-07-2023 17:37:59",,,,
+"Lead QA Engineer",Des_115,Archived,"04-07-2023 17:38:00",,,,
+"Manager DevOps",Des_116,Archived,"04-07-2023 17:38:00",,,,
+"Manager HR",Des_117,Archived,"04-07-2023 17:38:01",,,,
+"Manager IT Operations",Des_118,Archived,"04-07-2023 17:38:01",,,,
+"Manager Presales",Des_119,Archived,"04-07-2023 17:38:02",,,,
+"Manager Systems Admin",Des_120,Archived,"04-07-2023 17:38:02",,,,
+"Manager TA & PMO",Des_121,Archived,"04-07-2023 17:38:03",,,,
+"Performance Marketing Strategist",Des_122,Archived,"04-07-2023 17:38:03",,,,
+"Performance test engineer",Des_123,Archived,"04-07-2023 17:38:04",,,,
+"SEO Analyst",Des_124,Active,"04-07-2023 17:38:04",,,,
+"Senior Admin Executive",Des_125,Archived,"04-07-2023 17:38:05",,,,
+"Senior Director",Des_126,Archived,"04-07-2023 17:38:06",,,,
+"Senior Engineer Systems",Des_127,Active,"04-07-2023 17:38:06",,,,
+"Senior Executive Administration & Legal",Des_128,Active,"04-07-2023 17:38:07",,,,
+"Senior Executive PMO and HR",Des_129,Archived,"04-07-2023 17:38:07",,,,
+"Senior HR Manager",Des_130,Active,"04-07-2023 17:38:08",,,,
+"Senior Manager",Des_131,Active,"04-07-2023 17:38:08",,,,
+"Senior Manager Cloud and Automation",Des_132,Active,"04-07-2023 17:38:09",,,,
+"Senior Test Engineer",Des_133,Active,"04-07-2023 17:38:09",,,,
+"Software Designer",Des_134,Active,"04-07-2023 17:38:10",,,,
+"Software Engineer Oracle DBA",Des_135,Active,"04-07-2023 17:38:10",,,,
+"Talent Acquisition Executive ",Des_136,Active,"04-07-2023 17:38:11",,,,
+"UI Lead",Des_137,Active,"04-07-2023 17:38:11",,,,
+Accountant,DESG_1,Active,"05-07-2023 02:37:42",,"05-07-2023 03:00:28",,05-07-2023
+" Administrative Executive",DESG_2,Active,"05-07-2023 02:37:42",,,,
+" Assistant Manager HR",DESG_3,Active,"05-07-2023 02:37:43",,,,
+" Assistant Manager Inside Sales",DESG_4,Active,"05-07-2023 02:37:43",,,,
+" Associate Accounts",DESG_5,Active,"05-07-2023 02:37:44",,,,
+" Associate Admin",DESG_6,Active,"05-07-2023 02:37:44",,,,
+" Associate Business Analyst",DESG_7,Active,"05-07-2023 02:37:45",,,,
+" Associate Designer",DESG_8,Active,"05-07-2023 02:37:46",,,,
+" Associate Inside Sales",DESG_9,Active,"05-07-2023 02:37:46",,,,
+" Associate Systems Administrator",DESG_10,Active,"05-07-2023 02:37:47",,,,
+" Associate Technical Support",DESG_11,Active,"05-07-2023 02:37:47",,,,
+" Automation Lead",DESG_12,Active,"05-07-2023 02:37:48",,,,
+" Automation Lead Engineer",DESG_13,Active,"05-07-2023 02:37:48",,,,
+" AVP Finance",DESG_14,Active,"05-07-2023 02:37:49",,,,
+" AVP Technology",DESG_15,Active,"05-07-2023 02:37:49",,,,
+" AVP Technology Solution Architect",DESG_16,Active,"05-07-2023 02:37:50",,,,
+" Business Development Manager",DESG_17,Active,"05-07-2023 02:37:50",,,,
+" Creative Designer",DESG_18,Active,"05-07-2023 02:37:51",,,,
+" CTO",DESG_19,Active,"05-07-2023 02:37:52",,,,
+" Customer Engagement Manager",DESG_20,Active,"05-07-2023 02:37:52",,,,
+" DevOps Support Lead",DESG_21,Active,"05-07-2023 02:37:53",,,,
+" Director",DESG_22,Active,"05-07-2023 02:37:53",,,,
+" Engineer DevOps",DESG_23,Active,"05-07-2023 02:37:54",,,,
+" Engineer Systems",DESG_24,Active,"05-07-2023 02:37:54",,,,
+" Executive HR",DESG_25,Active,"05-07-2023 02:37:55",,,,
+" Executive Inside Sales",DESG_26,Active,"05-07-2023 02:37:55",,,,
+" Executive Product",DESG_27,Active,"05-07-2023 02:37:56",,,,
+" Executive Product BA",DESG_28,Active,"05-07-2023 02:37:57",,,,
+" Founder and Director",DESG_29,Active,"05-07-2023 02:37:57",,,,
+" Hadoop Administrator",DESG_30,Active,"05-07-2023 02:37:58",,,,
+" Help Desk Executive",DESG_31,Active,"05-07-2023 02:37:58",,,,
+" HR Associate",DESG_32,Active,"05-07-2023 02:37:59",,,,
+" HR Lead",DESG_33,Active,"05-07-2023 02:37:59",,,,
+" HR Trainee",DESG_34,Active,"05-07-2023 02:38:00",,,,
+" Intern",DESG_35,Active,"05-07-2023 02:38:00",,,,
+" Junior QA Engineer",DESG_36,Active,"05-07-2023 02:38:01",,,,
+" Junior Software Engineer",DESG_37,Active,"05-07-2023 02:38:01",,,,
+" Junior System Admin",DESG_38,Active,"05-07-2023 02:38:02",,,,
+" Lead Cisco Voice",DESG_39,Active,"05-07-2023 02:38:03",,,,
+" Lead Data Solutions",DESG_40,Active,"05-07-2023 02:38:03",,,,
+" Lead Digital Marketing",DESG_41,Active,"05-07-2023 02:38:04",,,,
+" Lead Engineer",DESG_42,Active,"05-07-2023 02:38:04",,,,
+" Lead HR",DESG_43,Active,"05-07-2023 02:38:05",,,,
+" Lead Presales",DESG_44,Active,"05-07-2023 02:38:05",,,,
+" Lead Product",DESG_45,Active,"05-07-2023 02:38:06",,,,
+" Lead Projects",DESG_46,Active,"05-07-2023 02:38:06",,,,
+" Lead QA",DESG_47,Active,"05-07-2023 02:38:07",,,,
+" Lead Quality Initiatives",DESG_48,Archived,"05-07-2023 02:38:07",,,,
+" Lead Talent Acquisition",DESG_49,Active,"05-07-2023 02:38:08",,,,
+" Lead Technology &amp; Presales",DESG_50,Active,"05-07-2023 02:38:08",,,,
+" Lead UI UX",DESG_51,Active,"05-07-2023 02:38:09",,,,
+" Manager Operations",DESG_52,Active,"05-07-2023 02:38:09",,,,
+" Manager Product",DESG_53,Active,"05-07-2023 02:38:10",,,,
+" Manager Product BA",DESG_54,Active,"05-07-2023 02:38:11",,,,
+" Manager Service Delivery",DESG_55,Active,"05-07-2023 02:38:11",,,,
+" Manager Talent Aquistion &amp; presales",DESG_56,Active,"05-07-2023 02:38:12",,,,
+" Manager Technology AWS",DESG_57,Active,"05-07-2023 02:38:12",,,,
+" Marketing Associate",DESG_58,Active,"05-07-2023 02:38:13",,,,
+" Marketing Executive",DESG_59,Active,"05-07-2023 02:38:13",,,,
+" Network Admin",DESG_60,Active,"05-07-2023 02:38:14",,,,
+" NOC Engineer",DESG_61,Active,"05-07-2023 02:38:14",,,,
+" Practice Lead",DESG_62,Active,"05-07-2023 02:38:15",,,,
+" Principal Consultant",DESG_63,Active,"05-07-2023 02:38:15",,,,
+" Product Management",DESG_64,Active,"05-07-2023 02:38:16",,,,
+" Product Manager",DESG_65,Active,"05-07-2023 02:38:16",,,,
+" Project Co-ordinator",DESG_66,Active,"05-07-2023 02:38:17",,,,
+" Project Manager",DESG_67,Active,"05-07-2023 02:38:17",,,,
+" QA Lead",DESG_68,Active,"05-07-2023 02:38:18",,,,
+" Senior Automation Engineer",DESG_69,Active,"05-07-2023 02:38:18",,,,
+" Senior Business Development Lead",DESG_70,Active,"05-07-2023 02:38:19",,,,
+" Senior Developer UI &amp; SEO",DESG_71,Active,"05-07-2023 02:38:20",,,,
+" Senior DevOps Support Engineer",DESG_72,Active,"05-07-2023 02:38:20",,,,
+" Senior Executive Accounts",DESG_73,Active,"05-07-2023 02:38:21",,,,
+" Senior Executive Business Development",DESG_74,Active,"05-07-2023 02:38:21",,,,
+" Senior Inside Sales Executive",DESG_75,Active,"05-07-2023 02:38:22",,,,
+" Senior Inside Sales Specialist",DESG_76,Active,"05-07-2023 02:38:22",,,,
+" Senior Manager Architect",DESG_77,Active,"05-07-2023 02:38:23",,,,
+" Senior Manager Projects",DESG_78,Active,"05-07-2023 02:38:23",,,,
+" Senior Manager Service Delivery",DESG_79,Active,"05-07-2023 02:38:24",,,,
+" Senior Manager Technical Architect",DESG_80,Active,"05-07-2023 02:38:24",,,,
+" Senior Sales Director",DESG_81,Active,"05-07-2023 02:38:25",,,,
+" Senior Sales Manager",DESG_82,Active,"05-07-2023 02:38:25",,,,
+" Senior Software Engineer My Sql DBA",DESG_83,Active,"05-07-2023 02:38:26",,,,
+" Senior Support Engineer",DESG_84,Active,"05-07-2023 02:38:26",,,,
+" Senior Systems Admin",DESG_85,Active,"05-07-2023 02:38:27",,,,
+" Senior UI Engineer",DESG_86,Active,"05-07-2023 02:38:27",,,,
+" Senior Visual Designer",DESG_87,Active,"05-07-2023 02:38:28",,,,
+" Senior Visualiser",DESG_88,Active,"05-07-2023 02:38:28",,,,
+" Senior VOIP Engineer",DESG_89,Active,"05-07-2023 02:38:29",,,,
+" SEO Manager",DESG_90,Active,"05-07-2023 02:38:30",,,,
+" SEO Specialist",DESG_91,Active,"05-07-2023 02:38:30",,,,
+" Social Media Strategist",DESG_92,Active,"05-07-2023 02:38:31",,,,
+" Software Engineer Application support",DESG_93,Active,"05-07-2023 02:38:31",,,,
+" Software Engineer UI Designer",DESG_94,Active,"05-07-2023 02:38:32",,,,
+" Software Engineer UI/UX Designer",DESG_95,Active,"05-07-2023 02:38:32",,,,
+" Software Engineer VOIP",DESG_96,Archived,"05-07-2023 02:38:33",,,,
+" System Architect",DESG_97,Active,"05-07-2023 02:38:33",,,,
+" Team Lead - QA",DESG_98,Archived,"05-07-2023 02:38:34",,,,
+" Technical Architect- Enterprise and Wireless Application",DESG_99,Active,"05-07-2023 02:38:34",,,,
+" Technical Writer",DESG_100,Active,"05-07-2023 02:38:35",,"05-01-2024 11:59:55","[REDACTED]",05-07-2023
+" Test Automation Lead",DESG_101,Active,"05-07-2023 02:38:35",,,,
+" Test Engineer",DESG_102,Active,"05-07-2023 02:38:36",,,,
+" Test Lead",DESG_103,Active,"05-07-2023 02:38:37",,,,
+" Trainee",DESG_104,Active,"05-07-2023 02:38:37",,,,
+" Trainee Engineer",DESG_105,Active,"05-07-2023 02:38:38",,,,
+" Trainee Software Engineer",DESG_106,Active,"05-07-2023 02:38:38",,,,
+" UI Engineer",DESG_107,Active,"05-07-2023 02:38:39",,,,
+" US IT Recruiter",DESG_108,Active,"05-07-2023 02:38:39",,,,
+" VOIP Engineer",DESG_109,Active,"05-07-2023 02:38:40",,,,
+" VP Technology",DESG_110,Active,"05-07-2023 02:38:40",,,,
+" Wordpress lead",DESG_111,Active,"05-07-2023 02:38:41",,,,
+Accountant,DE_1,Active,"05-07-2023 03:09:52",,,,
+"Admin Executive",DE_2,Active,"05-07-2023 03:09:52",,,,
+"Administrative Executive",DE_3,Active,"05-07-2023 03:09:53",,,,
+"Android Developer",DE_4,Archived,"05-07-2023 03:09:53",,,,
+"Assistant Manager HR",DE_5,Active,"05-07-2023 03:09:54",,,,
+"Assistant Manager Inside Sales",DE_6,Active,"05-07-2023 03:09:54",,,,
+"Associate Accounts",DE_7,Active,"05-07-2023 03:09:55",,,,
+"Associate Admin",DE_8,Active,"05-07-2023 03:09:55",,,,
+"Associate Business Analyst",DE_9,Active,"05-07-2023 03:09:56",,,,
+"Associate Designer",DE_10,Active,"05-07-2023 03:09:56",,,,
+"Associate Engineer",DE_11,Active,"05-07-2023 03:09:57",,,,
+"Associate HR",DE_12,Active,"05-07-2023 03:09:57",,,,
+"Associate Inside Sales",DE_13,Active,"05-07-2023 03:09:58",,,,
+"Associate Systems Administrator",DE_14,Active,"05-07-2023 03:09:59",,,,
+"Associate Technical Support",DE_15,Active,"05-07-2023 03:09:59",,,,
+"Automation Lead",DE_16,Active,"05-07-2023 03:10:00",,,,
+"Automation Lead Engineer",DE_17,Active,"05-07-2023 03:10:00",,,,
+AVP,DE_18,Active,"05-07-2023 03:10:01",,,,
+"AVP Business Development",DE_19,Active,"05-07-2023 03:10:01",,,,
+"AVP Finance",DE_20,Active,"05-07-2023 03:10:02",,,,
+"AVP Technology",DE_21,Active,"05-07-2023 03:10:03",,,,
+"AVP Technology Solution Architect",DE_22,Active,"05-07-2023 03:10:03",,,,
+"Business Analyst",DE_23,Active,"05-07-2023 03:10:04",,,,
+"Business Development Manager",DE_24,Active,"05-07-2023 03:10:04",,,,
+Consultant,DE_25,Active,"05-07-2023 03:10:05",,,,
+"Content writer",DE_26,Active,"05-07-2023 03:10:05",,,,
+"Creative Designer",DE_27,Archived,"05-07-2023 03:10:06",,,,
+CTO,DE_28,Active,"05-07-2023 03:10:06",,,,
+"Customer Engagement Manager",DE_29,Active,"05-07-2023 03:10:07",,,,
+"DevOps Support Engineer",DE_30,Active,"05-07-2023 03:10:07",,,,
+"DevOps Support Lead",DE_31,Active,"05-07-2023 03:10:08",,,,
+"DevOps System Engineer",DE_32,Active,"05-07-2023 03:10:08",,,,
+Director,DE_33,Active,"05-07-2023 03:10:09",,,,
+"Director Operations",DE_34,Active,"05-07-2023 03:10:09",,,,
+"Director, Business Development and Sales",DE_35,Active,"05-07-2023 03:10:10",,,,
+"Engineer DevOps",DE_36,Active,"05-07-2023 03:10:10",,,,
+"Engineer Systems",DE_37,Active,"05-07-2023 03:10:11",,,,
+"Executive HR",DE_38,Active,"05-07-2023 03:10:12",,,,
+"Executive Inside Sales",DE_39,Active,"05-07-2023 03:10:12",,,,
+"Executive Lead Generation",DE_40,Active,"05-07-2023 03:10:13",,,,
+"Executive Product",DE_41,Active,"05-07-2023 03:10:13",,,,
+"Executive Product BA",DE_42,Active,"05-07-2023 03:10:14",,,,
+"Founder and Director",DE_43,Active,"05-07-2023 03:10:14",,,,
+"Hadoop Administrator",DE_44,Active,"05-07-2023 03:10:15",,,,
+"Help Desk Executive",DE_45,Active,"05-07-2023 03:10:15",,,,
+"HR Associate",DE_46,Active,"05-07-2023 03:10:16",,,,
+"HR Executive",DE_47,Active,"05-07-2023 03:10:16",,,,
+"HR Lead",DE_48,Active,"05-07-2023 03:10:17",,,,
+"HR Trainee",DE_49,Active,"05-07-2023 03:10:17",,,,
+"Inside Sales associate",DE_50,Active,"05-07-2023 03:10:18",,,,
+"Inside Sales Executive",DE_51,Active,"05-07-2023 03:10:18",,,,
+Intern,DE_52,Active,"05-07-2023 03:10:19",,,,
+"iOS Developer",DE_53,Active,"05-07-2023 03:10:19",,,,
+"Junior QA Engineer",DE_54,Active,"05-07-2023 03:10:20",,,,
+"Junior Software Engineer",DE_55,Active,"05-07-2023 03:10:21",,,,
+"Junior System Admin",DE_56,Active,"05-07-2023 03:10:21",,,,
+"Lead Cisco Voice",DE_57,Active,"05-07-2023 03:10:22",,,,
+"Lead Data Solutions",DE_58,Active,"05-07-2023 03:10:22",,,,
+"Lead Digital Marketing",DE_59,Active,"05-07-2023 03:10:23",,,,
+"Lead Engineer",DE_60,Active,"05-07-2023 03:10:23",,,,
+"Lead HR",DE_61,Active,"05-07-2023 03:10:24",,,,
+"Lead Mobility",DE_62,Active,"05-07-2023 03:10:24",,,,
+"Lead Presales",DE_63,Active,"05-07-2023 03:10:25",,,,
+"Lead Product",DE_64,Active,"05-07-2023 03:10:25",,,,
+"Lead Projects",DE_65,Active,"05-07-2023 03:10:26",,,,
+"Lead QA",DE_66,Active,"05-07-2023 03:10:26",,,,
+"Lead Quality Initiatives",DE_67,Active,"05-07-2023 03:10:27",,,,
+"Lead Talent Acquisition",DE_68,Active,"05-07-2023 03:10:28",,,,
+"Lead Technology & Presales",DE_69,Active,"05-07-2023 03:10:28",,,,
+"Lead UI UX",DE_71,Active,"05-07-2023 03:10:29",,,,
+"Manager Business Development",DE_72,Active,"05-07-2023 03:10:30",,,,
+"Manager Operations",DE_73,Active,"05-07-2023 03:10:30",,,,
+"Manager Product",DE_74,Active,"05-07-2023 03:10:31",,,,
+"Manager Product BA",DE_75,Active,"05-07-2023 03:10:31",,,,
+"Manager Projects",DE_76,Active,"05-07-2023 03:10:32",,,,
+"Manager Quality Assurance",DE_77,Active,"05-07-2023 03:10:32",,,,
+"Manager Service Delivery",DE_78,Active,"05-07-2023 03:10:33",,,,
+"Manager Talent Aquistion & presales",DE_79,Active,"05-07-2023 03:10:34",,,,
+"Manager Technology AWS",DE_80,Active,"05-07-2023 03:10:34",,,,
+"Marketing Associate",DE_81,Active,"05-07-2023 03:10:35",,,,
+"Marketing Executive",DE_82,Active,"05-07-2023 03:10:35",,,,
+"Network Admin",DE_83,Active,"05-07-2023 03:10:36",,,,
+"NOC Engineer",DE_84,Active,"05-07-2023 03:10:36",,,,
+"Practice Lead",DE_85,Active,"05-07-2023 03:10:37",,,,
+"Principal Consultant",DE_86,Active,"05-07-2023 03:10:37",,,,
+"Product Management",DE_87,Active,"05-07-2023 03:10:38",,,,
+"Product Manager",DE_88,Active,"05-07-2023 03:10:38",,,,
+"Program Manager",DE_89,Active,"05-07-2023 03:10:39",,,,
+"Project Co-ordinator",DE_90,Active,"05-07-2023 03:10:39",,,,
+"Project Lead",DE_91,Active,"05-07-2023 03:10:40",,,,
+"Project Manager",DE_92,Active,"05-07-2023 03:10:40",,,,
+"QA Engineer",DE_93,Active,"05-07-2023 03:10:41",,,,
+"QA Lead",DE_94,Active,"05-07-2023 03:10:41",,,,
+"Senior Automation Engineer",DE_95,Active,"05-07-2023 03:10:42",,,,
+"Senior Business Development Lead",DE_96,Active,"05-07-2023 03:10:43",,,,
+"Senior Consultant Quality Assurance",DE_97,Active,"05-07-2023 03:10:43",,,,
+"Senior Content Writer",DE_98,Active,"05-07-2023 03:10:44",,,,
+"Senior Developer UI & SEO",DE_99,Active,"05-07-2023 03:10:44",,,,
+"Senior DevOps Support Engineer",DE_100,Active,"05-07-2023 03:10:45",,,,
+"Senior Executive Accounts",DE_101,Active,"05-07-2023 03:10:45",,,,
+"Senior Executive Business Development",DE_102,Active,"05-07-2023 03:10:46",,,,
+"Senior Executive Inside Sales",DE_103,Active,"05-07-2023 03:10:46",,,,
+"Senior Executive Product",DE_104,Active,"05-07-2023 03:10:47",,,,
+"Senior Game Engineer",DE_105,Active,"05-07-2023 03:10:47",,,,
+"Senior HR Executive",DE_106,Active,"05-07-2023 03:10:48",,,,
+"Senior Inside Sales Executive",DE_107,Active,"05-07-2023 03:10:49",,,,
+"Senior Inside Sales Specialist",DE_108,Active,"05-07-2023 03:10:49",,,,
+"Senior iOS Developer",DE_109,Active,"05-07-2023 03:10:50",,,,
+"Senior Manager Architect",DE_110,Active,"05-07-2023 03:10:50",,,,
+"Senior Manager Projects",DE_111,Active,"05-07-2023 03:10:51",,,,
+"Senior Manager Service Delivery",DE_112,Active,"05-07-2023 03:10:51",,,,
+"Senior Manager Technical Architect",DE_113,Active,"05-07-2023 03:10:52",,,,
+"Senior QA Engineer",DE_114,Active,"05-07-2023 03:10:52",,,,
+"Senior Sales Director",DE_115,Active,"05-07-2023 03:10:53",,,,
+"Senior Sales Manager",DE_116,Active,"05-07-2023 03:10:53",,,,
+"Senior SEO Specialist",DE_117,Active,"05-07-2023 03:10:54",,,,
+"Senior Software Engineer",DE_118,Active,"05-07-2023 03:10:55",,,,
+"Senior Software Engineer My Sql DBA",DE_119,Active,"05-07-2023 03:10:55",,,,
+"Senior Support Engineer",DE_120,Active,"05-07-2023 03:10:56",,,,
+"Senior System Engineer",DE_121,Active,"05-07-2023 03:10:56",,,,
+"Senior Systems Admin",DE_122,Active,"05-07-2023 03:10:57",,,,
+"Senior UI Designer",DE_123,Active,"05-07-2023 03:10:57",,,,
+"Senior UI Engineer",DE_124,Active,"05-07-2023 03:10:58",,,,
+"Senior Visual Designer",DE_125,Active,"05-07-2023 03:10:58",,,,
+"Senior Visualiser",DE_126,Active,"05-07-2023 03:10:59",,,,
+"Senior VOIP Engineer",DE_127,Archived,"05-07-2023 03:10:59",,,,
+"SEO Associate",DE_128,Active,"05-07-2023 03:11:00",,,,
+"SEO Manager",DE_129,Active,"05-07-2023 03:11:00",,,,
+"SEO Specialist",DE_130,Active,"05-07-2023 03:11:01",,,,
+"Social Media Strategist",DE_131,Active,"05-07-2023 03:11:01",,,,
+"Software Engineer",DE_132,Active,"05-07-2023 03:11:02",,,,
+"Software Engineer Application support",DE_133,Active,"05-07-2023 03:11:02",,,,
+"Software Engineer QA",DE_134,Active,"05-07-2023 03:11:03",,,,
+"Software Engineer UI Designer",DE_135,Active,"05-07-2023 03:11:03",,,,
+"Software Engineer UI/UX Designer",DE_136,Active,"05-07-2023 03:11:04",,,,
+"Software Engineer VOIP",DE_137,Active,"05-07-2023 03:11:05",,,,
+"Support Engineer",DE_138,Archived,"05-07-2023 03:11:05",,,,
+"Support Office",DE_139,Active,"05-07-2023 03:11:06",,,,
+"System Architect",DE_140,Active,"05-07-2023 03:11:06",,,,
+"Systems Admin",DE_141,Active,"05-07-2023 03:11:07",,,,
+"Team Lead",DE_142,Archived,"05-07-2023 03:11:07",,,,
+"Team Lead - QA",DE_143,Active,"05-07-2023 03:11:08",,,,
+"Tech Lead",DE_144,Active,"05-07-2023 03:11:08",,,,
+"Technical Architect- Enterprise and Wireless Application",DE_145,Active,"05-07-2023 03:11:09",,,,
+"Technical Lead",DE_146,Active,"05-07-2023 03:11:09",,,,
+"Technical Writer",DE_147,Active,"05-07-2023 03:11:10",,"05-01-2024 11:57:54","[REDACTED]",05-07-2023
+"Test Automation Lead",DE_148,Active,"05-07-2023 03:11:10",,,,
+"Test Engineer",DE_149,Active,"05-07-2023 03:11:11",,,,
+"Test Lead",DE_150,Active,"05-07-2023 03:11:11",,,,
+Trainee,DE_151,Active,"05-07-2023 03:11:12",,,,
+"Trainee Engineer",DE_152,Active,"05-07-2023 03:11:12",,,,
+"Trainee Software Engineer",DE_153,Active,"05-07-2023 03:11:13",,,,
+"UI Developer",DE_154,Active,"05-07-2023 03:11:13",,,,
+"UI Engineer",DE_155,Active,"05-07-2023 03:11:14",,,,
+"US IT Recruiter",DE_156,Active,"05-07-2023 03:11:15",,,,
+"Vice President",DE_157,Active,"05-07-2023 03:11:15",,,,
+"VOIP Engineer",DE_158,Archived,"05-07-2023 03:11:16",,,,
+"VP Technology",DE_159,Active,"05-07-2023 03:11:16",,,,
+"Wordpress lead",DE_160,Active,"05-07-2023 03:11:17",,,,
+"Lead - Technology Solution Architect",,Active,"05-07-2023 03:46:03",,,,
+"Co-Founder & Executive Vice President",,Active,"06-07-2023 15:25:51",,,,
+TPL.A.OB.SO,TPL.A.OB.SO,Active,"06-07-2023 18:21:40",,,,
+"Software Engineer_Python",,Active,"04-09-2023 14:01:08",,,,
+"Associate Engineer_QA_Test Complete",,Archived,"05-09-2023 12:22:48",,"05-09-2023 12:38:23",,05-09-2023
+"Associate Analyst",,Active,"05-09-2023 12:50:37",,,,
+"Company Director",,Active,"08-09-2023 09:54:17",,,,
+"QA Engineer_Performance Testing",,Active,"10-09-2023 18:33:44",,,,
+"Java Trainer",,Active,"10-09-2023 19:04:04",,,,
+"Cyber Security Specialist",,Active,"18-09-2023 20:07:27",,,,
+"QA Engineers (Python/TCL)",,Active,"18-09-2023 20:33:29",,,,
+"Software Engineer_Java_Invoicemart",PSI.DEV.BE.SE.JAVA.INVOICEMART,Active,"27-10-2023 13:46:54",,,,
+"Mobile Hybrid Developer",DE_170,Active,"28-10-2023 12:24:34",,,,
+"Senior Director Human Resources",,Active,"15-11-2023 10:52:49","Darwinbox Admin",,,
+"Director Technology and Services",,Active,"15-11-2023 10:54:51","Darwinbox Admin",,,
+"Executive Vice President",,Active,"15-11-2023 10:56:40","Darwinbox Admin",,,
+"Manager Talent Acquisition",,Active,"15-11-2023 10:58:03","Darwinbox Admin",,,
+"Monitoring Lead",,Active,"15-11-2023 11:03:05","Darwinbox Admin",,,
+"Inside Sales",,Active,"15-11-2023 11:05:46","Darwinbox Admin",,,
+"Proposal Writer",,Active,"15-11-2023 11:06:52","Darwinbox Admin",,,
+"Scrum Master",,Active,"15-11-2023 11:11:28","Darwinbox Admin",,,
+"UX Manager",,Active,"12-12-2023 09:13:13","Darwinbox Admin",,,12-12-2023
+"Vice President Engineering ",DE_161,Active,"22-12-2023 14:58:59","[REDACTED]",,,22-12-2023
+"Senior Software Engineer- Python",DE_162,Active,"03-01-2024 14:31:33","[REDACTED]","03-01-2024 14:52:15","[REDACTED]",03-01-2024
+"Senior Director",DE_163,Archived,"03-01-2024 14:34:50","[REDACTED]","04-01-2024 16:12:53","[REDACTED]",03-01-2024
+"Senior Technical Writer",DE_164,Active,"03-01-2024 14:56:47","[REDACTED]",,,03-01-2024
+"Senior Business Analyst",DE_166,Active,"03-01-2024 17:55:01","[REDACTED]",,,03-01-2024
+"Senior Director",DE_167,Active,"04-01-2024 16:13:42","[REDACTED]",,,04-01-2024
+"Senior Technical Writer",PSI.PD.D.STW,Archived,"05-01-2024 12:02:29","[REDACTED]",,,05-01-2024
+"Sales Director",DE_172,Active,"09-01-2024 12:30:06","[REDACTED]",,,09-01-2024
+"Business Development Executive",DE_169,Active,"11-01-2024 10:19:59","[REDACTED]",,,11-01-2024
+"UX Designer",PSI.DG.UI/UX.DESG,Active,"22-01-2024 15:53:29","[REDACTED]",,,22-01-2024
+"Senior Director Engineering",DE_163,Active,"07-02-2024 12:12:53","[REDACTED]","07-02-2024 12:43:43","[REDACTED]",07-02-2024
+"Business Development Manager",PSI.BD.S.BDM,Active,"07-02-2024 18:11:28","[REDACTED]",,,07-02-2024
+"Lead Technical Writer",PSI.Doc.LTW,Active,"20-02-2024 08:06:33","[REDACTED]",,,19-02-2024
+"Associate Business Development",DESG_421,Active,"14-03-2024 09:55:45","[REDACTED]",,,14-03-2024
+"Lead Talent Acquisition ",DESG_125,Active,"07-08-2024 10:16:18","[REDACTED]",,,07-08-2024
+"Software Engineer",PSI.FE.SE.Flutter,Active,"17-08-2024 20:44:38","[REDACTED]",,,17-08-2024
+"Software Engineer Flutter",DE_171,Active,"18-08-2024 19:44:56","[REDACTED]",,,18-08-2024
+"Db Admin","Db Admin",Active,"20-08-2024 14:11:18","[REDACTED]",,,20-08-2024
+" Senior Director Business Development",DE_173,Active,"01-10-2024 12:38:35","[REDACTED]",,,01-08-2024
+"Senior Director Business Development",PSI.DIR.BD,Active,"01-10-2024 12:43:39","[REDACTED]",,,01-10-2024
+"Software Engineer (MS SQL DBA )",PSI.SE.MSDBA,Active,"16-10-2024 10:16:36","[REDACTED]",,,16-10-2024
+"Senior Technical Lead",PSI.STL,Active,"04-11-2024 13:56:49","[REDACTED]",,,04-11-2024
+"Senior QA Engineer",PSI.SQAE,Active,"04-11-2024 13:57:40","[REDACTED]",,,04-11-2024
+"Senior Business Analyst",SBA,Active,"04-11-2024 13:58:20","[REDACTED]",,,04-11-2024
+"Application Support Engineer",PSI.ASE.NE,Active,"25-12-2024 14:31:13","[REDACTED]",,,25-12-2024
+"System Engineer",DESG_130,Active,"30-01-2025 22:45:22","[REDACTED]",,,30-01-2025
+"SQL Engineer",DESG_138,Active,"07-02-2025 23:26:25","[REDACTED]",,,07-02-2025
+"Senior Marketing Professional",DESG_140,Active,"01-03-2025 13:43:09","[REDACTED]","14-10-2025 16:58:18","[REDACTED]",01-03-2025
+"Talent Acquisition Lead ",DESG_141,Active,"01-03-2025 13:45:01","[REDACTED]",,,01-03-2025
+"Senior Analyst",DESG_142,Active,"21-03-2025 11:29:17","[REDACTED]",,,21-03-2025
+"Oracle Fusion Functional Consultant",DE_180,Active,"16-04-2025 14:44:28","[REDACTED]",,,16-04-2025
+"Oracle Fusion Technical Lead",DE_181,Active,"16-04-2025 15:01:48","[REDACTED]",,,16-04-2025
+"Senior Oracle Consultant",DE_174,Active,"09-05-2025 12:59:38","[REDACTED]",,,09-05-2025
+"Senior SCM Functional Consultant",DE_175,Active,"09-05-2025 13:00:55","[REDACTED]",,,09-05-2025
+"Senior Oracle CPQ Consultant",DE_176,Active,"19-05-2025 14:21:07","[REDACTED]",,,19-05-2025
+"Senior Oracle PDH Consultant",DE_177,Active,"19-05-2025 14:21:31","[REDACTED]",,,19-05-2025
+"Senior Technical Manager",DE_178,Active,"22-05-2025 11:42:01","[REDACTED]",,,22-05-2025
+"Associate Backend Engineer",PSI.DEV.BE.Java/Python,Active,"29-05-2025 12:32:17","[REDACTED]","29-05-2025 12:36:37","[REDACTED]",29-05-2025
+"Senior Delivery Manager",DE_179,Active,"12-06-2025 18:03:32","[REDACTED]",,,12-06-2025
+"Senior Software Engieer","PSI.DEV.BE.Golang	",Active,"23-06-2025 12:50:25","[REDACTED]",,,23-06-2025
+"Software Engineer",PSI.DEV.BE.SE.EVERTZ,Active,"24-07-2025 17:52:13","[REDACTED]",,,24-07-2025
+"QA Engineer",PSI.QA.AT.KOTAK,Active,"25-07-2025 10:39:50","[REDACTED]",,,25-07-2025
+"SQA ( Software Quality Assurance)",PSI.QA.MT.KOTAK,Active,"25-07-2025 11:31:01","[REDACTED]",,,25-07-2025
+"Oracle Master data consultant",PSI.ERP.OMD.ABDN,Active,"28-07-2025 11:08:05","[REDACTED]",,,28-07-2025
+"Test engineer","PSI.QA.AT.PYTHON.HP	",Active,"21-08-2025 18:06:44","[REDACTED]","21-08-2025 18:12:12","[REDACTED]",21-08-2025
+"QA Python Engineer ",PSI.QA.AT.PYTHON.HP,Active,"21-08-2025 18:15:07","[REDACTED]","21-08-2025 18:17:15","[REDACTED]",21-08-2025
+"Sr UX designer",PSI.DG.UX.DSG,Active,"22-08-2025 11:59:39","[REDACTED]",,,22-08-2025
+"Devops Engineer",PSI.DAS.SK,Active,"22-08-2025 16:06:24","[REDACTED]",,,22-08-2025
+"UI Development lead",PSI.UI.Lead.Abdrn,Active,"25-08-2025 11:07:24","[REDACTED]","25-08-2025 11:07:53","[REDACTED]",25-08-2025
+"Senior Software Engineer",PSI.DEV.FE.SK,Active,"26-08-2025 18:05:55","[REDACTED]","28-08-2025 16:18:29","[REDACTED]",26-08-2025
+"Senior Software Engineer",PSI.DEV.MD.SK,Active,"26-08-2025 18:17:00","[REDACTED]",,,26-08-2025
+"Senior Software Engineer",PSI.DEV.Fullstack.SK,Active,"26-08-2025 18:27:28","[REDACTED]","28-08-2025 16:18:18","[REDACTED]",26-08-2025
+"Senior UI Developer",PSI.UI.Dev.Abdrn,Active,"28-08-2025 14:20:39","[REDACTED]",,,28-08-2025
+"Business Analyst","PSI.BA.SK ",Active,"28-08-2025 14:58:34","[REDACTED]",,,28-08-2025
+"Full Stack Development Lead",PSI.Lead.Fullstack.SK,Active,"28-08-2025 16:51:12","[REDACTED]",,,28-08-2025
+"Senior Data Engineer","PSI.Data Engineer.Aberdeen",Active,"29-08-2025 12:25:17","[REDACTED]",,,29-08-2025
+"Senior Data QA Engineer",PSI.QA.DE.Aberdeen,Active,"29-08-2025 12:27:15","[REDACTED]",,,29-08-2025
+"Software Engineer",PSI.DEV.BE.Java.HP,Active,"03-09-2025 13:55:33","[REDACTED]",,,03-09-2025
+"Accounts Coordinator ",DE_182,Active,"03-09-2025 16:54:34","[REDACTED]",,,03-09-2025
+"Test Automation Engineer",PSI.QA.AT.Abdrn,Active,"06-09-2025 13:14:19","[REDACTED]",,,06-09-2025
+"Senior Data QA Engineer (Powe BI)",PSI.QA.DE.PowerBI.Aberdeen,Active,"08-09-2025 11:46:16","[REDACTED]",,,08-09-2025
+"QA Engineer",PSI.QA.Jr.NSDL,Active,"08-09-2025 15:02:44","[REDACTED]","08-09-2025 15:50:51","[REDACTED]",08-09-2025
+"Senior QA Engineer",PSI.QA.Mid.NSDL,Active,"08-09-2025 15:11:04","[REDACTED]",,,08-09-2025
+"QA Lead",PSI.QA.Lead.NSDL,Active,"08-09-2025 15:22:00","[REDACTED]",,,08-09-2025
+"Tech Lead ","PSI.DEV.BE.Tech lead.SC",Active,"01-10-2025 15:33:53","[REDACTED]","01-10-2025 16:23:15","[REDACTED]",01-10-2025
+"Senior Software Engineer",PSI.DEV.BE.SSE.SC,Active,"01-10-2025 16:30:09","[REDACTED]",,,01-10-2025
+"Practice Head","PSI.ERP.PH.Oracle ",Active,"01-10-2025 18:34:37","[REDACTED]",,,01-10-2025
+"Tech Lead","PSI.DEV.Lead.Dot Net.SC",Active,"21-10-2025 12:19:37","[REDACTED]",,,21-10-2025
+"Senior Software Engineer.","PSI.DEV.SSE.Dot Net.SC",Active,"21-10-2025 12:22:23","[REDACTED]",,,21-10-2025
+"Business Analyst ( QA)","PSI. BA.QA.YES",Active,"24-10-2025 12:57:15","[REDACTED]",,,24-10-2025
+"Software Engineer ",PSI.DEV.FE.React.Kotak,Active,"28-10-2025 11:57:48","[REDACTED]",,,28-10-2025
+"Director- Product",DE_183,Active,"31-10-2025 23:19:26","[REDACTED]",,,31-10-2025
+"Oracle Fusion MRP Architect",PSI.ERP.OFMRP.HANGER,Active,"04-11-2025 12:29:04","[REDACTED]",,,04-11-2025
+"Oracle Supply Chain/Financials OM & AR Sr. Consultant",PSI.ERP.SC/F.HANGER,Active,"04-11-2025 12:32:25","[REDACTED]","02-12-2025 16:53:38","[REDACTED]",04-11-2025
+"Oracle Financials PO & AP Sr. Consultant",PSI.ERP.PO.AP.HANGER,Active,"04-11-2025 14:03:47","[REDACTED]","03-12-2025 12:11:21","[REDACTED]",04-11-2025
+"Oracle Fusion Inventory Consultant",PSI.DEV.OFIC.HANGER,Active,"04-11-2025 14:20:50","[REDACTED]",,,04-11-2025
+" Senior Consultant : Oracle Fusion Cost Accounting and Intercompany Supply Chain Financial Orchestration ",PSI.ERP.SR.OFCA.ISC.HANGER,Active,"04-11-2025 14:24:50","[REDACTED]",,,04-11-2025
+"Junior Consultant : Oracle Fusion Cost Accounting and Intercompany Supply Chain Financial Orchestration ",PSI.ERP.JR.OFCA.ISC.HANGER,Active,"04-11-2025 14:26:01","[REDACTED]",,,04-11-2025
+"Technical Project Manager","PSI.C.Tech PM.SK",Active,"06-11-2025 14:52:17","[REDACTED]",,,06-11-2025
+"QA Engineer",PSI.QA.AT.Hanger,Active,"10-11-2025 14:10:09","[REDACTED]",,,10-11-2025
+" Oracle Fusion Cloud OIC Integration Specialist consultant",PSI.ERP.OFCOIC.HANGER,Active,"28-11-2025 12:31:17","[REDACTED]",,,28-11-2025
+"Senior Test Automation Engineer",PSI.SR.QA.AT.HANGER,Active,"01-12-2025 11:32:43","[REDACTED]",,,01-12-2025
+"Software Engineer.",PSI.QA.Yesbank,Active,"02-12-2025 17:24:41","[REDACTED]",,,02-12-2025
+"Oracle Fusion OM / AR / Collections Technical Specialist",PSI.ERP.OM/AR/Collections.Tech.HANGER,Active,"08-12-2025 11:37:50","[REDACTED]",,,08-12-2025
+"Senior Flutter Developer",PSI.DEV.FE.Flutter.Kotak,Active,"12-12-2025 15:45:08","[REDACTED]","12-12-2025 16:15:07","[REDACTED]",12-12-2025
+"Senior Director-Oracle Practice",DE_184,Active,"22-12-2025 14:04:02","[REDACTED]",,,22-12-2025
+"Software Engineer",PSI.FE.React.SK,Active,"29-12-2025 11:49:19","[REDACTED]",,,29-12-2025
+"Software Engineer","PSI.DEV.BE.SK finance.",Active,"07-01-2026 17:29:50","[REDACTED]",,,07-01-2026
+"Senior Software Engineer",PSI.DEV.Next.JS.SC,Active,"20-01-2026 11:27:47","[REDACTED]",,,20-01-2026
+"Veterinary Radiologist",PSI.QA.Vet.Radiology,Active,"06-03-2026 12:08:42","[REDACTED]",,,06-03-2026
+"Oracle Fusion Functional Consultant ( SCM)",PSI.ERP.Functional.SCM,Active,"10-03-2026 14:21:19","[REDACTED]",,,10-03-2026
+"Business Analyst.",PSI.BA.INVOICEMART,Active,"18-03-2026 12:39:37","[REDACTED]",,,18-03-2026
+"Marketing Executive",PSI.BD.MKT.EXE,Active,"30-03-2026 15:38:10","[REDACTED]",,,30-03-2026
+"Marketing Executive",PSI.BD.MKT.EXECTV,Active,"30-03-2026 15:40:23","[REDACTED]",,,30-03-2026
+"Marketing Manager",PSI.BD.MKT.Manager,Active,"30-03-2026 15:57:00","[REDACTED]",,,30-03-2026
+"QA Engineer",PSI.QA.AT.Oracle-Hanger,Active,"30-03-2026 16:40:46","[REDACTED]",,,30-03-2026
+"Technical Engineer",PSI.QA.API.YESBANK,Active,"15-04-2026 12:43:07","[REDACTED]",,,15-04-2026
+"Senior Data QA Engineer.",PSI.QA.DE.Hanger,Active,"16-04-2026 18:47:12","[REDACTED]",,,16-04-2026

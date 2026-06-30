@@ -1,0 +1,9 @@
+"Reason Type",Reason,Status,"Enable Exception Resolution Date","Enable Approval Attachment","Hide Reason for Candidate","Reminder Email to Admin","Reminder Email to Candidate","Updated On","Updated By","Created On","Created By"
+"Separation Revoke Reason (2)",Retained,Active,,,,,,"08-07-2025 12:51:03","[REDACTED]","08-07-2025 12:51:03","[REDACTED]"
+"Onboarding Reinitiation Reason (10)","Change in Date of Joining",Active,,,,,,"16-05-2025 23:11:31",System,"16-05-2025 23:11:31",System
+"Onboarding Reinitiation Reason (10)","Change in Template Assignation",Active,,,,,,"16-05-2025 23:11:31",System,"16-05-2025 23:11:31",System
+"Onboarding Reinitiation Reason (10)","Change in Candidate's Contact Details",Active,,,,,,"16-05-2025 23:11:31",System,"16-05-2025 23:11:31",System
+"Onboarding Reinitiation Reason (10)","Candidate Requested Redo",Active,,,,,,"16-05-2025 23:11:31",System,"16-05-2025 23:11:31",System
+"Sensitive Data Access Reason (9)","Sensitive Data Audit",Active,,,,,,"09-02-2025 03:56:12",System,"09-02-2025 03:56:12",System
+"Employee Deletion Reason (4)","Candidate Dint Join",Active,,,,,,"30-07-2024 15:36:17","[REDACTED]","30-07-2024 15:36:17","[REDACTED]"
+"Employee Deletion Reason (4)","Not Needed",Active,,,,,,"30-07-2024 15:32:31","Darwinbox Admin (DB006)","30-07-2024 15:32:31","Darwinbox Admin (DB006)"

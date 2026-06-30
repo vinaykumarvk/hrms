@@ -1,0 +1,313 @@
+Catalogue ID,Permission Code,Permission Name,PrimeSoft Module Group,Module Code,Phase,Layer,Action,Legacy Module,Legacy Sub-Module,Source
+CAT-001,view_position_details_standard,View Position Details,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-002,view_profile_flag_standard,View profile flag,Employee Master,M01,1,Operational,View,Core,Core & Employee management,Export (enforced)
+CAT-003,view_future_transactions_standard,Future Transactions,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-004,edit_future_transactions_standard,Future Transactions,Employee Master,M01,1,Operational,Edit/Action,Core,Employee Data management,Export (enforced)
+CAT-005,view_assigned_policies_standard,View Assigned Policies,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-006,view_profile_history_standard,Profile History,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-007,assign_replacement_standard,Assign Replacement,Employee Master,M01,1,Operational,Edit/Action,Core,Employee Data management,Export (enforced)
+CAT-008,download_profile_pdf_standard,Download Profile PDF,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-009,employee_lifecycle_probation_confirmation_standard,Employee Lifecycle - Probation Confirmation,Employee Master,M01,1,Operational,View,Workflows,Confirmation,Export (enforced)
+CAT-010,employee_lifecycle_separation_standard,Employee Lifecycle Separation,Exits & Offboarding,M03,1,Operational,View,Workflows,Separation,Export (enforced)
+CAT-011,employee_lifecycle_contract,Employee Lifecycle - Contract,Employee Master,M01,1,Operational,View,Workflows,Contract,Export (enforced)
+CAT-012,workflow_tab,Employee Lifecycle - WorkFlow,Workflow Engine,P01,1,Operational,View,Workflows,Workflows,Export (enforced)
+CAT-013,separation_history,Separation History,Exits & Offboarding,M03,1,Operational,View,Workflows,Separation,Export (enforced)
+CAT-014,view_employee_lifecycle_onboarding,Employee Lifecycle - Onboarding,Onboarding,M02,1,Operational,View,Onboarding,Onboarding,Export (enforced)
+CAT-015,view_personal_details_standard,View Personal Details,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-016,view_employment_details_standard,View Employment Details,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-017,view_assigned_permissions_standard,View Assigned Permissions,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-018,attendance_leave_oneview_view_standard,View attendance & leave data in one view,Attendance,M05,1,Operational,View,Time Management,Attendance,Export (enforced)
+CAT-019,attendance_view_overtime_list_standard,Overtime Credited List,Attendance,M05,1,Operational,View,Time Management,Attendance,Export (enforced)
+CAT-020,attendance_view_attendance_standard,View Attendance Page,Attendance,M05,1,Operational,View,Time Management,Attendance,Export (enforced)
+CAT-021,attendance_edit_one_view_standard,Edit attendance in One View,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-022,edit_shift_weeklyoff_one_view_standard,Edit Shift & Weekly off in One View,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-023,attendance_edit_attendance_page_standard,Edit Attendance in attendance page,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-024,attendance_apply_attendance_others_standard,On behalf attendance application,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-025,edit_leave_balance_on_leave_page_standard,Edit Leave Balance on leave page,Leave,M04,1,Operational,Edit/Action,Time Management,Leave,Export (enforced)
+CAT-026,leave_apply_oneview_standard,Apply leave in one view,Leave,M04,1,Operational,Edit/Action,Time Management,Leave,Export (enforced)
+CAT-027,leave_compoff_payout_history_standard,Pay out in comp-off history,Leave,M04,1,Operational,Edit/Action,Time Management,Leave,Export (enforced)
+CAT-028,leave_apply_other_standard,Raise leave request on behalf of,Leave,M04,1,Operational,Edit/Action,Time Management,Leave,Export (enforced)
+CAT-029,leave_compoff_credited_history_standard,Comp off credited history,Leave,M04,1,Operational,View,Time Management,Leave,Export (enforced)
+CAT-030,leave_history_standard,Leave history,Leave,M04,1,Operational,View,Time Management,Leave,Export (enforced)
+CAT-031,leave_view_leave_standard,View an Employee's Leave Page,Leave,M04,1,Operational,View,Time Management,Leave,Export (enforced)
+CAT-032,attendance_import_roster_standard,Roster Import,Attendance,M05,1,Operational,Import,Time Management,Attendance,Export (enforced)
+CAT-033,attendance_import_roster_calendar_standard,Roster Calendar Import,Attendance,M05,1,Operational,Import,Time Management,Attendance,Export (enforced)
+CAT-034,assign_time_sheet_policy_standard,Assign TimeSheet Policy,Attendance,M05,1,Operational,Edit/Action,Time Management,TimeSheets,Export (enforced)
+CAT-035,attendance_edit_shift_policy_weeklyoff_standard,"Assign Shift, Attendance Policy and Weekly off",Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-036,view_summary,View Trip Summary,Expense & Travel,M12,2,Operational,View,Travel & Expense,Travel,Export (enforced)
+CAT-037,view_travel,View Travel Requests,Expense & Travel,M12,2,Operational,View,Travel & Expense,Travel,Export (enforced)
+CAT-038,leave_edit_flexible_holiday_date_standard,Edit Flexible Holiday Date,Leave,M04,1,Operational,Edit/Action,Time Management,Leave,Export (enforced)
+CAT-039,edit_pay_package,Edit Pay Package,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-040,edit_it_declaration_access,Edit IT/POI Declaration Access,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-041,edit_it_declaration,Edit IT/POI Declaration,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-042,manage_extra_payments,Manage Extra Payments,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-043,manage_loan_advances_extra_deductions,Manage Loan & Advances / ExtraDeductions,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-044,create_hold_salary,Create Hold Salary,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-045,create_perquisite,Create Perquisite,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-046,manage_benefits,Manage Benefits,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-047,manage_flexi_declarations,Manage Flexi Declarations,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-048,edit_flexi_declarations,Edit Flexi Declarations,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-049,create_form_12b,Create Form12b,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-050,manage_loans,Manage Loans,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-051,manage_advances,Manage Advances,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-052,edit_component_pay_package,Edit Component Pay Package,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-053,manage_component_extrapayments,Manage Component Extra Payments,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-054,manage_component_advances,Manage Component Advances,Payroll,M06,2,Operational,Edit/Action,Payroll,Payroll,Export (enforced)
+CAT-055,view_pay_package,Pay Package,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-056,view_benefits,Benefits,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-057,view_it_declarations,IT/POI Declarations,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-058,view_payslips,Payslips,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-059,view_extra_payments,Extra Payments,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-060,view_loans_advances_extra_deductions,Loans & Advances/Extra Deductions,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-061,view_hold_salary_repayment,Hold Salary / Repayment,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-062,view_taxsheet,Taxsheet,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-063,view_form_12b,Form 12B,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-064,view_form_16b,Form 16B,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-065,view_form_12ba,Form 12BA,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-066,view_perquisite,Perquisite,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-067,view_flexi_components,View Flexi Components,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-068,view_loans,View Loans,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-069,view_advances,View Advances,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-070,view_component_pay_package,View Component Pay Package,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-071,view_component_proration,View Component Proration,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-072,view_component_extrapayments,View Component Extra Payments,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-073,view_component_advances,View Component Advances,Payroll,M06,2,Operational,View,Payroll,Payroll,Export (enforced)
+CAT-074,view_user_expenses,View User Expenses,Expense & Travel,M12,2,Operational,View,Travel & Expense,Reimbursement,Export (enforced)
+CAT-075,view_reimbursement_advances,View Reimbursement Advances,Expense & Travel,M12,2,Operational,View,Travel & Expense,Reimbursement,Export (enforced)
+CAT-076,employee_performance_view,Employee Performance,Performance,M09,1,Operational,View,Performance,Performance,Export (enforced)
+CAT-077,help_desk_ticket_creation_on_behalf_standard,Allow ticket creation on behalf,Assets & IT,M17,1,Operational,Edit/Action,Helpdesk,Helpdesk,Export (enforced)
+CAT-078,view_help_desk_ticket_created_by_employee_standard,Ticket created by employee,Assets & IT,M17,1,Operational,View,Helpdesk,Helpdesk,Export (enforced)
+CAT-079,goal_plan_view_standard,View Goal Plan,Performance,M09,1,Operational,View,Performance,Performance,Export (enforced)
+CAT-080,goal_plan_edit_access_standard,Manage Goal Plan,Performance,M09,1,Operational,Edit/Action,Performance,Performance,Export (enforced)
+CAT-081,appreciations_history_page,Appreciations History,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-082,appreciations_leaderboard_page,Appreciations Leaderboard,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-083,individual_award_programs_page,Individual Award programs,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-084,team_award_programs_page,Team Award programs,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-085,individual_award_winners_page,Individual Award Winners,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-086,team_award_winners_page,Team Award Winners,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-087,individual_awards_history_page,Individual Awards History,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-088,team_awards_history_page,Team Awards history,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-089,individual_nominations_raised,Nominations Workflows - Individual Nominations Raised,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-090,individual_nominations_received,Nominations Workflows - Individual Nominations Received,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-091,team_nominations_raised,Nominations Workflows - Team Nominations Raised,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-092,earned_points_summary,Earned Points Summary page,Engagement & Rewards,M15,3,Operational,View,Rewards & Recognition,Rewards & Recognition,Export (enforced)
+CAT-093,onbehalf_time_sheet_entry_standard,Raise On-Behalf Timesheet Entries,Attendance,M05,1,Operational,Edit/Action,Time Management,TimeSheets,Export (enforced)
+CAT-094,view_time_sheets_standard,View TimeSheets,Attendance,M05,1,Operational,View,Time Management,TimeSheets,Export (enforced)
+CAT-095,attendance_view_overview_standard,View Overview Page,Attendance,M05,1,Operational,View,Time Management,Attendance,Export (enforced)
+CAT-096,edit_shift_shiftblock_directory_standard,Assign Shift / Shift Block,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-097,edit_weekly_off_directory_standard,Assign Weekly Off,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-098,edit_clockin_directory_standard,Assign Web Clock-in,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-099,edit_checkin_directory_standard,Assign Check-in,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-100,edit_employee_contractual_hours_directory_standard,Assign Employee contractual hours,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-101,view_hover_object_standard,Access Org Units Hover Experience,Employee Master,M01,1,Operational,View,Core,Core & Employee management,Export (enforced)
+CAT-102,hr_docs_view_my_documents,View Employee Documents,Documents,M11,1,Operational,View,HR Documents,HR Documents,Export (enforced)
+CAT-103,assign_fairworkweek_policy_standard,Assign Fair Workweek Policy,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-104,emp_career_and_development_edit,Employee Career and Development,Performance,M09,1,Operational,Edit/Action,Talent Management,Talent Management,Export (enforced)
+CAT-105,emp_career_and_development_view,Employee Career and Development,Performance,M09,1,Operational,View,Talent Management,Talent Management,Export (enforced)
+CAT-106,OneView_STANDARD,One View Access,Attendance,M05,1,Operational,Administration,Time Management,Attendance,Export (enforced)
+CAT-107,AttendanceImportBackdated_STANDARD,Backdated Attendance Import,Attendance,M05,1,Operational,Import,Time Management,Attendance,Export (enforced)
+CAT-108,CompoffImport_STANDARD,Compensatory off Import,Attendance,M05,1,Operational,Import,Time Management,Attendance,Export (enforced)
+CAT-109,AttendanceRegularization_STANDARD,Attendance Regularization,Attendance,M05,1,Operational,Administration,Time Management,Attendance,Export (enforced)
+CAT-110,AttendanceImportAssignment_STANDARD,Attendance Assignment Import,Attendance,M05,1,Operational,Import,Time Management,Attendance,Export (enforced)
+CAT-111,edit_shift_policy_weeklyoff_ip_checkin_standard,"Assign Shifts, Policy, weeklyoff, IP network, Fencing, check in",Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-112,edit_attendance_policy_directory_standard,Assign Attendance Policy,Attendance,M05,1,Operational,Edit/Action,Time Management,Attendance,Export (enforced)
+CAT-113,comp_setup_Attendance_standard,Attendance Import,Attendance,M05,1,Operational,Import,Time Management,Attendance,Export (enforced)
+CAT-114,attendance_import_optional_holiday_standard,Optional Holiday Import,Attendance,M05,1,Operational,Import,Time Management,Attendance,Export (enforced)
+CAT-115,attendance_import_planned_ot_standard,Planned Overtime Requests Import,Attendance,M05,1,Operational,Import,Time Management,Attendance,Export (enforced)
+CAT-116,bulk_import_attendance_standard,Bulk Import Attendance,Attendance,M05,1,Operational,Import,Time Management,Attendance,Export (enforced)
+CAT-117,time_sheets_standard,TimeSheet Admin,Attendance,M05,1,Operational,Administration,Time Management,TimeSheets,Export (enforced)
+CAT-118,import_time_sheet_policy_assignment_standard,Import TimeSheet Policy Assignment,Attendance,M05,1,Operational,Import,Time Management,TimeSheets,Export (enforced)
+CAT-119,import_time_sheet_duration_standard,Import TimeSheet,Attendance,M05,1,Operational,Import,Time Management,TimeSheets,Export (enforced)
+CAT-120,leave_requests_standard,Act as admin in leave requests,Leave,M04,1,Operational,Administration,Time Management,Leave,Export (enforced)
+CAT-121,leave_apply_other_bypass_restrictions_standard,Raise leave request on behalf of without restrictions,Leave,M04,1,Operational,Edit/Action,Time Management,Leave,Export (enforced)
+CAT-122,comp_setup_LeaveBalance_standard,Carry Forward Balance,Leave,M04,1,Operational,Import,Time Management,Leave,Export (enforced)
+CAT-123,comp_setup_Leaves_standard,Leaves,Leave,M04,1,Operational,Import,Time Management,Leave,Export (enforced)
+CAT-124,leaveadjustmentbalance_standard,Leave Adjustment Balance,Leave,M04,1,Operational,Import,Time Management,Leave,Export (enforced)
+CAT-125,leaveencashment_standard,Leave Encashment,Leave,M04,1,Operational,Import,Time Management,Leave,Export (enforced)
+CAT-126,deactivated_employee_leave_update_standard,Deactivated Employee Leave Update,Leave,M04,1,Operational,Import,Time Management,Leave,Export (enforced)
+CAT-127,recalculate_leave_balances_standard,Recalculate Leave Balances,Leave,M04,1,Operational,Import,Time Management,Leave,Export (enforced)
+CAT-128,leave_import_flexible_holiday_date_standard,Flexible Holiday Date,Leave,M04,1,Operational,Import,Time Management,Leave,Export (enforced)
+CAT-129,optional_holiday_policy_import_standard,Optional Holiday Policy,Leave,M04,1,Operational,Import,Time Management,Leave,Export (enforced)
+CAT-130,assign_scheduling_org_policy_standard,Assign Scheduling Org Policy,Attendance,M05,1,Operational,Edit/Action,Time Management,Scheduling,Export (enforced)
+CAT-131,assign_scheduling_unit_groups_standard,Assign Scheduling Unit Groups,Attendance,M05,1,Operational,Edit/Action,Time Management,Scheduling,Export (enforced)
+CAT-132,assign_scheduling_tags_standard,Assign Scheduling Tags,Attendance,M05,1,Operational,Edit/Action,Time Management,Scheduling,Export (enforced)
+CAT-133,view_schedule_page_standard,View Schedule Page,Attendance,M05,1,Operational,View,Time Management,Scheduling,Export (enforced)
+CAT-134,on_behalf_open_shift_request_standard,On behalf Open Shift Request,Attendance,M05,1,Operational,Edit/Action,Time Management,Scheduling,Export (enforced)
+CAT-135,assign_cover_shift_standard,Assign Cover Shift,Attendance,M05,1,Operational,Edit/Action,Time Management,Scheduling,Export (enforced)
+CAT-136,view_open_shift_board_standard,View Open Shift Board,Attendance,M05,1,Operational,View,Time Management,Scheduling,Export (enforced)
+CAT-137,learning_edit,Employee Learning Center,Performance,M09,1,Operational,Edit/Action,Talent Management,Talent Management,Export (enforced)
+CAT-138,learning_view,Employee Learning Center,Performance,M09,1,Operational,View,Talent Management,Talent Management,Export (enforced)
+CAT-139,manager_hub_access,Manager Hub,Uncategorised,--,?,Operational,View,,Manager Hub,Export (enforced)
+CAT-140,DeleteFaceEnrollmentImport_STANDARD,Delete Face Enrollment Import,Attendance,M05,1,Operational,Import,Time Management,Attendance,Export (enforced)
+CAT-141,employee_skill_profile_view,Employee Skill Profile,Performance,M09,1,Operational,View,Talent Management,Talent Management,Export (enforced)
+CAT-142,employee_skill_profile_edit,Employee Skill Profile,Performance,M09,1,Operational,Edit/Action,Talent Management,Talent Management,Export (enforced)
+CAT-143,view_position_budget_status,View Position Budget Status in Position Structure,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-144,employee_lifecycle_onboarding_standard,Manage Onboarding,Onboarding,M02,1,Operational,Edit/Action,Onboarding,Onboarding,Export (enforced)
+CAT-145,talent_pool_reviewer,Talent Pool Reviewer,Performance,M09,1,Operational,Edit/Action,Talent Management,Talent Management,Export (enforced)
+CAT-146,talent_person_position_based_succession_dashboard,Person/Position based Succession Dashboard,Performance,M09,1,Operational,View,Talent Management,Talent Management,Export (enforced)
+CAT-147,msf_edit_access_standard,Manage MSF,Performance,M09,1,Operational,Edit/Action,MSF,MSF,Export (enforced)
+CAT-148,focus_view_org_structure_standard_hod,Focus View - Org Structure,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-149,focus_view_functional_structure_standard_hod,Focus View - Functional Structure,Employee Master,M01,1,Operational,View,Core,Employee Data management,Export (enforced)
+CAT-150,talent_role_based_succession_dashboard,Role-based Succession Dashboard,Performance,M09,1,Operational,View,Talent Management,Talent Management,Export (enforced)
+CAT-151,migrate_position_standard,Migrate Position,Employee Master,M01,1,Operational,Edit/Action,Core,Core & Employee management,Export (enforced)
+CAT-152,position_update,Position Update,Employee Master,M01,1,Operational,Edit/Action,Core,Employee Data management,Export (enforced)
+CAT-153,CFGP-153,Configure / Manage — Legal Entity,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-154,CFGP-154,Configure / Manage — Business Unit,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-155,CFGP-155,Configure / Manage — Department,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-156,CFGP-156,Configure / Manage — Designation,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-157,CFGP-157,Configure / Manage — Grade,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-158,CFGP-158,Configure / Manage — Band,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-159,CFGP-159,Configure / Manage — Workforce Classification,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-160,CFGP-160,Configure / Manage — Region & Location,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-161,CFGP-161,Configure / Manage — Cost Centre,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-162,CFGP-162,Configure / Manage — Custom Fields,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-163,CFGP-163,Configure / Manage — National-ID Configuration,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-164,CFGP-164,Configure / Manage — Employment-Details Settings,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-165,CFGP-165,Configure / Manage — Assignment Rules,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-166,CFGP-166,Configure / Manage — User Assignment Groups (UAG),Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-167,CFGP-167,Configure / Manage — Workflow Builder,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-168,CFGP-168,Configure / Manage — Approval-Flow Builder,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-169,CFGP-169,Configure / Manage — Skip Settings,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-170,CFGP-170,Configure / Manage — SLA Timers,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-171,CFGP-171,Configure / Manage — Decision Matrix,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-172,CFGP-172,Configure / Manage — Form Builder,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-173,CFGP-173,Configure / Manage — Notification Configuration,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-174,CFGP-174,Configure / Manage — Leave Platform Settings,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-175,CFGP-175,Configure / Manage — Attendance Platform Settings,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-176,CFGP-176,Configure / Manage — Performance Platform Settings,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-177,CFGP-177,Configure / Manage — Holidays,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-178,CFGP-178,Configure / Manage — Weekly-Off,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-179,CFGP-179,Configure / Manage — Shifts & Shift Blocks,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-180,CFGP-180,Configure / Manage — Infraction Framework,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-181,CFGP-181,Configure / Manage — Overtime Policy,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-182,CFGP-182,Configure / Manage — Goal-Plan Templates,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-183,CFGP-183,Configure / Manage — Review Frameworks,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-184,CFGP-184,Configure / Manage — Calibration,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-185,CFGP-185,Configure / Manage — Rating Scales,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-186,CFGP-186,Configure / Manage — Normalization,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-187,CFGP-187,Configure / Manage — Scorecard Pillars,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-188,CFGP-188,Configure / Manage — PIP,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-189,CFGP-189,Configure / Manage — Hiring Leads,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-190,CFGP-190,Configure / Manage — External Recruiters,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-191,CFGP-191,Configure / Manage — Custom Sources,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-192,CFGP-192,Configure / Manage — Duplicity-Check Settings,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-193,CFGP-193,Configure / Manage — BGV Checklist,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-194,CFGP-194,Configure / Manage — Job Portals,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-195,CFGP-195,Configure / Manage — Interview Types & Guides,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-196,CFGP-196,Configure / Manage — Candidate Auto-Numbering,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-197,CFGP-197,Configure / Manage — Document Settings,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-198,CFGP-198,Configure / Manage — Document Templates,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-199,CFGP-199,Configure / Manage — Letterheads,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-200,CFGP-200,Configure / Manage — Signing Authorities,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-201,CFGP-201,Configure / Manage — Document Categories,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-202,CFGP-202,Configure / Manage — Letter-Generation Settings,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-203,CFGP-203,Configure / Manage — Separation Reasons,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-204,CFGP-204,Configure / Manage — Notice Periods,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-205,CFGP-205,Configure / Manage — Probation Periods,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-206,CFGP-206,Configure / Manage — Service Catalogue,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-207,CFGP-207,Configure / Manage — SSO & Authentication,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-208,CFGP-208,Configure / Manage — Integration Credentials,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-209,CFGP-209,Configure / Manage — IP Whitelist,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-210,CFGP-210,Configure / Manage — Biometric Devices,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-211,CFGP-211,Configure / Manage — Geofence,Org & Platform Configuration,CFG,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-212,CFGP-212,Configure / Manage — Manage Standard Permission Roles,RBAC & Security,P02,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-213,CFGP-213,Configure / Manage — Manage Custom Permission Roles,RBAC & Security,P02,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-214,CFGP-214,Configure / Manage — Manage Report Permissions,RBAC & Security,P02,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-215,CFGP-215,Configure / Manage — Field-Level Access Configuration,RBAC & Security,P02,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-216,CFGP-216,Configure / Manage — Entitlement Grants,RBAC & Security,P02,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-217,CFGP-217,Configure / Manage — Capability-Flag Grants,RBAC & Security,P02,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-218,CFGP-218,Configure / Manage — Configurable Role Grants,RBAC & Security,P02,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-219,CFGP-219,Configure / Manage — Query Audit Log,RBAC & Security,P02,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-220,CFGP-220,Configure / Manage — Export Audit Log,RBAC & Security,P02,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-221,CFGP-221,Configure / Manage — Audit Retention Settings,RBAC & Security,P02,1,Config/Platform,Admin Rights,,,FS-derived (Org Admin)
+CAT-222,CFGP-222,Configure / Manage — Tenant Provisioning,RBAC & Security,P04/P06,1,Config/Platform,Admin Rights,,,FS-derived (Platform Super Admin)
+CAT-223,CFGP-223,Configure / Manage — Licensing & Feature Flags,RBAC & Security,P04/P06,1,Config/Platform,Admin Rights,,,FS-derived (Platform Super Admin)
+CAT-224,CFGP-224,Configure / Manage — Migration Toolkit (ETL),RBAC & Security,P04/P06,1,Config/Platform,Admin Rights,,,FS-derived (Platform Super Admin)
+CAT-225,CFGP-225,Configure / Manage — Platform Master Data,RBAC & Security,P04/P06,1,Config/Platform,Admin Rights,,,FS-derived (Platform Super Admin)
+CAT-226,CFGP-226,Configure / Manage — Monitoring & Security Enforcement,RBAC & Security,P04/P06,1,Config/Platform,Admin Rights,,,FS-derived (Platform Super Admin)
+CAT-227,CFGP-227,Configure / Manage — Environments & Releases,RBAC & Security,P04/P06,1,Config/Platform,Admin Rights,,,FS-derived (Platform Super Admin)
+CAT-228,CFGP-228,Configure / Manage — Cross-Tenant Analytics,RBAC & Security,P04/P06,1,Config/Platform,Admin Rights,,,FS-derived (Platform Super Admin)
+CAT-229,M01-229,View own profile,Employee Master,M01,1,Self-Service,View,,,FS-derived
+CAT-230,M01-230,Edit own personal & contact details,Employee Master,M01,1,Self-Service,Edit,,,FS-derived
+CAT-231,M01-231,Request sensitive-field change,Employee Master,M01,1,Self-Service,Edit,,,FS-derived
+CAT-232,M01-232,View own org chart,Employee Master,M01,1,Self-Service,View,,,FS-derived
+CAT-233,M04-233,Apply for leave,Leave,M04,1,Self-Service,Add,,,FS-derived
+CAT-234,M04-234,View own leave balance & history,Leave,M04,1,Self-Service,View,,,FS-derived
+CAT-235,M04-235,Cancel / revoke own leave,Leave,M04,1,Self-Service,Edit,,,FS-derived
+CAT-236,M04-236,Apply optional holiday,Leave,M04,1,Self-Service,Add,,,FS-derived
+CAT-237,M04-237,Apply comp-off,Leave,M04,1,Self-Service,Add,,,FS-derived
+CAT-238,M05-238,View own attendance,Attendance,M05,1,Self-Service,View,,,FS-derived
+CAT-239,M05-239,Apply attendance regularization,Attendance,M05,1,Self-Service,Add,,,FS-derived
+CAT-240,M05-240,Clock in / out,Attendance,M05,1,Self-Service,Add,,,FS-derived
+CAT-241,M05-241,Apply planned overtime,Attendance,M05,1,Self-Service,Add,,,FS-derived
+CAT-242,M05-242,View own timesheet,Attendance,M05,1,Self-Service,View,,,FS-derived
+CAT-243,M05-243,Apply out-duty / WFH,Attendance,M05,1,Self-Service,Add,,,FS-derived
+CAT-244,M02-244,Complete own onboarding form,Onboarding,M02,1,Self-Service,Edit,,,FS-derived
+CAT-245,M02-245,Sign onboarding documents,Onboarding,M02,1,Self-Service,Approve,,,FS-derived
+CAT-246,M03-246,Initiate own resignation,Exits & Offboarding,M03,1,Self-Service,Add,,,FS-derived
+CAT-247,M03-247,View own FnF statement,Exits & Offboarding,M03,1,Self-Service,View,,,FS-derived
+CAT-248,M03-248,Complete own clearance tasks,Exits & Offboarding,M03,1,Self-Service,Edit,,,FS-derived
+CAT-249,M09-249,Submit self-review / rating,Performance,M09,1,Self-Service,Edit,,,FS-derived
+CAT-250,M09-250,View own goals,Performance,M09,1,Self-Service,View,,,FS-derived
+CAT-251,M09-251,Acknowledge appraisal,Performance,M09,1,Self-Service,Approve,,,FS-derived
+CAT-252,M09-252,Goal check-in,Performance,M09,1,Self-Service,Edit,,,FS-derived
+CAT-253,M11-253,View own documents,Documents,M11,1,Self-Service,View,,,FS-derived
+CAT-254,M11-254,Upload own documents,Documents,M11,1,Self-Service,Add,,,FS-derived
+CAT-255,M11-255,Sign HR policies / letters,Documents,M11,1,Self-Service,Approve,,,FS-derived
+CAT-256,M17-256,View own assets & acknowledge,Assets & IT,M17,1,Self-Service,View,,,FS-derived
+CAT-257,M17-257,Report asset issue / request return,Assets & IT,M17,1,Self-Service,Edit,,,FS-derived
+CAT-258,M17-258,Raise IT ticket,Assets & IT,M17,1,Self-Service,Add,,,FS-derived
+CAT-259,M17-259,Submit service-catalogue request,Assets & IT,M17,1,Self-Service,Add,,,FS-derived
+CAT-260,M17-260,Browse knowledge base,Assets & IT,M17,1,Self-Service,View,,,FS-derived
+CAT-261,M08-261,Apply via IJP,Recruitment,M08,1,Self-Service,Add,,,FS-derived
+CAT-262,M08-262,Refer a candidate,Recruitment,M08,1,Self-Service,Add,,,FS-derived
+CAT-263,M08-263,View my referrals,Recruitment,M08,1,Self-Service,View,,,FS-derived
+CAT-264,M08-264,Submit interview feedback (interviewer),Recruitment,M08,1,Self-Service,Edit,,,FS-derived
+CAT-265,M08-265,Raise requisition,Recruitment,M08,1,Operational,Add,,,FS-derived
+CAT-266,M08-266,View requisitions,Recruitment,M08,1,Operational,View,,,FS-derived
+CAT-267,M08-267,Approve requisition,Recruitment,M08,1,Operational,Approve,,,FS-derived
+CAT-268,M08-268,Create job,Recruitment,M08,1,Operational,Add,,,FS-derived
+CAT-269,M08-269,Post job (IJP / careers),Recruitment,M08,1,Operational,Add,,,FS-derived
+CAT-270,M08-270,Configure job application fields,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-271,M08-271,Add candidate,Recruitment,M08,1,Operational,Add,,,FS-derived
+CAT-272,M08-272,View candidate pool,Recruitment,M08,1,Operational,View,,,FS-derived
+CAT-273,M08-273,Manage candidate pipeline / hiring flow,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-274,M08-274,Screen / shortlist candidate,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-275,M08-275,Override duplicity check,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-276,M08-276,Schedule interview,Recruitment,M08,1,Operational,Add,,,FS-derived
+CAT-277,M08-277,Reschedule / cancel interview,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-278,M08-278,Interview oversight,Recruitment,M08,1,Operational,View,,,FS-derived
+CAT-279,M08-279,Issue pre-offer (IOI),Recruitment,M08,1,Operational,Add,,,FS-derived
+CAT-280,M08-280,Verify candidate documents,Recruitment,M08,1,Operational,Approve,,,FS-derived
+CAT-281,M08-281,Flag document discrepancy,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-282,M08-282,Generate offer letter,Recruitment,M08,1,Operational,Add,,,FS-derived
+CAT-283,M08-283,Approve offer,Recruitment,M08,1,Operational,Approve,,,FS-derived
+CAT-284,M08-284,Share offer,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-285,M08-285,Initiate movement to onboarding,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-286,M08-286,Manage external recruiters,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-287,M08-287,Manage sources,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-288,M08-288,Manage job portals,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-289,M08-289,Assign recruiters,Recruitment,M08,1,Operational,Edit,,,FS-derived
+CAT-290,M08-290,Recruitment reports & analytics,Recruitment,M08,1,Operational,Export,,,FS-derived
+CAT-291,M17-291,Create / edit asset,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-292,M17-292,Manage asset masters (mfr/vendor/category),Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-293,M17-293,Asset state transitions,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-294,M17-294,Bulk import assets,Assets & IT,M17,1,Operational,Add,,,FS-derived
+CAT-295,M17-295,Assign asset,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-296,M17-296,Record asset return,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-297,M17-297,Substitute bundle,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-298,M17-298,Manage provisioning requests,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-299,M17-299,Mark provisioning complete,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-300,M17-300,Open procurement ticket,Assets & IT,M17,1,Operational,Add,,,FS-derived
+CAT-301,M17-301,Work service-desk tickets,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-302,M17-302,Transition ticket states,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-303,M17-303,Approve / reassign tickets (lead),Assets & IT,M17,1,Operational,Approve,,,FS-derived
+CAT-304,M17-304,Mark ticket out-of-scope,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-305,M17-305,Manage CMDB CIs,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-306,M17-306,CMDB impact analysis,Assets & IT,M17,1,Operational,View,,,FS-derived
+CAT-307,M17-307,P1 post-mortem sign-off,Assets & IT,M17,1,Operational,Approve,,,FS-derived
+CAT-308,M17-308,IT asset clearance / recovery,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-309,M17-309,Configure service desk (categories/queues/SLA),Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-310,M17-310,Configure catalogue items,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-311,M17-311,Author KB articles,Assets & IT,M17,1,Operational,Edit,,,FS-derived
+CAT-312,M17-312,Asset audit certify (HOD),Assets & IT,M17,1,Operational,Approve,,,FS-derived

@@ -1,0 +1,266 @@
+How Recruitment is Configured and Implemented in Darwinbox (for Primesoft)
+
+Note: I do not have Primesoft-specific configurations available. The documentation below is the standard Darwinbox recruitment configuration framework that applies to all clients. If you need Primesoft's specific instance configurations (e.g., requisition workflow, approval flows, job templates, recruiter mappings), please share the tenant/specific job/candidate details for instance-level analysis.
+
+Below is the detailed end-to-end recruitment configuration and implementation walkthrough.
+
+🎯 Recruitment Overview
+Recruitment in Darwinbox covers the full hiring lifecycle — from raising a requisition to onboarding handover.
+📍 Admin Path: Darwinbox > Admin Access > Settings > Talent > Talent Acquisition
+📍 User Path: My Access > Recruitment
+
+1️⃣ Recruitment Setup (Admin Configuration)
+Configure the following under Talent Acquisition:
+
+
+
+Configuration
+Purpose
+
+
+
+Advanced Settings
+Customize fields visible at each recruitment stage (Requisition, Job Description, Hiring Workflow, Job Posting, Candidate addition, Interview, Offer Proposal, Offer Letter, Pending List). Enable/disable fields, mark as mandatory, set defaults.
+
+
+Hiring Lead Configuration
+Define who can be tagged as Hiring Lead (Company-wise or Assignment Framework-based).
+
+
+Interview Types
+e.g., Technical, HR, Managerial.
+
+
+Interview Guides & Evaluation Forms
+Standardized rating scales for interviewers.
+
+
+Duplicity Check & Rehire Check
+Detect duplicate or returning candidates.
+
+
+External Assessments
+Integrate third-party assessment partners.
+
+
+Offer Letter Attributes
+Configure the three steps (Job/Candidate, Offer Letter, Pay Details).
+
+
+Notification Templates
+Recruiter, candidate, approver communications.
+
+
+Career Page Filters
+Configure filters available on the careers page.
+
+
+Source Update Settings
+Track source of candidates.
+
+
+Pre-Screening Settings
+Pre-screen candidates before interview.
+
+
+Tab View Settings
+Customize tab visibility.
+
+
+
+2️⃣ Requisition (Position Demand)
+📍 Path: Dashboard > Recruitment > Requisitions > + Add Requisition
+Steps:
+
+Permission role holder clicks + Add Requisition.
+Fill Step 1: Requisition Details (department, designation, location, etc.).
+Step 2: Job Details – Specify number of positions, assign Hiring Lead, provide justification.
+Submit for approval to designated stakeholders (configured via approval flow).
+Once approved, the requisition can be linked to a Job.
+
+
+3️⃣ Job Creation & Recruiter Assignment
+After requisition approval:
+
+Go to Dashboard > Recruitment > Requisitions.
+For the approved requisition, click the kebab icon (⋮) → Activate → Assign Recruiter.
+The Hiring Lead/Admin associates positions with a Job Opening.
+
+Job Creation Steps (typically 5 steps):
+
+Step 1: Job Details – Title, description, department, location, employment type.
+Step 2: Hiring Workflow – Define stages such as Application → Screening → Interview → Offer → Hired.
+Step 3: Job Posting – Configure where to post (Careers Page, Internal Job Posting, Referrals).
+Step 4: Application Form – Define the application form candidates fill.
+Step 5: Review & Publish – Final review before publishing.
+
+
+4️⃣ Job Posting Channels
+Once the job is created, it can be posted on multiple channels:
+
+Careers Page (External) – Public-facing job board for external candidates.
+Internal Job Posting (IJP) – Visible only to employees who meet eligibility criteria.
+Referrals (Refer) – Employees refer candidates and earn rewards.
+External Recruiter Portal – Vendors/agencies can submit candidates.
+Job Boards / Social Media – Via integrations.
+
+
+5️⃣ Candidate Addition
+Candidates can be added through:
+
+Apply via Careers Page – External candidate self-apply.
+Manual Addition by Recruiter – Recruitment > Jobs > Select Job > Add Candidate.
+Bulk Import – Upload multiple candidates via import template.
+Resume Parsing (Document Parsing) – Auto-fill candidate profile from resume.
+Employee Referral – Through the Refer module.
+External Recruiter Portal – Vendors push candidates.
+
+Duplicity Check runs automatically based on configured fields (email, phone, etc.) to prevent duplicate profiles.
+
+6️⃣ Candidate Lifecycle / Hiring Workflow
+Candidates move through the configured Hiring Workflow stages:
+
+Applied → Initial application received.
+Screening – Resume review.
+Pre-Screening – Optional automated screening based on configured criteria.
+Assessment – External/internal assessment.
+Interview Rounds – Schedule and conduct multiple rounds.
+Offer Proposal – Internal approval of compensation.
+Offer Letter – Generate and release offer letter.
+Pre-Offer Stage → Pending List (Yet to Onboard) – Transition to onboarding.
+
+Candidate Status Management:
+
+Status Copy/Move – Move candidates to other jobs.
+Reject – With configurable reasons.
+Hold – Pause processing.
+
+
+7️⃣ Interview Scheduling
+📍 Path: Candidate Profile > Schedule Interview
+Steps:
+
+Select Interview Type (Technical, HR, Managerial).
+Choose Interview Mode (In-person, Telephonic, Video).
+Add Interviewers – calendar invite is sent automatically.
+Set Date, Time, Location/Link.
+Attach Interview Guide / Evaluation Form.
+Send invite — candidate and interviewer receive notifications.
+
+Interviewers can submit Evaluation Feedback post-interview through their dashboard.
+
+8️⃣ Offer Proposal & Offer Letter
+📍 Path: Candidate Profile > Initiate Offer
+Offer Letter Configuration (3 Steps):
+
+Job/Candidate Details – Verify candidate and job details.
+Offer Letter Template – Select the configured HTML/DOCX template; placeholders auto-fill from candidate data.
+Pay Details – Salary structure, components, and breakdown.
+
+Approval Flow:
+
+Configured approvers (e.g., Hiring Manager, HR, Finance) approve sequentially or in parallel.
+Once approved → Offer Letter is generated and released to the candidate.
+Candidate can Accept/Reject the offer via the Candidate Portal (with optional Digital Signature).
+
+
+9️⃣ Pre-Offer / Yet to Onboard / Handover to Onboarding
+Once the candidate accepts the offer:
+
+Status changes to Pre-Offer / Yet to Onboard.
+Candidate appears under Admin Access > Onboarding > Yet to Onboard tab.
+The Onboarding process can be Initiated from here (linking recruitment data to onboarding forms).
+
+
+🔟 Permissions & Roles
+Recruitment uses both Standard and Custom Permissions:
+
+Recruitment Admin – Full control.
+Hiring Lead – Manage their requisitions/jobs.
+Recruiter – Manage assigned jobs and candidates.
+Interviewer – View assigned candidates, submit feedback.
+External Recruiter – Limited access via external portal.
+
+Permissions can be scoped by Assignment Framework (Department, Location, Company, etc.).
+
+1️⃣1️⃣ Notifications & Email Templates
+Configured notifications include:
+
+Requisition Approval/Rejection
+Job Posted (IJP, Careers)
+Candidate Application Acknowledgment
+Interview Schedule / Reschedule / Cancellation
+Offer Letter Release / Acceptance / Rejection
+Recruiter / Hiring Manager Task Alerts
+
+Templates can be standard or custom, with dynamic placeholders.
+
+1️⃣2️⃣ Recruitment Reports & Audit Logs
+
+Reports – Requisition reports, candidate funnel, source effectiveness, time-to-hire, recruiter performance.
+Audit Logs – Track all changes to requisitions, jobs, candidate status, offer letters.
+
+
+✅ Summary of Implementation Sequence
+
+
+
+Step
+Action
+
+
+
+1
+Configure Advanced Settings under Talent Acquisition
+
+
+2
+Set up Hiring Lead Configuration, Interview Types, Evaluation Forms
+
+
+3
+Configure Duplicity / Rehire Check, Pre-Screening, Career Page Filters
+
+
+4
+Define Offer Letter Templates and Approval Flows
+
+
+5
+Set up Notification Templates for recruitment events
+
+
+6
+Configure Permissions for Recruiters, Hiring Leads, Interviewers
+
+
+7
+Raise Requisitions → get approved
+
+
+8
+Create Jobs (5-step process) → Post on Careers/IJP/Refer
+
+
+9
+Add Candidates (apply / manual / bulk / referral / parsing)
+
+
+10
+Move candidates through Hiring Workflow stages
+
+
+11
+Schedule Interviews with evaluation guides
+
+
+12
+Initiate Offer Proposal & Offer Letter with approval
+
+
+13
+On acceptance → handover to Onboarding (Yet to Onboard)
+
+
+
+👉 If you'd like me to verify Primesoft's specific recruitment setup (e.g., active hiring workflows, approval flow configurations, offer letter templates, recruiter mappings), please share a specific job ID, requisition ID, or candidate name, and I can route it to the Jobs & Candidates / Requisitions / Offer Letters agent for instance-level diagnostics.

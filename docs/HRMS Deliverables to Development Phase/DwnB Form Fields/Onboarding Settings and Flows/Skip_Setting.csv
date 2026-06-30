@@ -1,0 +1,5 @@
+﻿"Code","Name","Module Transaction","Description","Skip Settings For","Skip Output","Tagged Flows","Version","Created On","Update On","Status"
+"Skip_AF_1","Custom Workflow Skip Setting","Default","","Approval Flow","Approve","Approval Flows (AF_22)","1","2023-08-23","2023-11-05","Active"
+"Skip_AF_2","Requistion Approval","Default","","Approval Flow","Approve","","1","2023-08-29","2023-11-05","Active"
+"Skip_AF_3","Initiator assignee","Default","","Approval Flow","Approve","","1","2023-09-05","2023-11-05","Active"
+"Skip_AF_4","Skip (Assignee is the Initiator)","Position Update","","Approval Flow","Approve","","1","2026-04-07","2026-04-07","Draft"

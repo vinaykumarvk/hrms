@@ -1,0 +1,247 @@
+
+# PrimeSoft HRMS — Configuration Coverage & Governance v1.0
+Consolidated governance document. Supersedes and replaces four previously separate artefacts — Configuration: Source of Truth, Boundary & Traceability (v1.0); Configuration Ownership & Coverage Map (v1.0); Configuration Enablement & Coverage-Detail Register (v1.0); and Configuration Actions Register (v1.0) — now folded into §1–§4 below. All identifier schemes are preserved unchanged (CFG-MAP-nnn for coverage rows, CFG-nnn for configuration actions), so every existing reference to those ids elsewhere in the package remains valid and resolves to the same item in this document.
+How to read it: §1 is the convention (what's authoritative for which question); §2 is the coverage index (one row per config file); §3 is the field-level enablement/dependency detail for the heavy objects; §4 is the running list of tenant configuration actions for go-live.
+
+## 1. Source of Truth, Boundary & Traceability
+Employee-review note. The current clickable screen reference is Prototype v2.1. A new config object — the Service-Catalogue master (owner: Service Desk Admin, M17) — was introduced; it has no export yet and is tracked in the Coverage Map (CFG-MAP-116) and Actions Register (CFG-012). It is managed by the existing screen cfg-catalog-items (FR-M17-010); the sample export is its field-inventory reference.
+A one-page convention for reading configuration across the PrimeSoft HRMS handoff package (prototype, Functional Specifications, and the Configuration Ownership & Coverage Map). Read this before interpreting any configuration screen or specification.
+
+### Why this note exists
+The tenant’s configuration is large (115 export files, several with 130–286 fields). No single artifact can both show it interactively and enumerate it completely without duplication and drift. This package therefore splits the job across three artifacts with clear, non-overlapping authority. This note states that split so a reader always knows which artifact to trust for which question.
+
+### Source of truth — layered authority
+| For this question… | The source of truth is… | Notes |
+| What is configurable, and what are the current values? | The configuration export file (CSV) | The system export is authoritative for the field inventory and the tenant’s actual values. |
+| What does a setting mean, how does it behave, what depends on it? | The Functional Specification (FS) | The FS specifies semantics, rules, dependencies, defaults and validation. It references the file; it does not re-print values. |
+| Where is it managed, and what does the screen / flow look like? | The clickable prototype | The prototype shows the screen, its information architecture and interaction pattern, with representative data only. |
+
+Rule of thumb: values → the file · meaning & behaviour → the FS · screen & flow → the prototype.
+
+### Where the prototype stops and the document begins
+The prototype carries the existence of a screen, its layout, its interaction pattern (list / add / edit), and a representative subset of rows and fields so the reader can see the shape. It never claims completeness — it does not enumerate every column or every row of a config file.
+The document carries the full field inventory (by reference to the file), the semantics, dependencies, defaults, validation, and the coverage status.
+In one line: the prototype is the shape and behaviour of a configuration screen; the document is the completeness and meaning of the configuration. A “representative” screen is intentional, not a gap — the build drives the screen’s full field set from the named config file.
+
+### Traceability — one spine, read from any end
+Every configuration item is traceable along a single chain:
+Config file → Owning admin → Managing screen (page id) → FS reference (FR id) → Coverage status (Present / Partial / Missing)
+This chain is carried by three devices:
+The Configuration Ownership & Coverage Map — the index. One row per config file, with a stable ID (CFG-MAP-nnn), the owning admin, the managing screen (prototype page id), the FS reference, the coverage status, and a source-of-truth note.
+Inline provenance lines — each configuration screen and each FS configuration section carries a short banner naming its source file and map ID, e.g. “Config source: Leaves_Settings_Export.csv · CFG-MAP-012 · screen is representative.”
+This preface — read once, it tells the reader how the three artifacts relate.
+Because the chain is bidirectional, a reader can start from any end: - From a file → the map gives the owning admin, the screen, the FS reference and the coverage status. - From a screen → its provenance banner cites the file and the map ID. - From the FS → each configuration section names the file and the screen.
+
+### Coverage status — what the three values mean
+Present — the screen manages the configuration at, or close to, the file’s field set; build follows the file for any remaining fields.
+Partial (representative) — the screen exists and is correctly purposed, but shows a representative subset; the build drives the full field set from the named file. This is the expected state for most config screens and is not a defect.
+Missing — the configuration exists in a file but has no managing admin screen; this is a genuine gap to be added.
+
+### How to use this in review and build
+Reviewers judge a config screen on purpose, ownership and interaction — not on whether every field is present (completeness is the document’s job, audited in the map).
+Engineers build each config screen’s full field set from the named config file, using the FS for semantics and the prototype for the screen shape.
+The map is the worklist: Missing rows are screens to add; Partial rows are field-completeness build tasks; Present rows are done.
+
+### Manager-role review (Round 3)
+Manager-role review applied to Prototype v2.2. New config touchpoints: Manager may edit Notice Period flag (CFG-MAP-117, Notice config) and the Workspace-model availability inputs (CFG-MAP-118, Platform P02). Bulk queue actions reuse existing per-queue action permissions. Open items: OPEN-FS-FND-05 (BRD §3.4 vs Admin-workspace exclusivity); OPEN-FS-CFG-08 (has-reportees derived vs configurable); decision-queue bulk scope.
+
+### Manager-role review (Round 3 follow-up)
+OPEN-FS-FND-05 resolved (Admin exclusive) and OPEN-FS-CFG-08 resolved (has-reportees derived). Manager reportee view rebuilt to mirror the employee's own profile with intentional Tier-1/bank/statutory masks only; applied to Prototype v2.3. No new configuration objects (workspace availability is RBAC-derived).
+
+## 2. Configuration Ownership & Coverage Map
+Read alongside Configuration: Source of Truth, Boundary & Traceability (the convention preface). One row per configuration export file. Coverage uses that convention: Present (screen manages at/near the file’s field set), Partial (screen exists and is correctly purposed but representative — the build drives the full field set from the file; this is the expected state, not a defect), Missing (configured but no managing screen — a gap to add).
+Totals: 115 files — 79 Present · 35 Partial · 1 N/A (unused) · 0 Missing.
+Traceability spine: Config file → Owning admin → Managing screen (page id) → Coverage. Each managing screen and its FS section should carry a provenance line citing the file and this map ID.
+| Map ID | Config file | Owning admin | Managing screen (page id) | Coverage | Note |
+| CFG-MAP-001 | Leaves_Settings_Export.csv | Org Admin / Leave Admin | cfg-leave-platform | Partial | 131 global leave settings; representative · also leave-config |
+| CFG-MAP-002 | Leaves_Policy_Export.csv | Leave Admin | leave-policies | Present | leave types list |
+| CFG-MAP-003 | Leave_Reasons1.csv | Leave Admin | leave-reasons | Present | 8 reasons + HRBP auto-route |
+| CFG-MAP-004 | Unpaid_Leave_Export.csv | Leave Admin | leave-policies | Partial | unpaid policies (45 cols) |
+| CFG-MAP-005 | Tenant_Leaves_Compoff_Export.csv | Org Admin | cfg-compoff | Partial | 286-col comp-off/OT policy |
+| CFG-MAP-006 | allHolidayExport.csv | Org Admin | cfg-holiday-calendars | Present | 156 holidays |
+| CFG-MAP-007 | LeavePolicyTenureExport.csv | Org Admin | cfg-leave-policy | Partial | tenure brackets |
+| CFG-MAP-008 | LeavePolicyBlockLeaveExport.csv | Org Admin | cfg-leave-policy | Partial | block-leave sub-config |
+| CFG-MAP-009 | LeavePolicyCustomQAExport.csv | Org Admin | cfg-leave-policy | Partial | custom Q&A |
+| CFG-MAP-010 | LeavePolicyDateSpecificExport.csv | Org Admin | cfg-leave-policy | Partial | date-specific allotment |
+| CFG-MAP-011 | LeavePolicyMultipleAllotmentExport.csv | Org Admin | cfg-leave-policy | Partial | multiple allotment |
+| CFG-MAP-012 | Attendance_Settings_Export1.csv | Org Admin / Attendance Admin | cfg-att-platform | Partial | 147 settings; also attendance-config |
+| CFG-MAP-013 | Attendance_Policy_Export.csv | Attendance Admin | cfg-att-policy | Partial | policies |
+| CFG-MAP-014 | Attendance_Policy_Work_Transfer_Export.csv | Attendance Admin | cfg-att-policy | Partial | work-transfer attrs |
+| CFG-MAP-015 | Attendance_Reasons_Export.csv | Attendance Admin | attendance-reasons | Present | 8 regularization reasons |
+| CFG-MAP-016 | Attendance_Shift_Export.csv | Attendance Admin | cfg-shifts | Present | 21 shifts · also attendance-shifts |
+| CFG-MAP-017 | Attendance_Shift_Export_1.csv | Attendance Admin | cfg-shifts | Present | 21 shifts (dup export) |
+| CFG-MAP-018 | Attendance_Shift_Block_Export.csv | Attendance Admin | cfg-shifts | Partial | shift blocks |
+| CFG-MAP-019 | Attendance_Tags_Export.csv | Attendance Admin | cfg-att-platform | Partial | attendance tags |
+| CFG-MAP-020 | Attendance_Ip_Export.csv | Org Admin | cfg-ip | Present | IP whitelist (12) |
+| CFG-MAP-021 | CheckIn_Settings_Export2.csv | Attendance Admin | cfg-att-platform | Partial | check-in = Manager Approval |
+| CFG-MAP-022 | GeofencingExport.csv | Org Admin | cfg-geofence | Present | 29 fences · enforcement off |
+| CFG-MAP-023 | Weekly_OffExport.csv | Org Admin | cfg-weeklyoff | Present | 19 patterns |
+| CFG-MAP-024 | Overtime_Settings_Export.csv | Attendance Admin | cfg-att-platform | Partial | OT config retained; OT request surfaces removed per scope; comp-off accrual kept |
+| CFG-MAP-025 | Overtime_Slabs_Export.csv | Attendance Admin | cfg-att-platform | Partial | OT slabs (scope note) |
+| CFG-MAP-026 | Overtime_Threshold_Export.csv | Attendance Admin | cfg-att-platform | Partial | OT thresholds (scope note) |
+| CFG-MAP-027 | OvertimePolicyIndexingRulesExport.csv | Attendance Admin | cfg-att-platform | Partial | OT indexing (scope note) |
+| CFG-MAP-028 | ReviewKraSettingsExport.csv | Org Admin / Performance Admin | cfg-review-templates | Partial | 161-col review framework; also pa-review-cycles |
+| CFG-MAP-029 | GoalPlanKraSettingsExport.csv | Org Admin / Performance Admin | cfg-goal-templates | Partial | 249-col goal-plan framework; also pa-goal-plans |
+| CFG-MAP-030 | Review_CycleKra_SettingsExport.csv | Performance Admin | pa-review-cycles | Present | 26 cycles |
+| CFG-MAP-031 | Calibration1.csv | Org Admin | cfg-calibration | Partial | 110-col calibration |
+| CFG-MAP-032 | Calibration2.csv | Org Admin | cfg-calibration | Partial | 110-col calibration (2nd) |
+| CFG-MAP-033 | Scorecard_Pillar.csv | Performance Admin | pa-scorecard-pillars | Present | 2 pillars |
+| CFG-MAP-034 | Normalization.csv | Performance Admin | pa-normalization | Present | normalization curves |
+| CFG-MAP-035 | Metric.csv | Performance Admin | pa-metrics | Present | 4 metrics |
+| CFG-MAP-036 | CustomFormulaSettingsExport.csv | Performance Admin | pa-metrics | Present | custom formulas |
+| CFG-MAP-037 | ExcludedEmployeesExport.csv | Performance Admin | pa-exclusions | Present | 122 exclusions |
+| CFG-MAP-038 | GoalsExport.csv | Performance Admin | pa-goal-plans | Present | goal data (not config) |
+| CFG-MAP-039 | New_Goal_Plan_Framework_Translation.csv | Org Admin | cfg-notif | Present | i18n (goal plan) |
+| CFG-MAP-040 | Review_Framework_Translation.csv | Org Admin | cfg-notif | Present | i18n (review) |
+| CFG-MAP-041 | Review_Cycle_Framework_Translation.csv | Org Admin | cfg-notif | Present | i18n (review cycle) |
+| CFG-MAP-042 | Scorecard_Pillar_Translation.csv | Org Admin | cfg-notif | Present | i18n (pillar) |
+| CFG-MAP-043 | TenantCalibration_translation.csv | Org Admin | cfg-notif | Present | i18n (calibration) |
+| CFG-MAP-044 | TenantCalibration_translation1.csv | Org Admin | cfg-notif | Present | i18n (calibration) |
+| CFG-MAP-045 | Document_Category_Export.csv | Document Admin | da-policies | Present | 4 categories |
+| CFG-MAP-046 | Document_Template_Name_Formats_Export1.csv | Document Admin | da-templates | Present | 6 template formats |
+| CFG-MAP-047 | CustomFieldsExport.csv | Org Admin | cfg-custom | Present | 40 custom fields |
+| CFG-MAP-048 | Policy_And_Letter_Settings_Export.csv | Org Admin | cfg-document-settings | Partial | policy/letter settings |
+| CFG-MAP-049 | Self_Generate_Setings_Export.csv | Org Admin | cfg-signers | Partial | self-generate signing authorities |
+| CFG-MAP-050 | ReasonListExport.csv | Document Admin | da-policies | Present | reason list |
+| CFG-MAP-051 | VerificationStatus.csv | Onboarding Admin | cfg-bgv-checklist | Present | 7 verification statuses |
+| CFG-MAP-052 | OnboardingProcessExport.csv | Onboarding Admin | onboarding-config | Partial | 46-col process; also cfg-forms |
+| CFG-MAP-053 | OnboardingSettingsExport.csv | Onboarding Admin | onboarding-config | Present | BGV on, OCR off, etc. |
+| CFG-MAP-054 | Designation_NamesExport.csv | Org Admin | cfg-grades | Present | 527 designations |
+| CFG-MAP-055 | GradeExport.csv | Org Admin | cfg-grades | Present | 14 grades |
+| CFG-MAP-056 | BandExport.csv | Org Admin | cfg-grades | Present | bands (empty export) |
+| CFG-MAP-057 | DepartmentExport.csv | Org Admin | cfg-depts | Present | 148 departments |
+| CFG-MAP-058 | LocationExport.csv | Org Admin | cfg-geo | Present | 12 locations |
+| CFG-MAP-059 | LocationRegionExport.csv | Org Admin | cfg-geo | Present | 5 regions |
+| CFG-MAP-060 | Location_Country_Master_Data.csv | Org Admin | cfg-geo | Present | country master (empty) |
+| CFG-MAP-061 | NeevLevelExport1.csv | Org Admin | cfg-classification | Present | 8 contribution levels |
+| CFG-MAP-062 | AssignmentExport.csv | Org Admin | cfg-assign | Partial | 97 assignments, 162 cols |
+| CFG-MAP-063 | AssignmentOneExport.csv | Org Admin | cfg-classification | Present | employee groups |
+| CFG-MAP-064 | AssignmentTwoExport.csv | Org Admin | cfg-classification | Present | notice-period assignment |
+| CFG-MAP-065 | AssignmentThreeExport.csv | Org Admin | cfg-classification | Present | appraisal-period assignment |
+| CFG-MAP-066 | National_IDExport1.csv | Org Admin | cfg-nid | Present | 8 ID types + mandatory flags |
+| CFG-MAP-067 | Profile_View_settings.csv | Org Admin | cfg-custom | Partial | profile view settings |
+| CFG-MAP-068 | StandardPermissionsExport.csv | Org Admin / Platform | cfg-rbac | Present | RBAC matrix (also psa-security) |
+| CFG-MAP-069 | StandardPermissionsExport1.csv | Org Admin / Platform | cfg-rbac | Present | RBAC matrix |
+| CFG-MAP-070 | StandardPermissionsExport2.csv | Org Admin / Platform | cfg-rbac | Present | RBAC matrix |
+| CFG-MAP-071 | StandardPermissionsExport3.csv | Org Admin / Platform | cfg-rbac | Present | RBAC matrix |
+| CFG-MAP-072 | StandardPermissionsExport4.csv | Org Admin / Platform | cfg-rbac | Present | RBAC matrix |
+| CFG-MAP-073 | StandardPermissionsExport5.csv | Org Admin / Platform | cfg-rbac | Present | RBAC matrix |
+| CFG-MAP-074 | StandardPermissionsExport6.csv | Org Admin / Platform | cfg-rbac | Present | RBAC matrix |
+| CFG-MAP-075 | StandardPermissionsExport7.csv | Org Admin / Platform | cfg-rbac | Present | RBAC matrix |
+| CFG-MAP-076 | ApprovalflowsExport.csv | Org Admin | cfg-approval-flows → cfg-approval-builder | Present | approval flows |
+| CFG-MAP-077 | Approval_Flow.csv | Org Admin | cfg-approval-flows → cfg-approval-builder | Present | 76 approval flows |
+| CFG-MAP-078 | Approval_Flow_Stages.csv | Org Admin | cfg-approval-flows → cfg-approval-builder | Present | 104 approval stages |
+| CFG-MAP-079 | Workflows.csv | Org Admin | cfg-workflows → cfg-workflow-builder | Present | 68 workflows |
+| CFG-MAP-080 | Workflow_Stages.csv | Org Admin | cfg-workflows → cfg-workflow-builder | Partial | 189 stages, 121 cols |
+| CFG-MAP-081 | Custom_Flow.csv | Org Admin | cfg-workflows → cfg-workflow-builder | Present | custom flows |
+| CFG-MAP-082 | Custom_Flow_Stages.csv | Org Admin | cfg-workflows → cfg-workflow-builder | Partial | 78 custom-flow stages |
+| CFG-MAP-083 | Flow_Category.csv | Org Admin | cfg-workflows → cfg-workflow-builder | Present | flow categories |
+| CFG-MAP-084 | SLA_Setting.csv | Org Admin | cfg-sla | Present | SLA timers |
+| CFG-MAP-085 | SLA_Setting_Stages.csv | Org Admin | cfg-sla | Present | SLA levels |
+| CFG-MAP-086 | Skip_Setting.csv | Org Admin | cfg-skip | Present | skip settings |
+| CFG-MAP-087 | Skip_Setting1.csv | Org Admin | cfg-skip | Present | skip settings |
+| CFG-MAP-088 | Skip_Setting_Stages.csv | Org Admin | cfg-skip | Present | skip conditions |
+| CFG-MAP-089 | Deactivation_ReasonsExport1.csv | Separation Admin | cfg-separation-policy | Present | 57 reasons (typed) |
+| CFG-MAP-090 | NoticeExport.csv | Separation Admin | cfg-separation-policy | Present | 5 notice policies |
+| CFG-MAP-091 | ProbationExport.csv | Separation Admin | cfg-separation-policy | Present | 12 probation policies |
+| CFG-MAP-092 | Confirmation_Workflow.csv | Separation Admin | cfg-workflows → cfg-workflow-builder | Present | confirmation workflows |
+| CFG-MAP-093 | Confirmation_Workflow_Stages.csv | Separation Admin | cfg-workflows → cfg-workflow-builder | Partial | 20 stages |
+| CFG-MAP-094 | CustomApprovalFlow_translation1.csv | Org Admin | cfg-notif | Present | i18n (approval flow) |
+| CFG-MAP-095 | CustomApprovalFlow_translation3.csv | Org Admin | cfg-notif | Present | i18n (approval flow) |
+| CFG-MAP-096 | CustomFlowCategory_translation.csv | Org Admin | cfg-notif | Present | i18n (flow category) |
+| CFG-MAP-097 | CustomFlowCategory_translation1.csv | Org Admin | cfg-notif | Present | i18n (flow category) |
+| CFG-MAP-098 | CustomFlow_translation2.csv | Org Admin | cfg-notif | Present | i18n (custom flow) |
+| CFG-MAP-099 | CustomFlow_translation3.csv | Org Admin | cfg-notif | Present | i18n (custom flow) |
+| CFG-MAP-100 | CustomWorkFlowForm_translation.csv | Org Admin | cfg-forms → cfg-form-builder | Present | i18n (workflow form) |
+| CFG-MAP-101 | CustomWorkFlowForm_translation1.csv | Org Admin | cfg-forms → cfg-form-builder | Present | i18n (workflow form) |
+| CFG-MAP-102 | Assign_Assessments_Export.csv | Recruitment Admin | `— ```` ``(none) ``` | N/A (unused) | assessment assignment — unused export (feature not in use) |
+| CFG-MAP-103 | Auto_Numbering_Requisition_ID_Export.csv | Recruitment Admin | create-job | Partial | requisition auto-numbering |
+| CFG-MAP-104 | Candidate_Auto_Numbering_Export.csv | Recruitment Admin | ra-add-candidate | Partial | candidate auto-numbering |
+| CFG-MAP-105 | Candidate_Decision__Archival_Reasons_Export.csv | Recruitment Admin | cfg-sources | Present | 24 decision/archival reasons |
+| CFG-MAP-106 | Custom_Source_Export.csv | Recruitment Admin | cfg-sources | Present | custom sources |
+| CFG-MAP-107 | Custom_Source_Type_Export.csv | Recruitment Admin | cfg-sources | Present | source types |
+| CFG-MAP-108 | Duplicity_Check_Settings_Export.csv | Recruitment Admin | cfg-duplicity | Present | duplicity rules |
+| CFG-MAP-109 | External_Recruiter_Groups_Export.csv | Recruitment Admin | cfg-external-rec | Present | recruiter groups |
+| CFG-MAP-110 | External_Recruiters_Export.csv | Recruitment Admin | ra-external-recruiters | Present | 11 external recruiters |
+| CFG-MAP-111 | Hiring_Leads_Export.csv | Recruitment Admin | cfg-hiring-leads | Present | hiring leads |
+| CFG-MAP-112 | Interview_Guides_Export.csv | Recruitment Admin | ra-interviews | Partial | interview guides |
+| CFG-MAP-113 | Interview_Types_Export.csv | Recruitment Admin | ra-interviews | Partial | interview types |
+| CFG-MAP-114 | Job_Portals_Export.csv | Recruitment Admin | ra-portals | Present | 3 job portals |
+| CFG-MAP-115 | Raise_Requisition_Scope_Export.csv | Recruitment Admin | create-job | Partial | requisition scope |
+| CFG-MAP-116 | Service_Catalogue_Master_SAMPLE.csv (new) | Service Desk Admin (M17) | cfg-catalog-items (FR-M17-010) | Present | service-catalogue items + category/sub-category/asset/approver — managed by cfg-catalog-items (FR-M17-010); sample is the field-inventory reference |
+
+
+### Key findings
+Org Admin is the tenant configuration hub — its cfg-* console provides a dedicated screen for nearly every domain (entities, departments, grades, locations, assignment, RBAC, leave/attendance/performance platform settings, shifts, workflows, approval flows, SLA, skip, notifications). Functional admins provide the operational, in-context view of the same configuration.
+Coverage is complete: every configured object has a managing screen — 79 Present, 35 Partial (full field set built from the file), 1 N/A (Assign_Assessments, unused); none are Missing. The Service-Catalogue master (CFG-MAP-116) is Present via cfg-catalog-items (FR-M17-010).
+Builder screens (v1.3): the workflow, approval-flow and form configs now have working authoring screens — cfg-workflow-builder (all stage components), cfg-approval-builder (levels/exceptions/routing), and cfg-form-builder (custom-form authoring, reachable from a workflow stage). Org Admin console.
+No Missing screens. Assign_Assessments_Export.csv (CFG-MAP-102) is an unused export → N/A. The Service-Catalogue master (CFG-MAP-116) is managed by the existing Service Desk Admin screen cfg-catalog-items (FR-M17-010, §4.13.6) → Present; the sample master is the field-inventory reference.
+Scope note (Overtime): OT configuration files are retained at the config layer (CFG-MAP-024–027), but the OT request surfaces were removed from the employee/manager experience per the agreed scope; comp-off accrual is retained.
+
+### How to use
+Missing rows are screens to add (worklist). Partial rows are field-completeness build tasks (engineering drives the full field set from the named file). Present rows are done.
+Reviewers judge config screens on purpose/ownership/interaction; field completeness is audited here, not on the screen.
+
+### Manager-role review (Round 3) — coverage delta
+CFG-MAP-117 — Manager/Reviewer may edit Notice Period flag (Notice config). Managed on the existing Notice policy screen cfg-separation-policy (CFG-MAP-090, Present) — a field on an existing screen, not a separate gap. Status: Present.
+CFG-MAP-118 — Workspace model availability (has-reportees flag + RBAC role holdings) feeding the Workspace switcher. Owner: Platform (P02). Status: Partial (model documented; switcher represented in Prototype v2.2).
+Bulk queue actions (P01) require no new config object — governed by existing per-queue action permissions (RBAC).
+
+## 3. Configuration Enablement & Coverage Detail
+Purpose. The field-level detail tier beneath the Configuration Coverage Map. For the heavy Partial objects, it records only what the CSV cannot express — tenant gating (which clusters are live vs switched off) and non-obvious dependencies. It references the named CSV for values and BRD §4 for definitions, and restates neither. Closes the gating portion of the 35 Partial rows.
+Tenant scope dispositions applied: Overtime is out of scope (config retained, dormant). Empty config exports = unused features (engineering skips, no re-export). Decisions below are the tenant's product rulings, not document defects.
+
+### A. Objects needing a coverage-detail entry [E] / gating note [G]
+| Object (Map ref) | Status | GATED (off this tenant) | LIVE | Key dependency / note |
+| Tenant_Leaves_Compoff (286) | [E] | OT-generation cluster (weekday/weekly-off/holiday OT, slabs, indexing, NSD multiplier, OT approval flows) | Comp-off credit / accrual / lapse / half-day / encashment / clubbing | Half-day comp-off min-duration applies only if Credit comp-off for half day = Yes. Bound entity leave_compoff_policies (BRD §4.6). |
+| Overtime_Settings | [G] | Entire object — OT out of scope | — | Config retained but dormant. |
+| Overtime_Slabs | [G] | Entire object | — | Dormant (resolves OPEN-FS-M05-07; no slab-model ruling needed). |
+| Overtime_Threshold | [G] | Entire object | — | Dormant. |
+| OvertimePolicyIndexingRules | [G] | Entire object | — | Dormant. |
+| Leaves_Settings (131) | [E] | Blackout policy · Holiday-pay policy · Combined leave balance · Sandwich-leave auto-cron | Optional/Flexible holidays · carry-forward · rounding · half-day · standard leave display | Leave encashment = MANUAL (HR Admin decides → informs Finance; system encashment window/automation off). "Exempt Policies" sub-fields depend on their parent toggle. |
+| Attendance_Settings (147) | [E] | Night-shift differential · Break-policy config · Fair-workweek policy · Selfie/Facial-recognition check-in · (OT-linked settings, per OT scope) | Geofencing (29 fences, live) · Infraction framework · regularization · cycle restrictions · standard attendance | Confirmed against export values (all gated flags = No). |
+| GoalPlanKraSettings (249) | [E] | Cascade | Sub-goals (optional) · Check-in (optional) · Notes & 1:1 conversations · AI goal-generation (Department|Industry|Designation) | Sub-goal fields active only when Sub-goals on; check-in comments ↔ Enable Comments on Check-in. Notes/1:1 ≠ check-in/review comments (separate feature). |
+| ReviewKraSettings (161) | [E] | Competency parameter · Potential placement · N-Grid · MSF report | Goals · Promotion (used in some reviews) · Calibration | Gated set = No/empty across all 28 review rows; live set has data. |
+| Calibration1 / Calibration2 (110) | [E] | N-Grid framework | Lobby/group calibration · moderation fields per show-in-moderation flags | Confirmed against export values. |
+| OnboardingProcess (46) | [E] | ID-verification package | BGV · Buddy · Verification package · E-Verify (kept) · OCR (kept) | Each cluster's "Mandatory" sub-fields depend on its "Enable". E-Verify/OCR currently No in data but retained as available capability per tenant decision. |
+| AssignmentExport (162) | [E](dep only) | — none | Fully in scope | No gating — include/exclude rule logic only; build full field set from CSV. |
+| Workflow_Stages (121) · Custom_Flow_Stages · Confirmation_Workflow_Stages | [E](dep only) | — none | Fully in scope | No gating — per-stage skip / SLA / decision-matrix conditional logic; build from CSV. |
+
+
+### B. Partial objects needing no detail entry [—]
+Representative screen + self-describing CSV; engineering builds the full field set directly from the file. No tenant gating or non-obvious dependency:
+Unpaid_Leave · LeavePolicyTenure · LeavePolicyBlockLeave · LeavePolicyCustomQA · LeavePolicyDateSpecific · LeavePolicyMultipleAllotment · Attendance_Policy · Attendance_Policy_Work_Transfer · Attendance_Shift_Block · Attendance_Tags · CheckIn_Settings · Policy_And_Letter_Settings · Self_Generate_Settings · Profile_View_settings · Auto_Numbering_Requisition_ID · Candidate_Auto_Numbering · Interview_Guides · Interview_Types · Raise_Requisition_Scope
+
+### C. Empty-export disposition (unused features — skip, no re-export)
+LeavePolicyTenure · LeavePolicyCustomQA · LeavePolicyMultipleAllotment · LeavePolicyBlockLeave · Band · Location_Country_Master · Goals · Normalization · CustomFormula · Interview_Guides · Assign_Assessments  · Attendance_Policy_Work_Transfer · Attendance_Shift_Block. Verify-the-export (no parseable data): Leaves_Policy · Attendance_Policy · Profile_View_settings · Custom_Flow.
+Register folds into the Configuration governance set as the detail tier under the Coverage Map. Coverage Map rows for the [E]/[G] objects flip Partial → Present once their field sets are built; [—] rows are built straight from the CSV.
+
+## 4. Configuration Actions Register
+Purpose. A single running list of tenant configuration changes (system settings, not prototype or FS changes) surfaced during the role-by-role pre-handoff review. These are actions for the implementation/config team to apply in the product. This register is updated at the close of each role review.
+Status legend: Open = not yet applied · Applied = configured in tenant · N/A = superseded.
+| ID | Source (role · batch) | Area / Module | Setting | Current value | Required value | Why | Status |
+| CFG-001 | Employee · B2 (Leave) | Leave — M04 | Leave encashment ownership | Reachable as employee self-service | HR Admin decision only (Approve/Reject); not employee self-service and not a separately-initiated request | Encashment is an HR Admin decision, taken case-by-case during employment and at FnF | Open |
+| CFG-002 | Employee · B7 (Recruitment) | Recruitment — M08 · Duplicity Check Settings | “Allow employee to apply for multiple positions via IJP” + reapplication window | Multi-position enabled; reapplication 180 days | Disable multi-position via IJP; review reapplication window | IJP is out of scope for employee self-service this tenant | Open |
+| CFG-003 | Manager · B3 (Performance) | Performance — M09 · GoalPlan | “Enable Sendback” | No (all 40 plans) | Yes | Allow the approving manager to return a goal plan for redraft (mandatory comments) | Open |
+| CFG-004 | HOD · B1 (Department oversight) | RBAC / M01 | HOD “Compensation View” permission | Not defined | Define the permission controlling HOD salary/CTC visibility | Some HODs may view salary; it must be permission-gated, not open to all HODs | Open |
+| CFG-005 | HRBP · B1 (Casework) | RBAC / M01 | HRBP access to Compensation tab and Audit log | Reachable via full HR profile | Compensation hidden for HRBP; Audit log admin-only | Compensation is not an HRBP function; audit is restricted to admins | Open |
+| CFG-006 | HRBP · B2 (Tasks) | RBAC / M02 BGV | HRBP access to the BGV console | View · Modify / Save / Sync available | Read-only BGV status for HRBP (edit restricted to BGV/Onboarding admin) | HRBP oversees BGV status but does not edit verification reports | Open |
+| CFG-007 | HRBP · B2 (Tasks) | RBAC / M01 Probation | HRBP access to probation-decision | Confirm / Extend / Separate actions available | Read-only probation view for HRBP (decision = Manager confirms, HR Admin approves) | HRBP views probation; it is not the decision-maker | Open |
+| CFG-008 | HRBP · B3 (Module views) | RBAC / M09 Reviews | HRBP access to performance reviews | Reuses manager review surface (editable appraisal form, manager reportee detail) | No access to performance reviews for HRBP — performance is hidden from HRBP entirely; people drill-down resolves to the HRBP-scoped detail with no performance data | Performance is not an HRBP function — HRBP has no performance access (decision supersedes the earlier read-only proposal) | Open |
+| CFG-009 | CEO · B4 | RBAC / M08 | CEO requisition sign-off actions | Reuses HR requisition-approval (incl. “Send to CEO” escalation) | Approve / Reject only for CEO (no “Send to CEO” — CEO is the escalation target) | The CEO is the final sign-off, not an escalator | Open |
+| CFG-010 | Finance Admin · B3 | RBAC / M03 FnF | Finance FnF clearance task scope | Resolves shared fnf-clearance via fallback | Scope to the finance clearance line only (RBAC; no screen change) | Finance acts on its clearance line, not the full HR/manager clearance | Documented |
+| CFG-011 | Employee · Goals/Review | M09 / GoalPlanKraSettings · ReviewKra | Scorecard pillar & goal alignment on goal authoring | Pillar shown with required asterisk; alignment field present | Scorecard pillar = optional (enable-per-goal-plan; Mandatory in goal authoring OFF by default). Goal alignment removed from authoring (app-wide). | Pillar is org-optional; alignment is not used | Open |
+| CFG-012 | Employee · IT ticket | M17 / RBAC | Cost-centre, SLA and service-catalogue on the employee ticket surface | Cost-centre & SLA shown to employee; catalogue as buttons; no approver/status | Hide cost-centre & SLA from employee; catalogue → dropdown with defaults; add approver(s)+status; Service-Catalogue master already exists (cfg-catalog-items, FR-M17-010) | Data-minimisation + the catalogue needs a config master | Open |
+
+
+### Notes
+Each action is also recorded in the originating role’s Review Summary and, where it has a technical home, in the relevant Functional Specification (e.g. CFG-003 → M09 FS; CFG-004 → M01 FS).
+New rows are appended as later roles (HRBP, the functional admin roles, Platform Super Admin) are reviewed.
+
+### Manager-role review (Round 3)
+CFG-013 — Manager menu & workspace model: Manager appraisal→Team appraisals; Performance heading folded (reviews→Tasks, probation-confirmation & FnF→Team); goal-pending items added to Tasks; Workspace switcher (Me/My Team/Admin) with Admin exclusivity. Artifacts: Foundation FS v1.5, M09 v1.4, Platform v1.5, RBAC v1.6.
+CFG-014 — Separation & probation actions: manager-editable notice period (config-gated, M03/Org-Admin-Config) with live LWD recompute + audit; probation Extend-by UX with live end-date preview (M01/M02). Bulk approve/reject/delegate on volume approval queues (P01/RBAC).
+
+### Manager-role review (Round 3 follow-up)
+CFG-015 — Admin-workspace exclusivity (OPEN-FS-FND-05 resolved): admin roles see only admin functions; self-service suppressed in admin workspaces. Artifacts: Foundation v1.6, RBAC v1.7, Platform v1.6.
+CFG-016 — Manager employee-context reportee view (mirrors employee profile + Project history; on-behalf actions audit-logged; intentional Tier-1/bank/statutory masks only). has-reportees derived (OPEN-FS-CFG-08). Artifacts: M01 v1.4, RBAC v1.7, Platform v1.6.

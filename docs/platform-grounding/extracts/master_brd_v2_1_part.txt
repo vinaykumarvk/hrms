@@ -1,0 +1,1561 @@
+PrimeSoft HRMS — Phase 1 Business Requirements Document (v2.1)
+PrimeSoft Solutions, Inc.
+PrimeSoft HRMS
+Phase 1 Business Requirements Document
+Foundation & Core Operations
+Prepared for: PrimeSoft — PrimeSoft HRMS Platform
+Document Version: 2.1
+Date: May 2026
+Classification: Confidential
+Audience: CEO · CTO · Head of HR · Product Architect · Implementation Lead · AI Builder
+Companion documents: Product Vision v2.6 · Platform Specification v1.6 · RBAC Design v1.7 · Foundation FS v1.7 · module Functional Specs (M01–M17) · Clickable Prototype v2.6. See the Engineering Handoff — Start Here for the full document index and authority order.
+© PrimeSoft Solutions, Inc. All rights reserved.
+Table of Contents
+| # | Section |
+| 1 | Executive Summary |
+| 1.1 | Project Name |
+| 1.2 | Project Description |
+| 1.3 | Business Objectives |
+| 1.4 | Target Users and Pain Points |
+| 1.5 | Success Metrics |
+| 2 | Scope & Boundaries |
+| 2.1 | In Scope — Phase 1 |
+| 2.2 | Out of Scope — Explicitly Excluded from Phase 1 |
+| 2.3 | Assumptions |
+| 2.4 | Constraints |
+| 3 | User Roles & Permissions |
+| 3.1 | Role Taxonomy Overview |
+| 3.2 | Platform Roles |
+| 3.3 | Entity-Scoped Operational Roles |
+| 3.4 | Manager Hierarchy Roles |
+| 3.5 | Individual Access Roles |
+| 3.6 | Data Scoping Dimensions |
+| 3.7 | Action-Level Permissions Matrix — by Role and Module (Phase 1) |
+| 3.8 | Sensitive Data Restrictions |
+| 3.9 | Field-Level Access — Employment Details (M01 Employee Profile) |
+| 3.10 | Capability Flag Registry |
+| 4 | Data Model |
+| 4.1 | Platform Audit Columns — Required on Every Entity |
+| 4.2 | Tenancy & Organisation Entities |
+| 4.3 | Users, Roles & RBAC Entities |
+| 4.4 | Employee Master Entities (M01) |
+| 4.5 | Leave Management Entities (M04) |
+| 4.6 | Attendance Entities (M05) |
+| 4.7 | Onboarding Entities (M02) |
+| 4.8 | Exits & Offboarding Entities (M03) |
+| 4.9 | Recruitment Entities (M08) |
+| 4.10 | Performance Management Entities (M09) |
+| 4.11 | Document Management Entities (M11) |
+| 4.12 | Analytics & Reports Entities (M16) |
+| 4.13 | Assets & IT Entities (M17) |
+| 4.14 | Platform Entities (P01–P06) |
+| 5 | Functional Requirements |
+| 5.1 | Platform Modules (P01–P06) |
+| 5.2 | M01 — Employee Master |
+| 5.3 | M02 — Onboarding |
+| 5.4 | M03 — Exits & Offboarding |
+| 5.5 | M04 — Leave Management |
+| 5.6 | M05 — Attendance |
+| 5.7 | M08 — Recruitment (ATS) |
+| 5.8 | M09 — Performance Management |
+| 5.9 | M11 — Document Management |
+| 5.10 | M-CAL — Calendar (cross-module surface) |
+| 5.11 | M16 — Analytics & Reports |
+| 5.12 | M17 — Assets & IT |
+| 6 | API & Integration Specifications |
+| 6.1 | Authentication & Authorisation |
+| 6.2 | Standard Response Format |
+| 6.3 | Rate Limiting |
+| 6.4 | API Endpoints — Phase 1 Inventory by Module |
+| 6.5 | Example API Contracts |
+| 6.6 | External Integrations |
+| 7 | Non-Functional Requirements |
+| 7.1 | Performance |
+| 7.2 | Availability & Reliability |
+| 7.3 | Scalability |
+| 7.4 | Security |
+| 7.5 | Data Integrity |
+| 7.6 | Compliance |
+| 7.7 | Accessibility |
+| 7.8 | Browser & Platform Support |
+| 7.9 | Maintainability |
+| 8 | Workflow & State Diagrams |
+| 8.1 | Employee Lifecycle State Machine (M01) |
+| 8.2 | Leave Application Workflow (M04) |
+| 8.3 | Attendance Request Workflow (M05) |
+| 8.4 | Separation Workflow (M03) |
+| 8.5 | Onboarding State Machine (M02) |
+| 8.6 | Candidate State Machine (M08) |
+| 8.7 | Requisition State Machine (M08) |
+| 8.8 | Performance Review State Machine (M09) |
+| 9 | Notification & Communication |
+| 9.1 | Notification Channels and Defaults |
+| 9.2 | Leave Management (M04) — Notification Matrix |
+| 9.3 | Attendance (M05) — Notification Matrix |
+| 9.4 | Exits & Offboarding (M03) — Notification Matrix |
+| 9.5 | Onboarding (M02) and Recruitment (M08) — Notification Matrix |
+| 9.6 | Employee Master (M01) and Document Management (M11) — Notification Matrix |
+| 9.7 | Performance Management (M09) — Notification Matrix |
+| 9.8 | Calendar-driven and Milestone Notifications |
+| 9.9 | Notification Governance |
+| 10 | Reporting & Analytics |
+| 10.1 | Pre-built Reports — Phase 1 Catalogue |
+| 10.2 | Role-Aware Dashboard Widgets — Phase 1 Inventory |
+| 10.3 | Custom Report Builder |
+| 10.4 | Data Freshness and Caching |
+| 10.5 | Export and Delivery |
+| 11 | Migration & Launch |
+| 11.1 | Migration Approach — Darwinbox as Source System |
+| 11.2 | Migration Waves |
+| 11.3 | ETL+V Pattern — Per-Wave Execution |
+| 11.4 | Dry Run Schedule and Exit Criteria |
+| 11.5 | Phased Product Rollout |
+| 11.6 | Phase 1 Go-Live Checklist |
+| 11.7 | Rollback Plan |
+| 12 | Glossary |
+| 12.1 | Tenancy and Organisation |
+| 12.2 | Employee Lifecycle |
+| 12.3 | Recruitment and Onboarding |
+| 12.4 | Performance Management |
+| 12.5 | Leave and Attendance |
+| 12.6 | Security, RBAC, and Privacy |
+| 12.7 | Compliance and Statutory |
+| 12.8 | Platform and Architecture |
+| 13 | Appendices |
+| App A | Appendix A — Indian Statutory Compliance (Phase 1 Summary) |
+| App B | Appendix B — PII Classification Tiers (Detail) |
+| App C | Appendix C — Audit Log Structure |
+| App D | Appendix D — Workflow Engine Pattern Reference |
+| App E | Appendix E — Migration Wave Detail |
+| App F | Appendix F — External Integration Register |
+| App G | Appendix G — Phase 1 Binding Decisions |
+| App H | Appendix H — Scope Decisions & Boundaries |
+
+
+# 1. Executive Summary
+Document positioning. This Business Requirements Document specifies what the system must do. It is read alongside the companion artefacts that specify how the system is designed, built, and operated, under the authority order in the Engineering Handoff — Start Here (RBAC → BRD → FS → Foundation/Platform Spec → prototype): the Clickable Prototype v2.6 is the authority for screens and flows (321 screens); the module and Foundation Functional Specs define screen behaviour, validations, and shared services; the named configuration exports define the complete field inventory and allowed values for each configuration screen; and the RBAC Design Document is the single source for roles, permissions, and field-level access. Physical implementation choices — database engine, application framework, cloud provider, object storage, messaging, search/indexing, secrets management, observability, and deployment topology — are owned by the engineering team within the logical architecture in Product Vision Part 2 and the Platform Specification, and within the non-functional targets in §1.5. Where this BRD and a companion document conflict on intent, the authority order above governs.
+
+## 1.1 Project Name
+PrimeSoft HRMS — Phase 1 (Foundation & Core Operations).
+
+## 1.2 Project Description
+PrimeSoft HRMS is a commercial-grade, enterprise-class Human Resource Management platform built as owned intellectual property of PrimeSoft Solutions, Inc. Phase 1 delivers the operational backbone of the platform: the complete hire-to-retire lifecycle (employee master, onboarding, exits), time management (leave, attendance), talent acquisition (recruitment ATS), performance management, document management, analytics, and IT asset management, supported by six cross-cutting platform modules (workflow engine, RBAC, AI chat agent, tenant administration, audit logging, migration toolkit). The platform is delivered as a responsive web application supporting three deployment models from a single codebase: Standalone (single organisation, single legal entity), Multi-Tenant SaaS (shared infrastructure with tenant-level data isolation), and Group Company (one parent with multiple legal entities sharing one HRMS instance).
+
+## 1.3 Business Objectives
+Own vs Rent — Eliminate perpetual subscription dependency. Built once, owned permanently. Operational costs reduce to hosting and maintenance, not per-employee licensing.
+Migration Advantage — Provide a structured, tooled migration pathway from Darwinbox (the primary source system for Release 1 migration) with less than 0.5% data error rate on Dry Run 3.
+Configuration over Code — Serve any industry segment and geography through configuration, not customisation. Segment and geography selection at provisioning drives all defaults.
+Compliance First — India’s statutory compliance landscape (EPF, ESI, TDS, PT, LWF, Gratuity, POSH, DPDPA, Shops & Establishments) is a first-class concern, built into the data model from Day 1.
+SaaS Readiness — Onboard a new tenant in hours through automated provisioning and segment-driven default loading.
+AI Native — Intelligence embedded in the core. Every module benefits from AI-assisted guidance and insight via the document-grounded Chat Agent.
+
+## 1.4 Target Users and Pain Points
+Phase 1 Release 1 target: IT Services organisations operating in India with up to 500 employees per tenant, transacting in Indian Rupees, with English as the working language.
+Primary user constituencies and their pain points:
+| User | Pain points addressed |
+| Head of HR | Lack of single source of truth across HR data; inability to consolidate multiple legal entities; perpetual SaaS licence fees with no data ownership. |
+| HR Administrator | Manual reconciliation between onboarding, payroll, and statutory filings; absence of audit-grade trails for every data change; difficulty enforcing PII protection at field level. |
+| Hiring Manager / Recruiter | Disconnected ATS, no integrated offer-to-onboarding handover, fragmented BGC vendor management. |
+| Line Manager (L1) | No unified team dashboard for approvals; inability to see team leave or attendance at a glance. |
+| Employee | Disjointed self-service across leave, attendance, documents, and payslips; opaque policies; no conversational policy guidance. |
+| Finance Admin | Lack of integrated payroll approval workflow; inability to view cost-centre-level compensation data for budgeting. |
+| Compliance Officer / DPO | Manual statutory compliance reporting; insufficient consent capture and right-to-erasure tracking under DPDPA 2023. |
+| Candidate / Pre-joiner | No structured pre-joining experience; manual document collection; no policy access before joining. |
+
+
+## 1.5 Success Metrics
+| KPI | Target |
+| Tenant provisioning time (IT Services segment, India) | < 1 business day |
+| Darwinbox migration data error rate (Dry Run 3 — Wave 1) | < 0.5% |
+| Production uptime | ≥ 99.5% per calendar month (≤ 3.6 hours downtime) |
+| Recovery Time Objective (RTO) | < 4 hours for any failure scenario |
+| Recovery Point Objective (RPO) | < 1 hour data loss maximum |
+| Standard API p95 latency | < 500 ms under 300 concurrent users |
+| Web page load (Largest Contentful Paint, 4G) | < 2.5 seconds |
+| Bulk upload — 500 employee records | < 90 seconds end-to-end |
+| Chat Agent response | < 8 seconds end-to-end including AI API call |
+| VAPT findings at Phase 1 go-live (offensive security testing findings) | Zero Critical, zero High unresolved |
+| CVE exposure in production at Phase 1 go-live (catalogued dependency vulnerabilities) | Zero Critical, zero High CVEs unpatched |
+| Concurrent active sessions supported | 300 without degradation |
+| WCAG accessibility level | 2.1 AA — all web screens pass automated checks |
+| P1 defects outstanding at Phase 1 UAT exit | Zero |
+
+
+# 2. Scope & Boundaries
+
+## 2.1 In Scope — Phase 1
+Phase 1 delivers ten functional modules and six platform modules. All modules are delivered as a responsive web application supporting 375 px (mobile), 768 px (tablet), and 1280 px (desktop) breakpoints. Native mobile applications and offline capability are Phase 2 deliverables and therefore out of scope for this Phase 1 BRD.
+
+### 2.1.1 Functional Modules (Phase 1)
+| # | Module | Sub-modules in scope |
+| M01 | Employee Master | Personal & employment profile · Lifecycle state machine (7 states; probation tracked as a flag on employment_history) · Organisation position · Document vault · Org chart (group-wide) · Dependent & nominee records · Grievance register |
+| M02 | Onboarding | Pre-joining portal (candidate-facing) · Document collection & verification · IT & asset provisioning task list · Induction & orientation task management · Buddy assignment · BGV integration · Welcome communication |
+| M03 | Exits & Offboarding | Resignation submission & acceptance workflow · Notice period management · Exit interview · FnF clearance (parallel multi-department) · Rehire eligibility determination · Separation letter generation · Absconding handling · Termination policy |
+| M04 | Leave Management | Leave types & policies · Application & approval · Balance & accrual engine · Holiday calendar · Comp-off · Encashment (HR-Admin authorised, case-by-case) · LOP feed to Payroll |
+| M05 | Attendance | Shift & roster management · GPS / biometric / app check-in · Regularisation workflow · Out Duty · Planned overtime · Attendance lock & LOP feed · Absconding detection · Overnight punch handling |
+| M08 | Recruitment (ATS) | Job requisition · Pipeline & candidate management · Interview scheduling · Offer letter · BGC trigger · Job board integrations (Naukri, LinkedIn, careers portal) · Agency / vendor management · Candidate portal · Internal Job Posting |
+| M09 | Performance Management | Appraisal period configuration (per-employee, defined by Performance Admin or HR Admin; 12-month default, editable) · 12 monthly goal cycles and 12 monthly review cycles (tenant-level cohorts) · Goal setting (OKR — one active plan per employee, scoped to appraisal period; next plan auto-opens 30 days before current ends) · Continuous manager feedback within cycle · Two-way feedback thread (employee response to manager feedback) · Self & manager review · Skip-level & HR calibration · Rating & contribution level assignment · Probation confirmation · Performance improvement plan tracking · Multi-Source Feedback |
+| M11 | Document Management | Policy library & versioning · Acknowledgement tracking · Employee document vault (storage substrate for M01) · POSH policy & compliance · Statutory document management · Letter templates with merge fields |
+| M16 | Analytics & Reports | Pre-built HR reports · Workforce dashboard · Compliance reports · Custom report builder · Role-scoped data visibility · Manager Hub team dashboard |
+| M17 | Assets & IT | Asset master (type, make, serial number, value, condition) · Assignment & return tracking · IT provisioning tasks (M02 integrated) · Asset clearance queue (M03 FnF integrated) |
+
+
+### 2.1.2 Platform Modules (Day 1 — operational before functional modules)
+| # | Module | Capabilities in scope |
+| P01 | Workflow Engine | Approval flow configuration · Notification engine · SLA & escalation · Delegation · Bulk approval · Multi-stage sequential, parallel all-of, parallel any-of, conditional routing, dynamic approver resolution |
+| P02 | RBAC & Security | Role & permission configuration · Field-level access rules · Row-level security · SSO (Google) & MFA (TOTP, SMS OTP) · Session management · IP restriction · Password policy · Account lockout |
+| P03 | Chat Agent (AI) | Document-grounded policy Q&A · Process guidance · Pre-joining access · PII-stripped backend calls only · Available to all active employee roles and Candidates in pre-joining state |
+| P04 | Tenant & Org Admin | Tenant provisioning · Master data configuration · Integration settings · Segment & geography defaults · Device registration · Location master · User management |
+| P05 | Audit & Compliance Log | Immutable data mutation log (database trigger) · Security event log · Access control audit · Integration event log · Export for regulatory and audit purposes · 7-year minimum retention |
+| P06 | Migration Toolkit | Darwinbox ETL framework · Data archaeology & profiling · Field mapping management · Dry-run & verification framework · Source ID traceability (darwinbox_source_id column on every migrated record) |
+
+
+### 2.1.3 Indian Statutory Compliance (Phase 1 elements only)
+Full statutory deduction calculation and government filing outputs (PF/EPF, ESI, TDS, PT, LWF, Gratuity payout) are Phase 2 (M06 Payroll + M07 Statutory Compliance) and out of scope for Phase 1. Two statutory obligations are embedded in Phase 1 modules:
+POSH Act 2013 — Mandatory policy publication and acknowledgement · Complaint intake via M01 Grievance Register (anonymous opt-in) · ICC routing for POSH-category grievances · Training completion tracking via M11.
+DPDPA 2023 — Consent capture at onboarding · Right of access (employee can export their own record with PII unmasked) · Right of correction (via sensitive-field change workflow) · Right of erasure (non-statutory data only, statutory data has legally mandated retention) · Data principal request register · Data fiduciary obligations · Audit log redaction marker for erased PII.
+Shops & Establishments Act — State-wise leave entitlements and working hour rules · Location-based policy overrides.
+
+## 2.2 Out of Scope — Explicitly Excluded from Phase 1
+| Excluded item | Reason / Future phase |
+| M06 Payroll (monthly run, payslip, bank disbursement file, FnF settlement) | Phase 2 |
+| M07 Statutory Compliance outputs (EPF/ECR, ESI/ESIC, TDS/Form 24Q/Form 16, PT, LWF, Gratuity payout) | Phase 2 |
+| M10 Hikes & Compensation (hike cycle, salary revision, increment letters, revised structure push) | Phase 2 |
+| Native mobile applications (iOS, Android) | Phase 2 — responsive web only for Phase 1 |
+| Offline capability | Phase 2 |
+| M12 Expense & Travel (claim submission, receipt OCR, travel advance) | Phase 3 |
+| M14 Benefits & Insurance (group health enrolment, TPA integration, flexi benefits) | Phase 3. Phase 1 captures benefit-preference intent during M02 Onboarding only — operational consumption deferred to Phase 3. |
+| M15 Engagement & Surveys (pulse surveys, sentiment analysis, eNPS) | Phase 3 |
+| M18 Internal Social (announcements feed, recognition wall) | Phase 3 |
+| Resume parsing / OCR for ATS | Phase 3 (AI capability roadmap). Phase 1 manual entry only. |
+| ID verification package (separate from BGV) | Phase 2 (subject to ID verification partner selection) |
+| E-Verify (US employment-eligibility verification) | Permanent exclusion — Phase 1 is India-first; toggle to be removed from UI |
+| Multi-currency support | Future — Phase 1 is INR-only |
+| Multi-language support (Hindi, regional Indian languages, Arabic, French) | Future — Phase 1 is English-only |
+| Geographies beyond India | Future — Phase 1 covers India only (all states and UTs) |
+| Direct API filing with government portals (EPFO, ESIC, Income Tax) | Future — Phase 2 generates portal-upload files only; direct API filing depends on portal availability |
+| Competency framework · Normalisation · Custom scoring (M09) | Phase 2 |
+| Interview Guides (M08 §D.2) | Out of Phase 1 scope — empty source register |
+| Assessments (M08 §D.3) | Out of Phase 1 scope — empty source register |
+| Manager-initiated hike recommendation | Not a feature — hike approval rests solely with CEO; HR Admin initiates; manager has no role |
+| Auto-approval of leave or attendance requests | Disabled platform-wide — no request auto-approves under any configuration |
+| Hard delete of any record | Permanently excluded — soft delete only on all tables; statutory data may be archived but never hard-deleted |
+
+
+## 2.3 Assumptions
+Tenant home region is India; data residency requirement flag is set to India with a DR replica in a second Indian region.
+Release 1 tenants operate at a scale of up to 500 active employees plus 5 years of historical records.
+Architecture must support up to 100 tenants without re-engineering, but Phase 1 go-live will operate at a single-tenant scale.
+Google Workspace is the assumed identity provider for tenants choosing SSO. Tenants on username/password may opt for self-hosted credentials.
+Biometric devices and IP-based attendance restrictions require prior device and location registration in P04 Tenant & Org Admin by Organisation Admin or Platform Super Admin before M05 configuration can be activated.
+BGV vendor selection (primary plus configurable additional vendors) and bank file format (NEFT / RTGS — Phase 2) are confirmed by the customer at provisioning.
+All AI calls are made from the backend; the AI API key is never exposed to the browser, and PII is stripped from prompts server-side.
+
+## 2.4 Constraints
+| Constraint type | Detail |
+| Technical — page size & breakpoints | Responsive web supporting 375 px (mobile), 768 px (tablet), 1280 px (desktop). Mobile touch targets minimum 44 × 44 px on all interactive elements. |
+| Technical — accessibility | WCAG 2.1 AA compliance — all web screens must pass automated checks. |
+| Technical — browser support | Modern evergreen browsers (latest two major versions of Chrome, Edge, Firefox, Safari). No support for Internet Explorer. |
+| Technical — encryption | TLS minimum version enforced across all connections. AES-256-GCM for PII at rest. Per-tenant KMS keys with envelope encryption pattern. |
+| Operational — deployment | Zero-downtime production deployments. Scheduled maintenance window Sundays 01:00 – 04:00 IST only. |
+| Regulatory — DPDPA 2023 | Consent capture, right of access, right of correction, right of erasure (non-statutory data), data fiduciary obligations are all mandatory from Day 1. |
+| Regulatory — POSH Act 2013 | Mandatory policy, complaint intake, ICC routing, and training tracking from Day 1. |
+| Regulatory — statutory retention | Statutory data (payroll, PF, TDS) has legally mandated minimum retention; hard delete is blocked at both application and database layers. |
+| Regulatory — audit log retention | Minimum 7 years. After 2 years entries may be archived to cold storage but must remain queryable within 24 hours. |
+| Security — VAPT | External Vulnerability Assessment & Penetration Testing before Phase 1 go-live. All Critical and High findings must be resolved before live data is loaded. Zero Critical or High CVEs in production at go-live. |
+| Security — MFA | Multi-Factor Authentication enforced by default for HR Admin and Organisation Admin roles. |
+| Data integrity — deletes | No hard deletes on any table — soft delete with timestamp only. |
+| Data integrity — referential integrity | All foreign key constraints enforced at the database layer. |
+| Data integrity — uniqueness | Employee ID, company email, PAN (per active employees), and Aadhaar are unique constraints enforced at the database layer. |
+| Audit completeness | 100% of mutations captured via database-level trigger; zero gaps permitted. No application bug, developer action, or API bypass can suppress an audit entry. |
+
+
+# 3. User Roles & Permissions
+[RBAC — single source of truth] The RBAC Design Document v1.7 is the authoritative single source for the access-control model: role taxonomy, the permission matrix, field-level access, capability flags, individual entitlements, and User Assignment Groups. Sections 3.2–3.10 below are retained as business context; where they differ from the RBAC Design Document, the RBAC Design Document governs. Phase-1 capability flags are four — BGV review, Letter Admin, Asset Custodian, and Department Head — Asset Audit Certify — plus two HOD configurable grants (report visibility; per-workflow approval authority). Change Manager is not a Phase-1 flag.
+
+## 3.1 Role Taxonomy Overview
+PrimeSoft HRMS Phase 1 defines 18 distinct roles spanning platform administration, organisational administration, HR operations, module administration, manager hierarchy, specialist functions, and individual access. A user may hold more than one role simultaneously. Where a user holds more than one role, the more restrictive permission applies — a less permissive role never elevates access granted by a more permissive one (Conflict Resolution Rule). Exception — defined inheritance: HR Admin is a defined superset of the nine operational module-admin roles (§3.1.1); its inherited permissions are part of the HR Admin role definition itself, not a multi-role combination, so the Conflict Resolution Rule does not down-scope HR Admin to a module admin’s narrower reach.
+Access control operates at four layers, applied in combination for every user session: (a) Module-level — whether a module is visible at all; (b) Field & Section level — visibility and editability of fields and form sections; (c) Data-level (row-level security) — which records a role can see, scoped by reporting chain, department, contribution level, UAG, or entity; (d) Action-level — what a user can do within a record (View Only, Edit, Approve/Reject, Download, Admin Rights).
+PII Protection Ceiling — PII fields carry system-enforced protection ceilings. No Organisation Admin, Module Admin, or any other role can override these ceilings upward. Exceptions are explicit platform-level grants (e.g. Office Admin national ID access) and are fixed — not configurable.
+
+## 3.2 Platform Roles
+| Role | Code | Scope | Core mandate |
+| Platform Super Admin | platform_super_admin | All tenants | Tenant provisioning · segment and geography selection · platform master data · cross-tenant analytics · migration tooling tenant-level operations (provisioning, staging environment, dry run execution) |
+| Organisation Admin | org_admin | Single tenant — all entities | Org structure · User Assignment Group (UAG) creation (shared with HR Admin) · workflow configuration · field-level RBAC · integration credentials · SSO policy · individual entitlement grants (mandatory expiry, audit-logged) · cross-entity HR data visibility within the tenant (consolidated reports, group-level org chart, group attrition view, internal mobility across entities) — the only role with cross-entity visibility inside a tenant. Org Admin does NOT perform per-employee HR transactions; those remain with the entity-scoped HR Admin. · cross-entity HR data visibility within the tenant (group-level headcount, attrition, mobility, ex-employee history). Operates above the entity boundary; does NOT replace per-entity HR Admins for entity-scoped HR operations. |
+
+
+## 3.3 Entity-Scoped Operational Roles
+Entity scope reminder. All roles in this section operate within a single legal entity. The HR Administrator, Finance Admin, HRBP, Office Admin, CEO, and the module-specific admins (Onboarding, Offboarding, Leave, Attendance, Performance, Document, Recruitment) all have single-entity scope. No HR transaction crosses entity boundaries — every leave application, separation, payroll run, statutory return, and employee record edit stays within the entity that owns the employee. Cross-entity visibility within a tenant is owned by Org Admin alone (see §3.2 Platform Roles). Platform Super Admin is cross-tenant, not cross-entity — it should not be used to bridge entities within a single tenant. If an HR Administrator needs cross-entity insight (e.g. a group-wide attrition report or to check whether a separated employee from Entity A has been rehired into Entity B), the request is routed to Org Admin, who provides the consolidated view.
+Entity scope reminder. All operational roles in this section are scoped to a single legal entity within the tenant. In a Group Company deployment with multiple entities (e.g. a holding company with subsidiaries across geographies — Solutions Pvt Ltd in India, Global Inc in the US, Services Pte Ltd in Singapore), each entity is staffed with its own HR Admin, Finance Admin, Office Admin and module admins (Onboarding, Leave, Attendance, Performance, Document, Offboarding, Recruitment). No transactional flow crosses entity boundaries — every leave application, attendance regularisation, payroll component, statutory filing, separation FnF, and grievance stays within the employee’s entity of record. Cross-entity activities (group headcount reports, group attrition, ex-employee lookup across entities, internal mobility scouting across entities) are owned by Org Admin per §3.2; HR Admin is not the channel for cross-entity visibility. Platform Super Admin is cross-tenant (all customers) and is also not the channel for cross-entity visibility within a single tenant.
+| Role | Code | Scope | Core mandate |
+| HR Administrator | hr_admin | Single entity | Superset operational role — HR Admin can perform all functions of every module admin within the entity. Full employee lifecycle · policy and document management · project master (§4.2.21, entity-scoped) · User Assignment Group (UAG) creation and management — including project-scoped UAGs, location selection, and employee tagging (one employee → one UAG). UAG is access-control only; leave / shift / holiday are assigned via the Assignment Framework (§4.2.17), not the UAG · offer letter generation (jointly with Recruitment Admin) · audit log access · leave encashment case-by-case authorisation (HR Admin only). HR Admin inherits the complete permission set of Recruitment Admin, Onboarding Admin, Leave Admin, Attendance Admin, Document Admin, Performance Admin, Offboarding Admin, Office Admin, and Analytics Admin (see §3.1.1). Module admins remain available for delegation, but any task a module admin can do, HR Admin can also do directly. |
+| Finance Admin | finance_admin | Single entity | Cost centre management. Phase 2 adds payroll approval and individual payslip view/download. Joint module admin on M10 for configuration purposes only (no hike approval authority in Phase 1 scope). |
+| HRBP | hrbp | Directly assigned employees (individually or via UAG) | HR operations for assigned employees · grievance intake · policy advisory · engagement oversight · leave application approval and rejection for directly assigned employees · attendance request approval. Business unit assignment optional. |
+| Office Admin | office_admin | Single entity | Employee directory · date of birth view · national ID view and upload (PAN, Aadhaar, Passport, Driving Licence) · bank account entry and update (masked after entry). No payroll, compensation, performance, leave, or attendance access. |
+| CEO | ceo | Single entity | Standard employee self-service access otherwise. (Final approver for hike and compensation decisions — Phase 2.) |
+| Onboarding Admin | onboarding_admin | M02 only — single entity | Configure onboarding checklists · manage task assignments · configure buddy assignments · track onboarding completion · manage BGV vendor profiles · assign verification packages. Capability flag: BGV review (grantable by Org Admin). |
+| Separation Admin (Offboarding Admin) | offboarding_admin | M03 only — single entity | Owns the separation surface: configure FnF clearance workflows and separation checklists · build and version the exit interview form (M11 form-builder) · read exit interview raw responses (Exit Interview Reader, within UAG) · schedule / track the exit interview · oversee the FnF clearance board and clear/hold per stage · initiate org-side termination (Separation Initiator) · track offboarding completion. Confidentiality of raw exit responses is hard-coded to HR Admin, Separation Admin, and HRBP (within UAG) (F.3 / DE11; CHRO removed — no CHRO role exists per DE16). FnF payroll settlement remains with HR Admin (Phase 2 with Finance Admin). HR Admin retains this full surface as a superset role (§3.1.1). |
+| Leave Admin | leave_admin | M04 only — single entity | Configure leave types, policies, accrual rules · override balances · manage holiday calendar · approve and reject individual leave requests within entity scope. Encashment authorisation is HR Admin only — Leave Admin cannot authorise individual encashment requests. Leave-type DEFINITION and leave-policy ASSIGNMENT (Assignment-Framework targeting) are shared functions: Leave Admin, Org Admin and HR Admin all have full define-and-assign access, RBAC-configurable (default: full edit for all three). |
+| Attendance Admin | attendance_admin | M05 only — single entity | Configure shifts and rosters · manage biometric device mapping · lock and unlock attendance periods · override punch records · approve and reject all attendance request types · eligible approver from Stage 1. |
+| Performance Admin | performance_admin | M09 only — single entity | Configure appraisal cycles · manage goal frameworks · initiate and close cycles · manage calibration sessions. Subject to contribution level, department, field, and section entitlement configuration per user. |
+| Recruitment Admin | recruitment_admin | Recruitment module — all requisitions within entity | Full ATS visibility · offer letter generation (jointly with HR Admin) · recruiter assignment · pipeline oversight · reporting. Subject to all five entitlement dimensions. |
+| Recruiter | recruiter | Recruitment module — assigned requisitions only | ATS and pipeline management · candidate communication · BGC initiation. Cannot generate offer letters (Recruitment Admin or HR Admin only). Visibility restricted to assigned requisitions only. |
+| Document Admin | document_admin | M11 only — single entity | Configure policy library register · manage policy clusters and acknowledgement requirements · configure letter template register and merge fields · manage employee document vault settings · manage sign-off engine · manage versioning rules. Capability flag: Letter Admin (grantable by Org Admin). |
+| Analytics Admin | analytics_admin | M16 only — entity-scoped by default | Create and publish custom report definitions · schedule report delivery · manage dashboard layouts. Analytics is available to all users — data visibility for every user governed by their own role entitlements. Tenant-wide configuration available via individual entitlement granted by Org Admin. |
+| IT Admin | it_admin | M17 only — single entity | Asset master · device assignment and return · IT provisioning tasks · FnF clearance queue. |
+| Service Desk Admin | service_desk_admin | M17 service desk — entity-scoped | Configures service desk: categories, queues, SLAs, escalation chains, catalog items, KB taxonomy. Marks tickets Out-of-Scope. Joint module ownership with IT Admin. |
+| Service Desk Agent | service_desk_agent | M17 — assigned queues only | Acts on tickets in assigned queues: pick up, reply, transition states. Cannot reassign cross-queue without Queue Lead approval. |
+
+**M17 Assets & IT roles and capability flags. **M17 introduces two distinct operational roles — Service Desk Admin (module-admin for the service desk surface) and Service Desk Agent (queue-bound operational role) — alongside the existing IT Admin role that owns the asset master, provisioning, and FnF clearance. Three capability flags support M17:
+Asset Custodian — granted by Org Admin to named users at locations or for asset classes; location-scoped asset handling (assignment, return, periodic stock count); cannot configure module-level settings.
+Department Head — Asset Audit Certify — granted by default to every HOD at provisioning; receives the annual asset list scoped to their department, verifies or delegates, flags discrepancies, and certifies the team's reconciliation within 10 business days. HODs cannot edit asset records — flagging produces an audit-exception ticket to IT Admin.
+Change Manager (Phase 1.5) — Phase 1 the IT Asset Manager double-hats; whether this becomes a distinct role or a capability flag is decided at Phase 1.5 design.
+**PII handling for M17 fields. **Tier 1 (licence keys) is encrypted at rest with view events audited. Tier 2 (purchase cost, serial number, MAC address, IP / management IP, insurance policy reference) is masked in list responses to non-privileged roles. Insurance Policy Reference is visible only to Finance Admin and IT Asset Manager; Server IP and Network Infrastructure Management IP are visible to Infra Ops / Network Ops custodians, IT Asset Manager, and CISO.
+
+### 3.1.1 HR Admin as the operational superset role
+HR Admin is the single operational superset role within an entity. Every permission held by any of the nine module-specific admin roles is also held by HR Admin. This means HR Admin can directly perform every configuration, approval, override, and oversight action that the following roles can perform, without needing the module-admin role to be separately assigned:
+| Module admin role | Module | Functions HR Admin inherits |
+| Recruitment Admin | M08 | Full ATS visibility · requisition management · recruiter assignment · pre-offer issuance · document review · offer letter generation · pipeline oversight · recruitment reporting |
+| Onboarding Admin | M02 | Configure onboarding checklists · task assignments · buddy assignments · BGV vendor profiles · verification packages · onboarding completion tracking |
+| Leave Admin | M04 | Configure leave types / policies / accrual rules · override balances · manage holiday calendar · approve and reject leave requests · (plus HR Admin’s exclusive encashment authorisation) |
+| Attendance Admin | M05 | Configure shifts and rosters · biometric device mapping · lock / unlock attendance periods · override punch records · approve and reject attendance request types |
+| Document Admin | M11 | Configure policy library register · policy clusters and acknowledgement requirements · letter template register and merge fields · employee document vault settings · sign-off engine · versioning rules |
+| Performance Admin | M09 | Configure appraisal periods and cycles · manage goal frameworks · initiate and close cycles · manage calibration sessions · (jointly owns appraisal-period definition with Performance Admin per FR-M09-001) |
+| Offboarding Admin (Exit Admin) | M03 | Configure FnF clearance workflows · exit interview templates · separation checklists · offboarding completion tracking · (plus HR Admin’s FnF settlement authority) |
+| Office Admin | M01 | Employee directory · date-of-birth view · national ID view and upload (PAN, Aadhaar, Passport, Driving Licence) · bank account entry and update |
+| Analytics Admin | M16 | Create and publish custom report definitions · schedule report delivery · manage dashboard layouts (entity-scoped) |
+
+Rules governing the superset:
+Inheritance is one-directional. HR Admin ⊇ each module admin. No module admin inherits HR Admin’s broader permissions (e.g. Leave Admin cannot do recruitment tasks; Onboarding Admin cannot do attendance tasks).
+Module admins remain assignable for delegation. An entity may still appoint a dedicated Leave Admin, Attendance Admin, etc. to distribute operational load. The superset relationship does not remove the module-admin roles — it means HR Admin does not require them to act in those areas.
+PII protection ceilings still apply. The superset does not elevate HR Admin above any system-enforced PII ceiling. HR Admin’s PII access is governed by §3.1’s PII Protection Ceiling rules, not widened by inheriting module-admin permissions.
+Entity scope is preserved. HR Admin’s superset applies only within their own entity. Cross-entity visibility remains with Org Admin per §3.2 — inheriting module-admin permissions does not grant cross-entity reach.
+Joint-authority patterns are unaffected. Where a function is explicitly joint (offer letter generation with Recruitment Admin; appraisal-period definition with Performance Admin), HR Admin’s inherited permission satisfies one side of the joint authority; it does not bypass approvals that require a second distinct role (e.g. CEO co-signature on above-threshold offers).
+
+## 3.4 Manager Hierarchy Roles
+| Role | Code | Data scope | Action level |
+| Manager (L1) | l1_manager | Direct and indirect reports | Full operational permissions — attendance, leave, performance, workflow approvals · team analytics scoped to reporting chain |
+| L2 Manager | l2_manager | Reporting subtree | Progressively reduced vs L1 |
+| L3 Manager | l3_manager | Reporting subtree | Progressively reduced vs L2 |
+| L4 Manager | l4_manager | Reporting subtree | Progressively reduced vs L3 |
+| L5 Manager+ | l5_manager | Reporting subtree | Minimal permissions — read-only |
+| HOD | hod | Entire assigned department | Department-wide read visibility · minimal write · workflow tab access · compensation and rating visibility off by default (Org Admin per-user configurable) · workflow approval authority off by default (Org Admin per-workflow per-user configurable) |
+| UAG Head | uag_head | Assigned User Assignment Group | Same entitlements as HOD scoped to assigned group · compensation and rating visibility off by default (Org Admin per-user configurable) · workflow approval authority cannot be granted under any configuration (hard system ceiling) |
+| Skip-level Manager | skip_level_manager | Full reporting subtree | Read visibility only — no write or approval actions · retains access to published ratings after calibration window closes |
+| Dotted Line Manager | dotted_line_manager | Dotted-line reportees | Limited read visibility — personal and employment details only. No appraisal access. |
+
+
+## 3.5 Individual Access Roles
+| Role | Code | Access boundary |
+| Employee | employee | Own data within entity — self-service profile · leave and expense requests · payslip and document access · Chat Agent · appraisals · employee directory and org chart · own analytics |
+| Candidate / Pre-joining | candidate | Recruitment portal (candidate state) · Pre-joining portal (post-offer acceptance state). Candidate: own application status · document upload · BGC consent. Pre-joining: offer letter · onboarding forms · policy documents · Chat Agent. No live HRMS access in either state. |
+
+
+## 3.6 Data Scoping Dimensions
+Five dimensions can be combined to define what records a user can see:
+Reporting Chain — Manager roles see records of their direct and indirect reports only. Skip-level Managers see their full subtree but cannot approve or edit.
+Department — HOD sees all employees in their assigned department regardless of reporting line.
+User Assignment Group (UAG) — A named group of one or more employees, optionally scoped to a project and its locations. Created and managed by HR Admin or Organisation Admin. An employee belongs to at most one UAG. UAG is an RBAC (access-control) construct only — it defines who can see and act on a population (e.g. UAG Head scope). It does NOT carry leave, shift, or holiday entitlement; those are assigned via the Assignment Framework (§4.2.17). UAG Head has same entitlements as HOD scoped to their group, except workflow approval authority (hard ceiling).
+HRBP Assignment — HRBPs are assigned employees directly, individually or via UAG. Data scope limited to directly assigned employees, refined by entitlement dimensions.
+Contribution Level — Additional filter applied within a role’s normal scope. Levels: Intern, Associate, Individual Contributor, Lead, Senior Lead, Manager, Senior Manager, CEO. Used in performance calibration scoping, hike recommendation banding (Phase 2), and recruitment entitlement configuration.
+Entity — HR Admin, Finance Admin, and Office Admin are scoped to their single entity. Cross-entity access requires explicit privilege granted by Organisation Admin and is audit-logged.
+Individual Entitlement — Time-bound access beyond a role’s default profile, granted by Organisation Admin within PII protection ceilings. All individual entitlements require Org Admin approval, are audit-logged, carry a mandatory expiry date, and are automatically revoked on expiry.
+
+## 3.7 Action-Level Permissions Matrix — by Role and Module (Phase 1)
+Legend: V = View Only · E = Edit · A = Approve/Reject · D = Download · Adm = Admin Rights · — = No Access · * = Conditional (see notes)
+
+### 3.7.1 Core Operational Modules
+| Module / Scope | Employee | L1 Mgr | HOD/UAG Head | HRBP | HR Admin | Finance Admin | Office Admin | Skip-level Mgr | Dotted Line Mgr |
+| Own profile (M01) | E | — | — | — | Adm | — | — | — | — |
+| Team / assigned profile (M01) | — | V | V | V | Adm | — | — | V | V |
+| Own leave (M04) | E | — | — | — | Adm | — | — | — | — |
+| Team / assigned leave (M04) | — | A | V | E · A | Adm | — | — | — | — |
+| Leave — raise on behalf (M04) | — | E | — | E | Adm | — | — | — | — |
+| Leave — revocation (M04) | — | — | — | A | Adm | — | — | — | — |
+| Leave Settings (M04 config) | — | — | — | — | Adm | — | — | — | — |
+| Own attendance (M05) | E | — | — | — | Adm | — | — | — | — |
+| Team / assigned attendance (M05) | — | E · A | V | E · A | Adm | — | — | — | — |
+| Own payslip (M01 vault, Phase 2 generated) | V · D | — | — | — | Adm | — | — | — | — |
+| Individual payslips (Phase 2) | — | — | — | — | V · D · Adm | V · D | — | — | — |
+
+
+### 3.7.2 Performance, Recruitment, Documents, Analytics, Assets
+| Module / Scope | Employee | L1 Mgr | HOD/UAG Head | HRBP | HR Admin | Recruiter | Recruitment Admin |
+| Own performance (M09) | E | — | — | — | Adm | — | — |
+| Team performance (M09) | — | E · A | V* | V | Adm | — | — |
+| Performance calibration (M09) | — | — | V* | — | Adm | — | — |
+| Own documents (M11/M01) | V · D | — | — | — | Adm | — | — |
+| Team / assigned documents | — | V | V | V · E | Adm | — | — |
+| Policy library (M11) | V · D | V · D | V · D | V · D | Adm | V | V |
+| Letter templates (M11) | — | — | — | — | Adm* | — | V |
+| Recruitment — requisitions (M08) | — | — | — | — | V | V* | Adm |
+| Recruitment — candidates (M08) | — | — | — | — | V | E · A* | Adm |
+| Recruitment — offer letters (M08) | — | — | — | — | V · D | — | E · D · Adm |
+| Onboarding (M02) | — | V* | — | V | Adm | — | — |
+| Exits & Offboarding (M03) | E* | A* | V | V · E | Adm | — | — |
+| Analytics & Reports (M16) | V (own) | V (team) | V (dept) | V (assigned) | V (entity) · Adm | V (own reqs) | V (assigned reqs) |
+| Assets & IT (M17) | V (own) | V (team) | — | V (assigned) | V | — | — |
+
+
+### 3.7.4 Full Permission Matrix (152 × 18)
+This appendix provides the full permission-grain matrix.
+Each permission is shown on a row; each role on a column. ✓ indicates the permission is enabled by default for that role; blank indicates disabled. All defaults are configurable by Org Admin within PII protection ceilings (see §3.7.1).
+Role abbreviations:
+| Code | Role |
+| Platform Super Admin | Platform Super Admin |
+| Org Admin | Org Admin |
+| HR Admin | Hr Admin |
+| Finance Admin | Finance Admin |
+| HRBP | Hrbp |
+| Office Admin | Office Admin |
+| Onboarding Admin | Onboarding Admin |
+| Leave Admin | Leave Admin |
+| Attendance Admin | Attendance Admin |
+| Document Admin | Document Admin |
+| L1 Mgr | L1 Manager |
+| L2 Mgr | L2 Manager |
+| L3 Mgr | L3 Manager |
+| L4 Mgr | L4 Manager |
+| L5 Mgr | L5 Manager |
+| HOD | Hod |
+| Skip-Lvl | Skip Level Manager |
+| Dotted | Dotted Line Manager |
+
+
+#### Core
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| View profile flag | View | ✓ |  | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  | ✓ | ✓ |  |
+| Access Org Units Hover Experience | View | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Migrate Position | Edit/Action | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Position Details | View | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Future Transactions | View | ✓ |  | ✓ |  |  |  |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |
+| Future Transactions | Edit/Action | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Assigned Policies | View | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Profile History | View | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Assign Replacement | Edit/Action | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Download Profile PDF | View | ✓ |  | ✓ |  | ✓ |  |  |  |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| View Personal Details | View | ✓ |  | ✓ |  | ✓ |  |  |  |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| View Employment Details | View | ✓ |  | ✓ |  | ✓ |  |  |  |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| View Assigned Permissions | View | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Position Budget Status in Position Structure | View | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Focus View - Org Structure | View | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Focus View - Functional Structure | View | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Position Update | Edit/Action | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+
+#### Time Management
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| View attendance & leave data in one view | View | ✓ |  | ✓ |  |  |  |  | ✓ | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |
+| Overtime Credited List | View | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |
+| View Attendance Page | View | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |
+| Edit attendance in One View | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| Edit Shift & Weekly off in One View | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| Edit Attendance in attendance page | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| On behalf attendance application | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Roster Import | Import | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| Roster Calendar Import | Import | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| Assign Shift, Attendance Policy and Weekly off | Edit/Action | ✓ | ✓ | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| View Overview Page | View | ✓ |  | ✓ |  | ✓ |  |  |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |
+| Assign Shift / Shift Block | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| Assign Weekly Off | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| Assign Web Clock-In | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Assign Check-In | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Assign Employee contractual hours | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| One View Access | Administration | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Backdated Attendance Import | Import | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Compensatory off Import | Import | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Attendance Regularization | Administration | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Attendance Assignment Import | Import | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Assign Shifts, Policy, weeklyoff, IP network, Fencing, check in | Edit/Action | ✓ | ✓ | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Assign Attendance Policy | Edit/Action | ✓ | ✓ | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Attendance Import | Import | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Optional Holiday Import | Import | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Planned Overtime Requests Import | Import | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Bulk Import Attendance | Import | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Delete Face Enrollment Import | Import | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Edit Leave Balance on leave page | Edit/Action | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Apply leave in one view | Edit/Action | ✓ |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  |  |  |
+| Pay out in comp-off history | Edit/Action | ✓ |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  |  |  |
+| Raise leave request on behalf of | Edit/Action | ✓ |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  |  |  |
+| Comp off credited history | View | ✓ |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  | ✓ |  |
+| Leave history | View | ✓ |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  | ✓ |  |
+| View an Employee’s Leave Page | View | ✓ |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  | ✓ |  |
+| Edit Flexible Holiday Date | Edit/Action | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Act as admin in leave requests | Administration | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Raise leave request on behalf of without restrictions | Edit/Action | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Carry Forward Balance | Import | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Leaves | Import | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Leave Adjustment Balance | Import | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Leave Encashment | Import | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Deactivated Employee Leave Update | Import | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Recalculate Leave Balances | Import | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Flexible Holiday Date | Import | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Optional Holiday Policy | Import | ✓ | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| Assign Scheduling Org Policy | Edit/Action | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Assign Scheduling Unit Groups | Edit/Action | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Assign Scheduling Tags | Edit/Action | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Schedule Page | View | ✓ |  | ✓ |  |  |  |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |
+| On behalf Open Shift Request | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| Assign Cover Shift | Edit/Action | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| View Open Shift Board | View | ✓ |  | ✓ |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |
+| Assign TimeSheet Policy | Edit/Action | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Raise On-Behalf Timesheet Entries | Edit/Action | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View TimeSheets | View | ✓ |  | ✓ |  |  |  |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |
+| TimeSheet Admin | Administration | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Import TimeSheet Policy Assignment | Import | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Import TimeSheet | Import | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+
+#### Onboarding
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| Employee Lifecycle - Onboarding | View | ✓ | ✓ | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |
+| Manage Onboarding | Edit/Action | ✓ | ✓ | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |
+
+
+#### Workflows
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| Employee Lifecycle - Probation Confirmation | View | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |
+| Employee Lifecycle - Contract | View | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |
+| Employee Lifecycle Separation | View | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |
+| Separation History | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Employee Lifecycle - WorkFlow | View | ✓ | ✓ | ✓ |  | ✓ |  |  |  |  |  | ✓ | ✓ |  |  |  | ✓ | ✓ | ✓ |
+
+
+#### Performance
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| Employee Performance | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Goal Plan | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Manage Goal Plan | Edit/Action | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+
+#### HR Documents
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| View Employee Documents | View | ✓ |  | ✓ |  |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |
+
+
+#### Payroll
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| Edit Pay Package | Edit/Action | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Edit IT/POI Declaration Access | Edit/Action | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Edit IT/POI Declaration | Edit/Action | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Manage Extra Payments | Edit/Action | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Manage Loan & Advances / ExtraDeductions | Edit/Action | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Create Hold Salary | Edit/Action | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Create Perquisite | Edit/Action | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Manage Benefits | Edit/Action | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Manage Flexi Declarations | Edit/Action | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Edit Flexi Declarations | Edit/Action | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Create Form12b | Edit/Action | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Manage Loans | Edit/Action | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Manage Advances | Edit/Action | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Edit Component Pay Package | Edit/Action | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Manage Component Extra Payments | Edit/Action | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Manage Component Advances | Edit/Action | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Pay Package | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Benefits | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| IT/POI Declarations | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Payslips | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Extra Payments | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Loans & Advances/Extra Deductions | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Hold Salary / Repayment | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Taxsheet | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Form 12B | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Form 16B | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Form 12BA | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Perquisite | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Flexi Components | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Loans | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Advances | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Component Pay Package | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Component Proration | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Component Extra Payments | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Component Advances | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+
+#### Helpdesk
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| Allow ticket creation on behalf | Edit/Action | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Ticket created by employee | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+
+#### Travel & Expense
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| View User Expenses | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Reimbursement Advances | View | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| View Trip Summary | View | ✓ |  |  | ✓ |  |  |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |
+| View Travel Requests | View | ✓ |  |  | ✓ |  |  |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |
+
+
+#### Rewards & Recognition
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| Appreciations History | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Appreciations Leaderboard | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Individual Award programs | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Team Award programs | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Individual Award Winners | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Team Award Winners | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Individual Awards History | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Team Awards history | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Nominations Workflows - Individual Nominations Raised | View | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Nominations Workflows - Individual Nominations Received | View | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Nominations Workflows - Team Nominations Raised | View | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Earned Points Summary page | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+
+#### Talent Management
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| Employee Career and Development | Edit/Action | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Employee Career and Development | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Employee Learning Center | Edit/Action | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Employee Learning Center | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Employee Skill Profile | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Employee Skill Profile | Edit/Action | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Talent Pool Reviewer | Edit/Action | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Person/Position based Succession Dashboard | View | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Role-based Succession Dashboard | View | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| Manager Hub | View | ✓ | ✓ |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |
+
+
+#### MSF
+| Permission | Action | Platform Super Admin | Org Admin | HR Admin | Finance Admin | HRBP | Office Admin | Onboarding Admin | Leave Admin | Attendance Admin | Document Admin | L1 Mgr | L2 Mgr | L3 Mgr | L4 Mgr | L5 Mgr | HOD | Skip-Lvl | Dotted |
+| Manage MSF | Edit/Action | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+
+### 3.7.5 M09 Performance — Phase 1 Action Codes
+The action codes below are added to the Phase 1 permission set (§3.7.4) for Performance Management. They bind the per-screen actions in the M09 Functional Specification to concrete §3.7 permissions; data scoping follows §3.6.
+| Action code | Action | Roles (ref §3.2–3.5) | FR (§5.8) |
+| performance.self.view | View own goals & reviews | Employee | FR-M09-001/003 |
+| performance.goal.author | Create / edit own goals | Employee | FR-M09-015 |
+| performance.goal.approve | Approve/reject/sendback/edit reportee goals | L1 Manager | FR-M09-015/016 |
+| performance.goal.admin_edit | Enable & edit goals anytime, any employee | Performance Admin, HR Admin | FR-M09-029 |
+| performance.review.self_submit | Submit self review | Employee | FR-M09-003 |
+| performance.review.l1 | Evaluate & submit/sendback reportee review | L1 Manager | FR-M09-025/016 |
+| performance.review.open_ondemand | Open a review on demand | Performance Admin, HR Admin | FR-M09-030 |
+| performance.review.hold_resume | Pause / resume a review | Performance Admin, HR Admin | FR-M09-030 |
+| performance.calibration.moderate | Calibrate, publish, un-publish, close | HR Admin, Performance Admin | FR-M09-009/022/024 |
+| performance.feedback.author | Post continuous feedback | L1 Manager | FR-M09-026 |
+| performance.feedback.respond | Respond to manager feedback | Employee | FR-M09-027 |
+| performance.probation.recommend | Recommend probation outcome | L1 Manager | FR-M09-005 |
+| performance.probation.confirm | Confirm probation | HR Admin | FR-M09-005 |
+| performance.pip.manage | Create / manage PIPs | HR Admin, Performance Admin, HRBP | FR-M09-PIP |
+| performance.config | Manage performance templates & config | Performance Admin | FR-M09-006/007/023 |
+| performance.admin.ops | Cycle / plan / calibration operations | Performance Admin, HR Admin | FR-M09-028/021 |
+
+
+### 3.7.6 M17 Assets & IT — Operational Roles
+The §3.7.2 matrix row 'Assets & IT (M17)' governs the HR-side personas (Employee V own · L1 Manager V team · HRBP V assigned · HR Admin V). The IT-side operational roles below are entity-scoped operational roles (§3.3) carrying the capability flags in §3.10. L1 Manager reportee-ticket visibility is V (team).
+| Operational role | Scope | Module access |
+| IT Admin / IT Asset Manager | Entity | Asset master, assignment, provisioning requests, masters, lifecycle transitions, tag re-issue, bulk import — Edit |
+| Service Desk Agent | Queue | Tickets in assigned queue — Edit; resolution notes; state transitions |
+| Service Desk Lead | Queue | Queue + ticket Edit/Approve; CMDB Edit; post-mortem draft |
+| Service Desk Admin | Entity | Catalog items, KB authoring, SD config (categories/queues/SLA/escalation) — Edit; IT Grievance visibility |
+| Finance Admin | Entity | Capitalisation/write-off booking; joint sign-off on manual write-off and Written-Off reversal |
+| CTO / IT Director | Entity | Post-mortem review/sign-off; audit-exception escalation target |
+| CISO / InfoSec Lead | Entity | Security-category ticket bypass; security-adjacent post-mortem input |
+
+
+## 3.8 Sensitive Data Restrictions
+System-enforced restrictions subject to PII protection ceilings. Exceptions are explicitly noted.
+| Data category | Permitted access | Restricted from |
+| Salary / CTC | Employee (own) · HR Admin · Finance Admin (view only for budgeting) | All manager tiers · HOD · UAG Head · HRBP · Recruiter · Recruitment Admin · Office Admin. HOD and UAG Head compensation visibility configurable per user by Org Admin — off by default. |
+| Bank account details | Employee (own, masked) · HR Admin · Office Admin (entry only) · Payroll processing at runtime (Phase 2) | All other roles. Masked to last 4 digits for all display contexts. |
+| Government IDs (PAN, Aadhaar, Passport, Driving Licence) | Employee (own, masked) · HR Admin · Office Admin (view and upload) | All other roles. Office Admin grant is platform-level and fixed — not configurable upward or downward. Changes require HR Admin approval via workflow. |
+| Date of Birth | Employee (own) · HR Admin · Office Admin (view only) | All other roles. Office Admin grant is platform-level and fixed. |
+| Performance ratings — draft | Reviewer only | All other roles including HR Admin. No entitlement grant can expose draft ratings prior to publish event. |
+| Performance ratings — published | Employee (own) · Manager (own team) · HR Admin · Skip-level (full subtree, retained post-calibration) · HOD/UAG Head (own dept/group — off by default) | Peers · Finance Admin · HRBP. HOD and UAG Head published rating visibility configurable per user by Org Admin. |
+| Performance ratings — calibration | Skip-level Manager (full subtree) · HR Admin · HOD (module-level entitlement grant required) | All other roles. |
+| Payslips (Phase 2 generated) | Employee (own) · HR Admin · Finance Admin | All manager tiers · HOD · UAG Head · HRBP · Office Admin. |
+| Medical / health data | Employee (own) · HR Admin | All other roles. Not transmitted externally without explicit consent. |
+| Biometric data (device punch ID, facial recognition data) | No UI display for any role | All roles. Managed at device integration layer only. |
+| Compensation bands | HR Admin · Finance Admin (view for budgeting) · Recruitment Admin (offer benchmarking) · Recruiters (band range for assigned requisition only) | Employees · Candidates · Office Admin · All manager tiers. |
+
+
+## 3.9 Field-Level Access — Employment Details (M01 Employee Profile)
+Legend: V = Visible · M = Masked · H = Hidden · E = Editable · AR = Approval Required to edit
+| Field | Employee (own) | L1 Mgr | HOD/UAG | HRBP | HR Admin | Finance Admin | Office Admin | Skip-Lvl | Dotted |
+| Employee ID | V | V | V | V | V | V | V | V | V |
+| Designation | V | V | V | V | E | H | V | V | V |
+| Department | V | V | V | V | E | H | V | V | V |
+| Business Unit | V | V | V | V | E | H | V | V | V |
+| Legal Entity | V | V | V | V | E | H | V | V | V |
+| Office Location | V | V | V | V | E | H | V | V | V |
+| Reporting Manager | V | V | V | V | E | H | V | V | V |
+| Dotted Line Manager | V | V | V | V | E | H | V | V | V |
+| Cost Centre | H | H | H | H | E | V | H | H | H |
+| Employment Type | V | V | V | V | E | H | H | V | V |
+| Employment Status | V | V | V | V | E | H | H | V | V |
+| Date of Joining | V | V | V | V | E | H | H | V | V |
+| Probation Status | V | V | V | V | E | H | H | H | H |
+| Confirmation Date | V | V | V | V | E | H | H | H | H |
+| Contract Start Date | V | V | V | V | E | H | H | H | H |
+| Contract End Date | V | V | V | V | E | H | H | H | H |
+| Notice Period | V | V | V | V | E | H | H | H | H |
+| Grade / Band | V | V | V | V | E | V | H | V | V |
+| Contribution Level | V | V | V | V | E | V | H | V | V |
+| CTC / Salary | V | H | H* | H | E | V | H | H | H |
+| PAN | M | H | H | H | E · AR | H | V · E | H | H |
+| Aadhaar | M | H | H | H | E · AR | H | V · E | H | H |
+| Passport Number | M | H | H | H | E · AR | H | V · E | H | H |
+| Driving Licence | M | H | H | H | E · AR | H | V · E | H | H |
+| Previous Employment History | V | H | V | V | E | H | H | H | H |
+| Internal Job History / Promotions | V | V | V | V | E | H | H | V | H |
+| Skills / Competency Profile | V | V | V | H | H | H | H | H | H |
+| Assigned Assets (M17) | V | V | H | H | H | H | H | H | H |
+
+
+## 3.10 Capability Flag Registry
+Capability flags are grantable extensions to existing roles. A flag is NOT a role — it is an opt-in capability that an Organisation Admin grants to a specific user’s existing role assignment. Grant and revoke events are audit-logged to P05.
+Skills & Assets visibility. An employee’s Skills / Competency Profile is visible to the employee, their management chain (L1–L5, HOD/UAG Head) for deployment and development decisions, but not to HR Admin, HRBP, or Finance Admin on the employee record. Assigned Assets are owned by IT Admin (M17) and are visible to the employee and their direct manager (via Team Assets); they are not surfaced on the HR Admin or HRBP employee-detail view — HR Admin engages with assets only for FnF recovery escalation (FR-M17-004). This keeps the HR employee record focused on HR-domain data and avoids HR seeing IT asset inventory or skills taxonomy by default.
+FY26 HOD visibility revision. Education Qualifications and Certifications are visible to the HOD / UAG Head — in addition to the employee and the L1–L5 management chain — for development and deployment decisions, consistent with the Skills / Competency Profile rule above. Education and Certifications are visible to HR Admin, HRBP, Managers (L1–L5), and the HOD / UAG Head, plus the employee on their own record. By contrast, the Skills / Competency Profile and date of birth remain restricted: Skills are visible to the employee and the L1–L5 / HOD chain but not to HR Admin, HRBP or Finance; date of birth is visible only to HR Admin, Office Admin and the employee (no manager, HOD, HRBP, peer or social-surface visibility, and no year-masking). Previous-employment, references and languages follow the same chain visibility as Education / Certifications; the statutory detail entities (PF / EPS / ESIC / gratuity / LWF / PT / insurance) are visible to the employee, HR Admin and Finance / Payroll Admin only. Full per-entity rows are added to the §3.9 matrix in the M01 functional specification. This revision also flips Probation Status, Confirmation Date, Contract Start Date, Contract End Date, Notice Period, and Previous Employment History from H to V for the HOD / UAG Head in the field-level access matrix above.
+| Flag | Grantable on | Capability granted | Capability NOT granted |
+| BGV review | Onboarding Admin · HR Admin | View Verification Reports tab on candidate records · view vendor BGV results per check (Verified · Discrepancy · Pending · Unable to Verify) · record disposition on Discrepancy alerts (retain, investigate, initiate separation) · view BGV result history on Employee Profile post-completion | Edit candidate-submitted form fields (Allow BGV Admin to edit user inputs = No per M02 §A.1) · view BGV results for employees outside the role’s existing data scope · approve onboarding completion |
+| Letter Admin | Document Admin · HR Admin | Author and manage letter templates in M11 register · configure merge-field bindings · designate additional editors per template · approve template content for activation · publish and unpublish templates · manage template versioning | Edit policy library content · manage employee document vault contents · alter retention or disposal rules · access documents outside the role’s existing data scope |
+| Asset Custodian | IT Admin · IT Asset Manager | Hold custodial responsibility for assigned assets · confirm periodic asset audit for held assets | Edit the asset register · reassign or write-off assets (IT Admin only) |
+| Department Head — Asset Audit Certify | HOD / UAG Head | Certify the periodic asset-audit attestation for the department's assigned assets | Edit the asset register · reassign/write-off |
+
+
+# 4. Data Model
+This section defines every entity in the PrimeSoft HRMS Phase 1 platform. Every entity supports soft-delete only — no hard deletes anywhere in the platform. Every entity carries the platform audit columns described below in §4.1. Every entity within a tenant context carries tenant_id (non-nullable); every entity holding organisational data also carries entity_id as a child of tenant_id. All foreign-key relationships are enforced at the database layer. Every entity migrated from Darwinbox carries a darwinbox_source_id column for permanent source-to-state traceability.
+
+## 4.1 Platform Audit Columns — Required on Every Entity
+Every entity below extends a base column set. To avoid repetition, the column set is defined once here and referenced throughout. Field tables in §4.2 onward show only the entity-specific columns; the audit columns are implied.
+| Field | Type | Required | Validation / Description | Default |
+| id | uuid | Y | Primary key. UUID v4. | auto |
+| tenant_id | uuid | Y | FK → tenants.id. Non-nullable on every table. All queries automatically scoped — no query may return data from another tenant. | — |
+| entity_id | uuid | Conditional | FK → entities.id. Required on all tables holding organisational data (employee-affiliated, payroll-affiliated, etc.). | — |
+| created_at | timestamp (UTC) | Y | Insertion timestamp. Set by database default. | now() |
+| created_by | uuid | Y | FK → users.id of the actor who created the record. System events use the well-known SYSTEM user id. | — |
+| updated_at | timestamp (UTC) | Y | Last mutation timestamp. Set by database trigger on every UPDATE. | now() |
+| updated_by | uuid | Y | FK → users.id of the actor who last mutated the record. | — |
+| deleted_at | timestamp (UTC) | N | Soft-delete timestamp. NULL means active. Hard delete blocked at database layer. | NULL |
+| deleted_by | uuid | N | FK → users.id of the actor who soft-deleted the record. | NULL |
+| darwinbox_source_id | string(64) | N | Source-system identifier from Darwinbox. Populated on migrated rows; NULL for natively created records. Indexed. | NULL |
+
+
+## 4.2 Tenancy & Organisation Entities
+
+### 4.2.1 tenants
+Top-level multi-tenant container. One row per customer organisation. Created by Platform Super Admin at provisioning.
+| Field | Type | Required | Validation / Description | Default |
+| tenant_name | string(200) | Y | Legal name of the organisation. | — |
+| display_name | string(60) | Y | Short name for UI headers and notifications. | — |
+| logo_url | string(500) | N | PNG/JPG, max 2MB, recommended 300×100 px. | NULL |
+| registration_number | string(50) | N | CIN or equivalent. | NULL |
+| company_pan | string(10) | N | Employer PAN (10-char alphanumeric). | NULL |
+| registered_address | text | N | Multi-line address. | NULL |
+| deployment_model | enum | Y | STANDALONE · MULTI_TENANT_SAAS · GROUP_COMPANY. Set at provisioning. Upgradeable through configuration only — no data migration required. | STANDALONE |
+| industry_segment | enum | Y | IT_SERVICES (Phase 1 target) · BFSI · MANUFACTURING · RETAIL · HEALTHCARE. Locked at provisioning. Drives default cascade. | IT_SERVICES |
+| primary_geography | enum | Y | INDIA (Phase 1 target). Locked at provisioning. Drives tax slabs, social security, labour law defaults. | INDIA |
+| financial_year_start_month | integer | Y | Month number 1-12. Locked to 4 (April) for Indian entities. | 4 |
+| calendar_week_start_day | enum | Y | MONDAY · SUNDAY. | MONDAY |
+| working_days_per_week | integer | Y | 5 or 6. Overridable per location. | 5 |
+| currency | string(3) | Y | ISO 4217. INR for Phase 1. | INR |
+| language | string(5) | Y | BCP 47. en-IN for Phase 1. | en-IN |
+| data_residency_region | string(50) | Y | India home region with DR replica in second Indian region. | IN-1 |
+| status | enum | Y | PROVISIONING · ACTIVE · SUSPENDED · DEPROVISIONED. | PROVISIONING |
+
+Sample data:
+| tenant_name | deployment_model | industry_segment | primary_geography | status |
+| Group Company 1 | STANDALONE | IT_SERVICES | INDIA | ACTIVE |
+| Acme Technologies India Pvt Ltd | MULTI_TENANT_SAAS | IT_SERVICES | INDIA | ACTIVE |
+| PrimeSoft Group | GROUP_COMPANY | IT_SERVICES | INDIA | PROVISIONING |
+
+
+### 4.2.2 entities
+Legal entity within a tenant. In a Group Company deployment, one tenant has multiple legal entities sharing master data while maintaining their own compliance, payroll, and leave configuration.
+| Field | Type | Required | Validation / Description | Default |
+| entity_name | string(200) | Y | Full legal name of the entity as it appears in statutory filings. | — |
+| entity_short_code | string(6) | Y | 3–6 uppercase chars. Used in employee ID generation. | — |
+| entity_pan | string(10) | N | Employer PAN for this entity (10-char alphanumeric). | NULL |
+| entity_tan | string(10) | N | Tax Deduction Account Number for TDS filings. | NULL |
+| pf_registration_number | string(50) | N | EPFO establishment code for ECR challan (Phase 2). | NULL |
+| esi_code | string(50) | N | ESIC employer code for ESI challan (Phase 2). | NULL |
+| pt_state | string(50) | N | Professional Tax state — drives slab applicability. | NULL |
+| lwf_state | string(50) | N | Labour Welfare Fund state. | NULL |
+| registered_address | text | N | Entity-level registered office address. | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Many-to-one with tenants (one tenant has many entities).
+Sample data:
+| entity_name | entity_short_code | pt_state | status |
+| Group Company 1 | PSI | Telangana | ACTIVE |
+| PrimeSoft Engineering Mauritius | PEM | Karnataka | ACTIVE |
+| Group Company 1 | PSI | Maharashtra | ACTIVE |
+
+
+### 4.2.3 departments
+Hierarchical department structure. Maximum depth of 9 levels supported in Phase 1. Departments roll up to top-level departments through parent_department_id. Each department can carry multiple head-role assignments distinct from the operational HOD.
+| Field | Type | Required | Validation / Description | Default |
+| department_id | uuid | Y | Primary key. | auto |
+| department_code | string(40) | Y | Unique within tenant. | — |
+| department_name | string(200) | Y | Display name. | — |
+| parent_department_id | uuid | N | FK → departments.id. NULL for top-level departments. Recursive depth capped at 9 levels. | NULL |
+| entity_id | uuid | Y | FK → entities.id (legal entity scope). | — |
+| business_unit_id | uuid | N | FK → business_units.id (optional grouping above department). | NULL |
+| project_allocated | string(120) | N | Services-business linkage to project. | NULL |
+| top_department_flag | boolean | Y | TRUE if this is a level-1 department (computed from parent_department_id IS NULL). | FALSE |
+| hod_user_id | uuid | N | Head of Department — operational lead. Drives approval routing and reporting hierarchy. | NULL |
+| performance_hod_user_id | uuid | N | Distinct head responsible for performance reviews if different from operational HOD. | NULL |
+| functional_head_user_id | uuid | N | Functional head (technical/practice leader). | NULL |
+| head_hr_user_id | uuid | N | Dedicated HR head for this department (HRBP supervisor level). | NULL |
+| group_hr_head_user_id | uuid | N | Group-level HR head (cross-department). | NULL |
+| head_level_access | enum | N | Access scope grant for the head roles above: DEPARTMENT_ONLY · DEPARTMENT_AND_SUB · BUSINESS_UNIT · ENTITY · TENANT. | DEPARTMENT_AND_SUB |
+| level_1_label | string(120) | N | Tenant-configurable display label for hierarchy level 1 (e.g. “Division”, “Vertical”). | “Department” |
+| level_2_label | string(120) | N | Level 2 label (e.g. “Sub-Department”, “Practice”). | “Sub-Department” |
+| level_3_label | string(120) | N | Level 3 label. | “Team” |
+| level_4_label | string(120) | N | Level 4 label. | “Sub-Team” |
+| level_5_label | string(120) | N | Level 5 label. | NULL |
+| level_6_label | string(120) | N | Level 6 label. | NULL |
+| level_7_label | string(120) | N | Level 7 label. | NULL |
+| level_8_label | string(120) | N | Level 8 label. | NULL |
+| level_9_label | string(120) | N | Level 9 label. | NULL |
+| capability_tag | string(120) | N | Optional capability classification (e.g. “Engineering”, “Operations”). | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Self-referencing via parent_department_id. Many-to-one with entities. Referenced by employment_history.department_id. The five head-role FKs (hod, performance_hod, functional_head, head_hr, group_hr_head) all link to users.id and are scoped by head_level_access for permission resolution.
+Constraints:
+Cycle prevention enforced on parent_department_id (no department can be its own ancestor).
+Hierarchy depth capped at 9; deeper inserts rejected with validation error.
+Department codes immutable post-creation; renames affect display name only.
+
+### 4.2.4 designations
+Tenant-level master list of job titles. Created by Organisation Admin.
+| Field | Type | Required | Validation / Description | Default |
+| designation_name | string(120) | Y | Job title label. | — |
+| grade_id | uuid | N | FK → grades.id. Tenant-level designation→grade mapping for compensation, leave policy assignment, entitlement defaults. | NULL |
+| contribution_level | enum | N | INTERN · ASSOCIATE · INDIVIDUAL_CONTRIBUTOR · LEAD · SENIOR_LEAD · MANAGER · SENIOR_MANAGER · CEO. Tenant-level mapping. HR Admin can override per employee. | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. Inactive designations removed from new assignment selectors. | ACTIVE |
+
+Sample data:
+| designation_name | contribution_level | status |
+| Senior Software Engineer | LEAD | ACTIVE |
+| HR Business Partner | SENIOR_LEAD | ACTIVE |
+| Engineering Manager | MANAGER | ACTIVE |
+
+
+### 4.2.5 grades
+Tenant-level grade master. Drives compensation, leave policy assignment, and entitlement defaults.
+| Field | Type | Required | Validation / Description | Default |
+| grade_code | string(20) | Y | Unique grade identifier. | — |
+| grade_name | string(80) | Y | Display name. | — |
+| sort_order | integer | Y | Hierarchy ordering for analytics and selectors. | — |
+| leave_policy_group_id | uuid | N | FK → leave_policy_groups.id (grade-level leave entitlement). | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Sample data:
+| grade_code | grade_name | sort_order | status |
+| B1 | Band 1 — Entry | 1 | ACTIVE |
+| B3 | Band 3 — Mid | 3 | ACTIVE |
+| B6 | Band 6 — Director | 6 | ACTIVE |
+
+
+### 4.2.6 locations
+Physical or registered work locations. Drives statutory location overrides, geofencing, and IP whitelist scoping. Linked to geo_master for validated country/state/city pick-lists (replacing free-text entry).
+| Field | Type | Required | Validation / Description | Default |
+| location_id | uuid | Y | Primary key. | auto |
+| entity_id | uuid | Y | FK → entities.id. | — |
+| work_area_code | string(40) | Y | Unique within tenant. Drives biometric mapping and IP scoping. | — |
+| location_name | string(200) | Y | Display name. | — |
+| office_area | string(200) | N | Sub-area / locality name. | NULL |
+| address_line_1 | string(300) | Y | Street address. | — |
+| address_line_2 | string(300) | N | Suite / floor / landmark. | NULL |
+| office_email | string(200) | N | Contact email for the location. | NULL |
+| office_mobile | string(20) | N | Contact mobile. | NULL |
+| office_telephone | string(20) | N | Landline. | NULL |
+| pincode | string(20) | Y | Postal code. | — |
+| city_geo_id | uuid | Y | FK → geo_master where geo_type=CITY. | — |
+| state_geo_id | uuid | Y | FK → geo_master where geo_type=STATE. | — |
+| country_geo_id | uuid | Y | FK → geo_master where geo_type=COUNTRY. | — |
+| region_id | uuid | N | FK → regions.id. | NULL |
+| city_type | enum | N | METRO · TIER_2 · TIER_3 · RURAL. Drives HRA / statutory overrides. | NULL |
+| centre_type | enum | N | HEAD_OFFICE · BRANCH · DEVELOPMENT_CENTRE · CLIENT_SITE · WAREHOUSE · REGISTERED_OFFICE. | NULL |
+| parent_location_id | uuid | N | FK → locations.id. For sub-locations within a campus. | NULL |
+| location_type | enum | N | OWNED · LEASED · CO_WORKING · CLIENT_PREMISES · VIRTUAL · CUSTOMER. | OWNED |
+| project_allocated | string(120) | N | Services-business project linkage. | NULL |
+| location_head_user_id | uuid | N | FK → users.id. | NULL |
+| is_registered_office | boolean | Y | TRUE if this is the legal registered office for the entity. | FALSE |
+| timezone | string(60) | Y | IANA timezone identifier (e.g. “Asia/Kolkata”). | per tenant |
+| sso_phone_number | string(20) | N | Thailand Social Security Office phone. | NULL |
+| sso_branch_name_en | string(200) | N | SSO branch name (English). | NULL |
+| sso_branch_name_local | string(200) | N | SSO branch name (local language). | NULL |
+| sso_branch_number | string(40) | N | SSO branch identifier. | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Referenced by employment_history.location_id, attendance_ip_whitelist.location_id, geofencing_master.location_id. Self-referencing via parent_location_id for campus sub-areas.
+
+### 4.2.7 user_assignment_groups (UAGs)
+Named group of one or more employees, optionally scoped to a project. Created and managed by HR Admin or Organisation Admin. A UAG may be project-scoped (tagged to a project and one or more of that project’s locations) or general-purpose. An employee can belong to at most one UAG (one employee, one UAG). When a UAG is project-scoped, the employees tagged to it must be allocated to that project. UAG is an access-control construct only and does not distribute leave, shift, or holiday entitlement — those resolve via the Assignment Framework (§4.2.17). (Historical note: earlier drafts bound policies to the UAG; this was reversed in v2.1 (removed fields: uag_leave_policy_id, uag_shift_id, uag_holiday_calendar_id, now removed).
+| Field | Type | Required | Validation / Description | Default |
+| uag_name | string(120) | Y | Display name. | — |
+| uag_head_user_id | uuid | N | FK → users.id. The user designated as UAG Head for this group. | NULL |
+| hrbp_user_id | uuid | N | FK → users.id. The HRBP using this UAG as their assignment mechanism (optional alternative to business-unit assignment). | NULL |
+| description | text | N | Free-text description of the group’s purpose. | NULL |
+| project_id | uuid | N | FK → projects.id. When set, the UAG is project-scoped; tagged employees must be allocated to this project. NULL = general-purpose UAG. | NULL |
+| project_location_ids | uuid[] | N | One or more locations of the project this UAG covers (subset of the project’s delivery locations). | NULL |
+| created_by_role | enum | Y | HR_ADMIN · ORG_ADMIN. Records which role created the UAG. | — |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Business rules:
+One employee, one UAG. An employee referenced in uag_members for an ACTIVE UAG cannot be added to any other ACTIVE UAG. Attempting to tag an already-assigned employee returns a validation error naming the existing UAG; the employee must be removed from the current UAG first.
+A project-scoped UAG can only tag employees allocated to its project_id; project_location_ids must be a subset of that project’s locations.
+Leave / shift / holiday bindings on the UAG apply to every member as the assignment unit; a per-member override follows the standard assignment precedence.
+HR Admin operates within their entity; the UAG’s project (if any) must belong to the same entity.
+Sample data:
+| uag_name | uag_head_user_id (display) | status |
+| South India Engineering Pool | alice.k@primesoft.in | ACTIVE |
+| Senior IC Bench | raj.m@primesoft.in | ACTIVE |
+| HRBP — Engineering POP1 | priya.n@primesoft.in | ACTIVE |
+
+
+### 4.2.8 uag_members
+Many-to-many junction between user_assignment_groups and employees.
+| Field | Type | Required | Validation / Description | Default |
+| uag_id | uuid | Y | FK → user_assignment_groups.id. | — |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| assigned_from | date | Y | Membership start date. | — |
+| assigned_to | date | N | Membership end date. NULL means open-ended. | NULL |
+
+Sample data:
+| uag_id (display) | employee_id (display) | assigned_from | assigned_to |
+| South India Eng Pool | PSI000123 | 2026-04-01 | NULL |
+| South India Eng Pool | PSI000456 | 2026-04-01 | NULL |
+| Senior IC Bench | PSI000789 | 2026-04-01 | 2026-12-31 |
+
+
+## 4.3 Users, Roles & RBAC Entities
+
+### 4.2.9 bands
+Compensation band master. Bands group grades for salary planning and reporting. One-to-many with grades.
+| Field | Type | Required | Validation / Description | Default |
+| band_id | uuid | Y | Primary key. | auto |
+| band_code | string(20) | Y | Unique within tenant. Used in payroll integration. | — |
+| band_name | string(80) | Y | Display name (e.g. “B1”, “B2”, “Senior”, “Executive”). | — |
+| description | string(500) | N | Free-text description of band scope. | NULL |
+| sort_order | integer | Y | Display order (1 = lowest band). | 1 |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Many-to-many with grades via grade.band_id FK. Referenced by employment_history.band (now FK, was string).
+
+### 4.2.10 contribution_levels
+Contribution Level master (NEEV Level / equivalent). Used to classify employees by individual contribution tier independent of grade/band.
+| Field | Type | Required | Validation / Description | Default |
+| contribution_level_id | uuid | Y | Primary key. | auto |
+| level_code | string(20) | Y | Unique within tenant. | — |
+| level_name | string(80) | Y | Display name (e.g. “L1 — Individual Contributor”, “L2 — Senior IC”, “L3 — Lead”). | — |
+| description | string(500) | N | Behavioural anchors / scope definition. | NULL |
+| sort_order | integer | Y | Display order. | 1 |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Referenced by employment_history.contribution_level (now FK, was string), and by assignment_rules as a targeting dimension.
+
+### 4.2.11 regions
+Location Region master. Groups locations into geographic regions for reporting and policy targeting (e.g. “South India” → Telangana, Karnataka, Tamil Nadu, Kerala).
+| Field | Type | Required | Validation / Description | Default |
+| region_id | uuid | Y | Primary key. | auto |
+| region_code | string(20) | Y | Unique within tenant. | — |
+| region_name | string(120) | Y | Display name. | — |
+| applicable_states | array(string) | Y | List of state names associated with this region. | [] |
+| applicable_countries | array(string) | N | If region spans multiple countries. | [] |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Referenced by locations.region_id and by assignment_rules.location_region dimension.
+
+### 4.2.12 weekly_off_patterns
+Weekly-off pattern master. Captures the named patterns of non-working days (e.g. “Sat-Sun off”, “Alternate Saturdays”, “Sun off, rotating Sat”). Separate from shifts so the same pattern can be reused across many shifts.
+| Field | Type | Required | Validation / Description | Default |
+| weekly_off_pattern_id | uuid | Y | Primary key. | auto |
+| pattern_name | string(120) | Y | Display name. | — |
+| pattern_code | string(40) | Y | Unique within tenant. | — |
+| description | string(500) | N | Pattern explanation. | NULL |
+| non_working_days | array(enum) | Y | Static list: SUN · MON · TUE · WED · THU · FRI · SAT. | [] |
+| rotation_rule | jsonb | N | For alternating patterns (e.g. {“type”:“alternate”,“day”:“SAT”,“weeks”:[1,3,5]} or {“type”:“monthly”,“day”:“SAT”,“weeks”:[2,4]}). NULL for static patterns. | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Referenced by shifts.weekly_off_pattern_id (replaces array(enum) days list) and by employee_shift_assignments.weekly_off_override_pattern_id.
+Sample patterns (representative — actual values per tenant):
+| pattern_code | pattern_name | non_working_days | rotation_rule |
+| WOP_SAT_SUN | Saturday-Sunday Off | [SAT, SUN] | NULL |
+| WOP_SUN_ONLY | Sunday Off | [SUN] | NULL |
+| WOP_ALT_SAT | Sunday + Alternate Saturdays (1st, 3rd, 5th) | [SUN, SAT] | {“type”:“alternate”,“day”:“SAT”,“weeks”:[1,3,5]} |
+| WOP_2_4_SAT | Sunday + 2nd, 4th Saturday | [SUN, SAT] | {“type”:“monthly”,“day”:“SAT”,“weeks”:[2,4]} |
+
+
+### 4.2.13 geo_master
+Country / State / City pick-list master. Replaces free-text address fields with validated geo data. Sourced from authoritative government / ISO data and refreshed per release.
+| Field | Type | Required | Validation / Description | Default |
+| geo_id | uuid | Y | Primary key. | auto |
+| geo_type | enum | Y | COUNTRY · STATE · CITY. | — |
+| geo_code | string(40) | Y | ISO 3166-1 alpha-2 for country, ISO 3166-2 for state, internal code for city. Unique per geo_type. | — |
+| geo_name | string(200) | Y | Display name. | — |
+| parent_geo_id | uuid | N | FK → geo_master.id. NULL for COUNTRY; STATE points to COUNTRY; CITY points to STATE. | NULL |
+| iso_alpha3 | string(3) | N | For COUNTRY only. ISO 3166-1 alpha-3 code. | NULL |
+| dial_code | string(10) | N | For COUNTRY only. International dialing code (+91, +1, etc.). | NULL |
+| currency_code | string(3) | N | For COUNTRY only. ISO 4217. | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Referenced by locations.country_geo_id, locations.state_geo_id, locations.city_geo_id, and equivalent fields on employee_contacts (current/permanent address).
+
+### 4.2.14 custom_fields
+Tenant-extensible custom field definitions across modules. Replaces hardcoded extra columns with a generic key-value layer.
+| Field | Type | Required | Validation / Description | Default |
+| custom_field_id | uuid | Y | Primary key. | auto |
+| field_name | string(120) | Y | Display label shown in UI. | — |
+| field_id_code | string(80) | Y | Unique internal identifier within tenant + target module. Format: snake_case, alphanumeric. | — |
+| field_type | enum | Y | TEXT · NUMBER · DATE · DATETIME · DROPDOWN · MULTI_SELECT · CHECKBOX · FILE_UPLOAD · EMPLOYEE_PICKER · CURRENCY. | — |
+| target_module | enum | Y | EMPLOYEE_PROFILE · ONBOARDING · RECRUITMENT · LEAVE · ATTENDANCE · PERFORMANCE · SEPARATION · DOCUMENT · ASSET. | — |
+| target_section | string(120) | N | Within the module, which sub-section (e.g. “Employment Details”, “Bank Details”). | NULL |
+| display_in | array(enum) | Y | Where it appears: PROFILE_VIEW · PROFILE_EDIT · REPORTS · EXPORT · FORMS. | [PROFILE_VIEW, PROFILE_EDIT] |
+| is_required | boolean | Y | Mandatory at save time. | FALSE |
+| is_editable | boolean | Y | If FALSE, field is display-only after first capture. | TRUE |
+| allow_decimals | boolean | N | NUMBER fields only. | FALSE |
+| number_separator | enum | N | NUMBER fields only: NONE · COMMA · INDIAN_LAKH. | COMMA |
+| dropdown_options | jsonb | N | DROPDOWN / MULTI_SELECT only. List of {value, label, sort_order}. | NULL |
+| validation_regex | string(500) | N | TEXT fields only. PCRE-compatible. | NULL |
+| min_value | numeric | N | NUMBER / DATE only. | NULL |
+| max_value | numeric | N | NUMBER / DATE only. | NULL |
+| help_text | string(500) | N | Tooltip / inline guidance shown to user. | NULL |
+| visibility_role_list | array(enum) | N | Roles that can view this field. NULL means visible to all roles per module’s default. | NULL |
+| pii_tier | enum | N | Tier 1 / 2 / 3 / NONE. If non-NULL, applies masking and audit rules. | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Values stored in a generic custom_field_values entity (entity_id, custom_field_id, value_text, value_number, value_date, value_jsonb).
+Sample data:
+| field_id_code | field_name | field_type | target_module | is_required |
+| client_office_location | Client Office Location | DROPDOWN | EMPLOYEE_PROFILE | N |
+| performance_appraisal_month | Performance Appraisal Month | DROPDOWN | EMPLOYEE_PROFILE | N |
+| former_project | Former Project | TEXT | EMPLOYEE_PROFILE | N |
+| contract_end_date_custom | Contract End Date (Custom) | DATE | EMPLOYEE_PROFILE | N |
+
+
+### 4.2.15 custom_field_values
+Generic storage for custom field values. One row per (entity instance × custom_field).
+| Field | Type | Required | Validation / Description | Default |
+| custom_field_value_id | uuid | Y | Primary key. | auto |
+| custom_field_id | uuid | Y | FK → custom_fields.id. | — |
+| target_entity_type | enum | Y | EMPLOYEE · CANDIDATE · REQUISITION · LEAVE_APPLICATION · ATTENDANCE_REQUEST · GOAL · etc. | — |
+| target_entity_id | uuid | Y | FK to the row in target entity. | — |
+| value_text | text | N | Used for TEXT, DROPDOWN (stored value), MULTI_SELECT (comma-joined). | NULL |
+| value_number | numeric | N | Used for NUMBER, CURRENCY. | NULL |
+| value_date | date | N | Used for DATE. | NULL |
+| value_datetime | timestamp (UTC) | N | Used for DATETIME. | NULL |
+| value_boolean | boolean | N | Used for CHECKBOX. | NULL |
+| value_jsonb | jsonb | N | Used for MULTI_SELECT (array), FILE_UPLOAD ({file_path, file_name, size}), EMPLOYEE_PICKER (array of employee_id). | NULL |
+
+Relationships: Composite unique index on (custom_field_id, target_entity_id). Soft-delete via standard audit columns.
+
+### 4.2.16 national_id_configurations
+Meta-configuration for which government / statutory IDs are enabled per country / tenant assignment, with per-field display rules. Replaces hardcoded country-specific ID columns in statutory_identities.
+| Field | Type | Required | Validation / Description | Default |
+| national_id_config_id | uuid | Y | Primary key. | auto |
+| id_type_code | string(40) | Y | Catalogue code: AADHAAR · PAN · PASSPORT · DRIVING_LICENCE · VOTER_ID · UAN · ESIC_NO · MYKAD · EMIRATES_CARD · SSN · NIN · NRIC · IQAMA · NSSF · BPJS · NPWP · TIN · etc. | — |
+| applicable_country_geo_id | uuid | Y | FK → geo_master where geo_type=COUNTRY. Drives which IDs surface for which employee nationality / location. | — |
+| applicable_assignment_id | uuid | N | FK → assignment_rules. If non-NULL, this configuration applies only to employees matching the assignment. | NULL |
+| is_enabled | boolean | Y | Master toggle. Disabled IDs are hidden from UI. | TRUE |
+| alias | string(120) | N | Tenant-specific display name (e.g. “PAN” → “Tax Number” for non-Indian users). | NULL |
+| is_temp_id_enabled | boolean | Y | Allow a temporary / provisional ID variant (e.g. EAN before Aadhaar issuance). | FALSE |
+| temp_id_alias | string(120) | N | Display name for temporary variant. | NULL |
+| issued_from_enabled | boolean | Y | Show “Issued From” / “Issue Date” sub-field. | FALSE |
+| issued_from_alias | string(120) | N | Display label for issue date field. | “Issue Date” |
+| issued_from_mandatory | boolean | Y | If issued_from_enabled, is it mandatory? | FALSE |
+| issued_till_enabled | boolean | Y | Show “Issued Till” / “Valid Till” sub-field. | FALSE |
+| issued_till_alias | string(120) | N | Display label for expiry field. | “Valid Till” |
+| issued_till_mandatory | boolean | Y | If issued_till_enabled, is it mandatory? | FALSE |
+| id_document_enabled | boolean | Y | Show document upload for this ID. | TRUE |
+| id_document_alias | string(120) | N | Display label for upload (e.g. “Aadhaar Scan”). | NULL |
+| id_document_mandatory | boolean | Y | If id_document_enabled, is the upload mandatory? | FALSE |
+| mandatory_for_activation | boolean | Y | Block employee activation (M02) if missing. | FALSE |
+| mandatory_for_addition | boolean | Y | Block employee creation if missing. | FALSE |
+| is_unique_within_tenant | boolean | Y | Enforce uniqueness across tenant. | FALSE |
+| masking_rule | enum | N | NONE · FULL · LAST_4_VISIBLE · FIRST_4_VISIBLE · CUSTOM. Applied at PII Tier per FR-M01-003. | LAST_4_VISIBLE |
+| sort_order | integer | Y | Display order in UI. | 1 |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Drives which fields in statutory_identities are surfaced; per-ID configuration cached on tenant load.
+Sample data (India tenant, default config):
+| id_type_code | alias | applicable_country | mandatory_for_activation | is_unique | masking_rule |
+| AADHAAR | Aadhaar | India | Y | Y | LAST_4_VISIBLE |
+| PAN | PAN | India | Y | Y | LAST_4_VISIBLE |
+| UAN | UAN | India | N | Y | NONE |
+| ESIC_NO | ESIC Number | India | N | Y | NONE |
+| PASSPORT | Passport | India | N | Y | LAST_4_VISIBLE |
+| DRIVING_LICENCE | Driving Licence | India | N | N | LAST_4_VISIBLE |
+
+
+### 4.2.17 assignment_rules
+First-class master entity for User Assignment Groups (UAGs) with expression-based targeting. Replaces the simple uag_members enumeration with a rules engine supporting 60+ dimensions, exclusion clauses, and numeric range criteria.
+UAGs created via this entity are reusable across leave policies, attendance policies, shifts, performance plans, onboarding processes, separation policies, and any other module requiring employee targeting.
+| Field | Type | Required | Validation / Description | Default |
+| assignment_id | uuid | Y | Primary key. | auto |
+| assignment_name | string(200) | Y | Display name. | — |
+| assignment_code | string(80) | Y | Unique within tenant. | — |
+| description | string(1000) | N | Free-text. | NULL |
+| applicable_processes | array(enum) | Y | LEAVE_POLICY · ATTENDANCE_POLICY · SHIFT · ONBOARDING_PROCESS · SEPARATION_POLICY · PERFORMANCE_REVIEW · GOAL_PLAN · RECRUITMENT_REQUISITION · DOCUMENT_GENERATION · WORKFLOW · REPORT_FILTER · NOTIFICATION_SCOPE · MULTI_PURPOSE. | [MULTI_PURPOSE] |
+| inclusion_criteria | jsonb | Y | Structured rule set (see schema below). Empty array means “all employees”. | [] |
+| exclusion_criteria | jsonb | N | Same schema as inclusion_criteria. Subtracts from the inclusion set. | [] |
+| numeric_range_criteria | jsonb | N | Experience-based range filters (see schema below). | [] |
+| explicit_include_employee_ids | array(uuid) | N | Always-include list, regardless of rules. | [] |
+| explicit_exclude_employee_ids | array(uuid) | N | Always-exclude list, regardless of rules. | [] |
+| evaluation_mode | enum | Y | STATIC (membership computed once and stored in uag_members) · DYNAMIC (evaluated on every reference). | DYNAMIC |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+inclusion_criteria / exclusion_criteria schema (jsonb):
+{ "logic": "AND" | "OR", "dimensions": [ { "field": "department_id" | "designation_id" | "grade_id" | "band_id" | "location_id" | "region_id" | "employment_type" | "employee_sub_type" | "entity_id" | "contribution_level_id" | "appraisal_period" | "notice_period_master_id" | "functional_area" | "project_allocated" | "gender" | "nationality" | "marital_status" | "timezone" | "lifecycle_state" | "current_country" | "permanent_country" | "designation_role_category" | "salutation" | "blood_group" | "current_state" | "current_city" | "permanent_state" | "permanent_city" | "company_country" | "pay_group" | "pf_applicability" | "eps_applicability" | "esic_applicability" | "lwf_applicability" | "pt_applicability" | "tds_applicability" | "probation_flag" | "notice_flag" | "manager_level" | "is_hod" | "is_hrbp" | "is_standard_role_1" | "is_standard_role_2" | "is_standard_role_3" | "designation_exempt_status" | "rotational_shift" | "sub_community_details" | "emergency_contact_relation" | "client_office_location" | "performance_appraisal_month" | "contract_status" | "work_type" | "capability" | "<custom_field_id_code>", "operator": "EQUALS" | "NOT_EQUALS" | "IN" | "NOT_IN" | "IS_NULL" | "IS_NOT_NULL", "values": ["..."] } ] }
+numeric_range_criteria schema (jsonb):
+[ { "field": "experience_from_doj" | "experience_from_group_doj" | "age" | "experience_in_current_role" | "experience_in_company", "condition": "BETWEEN" | "LESS_THAN" | "GREATER_THAN" | "EQUALS", "unit": "DAYS" | "MONTHS" | "YEARS", "value_from": , "value_to": <number | null> } ]
+Relationships: Referenced by every policy entity needing employee scoping (leave_policies, attendance_policies, separation_policies, goal_plan_templates, review_templates, onboarding_processes, etc.) via applicable_to_uag_id. uag_members materialises STATIC assignments; DYNAMIC ones evaluate at runtime.
+Sample assignment:
+| assignment_code | assignment_name | applicable_processes | inclusion_criteria | exclusion_criteria |
+| ASG_PERM_FT_IN | Permanent Full-Time India | [LEAVE_POLICY, ATTENDANCE_POLICY, PERFORMANCE_REVIEW] | logic:AND, dimensions:[{employment_type=FULL_TIME}, {nationality=Indian}] | logic:AND, dimensions:[{lifecycle_state IN [NOTICE, SEPARATED]}] |
+| ASG_NEW_HIRES_2026 | New Hires 2026 Onwards | [ONBOARDING_PROCESS, GOAL_PLAN] | logic:AND, dimensions:[] | (empty) — but numeric_range_criteria=[{field:experience_from_doj, condition:LESS_THAN, unit:MONTHS, value_from:12}] |
+
+
+### 4.2.18 assignment_three_groups
+Custom assignment tier — supplementary grouping by Appraisal Period with Group Head / Head / Lead role assignments. Used by performance management for cycle-specific scoping.
+| Field | Type | Required | Validation / Description | Default |
+| assignment_three_id | uuid | Y | Primary key. | auto |
+| appraisal_period | string(120) | Y | Period name (e.g. “FY26-Q1”). | — |
+| appraisal_period_code | string(40) | Y | Unique within tenant. | — |
+| group_head_user_id | uuid | N | FK → users.id. | NULL |
+| head_user_id | uuid | N | FK → users.id. | NULL |
+| lead_user_id | uuid | N | FK → users.id. | NULL |
+| project_allocated | string(120) | N | Project linkage. | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Referenced by review_cycles and goal_plans for cycle-specific head/lead resolution.
+
+### 4.2.19 assignment_two_groups
+Custom assignment tier — by Notice Period configuration. Stores Group Head / Head / Lead for separation lifecycle escalations.
+| Field | Type | Required | Validation / Description | Default |
+| assignment_two_id | uuid | Y | Primary key. | auto |
+| notice_period_config_name | string(120) | Y | E.g. “Standard 60-Day Notice”, “Senior 90-Day Notice”. | — |
+| notice_period_config_code | string(40) | Y | Unique within tenant. | — |
+| group_head_user_id | uuid | N | FK → users.id. | NULL |
+| head_user_id | uuid | N | FK → users.id. | NULL |
+| lead_user_id | uuid | N | FK → users.id. | NULL |
+| project_allocated | string(120) | N | Project linkage. | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Referenced by separation_policies for cycle-specific escalation routing.
+
+### 4.2.20 assignment_one_groups
+Custom assignment tier — by Employee Group. Stores Group Head / Head / Lead per employee-group classification.
+| Field | Type | Required | Validation / Description | Default |
+| assignment_one_id | uuid | Y | Primary key. | auto |
+| employee_group_name | string(120) | Y | E.g. “Inhouse”, “Client-Onsite”, “Offshore”. | — |
+| employee_group_code | string(40) | Y | Unique within tenant. | — |
+| group_head_user_id | uuid | N | FK → users.id. | NULL |
+| head_user_id | uuid | N | FK → users.id. | NULL |
+| lead_user_id | uuid | N | FK → users.id. | NULL |
+| project_allocated | string(120) | N | Project linkage. | NULL |
+| status | enum | Y | ACTIVE · INACTIVE. | ACTIVE |
+
+Relationships: Referenced from employment_history.employee_group_assignment_id (new field added in §4.4.2 expansion).
+
+### 4.2.21 projects
+Project master — the catalogue of projects (services-business engagements) that employees can be allocated to. The project_allocated linkage on employment_history, assignment_one/two/three_groups, departments, designations, and grades resolves to a row here. Managed by HR Admin, scoped to the HR Admin’s entity (each project belongs to a single legal entity via entity_id). Org Admin retains read visibility for cross-entity reporting but no longer owns project creation.
+| Field | Type | Required | Validation / Description | Default |
+| project_id | uuid | Y | Primary key. | auto |
+| project_code | string(40) | Y | Unique within tenant. Immutable post-creation. | — |
+| project_name | string(160) | Y | Display name. | — |
+| client_name | string(160) | N | Client / customer the project is delivered for. NULL for internal projects. | NULL |
+| entity_id | uuid | Y | FK → entities.id. Owning legal entity. A project belongs to exactly one entity (projects do not span entities). | — |
+| location_id | uuid | N | FK → locations.id. Primary delivery location. | NULL |
+| project_head_user_id | uuid | N | FK → users.id. Project head / delivery lead. | NULL |
+| start_date | date | N | Project start. | NULL |
+| end_date | date | N | Planned end; NULL = ongoing. | NULL |
+| is_billable | boolean | Y | Whether allocation to this project is billable. | TRUE |
+| status | enum | Y | ACTIVE · ON_HOLD · CLOSED. | ACTIVE |
+
+Mapping rule: project_allocated text fields elsewhere resolve to projects.project_code; on migration, distinct project values from the Assignment masters are seeded as project rows.
+Sample data:
+| project_code | project_name | client_name | project_head | status |
+| PRJ-ALPHA | Payments Platform | Acme Bank | Manager One | ACTIVE |
+| PRJ-BETA | Identity Revamp | Internal | Sneha Iyer | ACTIVE |
+| PRJ-GAMMA | Data Migration | Globex Corp | Arjun Rao | ON_HOLD |
+
+
+### 4.3.1 users
+Authentication identity. One row per individual person who can log into the platform — employees, candidates, pre-joiners, contractors, and platform administrators. Distinct from the ‘employees’ entity, which holds HR-domain data.
+| Field | Type | Required | Validation / Description | Default |
+| username | string(120) | Y | Unique within tenant. For Google SSO users, the Google email. | — |
+| email | string(200) | Y | Unique within tenant. Format: RFC 5322. Used for notifications and password reset. | — |
+| password_hash | string(255) | N | One-way hash with appropriate cost factor. NULL for SSO-only users. Never stored in plain text or reversible form. | NULL |
+| auth_provider | enum | Y | USERNAME_PASSWORD · GOOGLE_SSO. | USERNAME_PASSWORD |
+| mfa_enabled | boolean | Y | MFA is enforced by default for HR Admin and Organisation Admin roles. Configurable per user. | FALSE |
+| mfa_method | enum | N | TOTP · SMS_OTP. | NULL |
+| last_login_at | timestamp (UTC) | N | Set at successful login. | NULL |
+| failed_login_count | integer | Y | Reset on successful login. Triggers lockout at configured threshold. | 0 |
+| locked_until | timestamp (UTC) | N | Account lockout expiry. NULL means not locked. | NULL |
+| status | enum | Y | ACTIVE · LOCKED · DISABLED. | ACTIVE |
+| consent_captured_at | timestamp (UTC) | N | DPDPA consent capture timestamp. NULL means consent not yet captured. | NULL |
+
+Sample data:
+| username | auth_provider | mfa_enabled | status |
+| alice.k@primesoft.in | GOOGLE_SSO | TRUE | ACTIVE |
+| candidate.13799@external | USERNAME_PASSWORD | FALSE | ACTIVE |
+| raj.m@primesoft.in | GOOGLE_SSO | TRUE | ACTIVE |
+
+
+### 4.3.2 roles
+Master list of 18 roles defined in §3. Roles are platform-defined, not configurable by tenant admins. Permission definitions are configurable per tenant via P02 RBAC.
+| Field | Type | Required | Validation / Description | Default |
+| role_code | string(50) | Y | Platform identifier. e.g. hr_admin, l1_manager, leave_admin. | — |
+| role_name | string(120) | Y | Display name. | — |
+| role_category | enum | Y | PLATFORM · ENTITY_OPERATIONAL · MODULE_ADMIN · MANAGER_HIERARCHY · INDIVIDUAL_ACCESS. | — |
+| scope_type | enum | Y | ALL_TENANTS · TENANT · ENTITY · MODULE · ASSIGNED · OWN. | — |
+| pii_ceiling_overridable | boolean | Y | FALSE for all roles per platform PII protection ceiling. | FALSE |
+
+Sample data:
+| role_code | role_category | scope_type |
+| hr_admin | ENTITY_OPERATIONAL | ENTITY |
+| leave_admin | MODULE_ADMIN | MODULE |
+| l1_manager | MANAGER_HIERARCHY | ASSIGNED |
+
+
+### 4.3.3 user_role_assignments
+Many-to-many between users and roles, scoped to entity. A user may hold multiple roles simultaneously — Conflict Resolution Rule applies (more restrictive permission wins).
+| Field | Type | Required | Validation / Description | Default |
+| user_id | uuid | Y | FK → users.id. | — |
+| role_id | uuid | Y | FK → roles.id. | — |
+| entity_id | uuid | N | FK → entities.id. NULL for tenant-scoped or platform-scoped roles. | NULL |
+| assigned_at | timestamp (UTC) | Y | Assignment timestamp. | now() |
+| expires_at | timestamp (UTC) | N | Time-bound assignment expiry. NULL means permanent. | NULL |
+| assigned_by | uuid | Y | FK → users.id of the actor who created the assignment. Org Admin or Platform Super Admin. | — |
+
+Sample data:
+| user (display) | role_code | entity (display) | expires_at |
+| alice.k@primesoft.in | hr_admin | PrimeSoft IP Solutions | NULL |
+| raj.m@primesoft.in | l1_manager | PrimeSoft IP Solutions | NULL |
+| priya.n@primesoft.in | hrbp | PrimeSoft IP Solutions | 2026-12-31 |
+
+
+### 4.3.4 individual_entitlements
+Time-bound access beyond a role’s default profile. Granted by Organisation Admin within PII protection ceilings. Automatically revoked on expiry; all grant and revoke events audit-logged.
+| Field | Type | Required | Validation / Description | Default |
+| user_id | uuid | Y | FK → users.id. | — |
+| entitlement_type | enum | Y | DEPARTMENT_GRANT · FIELD_GRANT · SECTION_GRANT · MODULE_GRANT · CONTRIBUTION_LEVEL_UPLIFT. | — |
+| resource_identifier | string(200) | Y | Scope of the grant — department code, field name, section name, module code, or contribution level. | — |
+| justification | text | Y | Free-text reason. Audit-visible. | — |
+| granted_at | timestamp (UTC) | Y |  | now() |
+| expires_at | date | Y | Mandatory expiry — no open-ended individual entitlements permitted. | — |
+| granted_by | uuid | Y | FK → users.id. Must be Organisation Admin. | — |
+| revoked_at | timestamp (UTC) | N | Set when entitlement is revoked before expiry. | NULL |
+| revoked_by | uuid | N | Set when entitlement is revoked before expiry. | NULL |
+
+Sample data:
+| user (display) | entitlement_type | resource_identifier | expires_at |
+| sarah.l@primesoft.in | FIELD_GRANT | compensation_band | 2026-09-30 |
+| arjun.d@primesoft.in | SECTION_GRANT | employment_contract | 2026-12-31 |
+| meera.s@primesoft.in | DEPARTMENT_GRANT | Finance | 2026-08-15 |
+
+
+### 4.3.5 capability_flags
+Grantable role extensions. Phase 1 defines two flags: BGV review and Letter Admin. Grant and revoke events audit-logged.
+| Field | Type | Required | Validation / Description | Default |
+| user_id | uuid | Y | FK → users.id. | — |
+| flag_code | enum | Y | BGV_REVIEW · LETTER_ADMIN · ASSET_CUSTODIAN · DEPT_HEAD_ASSET_AUDIT. | — |
+| role_assignment_id | uuid | Y | FK → user_role_assignments.id. The specific role assignment the flag attaches to. | — |
+| granted_at | timestamp (UTC) | Y |  | now() |
+| granted_by | uuid | Y | FK → users.id. Must be Organisation Admin. | — |
+| revoked_at | timestamp (UTC) | N | Set on manual revoke or auto-revoke on role transition to a non-grantable role. | NULL |
+| revoked_by | uuid | N | FK → users.id or SYSTEM user for auto-revoke. | NULL |
+
+Sample data:
+| user (display) | flag_code | granted_at |
+| alice.k@primesoft.in | BGV_REVIEW | 2026-04-15 10:00 UTC |
+| raj.m@primesoft.in | LETTER_ADMIN | 2026-05-01 09:30 UTC |
+
+
+## 4.4 Employee Master Entities (M01)
+
+### 4.4.1 employees
+Central reference entity for the entire platform. One row per employee per tenant. Employee ID is immutable once assigned. Single record per employee across the tenant — cross-entity transfers create a new version of the employment record, not a new employee row. Rehire after separation creates a new row with a link to the prior employee_id.
+| Field | Type | Required | Validation / Description | Default |
+| employee_id | string(20) | Y | Format: {entity_short_code}{6-digit zero-padded sequence}. Unique within tenant, not just entity. Immutable post-assignment. | — |
+| user_id | uuid | Y | FK → users.id. One-to-one relationship with login identity. | — |
+| salutation | enum | N | MR · MRS · MS · DR · PROF · OTHER. | NULL |
+| first_name | string(80) | Y | Per profile policy. | — |
+| middle_name | string(80) | N | Optional middle name. | NULL |
+| last_name | string(80) | Y | Per profile policy. | — |
+| display_name | string(200) | Y | Auto-derived from first + middle + last; HR Admin override allowed. | auto |
+| official_email | string(200) | Y | Corporate email. Unique within tenant. Immutable post-assignment per policy. | — |
+| official_mobile | string(20) | N | Office contact mobile (directory tier). | NULL |
+| official_mobile_visibility | enum | N | EVERYONE · MANAGER_AND_HR · HR_ONLY. | EVERYONE |
+| office_extension | string(20) | N | Internal extension number. | NULL |
+| personal_email | string(200) | Y | Non-corporate domain. Used for separation-period self-service. | — |
+| personal_mobile_primary | string(20) | Y | Format: 10-digit national or +country-code prefix. Used for OTP and DPDPA consent. | — |
+| personal_mobile_secondary | string(20) | N | Optional second contact number. | NULL |
+| personal_mobile_visibility | enum | N | EVERYONE · MANAGER_AND_HR · HR_ONLY. | MANAGER_AND_HR |
+| date_of_joining | date | Y | Immutable once set. Cross-entity transfer creates new employment version, not new DOJ. | — |
+| group_date_of_joining | date | Y | Set on first employment in the group; never changes thereafter. | — |
+| retirement_date | date | N | Derived from DOB + tenant retirement-age policy. Editable for executive overrides. | derived |
+| profile_photo_url | string(500) | N | Image URL or NULL for initials avatar. | NULL |
+| gender | enum | Y | MALE · FEMALE · OTHER · PREFER_NOT_TO_SAY. | — |
+| date_of_birth | date | Y | PII Tier 2. Year display configurable per platform policy. | — |
+| date_of_birth_year_visibility | enum | N | EVERYONE · MONTH_DAY_ONLY · HR_ONLY. Controls how DOB displays on profiles and calendar. Superseded by §3.10 (FY26): DOB is visible only to the employee, HR Admin and Office Admin — no manager / HOD / HRBP / peer / social-surface visibility and no year-masking; this enum no longer drives display. Birthday celebration is governed instead by a separate, employee-managed boolean share_birthday_with_team (default FALSE, employee-editable) that exposes month + day only — never the DOB field. See §10.2.4 and FR-M01-020 amendment. | MONTH_DAY_ONLY |
+| country_of_birth_geo_id | uuid | N | FK → geo_master where geo_type=COUNTRY. | NULL |
+| nationality | string(80) | Y | Drives statutory scope. | Indian |
+| marital_status | enum | N | SINGLE · MARRIED · DIVORCED · WIDOWED · SEPARATED. | NULL |
+| marital_anniversary_date | date | N | Required if marital_status = MARRIED. | NULL |
+| marital_anniversary_visibility | enum | N | EVERYONE · MANAGER_AND_HR · HR_ONLY · HIDDEN. | MANAGER_AND_HR |
+| blood_group | string(10) | N | PII Tier 3 (health). Visible to employee and HR Admin only. | NULL |
+| father_name | string(200) | N | Used for statutory forms (PF, ESIC) and tax declarations. | NULL |
+| mother_name | string(200) | N | Used for statutory forms. | NULL |
+| sub_community_details | string(200) | N | India: sub-caste / community for diversity reporting. PII Tier 2. | NULL |
+| rotational_shift_flag | boolean | N | Whether employee participates in rotational shift roster. | FALSE |
+| lifecycle_state | enum | Y | PRE_JOINING · ACTIVE · NOTICE · LAST_WORKING_DAY · SEPARATED · ABSCONDED · REHIRE_ELIGIBLE. Probation is a sub-state of ACTIVE tracked via probation flag on employment record. | PRE_JOINING |
+| previous_employee_id | string(20) | N | Link to prior record on rehire. NULL on first hire. | NULL |
+| continuous_service_flag | boolean | N | Indicates rehire with continuous service credit. | FALSE |
+| read_only_until | date | N | Read-only access period post-separation. Set to LWD + 180 days by default. | NULL |
+| absconding_flagged_at | timestamp (UTC) | N | Set when M05 absconding threshold (7 consecutive calendar days) is met. | NULL |
+| profile_completeness_pct | integer | Y | 0-100. Computed from configured field set. Blocks leave application below mandatory minimum. | 0 |
+| timezone | string(60) | N | IANA timezone identifier. Defaults to current location timezone. | derived |
+| linkedin_url | string(500) | N | Optional social profile. | NULL |
+| portfolio_url | string(500) | N | Optional portfolio / GitHub / personal site. | NULL |
+| attendance_modality | enum | Y | Attendance capture modality per FR-M05-020. CLOCK_IN_ONLY · CHECK_IN_ONLY · BOTH. Drives which buttons the employee sees on the attendance page. | CLOCK_IN_ONLY |
+
+Sample data:
+| employee_id | display_name | official_email | lifecycle_state | date_of_joining |
+| PSI000123 | Alice Kumar | alice.k@primesoft.in | ACTIVE | 2024-06-15 |
+| PSI000457 | Raj Menon | raj.m@primesoft.in | NOTICE | 2022-03-01 |
+| PSI000789 | Manager One | priya.n@primesoft.in | ACTIVE | 2025-11-04 |
+
+
+### 4.4.2 employment_history
+
+### 4.4.3 employee_contacts
+Personal contact and address. Not versioned — overwrite in place with audit log entry. Edits by employee self-service; HR Admin can edit.
+| Field | Type | Required | Validation / Description | Default |
+| employee_id | uuid | Y | FK → employees.id. One row per employee. | — |
+| current_address_line_1 | string(200) | Y | PII Tier 3. | — |
+| current_address_line_2 | string(200) | N |  | NULL |
+| current_city | string(80) | Y | Drives statutory state overrides. | — |
+| current_state | string(80) | Y |  | — |
+| current_country | string(80) | Y |  | India |
+| current_postal_code | string(20) | Y |  | — |
+| permanent_address_line_1 | string(200) | Y |  | — |
+| permanent_address_line_2 | string(200) | N |  | NULL |
+| permanent_city | string(80) | Y |  | — |
+| permanent_state | string(80) | Y |  | — |
+| permanent_country | string(80) | Y |  | India |
+| permanent_postal_code | string(20) | Y |  | — |
+
+Sample data:
+| employee (display) | current_city | current_state | permanent_state |
+| PSI000123 | Hyderabad | Telangana | Kerala |
+| PSI000457 | Bangalore | Karnataka | Karnataka |
+| PSI000789 | Mumbai | Maharashtra | Maharashtra |
+
+
+### 4.4.4 emergency_contacts
+Emergency contact records. Mandatory minimum (at least one) gate for leave application and expense submission (§A.8 of M01 policy).
+| Field | Type | Required | Validation / Description | Default |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| contact_name | string(120) | Y | 1–120 chars. | — |
+| relation | enum | Y | SPOUSE · PARENT · SIBLING · CHILD · GUARDIAN · FRIEND · OTHER. | — |
+| mobile | string(20) | Y | Validated format. | — |
+| email | string(200) | N | RFC 5322. | NULL |
+| sort_order | integer | Y | Primary contact has sort_order = 1. | 1 |
+
+Sample data:
+| employee (display) | contact_name | relation | mobile |
+| PSI000123 | Sunita Kumar | PARENT | 9876543210 |
+| PSI000123 | Vivek Kumar | SPOUSE | 9988776655 |
+| PSI000457 | Lekha Menon | SPOUSE | 9123456780 |
+
+
+### 4.4.5 statutory_identities
+Per-employee statutory ID values. Schema is dynamic — fields surfaced per national_id_configurations (§4.2.16) for the employee’s nationality and assignment.
+Core India IDs are listed below; non-India IDs use the same row schema with id_type discriminator.
+| Field | Type | Required | Validation / Description | Default |
+| statutory_identity_id | uuid | Y | Primary key. | auto |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| id_type | string(40) | Y | FK → national_id_configurations.id_type_code. | — |
+| id_value | string(200) | Y | The actual ID number (PII Tier 1). Encrypted at rest. | — |
+| name_on_id | string(200) | N | Name as printed on the ID document (may differ from official name). | NULL |
+| issue_date | date | N | When ID was issued (if config requires). | NULL |
+| validity_until | date | N | Expiry date (if config requires). | NULL |
+| issued_from_place | string(200) | N | Issuing location. | NULL |
+| issuing_authority | string(200) | N | Issuing body. | NULL |
+| is_temporary | boolean | Y | TRUE if this is a temporary / provisional variant (e.g. EAN before Aadhaar). | FALSE |
+| document_file_path | string(500) | N | Scan upload. | NULL |
+| verification_status | enum | Y | NOT_VERIFIED · IN_PROGRESS · VERIFIED · DISPUTED · FAILED. | NOT_VERIFIED |
+| verified_by_user_id | uuid | N | FK → users.id. | NULL |
+| verified_at | timestamp (UTC) | N | Verification completion time. | NULL |
+
+Relationships: Many rows per employee, one per ID type per nationality scope. Composite unique constraint on (employee_id, id_type). Configuration surfaced through national_id_configurations. Masked per masking_rule from config.
+Sample data (India employee, post-Phase 3 schema):
+| employee_id | id_type | id_value (masked) | issue_date | validity_until | verification_status |
+| PSI000123 | AADHAAR | XXXX-XXXX-7892 | 2015-04-12 | NULL | VERIFIED |
+| PSI000123 | PAN | XXXXX5689F | 2017-08-22 | NULL | VERIFIED |
+| PSI000123 | UAN | XXXXXXXX3421 | 2024-06-20 | NULL | VERIFIED |
+| PSI000123 | PASSPORT | XXXXXX782 | 2020-01-15 | 2030-01-14 | VERIFIED |
+| PSI000457 | AADHAAR | XXXX-XXXX-1234 | 2014-09-03 | NULL | VERIFIED |
+
+
+### 4.4.6 statutory_pf_details
+Provident Fund (PF) detail cluster. Replaces single pf_uan field with full PF lifecycle data.
+| Field | Type | Required | Validation / Description | Default |
+| pf_detail_id | uuid | Y | Primary key. | auto |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| pf_number | string(40) | N | Old-style PF account number (legacy; pre-UAN). | NULL |
+| pf_uan | string(20) | N | Universal Account Number (12-digit). Tier 1 PII. | NULL |
+| pf_applicable | boolean | Y | Whether PF is applicable to this employee. | TRUE |
+| pf_applicable_from_date | date | N | Effective from date for PF deduction. | NULL |
+| pf_registration_location_geo_id | uuid | N | FK → geo_master. Registered PF office location. | NULL |
+| pf_restriction_amount | numeric(15,2) | N | Salary cap for PF contribution (e.g. ₹15,000/month default per EPF Act). | 15000.00 |
+| restrict_company_pf_to_statutory_max | boolean | Y | Whether employer’s PF contribution is capped at statutory max. | TRUE |
+| pf_account_type | enum | N | NEW_PF · TRANSFERRED · LEGACY · INTERNATIONAL_WORKER. | NEW_PF |
+| previous_employer_pf_transferred | boolean | Y | Whether previous PF balance was transferred. | FALSE |
+| pf_nominee_dependent_id | uuid | N | FK → dependents.id (nominee for PF balance). | NULL |
+
+Relationships: One-to-one with employees. Nominations resolved via dependents.dependent_for = ‘PF’.
+
+### 4.4.7 statutory_eps_details
+Employees’ Pension Scheme (EPS) detail cluster. EPS is a sub-component of PF for monthly pension contribution.
+| Field | Type | Required | Validation / Description | Default |
+| eps_detail_id | uuid | Y | Primary key. | auto |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| eps_applicable | boolean | Y | Whether EPS is applicable. Typically TRUE if salary ≤ statutory threshold at joining. | TRUE |
+| name_as_per_aadhaar | string(200) | N | Required to align EPS records with Aadhaar database. | NULL |
+| eps_pension_number | string(40) | N | Pension reference number. | NULL |
+| eps_contribution_capped | boolean | Y | Whether contribution is capped at statutory ceiling. | TRUE |
+
+Relationships: One-to-one with employees.
+
+### 4.4.8 statutory_esic_details
+Employees’ State Insurance Corporation (ESIC) detail cluster. Applicable for employees earning below statutory threshold.
+| Field | Type | Required | Validation / Description | Default |
+| esic_detail_id | uuid | Y | Primary key. | auto |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| esic_applicable | boolean | Y | Whether ESIC is applicable. Auto-toggled based on salary. | FALSE |
+| esic_ip_number | string(20) | N | Insured Person (IP) number. Tier 1 PII. | NULL |
+| name_as_per_esic | string(200) | N | Name as registered with ESIC. | NULL |
+| esic_applicable_from_date | date | N | Effective from date. | NULL |
+| esic_registration_code | string(40) | N | Registration office code. | NULL |
+| esic_dispensary_code | string(40) | N | Allotted dispensary for medical claims. | NULL |
+
+Relationships: One-to-one with employees.
+
+### 4.4.9 statutory_gratuity_details
+Gratuity is a statutory lump-sum payment to employees who complete 5+ years of continuous service (per Payment of Gratuity Act 1972 in India).
+| Field | Type | Required | Validation / Description | Default |
+| gratuity_detail_id | uuid | Y | Primary key. | auto |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| gratuity_number | string(40) | N | Internal gratuity tracking number. | NULL |
+| gratuity_eligible_date | date | Y | Computed: date_of_joining + 5 years. | computed |
+| is_eligible_now | boolean | Y | Computed: TRUE if gratuity_eligible_date ≤ today. | computed |
+| gratuity_nominee_dependent_id | uuid | N | FK → dependents.id. | NULL |
+| nomination_date | date | N | When nomination was filed. | NULL |
+| nomination_form_file_path | string(500) | N | Signed Form F (India statutory) scan. | NULL |
+
+Relationships: One-to-one with employees.
+
+### 4.4.10 statutory_lwf_details
+Labour Welfare Fund (LWF) detail cluster. State-specific applicability in India.
+| Field | Type | Required | Validation / Description | Default |
+| lwf_detail_id | uuid | Y | Primary key. | auto |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| lwf_applicable | boolean | Y | Whether LWF deduction applies (state-dependent). | FALSE |
+| lwf_state_geo_id | uuid | N | FK → geo_master (STATE) — LWF is state-level. | NULL |
+| lwf_designation_category | enum | N | EMPLOYEE · MANAGER · SUPERVISOR · APPRENTICE. Determines contribution slab. | EMPLOYEE |
+| lwf_contribution_amount | numeric(10,2) | N | Per-period contribution. | NULL |
+
+Relationships: One-to-one with employees.
+
+### 4.4.11 statutory_pt_details
+Professional Tax (PT) detail cluster. State-specific in India.
+| Field | Type | Required | Validation / Description | Default |
+| pt_detail_id | uuid | Y | Primary key. | auto |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| pt_applicable | boolean | Y | Whether PT applies (state-dependent). | FALSE |
+| pt_state_geo_id | uuid | N | FK → geo_master (STATE). | NULL |
+| pt_location_geo_id | uuid | N | FK → geo_master (CITY) for city-level PT. | NULL |
+| pt_is_default_state | boolean | Y | TRUE if using employee’s default location state; FALSE if overridden. | TRUE |
+| pt_registration_number | string(40) | N | Employer’s PT registration for this state. | NULL |
+| pt_slab_amount | numeric(10,2) | N | Monthly PT amount per slab. | NULL |
+
+Relationships: One-to-one with employees.
+
+### 4.4.12 statutory_insurance_details
+Group Medical Insurance and Personal Accident Insurance coverage.
+| Field | Type | Required | Validation / Description | Default |
+| insurance_detail_id | uuid | Y | Primary key. | auto |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| insurance_type | enum | Y | GROUP_MEDICAL · PERSONAL_ACCIDENT · LIFE · TERM · TOP_UP. | — |
+| insurer_name | string(300) | N | Insurance company. | NULL |
+| policy_number | string(80) | Y | Policy reference (PII Tier 2). | — |
+| member_number | string(80) | N | Employee’s member number within group policy. | NULL |
+| effective_from_date | date | Y | Coverage start. | — |
+| effective_to_date | date | N | Coverage end. NULL if open-ended. | NULL |
+| sum_insured | numeric(15,2) | N | Cover amount. | NULL |
+| sum_insured_currency | string(3) | N | ISO 4217. | INR |
+| includes_dependents | boolean | Y | Whether dependents are covered. | FALSE |
+| covered_dependent_ids | array(uuid) | N | List of dependents.id covered. | [] |
+| premium_employee_contribution | numeric(10,2) | N | Employee monthly contribution if any. | 0.00 |
+| premium_employer_contribution | numeric(10,2) | N | Employer monthly contribution. | NULL |
+| policy_document_file_path | string(500) | N | Policy schedule scan. | NULL |
+
+Relationships: Many-to-one with employees (employees can hold multiple insurance policies).
+
+### 4.4.13 employment_history
+Effective-date versioned employment record. Every change to a versioned field creates a new history row. Past-dated and future-dated changes supported.
+Existing fields retained; new fields appended below.
+| Field | Type | Required | Validation / Description | Default |
+| employee_id | uuid | Y | FK → employees.id. | — |
+| effective_from | date | Y | Start of this version. | — |
+| effective_to | date | N | End of this version. NULL means current. | NULL |
+| entity_id | uuid | Y | FK → entities.id. | — |
+| department_id | uuid | Y | FK → departments.id. | — |
+| designation_id | uuid | Y | FK → designations.id. | — |
+| grade_id | uuid | Y | FK → grades.id. | — |
+| band_id | uuid | N | FK → bands.id. | NULL |
+| contribution_level_id | uuid | Y | FK → contribution_levels.id. | — |
+| business_unit_id | uuid | N | FK → business_units.id (new master). | NULL |
+| functional_area | string(120) | N | Specialism / practice area. | NULL |
+| job_family | string(120) | N | Job family classification. | NULL |
+| division | string(120) | N | Organisational division above department. | NULL |
+| pay_scale_id | uuid | N | FK → pay_scales (Phase 2 payroll). | NULL |
+| location_id | uuid | Y | FK → locations.id. | — |
+| client_office_location | string(300) | N | Services-business: client-side work location. | NULL |
+| project_allocated | string(120) | N | Services-business: current project. | NULL |
+| former_project | string(120) | N | Most recent prior project. | NULL |
+| work_type | enum | N | ONSITE · REMOTE · HYBRID · CLIENT_PREMISES. | ONSITE |
+| reporting_manager_id | uuid | N | FK → employees.id. Cycle prevention enforced at save. | NULL |
+| dotted_line_manager_id | uuid | N | FK → employees.id. | NULL |
+| employment_type | enum | Y | FULL_TIME · PART_TIME · CONTRACT · CONSULTANT · ASSOCIATE · INTERN. | FULL_TIME |
+| employee_sub_type | string(120) | N | Sub-classification (e.g. “Trainee”, “Apprentice”, “Returnship”). | NULL |
+| employee_group_assignment_id | uuid | N | FK → assignment_one_groups.id. | NULL |
+| performance_appraisal_month | enum | N | JAN…DEC. Anniversary appraisal month. | NULL |
+| performance_appraisal_period | string(40) | N | Period code (e.g. “FY26-Annual”). | NULL |
+| capability_tag | string(120) | N | Skill / competency classification. | NULL |
+| probation_flag | boolean | Y | TRUE during probation. | TRUE |
+| probation_end_date | date | N | Calendar-driven trigger for confirmation workflow. | NULL |
+| probation_extension_months | enum | N | Extension period chosen by the manager when the probation decision is EXTEND: 1, 2, or 3 months. Re-triggers the confirmation workflow at the new probation_end_date − 15 days; generates LTR_PROBATION_EXTEND. NULL unless an extension is in effect. | NULL |
+| confirmation_date | date | N | Set when probation completes successfully. | NULL |
+| contract_start_date | date | N | For Contract/Consultant. | NULL |
+| contract_end_date | date | N | For Contract/Consultant. Triggers calendar reminders at 60/30 days. | NULL |
+| contract_status | enum | N | PRE_CONTRACT · ACTIVE · EXPIRING_SOON · EXPIRED · RENEWED · TERMINATED. | NULL |
+| notice_period_master_id | uuid | N | FK → notice_period_masters.id (new master in §4.8.5). | NULL |
+| notice_period_days | integer | Y | Resolved value. Calculated using working days per Org default (5/6). | 60 |
+| cost_centre_code | string(30) | N | Per department mapping; override permitted. | NULL |
+| pay_group | string(120) | N | Phase 2 payroll grouping. | NULL |
+| change_reason | string(200) | N | Reason captured for audit (promotion, transfer, etc.). | NULL |
+| correction_flag | boolean | Y | TRUE for past-dated corrections, distinct from natural versioning. | FALSE |
+| is_hod | boolean | Y | Computed: TRUE if employee is HOD of any department. | FALSE |
+| is_hrbp | boolean | Y | Computed: TRUE if employee is HRBP for any department / UAG. | FALSE |
+| is_standard_role_1 | boolean | N | Tenant-defined custom role flag 1. | FALSE |
+| is_standard_role_2 | boolean | N | Tenant-defined custom role flag 2. | FALSE |
+| is_standard_role_3 | boolean | N | Tenant-defined custom role flag 3. | FALSE |
+| designation_exempt_status | enum | N | US wage law: EXEMPT · NON_EXEMPT. NULL for non-US employees. | NULL |
+| manager_level | integer | Y | Computed: depth in reporting tree (0 = top of org). | computed |
+| total_experience_at_joining_months | integer | N | Prior experience credited at DOJ. | 0 |
+
+Relationships: Many-to-one with employees. Same employee has many history rows; one active row (effective_to IS NULL) at any time.
+
+### 4.4.14 bank_details
+Bank account for salary disbursement (Phase 2 active). Office Admin can enter and update — direct write, no approval. Cannot view full account numbers — masked to last 4 digits after entry. Employee-initiated change requires HR Admin approval.
+| Field | Type | Required | Validation / Description | Default |
+| employee_id | uuid | Y | FK → employees.id. One active row per employee

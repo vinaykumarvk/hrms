@@ -1,0 +1,2 @@
+﻿"Code","Row Id","SLA Level Name","Trigger Type","Trigger When (Before/After)","SLA Duration","SLA Month","Cut-Off Day in Month","Breach Output","Delegate To Roles","Delegation Context","Email when the duration of this level","Default Recipients","Additional Recipients","CC Recipient Users","CC Recipient Roles","Cancel Dependent Stages","Status"
+"SLA_WF_1","","Default","Trigger Date","After","3","","","Delegate","Manager","","","","","","","No","Active"

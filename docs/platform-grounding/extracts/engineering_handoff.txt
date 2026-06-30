@@ -1,0 +1,96 @@
+PrimeSoft HRMS
+Engineering Handoff — Start Here
+A short guide to what you are building, how the documents fit together, and what is left to do.
+Audience: the engineering team (first read). Read this before anything else.
+Companion to: Engineering Handoff Release v1.8 package.
+
+# 1. What you are building
+PrimeSoft HRMS is an enterprise HR platform that covers the whole employee lifecycle — hire to retire. Release 1 is built for IT-services companies in India, up to 500 employees per tenant, in English and INR.
+Three things shape every design decision:
+One codebase, three deployment models — standalone, multi-tenant SaaS, and group company (one parent with several legal entities). Same feature set across all three.
+Configuration over code — behaviour is driven by data and settings, not custom code. Segment and geography chosen at provisioning load the defaults.
+AI-native — an in-product assistant answers HR and process questions, grounded only in the organisation's uploaded policy documents and platform help guides. It never invents answers and never sees personal identifiers.
+
+# 2. The system at a glance
+Phase 1 modules to build
+M01 Employee Master · M02 Onboarding · M03 Exits & Offboarding · M04 Leave · M05 Attendance · M08 Recruitment · M09 Performance · M11 Document Management · M16 Analytics (Phase-1 part) · M17 Assets & IT + IT Service Desk.
+Platform layer — build first
+P01–P06: workflow engine, RBAC enforcement, AI chat agent, tenant & org admin, audit log, and migration. These underpin every module and must be operational before any functional module is built.
+Roles and screens
+31 roles, from Platform Super Admin down to the individual employee and the external candidate. Where a user holds more than one role, the more restrictive permission always wins.
+A clickable prototype of 321 screens shows every screen and flow in the system.
+
+# 3. Where to start — reading order
+A short path. Read top to bottom; each step builds on the last.
+This guide — orientation (you are here).
+Product Vision — the what and why: architecture, module map, and what is in Release 1.
+Business Requirements Document (BRD) — the business rules the product must satisfy.
+RBAC, Platform Specification, and Foundation FS — the cross-cutting rules every module obeys (who can do what, the shared services, the common data model).
+The module functional specs (M01, M02, …) — the behaviour of each module.
+The prototype — open it and click through; this is your screen-and-flow reference.
+The worklist (section 5), the Coverage Map, and the Configuration Actions Register — what is left to build and to switch on.
+
+# 4. How the documents fit together
+Read this once and it will save you a lot of time. Three sources, each authoritative for one thing. Do not look for the same answer in two places:
+Screens & flows → the prototype.
+Meaning & behaviour (what a screen does, the rules behind it) → the functional spec (FS).
+Field inventory & values (every field on a configuration screen, and the allowed values) → the named configuration file (a CSV export).
+Important: the prototype deliberately shows a representative subset of fields on configuration screens. The complete field set always comes from the configuration file, not the prototype.
+When two documents seem to disagree
+Follow this authority order — the higher one wins:
+RBAC  →  BRD  →  FS  →  Foundation / Platform Spec  →  prototype
+
+# 5. What is done, and what is left
+Most of the system is fully specified and prototyped. The remaining work is tracked screen-by-screen in the Configuration Coverage Map — most screens are complete, with around 35 partial (the screen exists but needs its full field set). In plain terms, the work is below.
+
+## Field-completeness (the 35 partial screens)
+“Partial” does not mean incomplete. The full logic is specified — business rules in the BRD, screen behaviour and validations in the FS, and the complete field list in the named config file; only the prototype shows a representative subset of fields, by design.
+So for each partial screen, build the full field set from its named config file, using the FS for behaviour and the prototype for screen shape. The largest are:
+Comp-off / Overtime policy — 286 fields
+Goal-plan framework — 249 fields
+Assignment rules — 162 fields
+Review framework — 161 fields
+Attendance settings — 147 fields
+Leave settings — 131 fields
+Workflow stages — 121 fields
+
+## Configuration to switch on before go-live
+Apply the items in the Configuration Actions Register (role, permission, and policy settings). These are settings to apply, not code to write.
+
+# 6. Document index
+Build inputs — orientation
+| Document | What it is |
+| Product Vision v2.6 | What and why; architecture; module map; Release-1 scope |
+| BRD v2.1 | Business requirements the product must satisfy |
+
+Build inputs — cross-cutting rules
+| Document | What it is |
+| RBAC Design v1.7 | Who can do what; field-level access; the highest authority |
+| Platform Specification v1.6 | Shared services P01–P06 (build first) |
+| Foundation FS v1.7 | Common data model and cross-module behaviour |
+
+Build inputs — module functional specs
+| Document | What it is |
+| M01 Employee Master v1.8 | Profile, lifecycle, org position, document vault |
+| M02 Onboarding v1.4 | Pre-joining, document collection, induction |
+| M03 Exits & Offboarding v1.3 | Resignation, notice, FnF clearance, exit |
+| M04 Leave Management v1.2 | Leave types, accrual, application, comp-off |
+| M05 Attendance v1.3 | Shifts, check-in, regularisation, overtime |
+| M08 Recruitment v1.3 | Requisition, pipeline, offer, candidate portal |
+| M09 Performance v1.4 | Goals, reviews, calibration, probation |
+| M11 Document Management v1.3 | Policy versioning, acknowledgement, vault |
+| M17 Assets & IT v2.1 | Asset master, provisioning, service desk |
+| Dashboard & Landing v1.0 | Role-composed landing; widgets; Manager Hub team views; per-persona homes |
+
+Build inputs — admin & configuration
+| Document | What it is |
+| Org Admin Configuration v1.3 | The tenant configuration console (cfg-* screens) |
+| Org Admin Master Data v1.1 | Organisation master data |
+| HR Admin Operational Config v1.1 | HR Admin in-context configuration |
+| Configuration Coverage Map v1.0 | Per-screen build state (Present / Partial / Missing) |
+| Configuration Source-of-Truth v1.0 | The three-source convention in detail |
+| Configuration Actions Register v1.0 | Settings to apply before go-live |
+
+Build inputs — prototype
+| Document | What it is |
+| Prototype v2.6 (HTML) | Clickable prototype — 321 screens; the screen & flow reference |

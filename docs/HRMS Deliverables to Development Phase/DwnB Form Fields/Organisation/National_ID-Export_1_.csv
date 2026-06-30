@@ -1,0 +1,9 @@
+﻿Code,Option,"Row ID","Applicable For",Enable/Disable,Alias,"Temporary ID Enable/Disable","Temporary ID Alias","Issued From Enable/Disable","Issued From Alias","Issued From Mandatory","Issued Till Enable/Disable","Issued Till Alias","Issued Till Mandatory","ID Document Enable/Disable","ID Document Alias","ID Document Mandatory","Mandatory for Activation","Mandatory for Addition","Is Unique",Masking
+adhar_card_number,Aadhaar,R1,India,Enable,Aadhaar,Enable,Temporary,Disable,,Disable,Disable,,Disable,Disable,,Disable,Disable,Disable,Disable,
+bank_pan_num,PAN,R1,India,Enable,PAN,Disable,,Disable,,Disable,Disable,,Disable,Disable,,Disable,Disable,Disable,Disable,
+passport_number,Passport,R1,"All Employees",Enable,Passport,Disable,,Enable,"Issued From",Disable,Enable,"Issued Till",Disable,Disable,,Disable,Disable,Disable,Disable,
+driving_licence_number,"Driving License",R1,"All Employees",Enable,"Driving License",Enable,Temporary,Enable,"Issued From",Disable,Enable,"Issued Till",Disable,Disable,,Disable,Disable,Disable,Disable,
+india_epf_number,"EPF Number",R1,India,Enable,"EPF Number",Disable,,Disable,,Disable,Disable,,Disable,Disable,,Disable,Disable,Disable,Disable,
+india_esic_insurance_number,"ESIC Insurance Number",R1,India,Enable,"ESIC Insurance Number",Disable,,Disable,,Disable,Disable,,Disable,Disable,,Disable,Disable,Disable,Disable,
+india_pran_number,"Permanent Retirement Account Number (PRAN)",R1,India,Enable,"Permanent Retirement Account Number (PRAN)",Disable,,Disable,,Disable,Disable,,Disable,Disable,,Disable,Disable,Disable,Disable,
+india_universal_account_number,"Universal Account Number",R1,India,Enable,"Universal Account Number",Disable,,Disable,,Disable,Disable,,Disable,Disable,,Disable,Disable,Disable,Disable,

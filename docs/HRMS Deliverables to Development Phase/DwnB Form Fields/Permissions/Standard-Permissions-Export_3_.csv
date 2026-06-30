@@ -1,0 +1,138 @@
+"Policy Code","Policy Name","Standard Permission Type","Standard Permission Type Code","Assignee Context Name","Assignee Context Code",Module,"Sub Module",Action,"Permission Name","Permission Code","Status (Enabled/Disabled)","Policy Status"
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",View,"View Position Details",view_position_details_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Core & Employee management",View,"View profile flag",view_profile_flag_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",View,"Future Transactions",view_future_transactions_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",Edit/Action,"Future Transactions",edit_future_transactions_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",View,"View Assigned Policies",view_assigned_policies_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",View,"Profile History",view_profile_history_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",Edit/Action,"Assign Replacement",assign_replacement_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",View,"Download Profile PDF",download_profile_pdf_standard,Enabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Workflows,Confirmation,View,"Employee Lifecycle - Probation Confirmation",employee_lifecycle_probation_confirmation_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Workflows,Separation,View,"Employee Lifecycle Separation",employee_lifecycle_separation_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Workflows,Contract,View,"Employee Lifecycle - Contract",employee_lifecycle_contract,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Workflows,Workflows,View,"Employee Lifecycle - WorkFlow",workflow_tab,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Workflows,Separation,View,"Separation History",separation_history,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Onboarding,Onboarding,View,"Employee Lifecycle - Onboarding",view_employee_lifecycle_onboarding,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",View,"View Personal Details",view_personal_details_standard,Enabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",View,"View Employment Details",view_employment_details_standard,Enabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",View,"View Assigned Permissions",view_assigned_permissions_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,View,"View attendance & leave data in one view",attendance_leave_oneview_view_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,View,"Overtime Credited List",attendance_view_overtime_list_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,View,"View Attendance Page",attendance_view_attendance_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Edit attendance in One View",attendance_edit_one_view_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Edit Shift & Weekly off in One View",edit_shift_weeklyoff_one_view_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Edit Attendance in attendance page",attendance_edit_attendance_page_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"On behalf attendance application",attendance_apply_attendance_others_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Edit/Action,"Edit Leave Balance on leave page",edit_leave_balance_on_leave_page_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Edit/Action,"Apply leave in one view",leave_apply_oneview_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Edit/Action,"Pay out in comp-off history",leave_compoff_payout_history_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Edit/Action,"Raise leave request on behalf of",leave_apply_other_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,View,"Comp off credited history",leave_compoff_credited_history_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,View,"Leave history",leave_history_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,View,"View an Employee's Leave Page",leave_view_leave_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Import,"Roster Import",attendance_import_roster_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Import,"Roster Calendar Import",attendance_import_roster_calendar_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",TimeSheets,Edit/Action,"Assign TimeSheet Policy",assign_time_sheet_policy_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Assign Shift, Attendance Policy and Weekly off",attendance_edit_shift_policy_weeklyoff_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Travel & Expense",Travel,View,"View Trip Summary",view_summary,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Travel & Expense",Travel,View,"View Travel Requests",view_travel,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Edit/Action,"Edit Flexible Holiday Date",leave_edit_flexible_holiday_date_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Edit Pay Package",edit_pay_package,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Edit IT/POI Declaration Access",edit_it_declaration_access,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Edit IT/POI Declaration",edit_it_declaration,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Manage Extra Payments",manage_extra_payments,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Manage Loan & Advances / ExtraDeductions",manage_loan_advances_extra_deductions,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Create Hold Salary",create_hold_salary,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Create Perquisite",create_perquisite,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Manage Benefits",manage_benefits,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Manage Flexi Declarations",manage_flexi_declarations,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Edit Flexi Declarations",edit_flexi_declarations,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Create Form12b",create_form_12b,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Manage Loans",manage_loans,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Manage Advances",manage_advances,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Edit Component Pay Package",edit_component_pay_package,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Manage Component Extra Payments",manage_component_extrapayments,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,Edit/Action,"Manage Component Advances",manage_component_advances,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"Pay Package",view_pay_package,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,Benefits,view_benefits,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"IT/POI Declarations",view_it_declarations,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,Payslips,view_payslips,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"Extra Payments",view_extra_payments,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"Loans & Advances/Extra Deductions",view_loans_advances_extra_deductions,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"Hold Salary / Repayment",view_hold_salary_repayment,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,Taxsheet,view_taxsheet,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"Form 12B",view_form_12b,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"Form 16B",view_form_16b,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"Form 12BA",view_form_12ba,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,Perquisite,view_perquisite,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"View Flexi Components",view_flexi_components,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"View Loans",view_loans,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"View Advances",view_advances,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"View Component Pay Package",view_component_pay_package,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"View Component Proration",view_component_proration,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"View Component Extra Payments",view_component_extrapayments,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Payroll,Payroll,View,"View Component Advances",view_component_advances,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Travel & Expense",Reimbursement,View,"View User Expenses",view_user_expenses,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Travel & Expense",Reimbursement,View,"View Reimbursement Advances",view_reimbursement_advances,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Helpdesk,Helpdesk,Edit/Action,"Allow ticket creation on behalf",help_desk_ticket_creation_on_behalf_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Helpdesk,Helpdesk,View,"Ticket created by employee",view_help_desk_ticket_created_by_employee_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Performance,Performance,View,"View Goal Plan",goal_plan_view_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Performance,Performance,Edit/Action,"Manage Goal Plan",goal_plan_edit_access_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Appreciations History",appreciations_history_page,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Appreciations Leaderboard",appreciations_leaderboard_page,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Individual Award programs",individual_award_programs_page,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Team Award programs",team_award_programs_page,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Individual Award Winners",individual_award_winners_page,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Team Award Winners",team_award_winners_page,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Individual Awards History",individual_awards_history_page,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Team Awards history",team_awards_history_page,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Nominations Workflows - Individual Nominations Raised",individual_nominations_raised,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Nominations Workflows - Individual Nominations Received",individual_nominations_received,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Nominations Workflows - Team Nominations Raised",team_nominations_raised,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Rewards & Recognition","Rewards & Recognition",View,"Earned Points Summary page",earned_points_summary,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",TimeSheets,Edit/Action,"Raise On-Behalf Timesheet Entries",onbehalf_time_sheet_entry_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",TimeSheets,View,"View TimeSheets",view_time_sheets_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,View,"View Overview Page",attendance_view_overview_standard,Enabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Assign Shift / Shift Block",edit_shift_shiftblock_directory_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Assign Weekly Off",edit_weekly_off_directory_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Assign Web Clock-in",edit_clockin_directory_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Assign Check-in",edit_checkin_directory_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Assign Employee contractual hours",edit_employee_contractual_hours_directory_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Core & Employee management",View,"Access Org Units Hover Experience",view_hover_object_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"HR Documents","HR Documents",View,"View Employee Documents",hr_docs_view_my_documents,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Assign Fair Workweek Policy",assign_fairworkweek_policy_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Administration,"One View Access",OneView_STANDARD,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Import,"Backdated Attendance Import",AttendanceImportBackdated_STANDARD,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Import,"Compensatory off Import",CompoffImport_STANDARD,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Administration,"Attendance Regularization",AttendanceRegularization_STANDARD,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Import,"Attendance Assignment Import",AttendanceImportAssignment_STANDARD,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Assign Shifts, Policy, weeklyoff, IP network, Fencing, check in",edit_shift_policy_weeklyoff_ip_checkin_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Edit/Action,"Assign Attendance Policy",edit_attendance_policy_directory_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Import,"Attendance Import",comp_setup_Attendance_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Import,"Optional Holiday Import",attendance_import_optional_holiday_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Import,"Planned Overtime Requests Import",attendance_import_planned_ot_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Import,"Bulk Import Attendance",bulk_import_attendance_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",TimeSheets,Administration,"TimeSheet Admin",time_sheets_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",TimeSheets,Import,"Import TimeSheet Policy Assignment",import_time_sheet_policy_assignment_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",TimeSheets,Import,"Import TimeSheet",import_time_sheet_duration_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Administration,"Act as admin in leave requests",leave_requests_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Edit/Action,"Raise leave request on behalf of without restrictions",leave_apply_other_bypass_restrictions_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Import,"Carry Forward Balance",comp_setup_LeaveBalance_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Import,Leaves,comp_setup_Leaves_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Import,"Leave Adjustment Balance",leaveadjustmentbalance_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Import,"Leave Encashment",leaveencashment_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Import,"Deactivated Employee Leave Update",deactivated_employee_leave_update_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Import,"Recalculate Leave Balances",recalculate_leave_balances_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Import,"Flexible Holiday Date",leave_import_flexible_holiday_date_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Leave,Import,"Optional Holiday Policy",optional_holiday_policy_import_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Scheduling,Edit/Action,"Assign Scheduling Org Policy",assign_scheduling_org_policy_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Scheduling,Edit/Action,"Assign Scheduling Unit Groups",assign_scheduling_unit_groups_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Scheduling,Edit/Action,"Assign Scheduling Tags",assign_scheduling_tags_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Scheduling,View,"View Schedule Page",view_schedule_page_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Scheduling,Edit/Action,"On behalf Open Shift Request",on_behalf_open_shift_request_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Scheduling,Edit/Action,"Assign Cover Shift",assign_cover_shift_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Scheduling,View,"View Open Shift Board",view_open_shift_board_standard,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Time Management",Attendance,Import,"Delete Face Enrollment Import",DeleteFaceEnrollmentImport_STANDARD,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Talent Management","Talent Management",View,"Employee Skill Profile",employee_skill_profile_view,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,"Talent Management","Talent Management",Edit/Action,"Employee Skill Profile",employee_skill_profile_edit,Disabled,Active
+STDPERM_5,"L3 Manager","L3 Manager",l3_manager,All,All,Core,"Employee Data management",View,"View Position Budget Status in Position Structure",view_position_budget_status,Disabled,Active

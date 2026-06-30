@@ -1,0 +1,420 @@
+Test ID,Category,Role,Subject,Precondition,Action,Expected Result,Source,Priority
+RBAC-T-0001,Scope-allow,Employee (own),Salary / CTC,record in own,view Salary / CTC,PERMIT (within scope),RBAC §6,P2
+RBAC-T-0002,Scope-deny,Employee (own),Salary / CTC,record OUTSIDE own,view Salary / CTC,DENY — out of scope,RBAC §6,P1
+RBAC-T-0003,Deny,Manager L1,Salary / CTC,default,attempt view Salary / CTC,DENY — not authorised,RBAC §6,P1
+RBAC-T-0004,Deny,Skip-level,Salary / CTC,default,attempt view Salary / CTC,DENY — not authorised,RBAC §6,P1
+RBAC-T-0005,Gated-default,HOD,Salary / CTC,grant OFF (default),view Salary / CTC,DENY — grant not enabled,RBAC §6,P1
+RBAC-T-0006,Gated-granted,HOD,Salary / CTC,grant ENABLED by Org Admin,view Salary / CTC,PERMIT (audit-logged),RBAC §6,P2
+RBAC-T-0007,Gated-default,UAG Head,Salary / CTC,grant OFF (default),view Salary / CTC,DENY — grant not enabled,RBAC §6,P1
+RBAC-T-0008,Gated-granted,UAG Head,Salary / CTC,grant ENABLED by Org Admin,view Salary / CTC,PERMIT (audit-logged),RBAC §6,P2
+RBAC-T-0009,Deny,HRBP,Salary / CTC,default,attempt view Salary / CTC,DENY — not authorised,RBAC §6,P1
+RBAC-T-0010,Allow,HR Admin,Salary / CTC,default,view Salary / CTC,PERMIT,RBAC §6,P2
+RBAC-T-0011,Deny,Office Admin,Salary / CTC,default,attempt view Salary / CTC,DENY — not authorised,RBAC §6,P1
+RBAC-T-0012,Allow,Finance Admin,Salary / CTC,default,view Salary / CTC,PERMIT,RBAC §6,P2
+RBAC-T-0013,Deny,Recruiter,Salary / CTC,default,attempt view Salary / CTC,DENY — not authorised,RBAC §6,P1
+RBAC-T-0014,Deny,Recruitment Admin,Salary / CTC,default,attempt view Salary / CTC,DENY — not authorised,RBAC §6,P1
+RBAC-T-0015,Deny,Org Admin,Salary / CTC,default,attempt view Salary / CTC,DENY — not authorised,RBAC §6,P1
+RBAC-T-0016,Ceiling-invariant,Org Admin,Salary / CTC,PII ceiling (RBAC §1/§6),attempt view Salary / CTC as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0017,Deny,Platform Super Admin,Salary / CTC,default,attempt view Salary / CTC,DENY — not authorised,RBAC §6,P1
+RBAC-T-0018,Ceiling-invariant,Platform Super Admin,Salary / CTC,PII ceiling (RBAC §1/§6),attempt view Salary / CTC as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0019,Masking,Employee (own),Bank account details,default,view Bank account details,PERMIT — MASKED (e.g. last-4),RBAC §6 / §3.4,P1
+RBAC-T-0020,Deny,Manager L1,Bank account details,default,attempt view Bank account details,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0021,Deny,Skip-level,Bank account details,default,attempt view Bank account details,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0022,Deny,HOD,Bank account details,default,attempt view Bank account details,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0023,Deny,UAG Head,Bank account details,default,attempt view Bank account details,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0024,Deny,HRBP,Bank account details,default,attempt view Bank account details,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0025,Allow,HR Admin,Bank account details,default,view Bank account details,PERMIT,RBAC §6 / §3.4,P2
+RBAC-T-0026,Write-no-read,Office Admin,Bank account details,entry context,enter Bank account details,PERMIT write (audit-logged),RBAC §6 / §3.4,P1
+RBAC-T-0027,Write-no-read,Office Admin,Bank account details,after entry,read back Bank account details,DENY read / MASKED,RBAC §6 / §3.4,P1
+RBAC-T-0028,Deny,Finance Admin,Bank account details,default,attempt view Bank account details,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0029,Deny,Recruiter,Bank account details,default,attempt view Bank account details,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0030,Deny,Recruitment Admin,Bank account details,default,attempt view Bank account details,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0031,Deny,Org Admin,Bank account details,default,attempt view Bank account details,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0032,Ceiling-invariant,Org Admin,Bank account details,PII ceiling (RBAC §1/§6),attempt view Bank account details as top-tier admin,DENY — ceiling not overridable upward,RBAC §6 / §3.4,P1
+RBAC-T-0033,Deny,Platform Super Admin,Bank account details,default,attempt view Bank account details,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0034,Ceiling-invariant,Platform Super Admin,Bank account details,PII ceiling (RBAC §1/§6),attempt view Bank account details as top-tier admin,DENY — ceiling not overridable upward,RBAC §6 / §3.4,P1
+RBAC-T-0035,Masking,Employee (own),Government IDs / National ID,default,view Government IDs / National ID,PERMIT — MASKED (e.g. last-4),RBAC §6 / §3.4,P1
+RBAC-T-0036,Deny,Manager L1,Government IDs / National ID,default,attempt view Government IDs / National ID,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0037,Deny,Skip-level,Government IDs / National ID,default,attempt view Government IDs / National ID,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0038,Deny,HOD,Government IDs / National ID,default,attempt view Government IDs / National ID,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0039,Deny,UAG Head,Government IDs / National ID,default,attempt view Government IDs / National ID,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0040,Deny,HRBP,Government IDs / National ID,default,attempt view Government IDs / National ID,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0041,Allow,HR Admin,Government IDs / National ID,default,view Government IDs / National ID,PERMIT,RBAC §6 / §3.4,P2
+RBAC-T-0042,Allow,Office Admin,Government IDs / National ID,own,view & upload Government IDs / National ID,PERMIT,RBAC §6 / §3.4,P2
+RBAC-T-0043,Deny,Finance Admin,Government IDs / National ID,default,attempt view Government IDs / National ID,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0044,Deny,Recruiter,Government IDs / National ID,default,attempt view Government IDs / National ID,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0045,Deny,Recruitment Admin,Government IDs / National ID,default,attempt view Government IDs / National ID,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0046,Deny,Org Admin,Government IDs / National ID,default,attempt view Government IDs / National ID,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0047,Ceiling-invariant,Org Admin,Government IDs / National ID,PII ceiling (RBAC §1/§6),attempt view Government IDs / National ID as top-tier admin,DENY — ceiling not overridable upward,RBAC §6 / §3.4,P1
+RBAC-T-0048,Deny,Platform Super Admin,Government IDs / National ID,default,attempt view Government IDs / National ID,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0049,Ceiling-invariant,Platform Super Admin,Government IDs / National ID,PII ceiling (RBAC §1/§6),attempt view Government IDs / National ID as top-tier admin,DENY — ceiling not overridable upward,RBAC §6 / §3.4,P1
+RBAC-T-0050,Scope-allow,Employee (own),Date of Birth,record in own,view Date of Birth,PERMIT (within scope),RBAC §6 / §3.4,P2
+RBAC-T-0051,Scope-deny,Employee (own),Date of Birth,record OUTSIDE own,view Date of Birth,DENY — out of scope,RBAC §6 / §3.4,P1
+RBAC-T-0052,Deny,Manager L1,Date of Birth,default,attempt view Date of Birth,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0053,Deny,Skip-level,Date of Birth,default,attempt view Date of Birth,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0054,Deny,HOD,Date of Birth,default,attempt view Date of Birth,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0055,Deny,UAG Head,Date of Birth,default,attempt view Date of Birth,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0056,Deny,HRBP,Date of Birth,default,attempt view Date of Birth,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0057,Allow,HR Admin,Date of Birth,default,view Date of Birth,PERMIT,RBAC §6 / §3.4,P2
+RBAC-T-0058,Allow,Office Admin,Date of Birth,default,view Date of Birth,PERMIT,RBAC §6 / §3.4,P2
+RBAC-T-0059,Deny,Finance Admin,Date of Birth,default,attempt view Date of Birth,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0060,Deny,Recruiter,Date of Birth,default,attempt view Date of Birth,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0061,Deny,Recruitment Admin,Date of Birth,default,attempt view Date of Birth,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0062,Deny,Org Admin,Date of Birth,default,attempt view Date of Birth,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0063,Ceiling-invariant,Org Admin,Date of Birth,PII ceiling (RBAC §1/§6),attempt view Date of Birth as top-tier admin,DENY — ceiling not overridable upward,RBAC §6 / §3.4,P1
+RBAC-T-0064,Deny,Platform Super Admin,Date of Birth,default,attempt view Date of Birth,DENY — not authorised,RBAC §6 / §3.4,P1
+RBAC-T-0065,Ceiling-invariant,Platform Super Admin,Date of Birth,PII ceiling (RBAC §1/§6),attempt view Date of Birth as top-tier admin,DENY — ceiling not overridable upward,RBAC §6 / §3.4,P1
+RBAC-T-0066,Deny,Employee (own),Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0067,Deny,Manager L1,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0068,Deny,Skip-level,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0069,Deny,HOD,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0070,Deny,UAG Head,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0071,Deny,HRBP,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0072,Deny,HR Admin,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0073,Deny,Office Admin,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0074,Deny,Finance Admin,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0075,Deny,Recruiter,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0076,Deny,Recruitment Admin,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0077,Deny,Org Admin,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0078,Ceiling-invariant,Org Admin,Performance rating — DRAFT,PII ceiling (RBAC §1/§6),attempt view Performance rating — DRAFT as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0079,Deny,Platform Super Admin,Performance rating — DRAFT,default,attempt view Performance rating — DRAFT,DENY — not authorised,RBAC §6,P1
+RBAC-T-0080,Ceiling-invariant,Platform Super Admin,Performance rating — DRAFT,PII ceiling (RBAC §1/§6),attempt view Performance rating — DRAFT as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0081,Scope-allow,Employee (own),Performance rating — published,record in own,view Performance rating — published,PERMIT (within scope),RBAC §6,P2
+RBAC-T-0082,Scope-deny,Employee (own),Performance rating — published,record OUTSIDE own,view Performance rating — published,DENY — out of scope,RBAC §6,P1
+RBAC-T-0083,Scope-allow,Manager L1,Performance rating — published,record in team,view Performance rating — published,PERMIT (within scope),RBAC §6,P2
+RBAC-T-0084,Scope-deny,Manager L1,Performance rating — published,record OUTSIDE team,view Performance rating — published,DENY — out of scope,RBAC §6,P1
+RBAC-T-0085,Scope-allow,Skip-level,Performance rating — published,record in sub,view Performance rating — published,PERMIT (within scope),RBAC §6,P2
+RBAC-T-0086,Scope-deny,Skip-level,Performance rating — published,record OUTSIDE sub,view Performance rating — published,DENY — out of scope,RBAC §6,P1
+RBAC-T-0087,Gated-default,HOD,Performance rating — published,grant OFF (default),view Performance rating — published,DENY — grant not enabled,RBAC §6,P1
+RBAC-T-0088,Gated-granted,HOD,Performance rating — published,grant ENABLED by Org Admin,view Performance rating — published,PERMIT (audit-logged),RBAC §6,P2
+RBAC-T-0089,Gated-default,UAG Head,Performance rating — published,grant OFF (default),view Performance rating — published,DENY — grant not enabled,RBAC §6,P1
+RBAC-T-0090,Gated-granted,UAG Head,Performance rating — published,grant ENABLED by Org Admin,view Performance rating — published,PERMIT (audit-logged),RBAC §6,P2
+RBAC-T-0091,Deny,HRBP,Performance rating — published,default,attempt view Performance rating — published,DENY — not authorised,RBAC §6,P1
+RBAC-T-0092,Allow,HR Admin,Performance rating — published,default,view Performance rating — published,PERMIT,RBAC §6,P2
+RBAC-T-0093,Deny,Office Admin,Performance rating — published,default,attempt view Performance rating — published,DENY — not authorised,RBAC §6,P1
+RBAC-T-0094,Deny,Finance Admin,Performance rating — published,default,attempt view Performance rating — published,DENY — not authorised,RBAC §6,P1
+RBAC-T-0095,Deny,Recruiter,Performance rating — published,default,attempt view Performance rating — published,DENY — not authorised,RBAC §6,P1
+RBAC-T-0096,Deny,Recruitment Admin,Performance rating — published,default,attempt view Performance rating — published,DENY — not authorised,RBAC §6,P1
+RBAC-T-0097,Deny,Org Admin,Performance rating — published,default,attempt view Performance rating — published,DENY — not authorised,RBAC §6,P1
+RBAC-T-0098,Deny,Platform Super Admin,Performance rating — published,default,attempt view Performance rating — published,DENY — not authorised,RBAC §6,P1
+RBAC-T-0099,Deny,Employee (own),Performance rating — calibration,default,attempt view Performance rating — calibration,DENY — not authorised,RBAC §6,P1
+RBAC-T-0100,Deny,Manager L1,Performance rating — calibration,default,attempt view Performance rating — calibration,DENY — not authorised,RBAC §6,P1
+RBAC-T-0101,Scope-allow,Skip-level,Performance rating — calibration,record in sub,view Performance rating — calibration,PERMIT (within scope),RBAC §6,P2
+RBAC-T-0102,Scope-deny,Skip-level,Performance rating — calibration,record OUTSIDE sub,view Performance rating — calibration,DENY — out of scope,RBAC §6,P1
+RBAC-T-0103,Gated-default,HOD,Performance rating — calibration,grant OFF (default),view Performance rating — calibration,DENY — grant not enabled,RBAC §6,P1
+RBAC-T-0104,Gated-granted,HOD,Performance rating — calibration,grant ENABLED by Org Admin,view Performance rating — calibration,PERMIT (audit-logged),RBAC §6,P2
+RBAC-T-0105,Deny,UAG Head,Performance rating — calibration,default,attempt view Performance rating — calibration,DENY — not authorised,RBAC §6,P1
+RBAC-T-0106,Deny,HRBP,Performance rating — calibration,default,attempt view Performance rating — calibration,DENY — not authorised,RBAC §6,P1
+RBAC-T-0107,Allow,HR Admin,Performance rating — calibration,default,view Performance rating — calibration,PERMIT,RBAC §6,P2
+RBAC-T-0108,Deny,Office Admin,Performance rating — calibration,default,attempt view Performance rating — calibration,DENY — not authorised,RBAC §6,P1
+RBAC-T-0109,Deny,Finance Admin,Performance rating — calibration,default,attempt view Performance rating — calibration,DENY — not authorised,RBAC §6,P1
+RBAC-T-0110,Deny,Recruiter,Performance rating — calibration,default,attempt view Performance rating — calibration,DENY — not authorised,RBAC §6,P1
+RBAC-T-0111,Deny,Recruitment Admin,Performance rating — calibration,default,attempt view Performance rating — calibration,DENY — not authorised,RBAC §6,P1
+RBAC-T-0112,Deny,Org Admin,Performance rating — calibration,default,attempt view Performance rating — calibration,DENY — not authorised,RBAC §6,P1
+RBAC-T-0113,Deny,Platform Super Admin,Performance rating — calibration,default,attempt view Performance rating — calibration,DENY — not authorised,RBAC §6,P1
+RBAC-T-0114,Scope-allow,Employee (own),Payslips,record in own,view Payslips,PERMIT (within scope),RBAC §6,P2
+RBAC-T-0115,Scope-deny,Employee (own),Payslips,record OUTSIDE own,view Payslips,DENY — out of scope,RBAC §6,P1
+RBAC-T-0116,Deny,Manager L1,Payslips,default,attempt view Payslips,DENY — not authorised,RBAC §6,P1
+RBAC-T-0117,Deny,Skip-level,Payslips,default,attempt view Payslips,DENY — not authorised,RBAC §6,P1
+RBAC-T-0118,Deny,HOD,Payslips,default,attempt view Payslips,DENY — not authorised,RBAC §6,P1
+RBAC-T-0119,Deny,UAG Head,Payslips,default,attempt view Payslips,DENY — not authorised,RBAC §6,P1
+RBAC-T-0120,Deny,HRBP,Payslips,default,attempt view Payslips,DENY — not authorised,RBAC §6,P1
+RBAC-T-0121,Allow,HR Admin,Payslips,default,view Payslips,PERMIT,RBAC §6,P2
+RBAC-T-0122,Deny,Office Admin,Payslips,default,attempt view Payslips,DENY — not authorised,RBAC §6,P1
+RBAC-T-0123,Allow,Finance Admin,Payslips,default,view Payslips,PERMIT,RBAC §6,P2
+RBAC-T-0124,Deny,Recruiter,Payslips,default,attempt view Payslips,DENY — not authorised,RBAC §6,P1
+RBAC-T-0125,Deny,Recruitment Admin,Payslips,default,attempt view Payslips,DENY — not authorised,RBAC §6,P1
+RBAC-T-0126,Deny,Org Admin,Payslips,default,attempt view Payslips,DENY — not authorised,RBAC §6,P1
+RBAC-T-0127,Ceiling-invariant,Org Admin,Payslips,PII ceiling (RBAC §1/§6),attempt view Payslips as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0128,Deny,Platform Super Admin,Payslips,default,attempt view Payslips,DENY — not authorised,RBAC §6,P1
+RBAC-T-0129,Ceiling-invariant,Platform Super Admin,Payslips,PII ceiling (RBAC §1/§6),attempt view Payslips as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0130,Scope-allow,Employee (own),Medical / health data,record in own,view Medical / health data,PERMIT (within scope),RBAC §6,P2
+RBAC-T-0131,Scope-deny,Employee (own),Medical / health data,record OUTSIDE own,view Medical / health data,DENY — out of scope,RBAC §6,P1
+RBAC-T-0132,Deny,Manager L1,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0133,Deny,Skip-level,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0134,Deny,HOD,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0135,Deny,UAG Head,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0136,Deny,HRBP,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0137,Allow,HR Admin,Medical / health data,default,view Medical / health data,PERMIT,RBAC §6,P2
+RBAC-T-0138,Deny,Office Admin,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0139,Deny,Finance Admin,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0140,Deny,Recruiter,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0141,Deny,Recruitment Admin,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0142,Deny,Org Admin,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0143,Ceiling-invariant,Org Admin,Medical / health data,PII ceiling (RBAC §1/§6),attempt view Medical / health data as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0144,Deny,Platform Super Admin,Medical / health data,default,attempt view Medical / health data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0145,Ceiling-invariant,Platform Super Admin,Medical / health data,PII ceiling (RBAC §1/§6),attempt view Medical / health data as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0146,Deny,Employee (own),Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0147,Deny,Manager L1,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0148,Deny,Skip-level,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0149,Deny,HOD,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0150,Deny,UAG Head,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0151,Deny,HRBP,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0152,Deny,HR Admin,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0153,Deny,Office Admin,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0154,Deny,Finance Admin,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0155,Deny,Recruiter,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0156,Deny,Recruitment Admin,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0157,Deny,Org Admin,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0158,Ceiling-invariant,Org Admin,Biometric data,PII ceiling (RBAC §1/§6),attempt view Biometric data as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0159,Deny,Platform Super Admin,Biometric data,default,attempt view Biometric data,DENY — not authorised,RBAC §6,P1
+RBAC-T-0160,Ceiling-invariant,Platform Super Admin,Biometric data,PII ceiling (RBAC §1/§6),attempt view Biometric data as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0161,Deny,Employee (own),Compensation bands,default,attempt view Compensation bands,DENY — not authorised,RBAC §6,P1
+RBAC-T-0162,Deny,Manager L1,Compensation bands,default,attempt view Compensation bands,DENY — not authorised,RBAC §6,P1
+RBAC-T-0163,Deny,Skip-level,Compensation bands,default,attempt view Compensation bands,DENY — not authorised,RBAC §6,P1
+RBAC-T-0164,Deny,HOD,Compensation bands,default,attempt view Compensation bands,DENY — not authorised,RBAC §6,P1
+RBAC-T-0165,Deny,UAG Head,Compensation bands,default,attempt view Compensation bands,DENY — not authorised,RBAC §6,P1
+RBAC-T-0166,Deny,HRBP,Compensation bands,default,attempt view Compensation bands,DENY — not authorised,RBAC §6,P1
+RBAC-T-0167,Allow,HR Admin,Compensation bands,default,view Compensation bands,PERMIT,RBAC §6,P2
+RBAC-T-0168,Deny,Office Admin,Compensation bands,default,attempt view Compensation bands,DENY — not authorised,RBAC §6,P1
+RBAC-T-0169,Allow,Finance Admin,Compensation bands,default,view Compensation bands,PERMIT,RBAC §6,P2
+RBAC-T-0170,Masking,Recruiter,Compensation bands,default,view Compensation bands,PERMIT — MASKED (e.g. last-4),RBAC §6,P1
+RBAC-T-0171,Allow,Recruitment Admin,Compensation bands,default,view Compensation bands,PERMIT,RBAC §6,P2
+RBAC-T-0172,Deny,Org Admin,Compensation bands,default,attempt view Compensation bands,DENY — not authorised,RBAC §6,P1
+RBAC-T-0173,Ceiling-invariant,Org Admin,Compensation bands,PII ceiling (RBAC §1/§6),attempt view Compensation bands as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0174,Deny,Platform Super Admin,Compensation bands,default,attempt view Compensation bands,DENY — not authorised,RBAC §6,P1
+RBAC-T-0175,Ceiling-invariant,Platform Super Admin,Compensation bands,PII ceiling (RBAC §1/§6),attempt view Compensation bands as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0176,Deny,Employee (own),Promotion readiness,default,attempt view Promotion readiness,DENY — not authorised,RBAC §6,P1
+RBAC-T-0177,Scope-allow,Manager L1,Promotion readiness,record in team,view Promotion readiness,PERMIT (within scope),RBAC §6,P2
+RBAC-T-0178,Scope-deny,Manager L1,Promotion readiness,record OUTSIDE team,view Promotion readiness,DENY — out of scope,RBAC §6,P1
+RBAC-T-0179,Allow,Skip-level,Promotion readiness,default,view Promotion readiness,PERMIT,RBAC §6,P2
+RBAC-T-0180,Deny,HOD,Promotion readiness,default,attempt view Promotion readiness,DENY — not authorised,RBAC §6,P1
+RBAC-T-0181,Deny,UAG Head,Promotion readiness,default,attempt view Promotion readiness,DENY — not authorised,RBAC §6,P1
+RBAC-T-0182,Deny,HRBP,Promotion readiness,default,attempt view Promotion readiness,DENY — not authorised,RBAC §6,P1
+RBAC-T-0183,Allow,HR Admin,Promotion readiness,default,view Promotion readiness,PERMIT,RBAC §6,P2
+RBAC-T-0184,Deny,Office Admin,Promotion readiness,default,attempt view Promotion readiness,DENY — not authorised,RBAC §6,P1
+RBAC-T-0185,Deny,Finance Admin,Promotion readiness,default,attempt view Promotion readiness,DENY — not authorised,RBAC §6,P1
+RBAC-T-0186,Deny,Recruiter,Promotion readiness,default,attempt view Promotion readiness,DENY — not authorised,RBAC §6,P1
+RBAC-T-0187,Deny,Recruitment Admin,Promotion readiness,default,attempt view Promotion readiness,DENY — not authorised,RBAC §6,P1
+RBAC-T-0188,Deny,Org Admin,Promotion readiness,default,attempt view Promotion readiness,DENY — not authorised,RBAC §6,P1
+RBAC-T-0189,Ceiling-invariant,Org Admin,Promotion readiness,PII ceiling (RBAC §1/§6),attempt view Promotion readiness as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0190,Deny,Platform Super Admin,Promotion readiness,default,attempt view Promotion readiness,DENY — not authorised,RBAC §6,P1
+RBAC-T-0191,Ceiling-invariant,Platform Super Admin,Promotion readiness,PII ceiling (RBAC §1/§6),attempt view Promotion readiness as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0192,Deny,Employee (own),Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0193,Scope-allow,Manager L1,Cost centre / budget (IT ticket),record in appr,view Cost centre / budget (IT ticket),PERMIT (within scope),RBAC §6,P2
+RBAC-T-0194,Scope-deny,Manager L1,Cost centre / budget (IT ticket),record OUTSIDE appr,view Cost centre / budget (IT ticket),DENY — out of scope,RBAC §6,P1
+RBAC-T-0195,Deny,Skip-level,Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0196,Deny,HOD,Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0197,Deny,UAG Head,Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0198,Deny,HRBP,Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0199,Deny,HR Admin,Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0200,Deny,Office Admin,Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0201,Scope-allow,Finance Admin,Cost centre / budget (IT ticket),record in appr,view Cost centre / budget (IT ticket),PERMIT (within scope),RBAC §6,P2
+RBAC-T-0202,Scope-deny,Finance Admin,Cost centre / budget (IT ticket),record OUTSIDE appr,view Cost centre / budget (IT ticket),DENY — out of scope,RBAC §6,P1
+RBAC-T-0203,Deny,Recruiter,Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0204,Deny,Recruitment Admin,Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0205,Deny,Org Admin,Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0206,Ceiling-invariant,Org Admin,Cost centre / budget (IT ticket),PII ceiling (RBAC §1/§6),attempt view Cost centre / budget (IT ticket) as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0207,Deny,Platform Super Admin,Cost centre / budget (IT ticket),default,attempt view Cost centre / budget (IT ticket),DENY — not authorised,RBAC §6,P1
+RBAC-T-0208,Ceiling-invariant,Platform Super Admin,Cost centre / budget (IT ticket),PII ceiling (RBAC §1/§6),attempt view Cost centre / budget (IT ticket) as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0209,Deny,Employee (own),Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0210,Deny,Manager L1,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0211,Deny,Skip-level,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0212,Deny,HOD,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0213,Deny,UAG Head,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0214,Deny,HRBP,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0215,Deny,HR Admin,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0216,Deny,Office Admin,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0217,Deny,Finance Admin,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0218,Deny,Recruiter,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0219,Deny,Recruitment Admin,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0220,Deny,Org Admin,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0221,Ceiling-invariant,Org Admin,Service-desk SLA timers,PII ceiling (RBAC §1/§6),attempt view Service-desk SLA timers as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0222,Deny,Platform Super Admin,Service-desk SLA timers,default,attempt view Service-desk SLA timers,DENY — not authorised,RBAC §6,P1
+RBAC-T-0223,Ceiling-invariant,Platform Super Admin,Service-desk SLA timers,PII ceiling (RBAC §1/§6),attempt view Service-desk SLA timers as top-tier admin,DENY — ceiling not overridable upward,RBAC §6,P1
+RBAC-T-0224,Allow,Employee (own),Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0225,Allow,Manager L1,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0226,Allow,Skip-level,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0227,Allow,HOD,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0228,Allow,UAG Head,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0229,Allow,HRBP,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0230,Allow,HR Admin,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0231,Allow,Office Admin,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0232,Allow,Finance Admin,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0233,Allow,Recruiter,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0234,Allow,Recruitment Admin,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0235,Allow,Org Admin,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0236,Allow,Platform Super Admin,Name / Employee ID,default,view Name / Employee ID,PERMIT,RBAC §11,P2
+RBAC-T-0237,Allow,Employee (own),Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0238,Allow,Manager L1,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0239,Allow,Skip-level,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0240,Allow,HOD,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0241,Allow,UAG Head,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0242,Allow,HRBP,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0243,Allow,HR Admin,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0244,Allow,Office Admin,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0245,Allow,Finance Admin,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0246,Allow,Recruiter,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0247,Allow,Recruitment Admin,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0248,Allow,Org Admin,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0249,Allow,Platform Super Admin,Designation / Dept / BU,default,view Designation / Dept / BU,PERMIT,RBAC §11,P2
+RBAC-T-0250,Allow,Employee (own),Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0251,Allow,Manager L1,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0252,Allow,Skip-level,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0253,Allow,HOD,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0254,Allow,UAG Head,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0255,Allow,HRBP,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0256,Allow,HR Admin,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0257,Allow,Office Admin,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0258,Allow,Finance Admin,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0259,Allow,Recruiter,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0260,Allow,Recruitment Admin,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0261,Allow,Org Admin,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0262,Allow,Platform Super Admin,Official email / work phone,default,view Official email / work phone,PERMIT,RBAC §11,P2
+RBAC-T-0263,Allow,Employee (own),Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0264,Allow,Manager L1,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0265,Allow,Skip-level,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0266,Allow,HOD,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0267,Allow,UAG Head,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0268,Allow,HRBP,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0269,Allow,HR Admin,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0270,Allow,Office Admin,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0271,Allow,Finance Admin,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0272,Allow,Recruiter,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0273,Allow,Recruitment Admin,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0274,Allow,Org Admin,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0275,Allow,Platform Super Admin,Reporting manager / org chart,default,view Reporting manager / org chart,PERMIT,RBAC §11,P2
+RBAC-T-0276,Allow,Employee (own),Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0277,Allow,Manager L1,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0278,Allow,Skip-level,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0279,Allow,HOD,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0280,Allow,UAG Head,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0281,Allow,HRBP,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0282,Allow,HR Admin,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0283,Allow,Office Admin,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0284,Allow,Finance Admin,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0285,Allow,Recruiter,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0286,Allow,Recruitment Admin,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0287,Allow,Org Admin,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0288,Allow,Platform Super Admin,Location / work area,default,view Location / work area,PERMIT,RBAC §11,P2
+RBAC-T-0289,Scope-allow,Employee (own),Grade / Band,record in own,view Grade / Band,PERMIT (within scope),RBAC §3.9,P2
+RBAC-T-0290,Scope-deny,Employee (own),Grade / Band,record OUTSIDE own,view Grade / Band,DENY — out of scope,RBAC §3.9,P1
+RBAC-T-0291,Masking,Manager L1,Grade / Band,default,view Grade / Band,PERMIT — MASKED (e.g. last-4),RBAC §3.9,P1
+RBAC-T-0292,Masking,Skip-level,Grade / Band,default,view Grade / Band,PERMIT — MASKED (e.g. last-4),RBAC §3.9,P1
+RBAC-T-0293,Scope-allow,HOD,Grade / Band,record in dept,view Grade / Band,PERMIT (within scope),RBAC §3.9,P2
+RBAC-T-0294,Scope-deny,HOD,Grade / Band,record OUTSIDE dept,view Grade / Band,DENY — out of scope,RBAC §3.9,P1
+RBAC-T-0295,Scope-allow,UAG Head,Grade / Band,record in grp,view Grade / Band,PERMIT (within scope),RBAC §3.9,P2
+RBAC-T-0296,Scope-deny,UAG Head,Grade / Band,record OUTSIDE grp,view Grade / Band,DENY — out of scope,RBAC §3.9,P1
+RBAC-T-0297,Scope-allow,HRBP,Grade / Band,record in asg,view Grade / Band,PERMIT (within scope),RBAC §3.9,P2
+RBAC-T-0298,Scope-deny,HRBP,Grade / Band,record OUTSIDE asg,view Grade / Band,DENY — out of scope,RBAC §3.9,P1
+RBAC-T-0299,Allow,HR Admin,Grade / Band,default,view Grade / Band,PERMIT,RBAC §3.9,P2
+RBAC-T-0300,Deny,Office Admin,Grade / Band,default,attempt view Grade / Band,DENY — not authorised,RBAC §3.9,P2
+RBAC-T-0301,Allow,Finance Admin,Grade / Band,default,view Grade / Band,PERMIT,RBAC §3.9,P2
+RBAC-T-0302,Deny,Recruiter,Grade / Band,default,attempt view Grade / Band,DENY — not authorised,RBAC §3.9,P2
+RBAC-T-0303,Deny,Recruitment Admin,Grade / Band,default,attempt view Grade / Band,DENY — not authorised,RBAC §3.9,P2
+RBAC-T-0304,Masking,Org Admin,Grade / Band,default,view Grade / Band,PERMIT — MASKED (e.g. last-4),RBAC §3.9,P1
+RBAC-T-0305,Masking,Platform Super Admin,Grade / Band,default,view Grade / Band,PERMIT — MASKED (e.g. last-4),RBAC §3.9,P1
+RBAC-T-0306,Approval-routing,Employee (own),Personal contact (email/mobile),Tier-2 field,edit Personal contact (email/mobile),ROUTE to HR sensitive-change queue (no direct write),RBAC §3.9 / FS M01 §2.14,P1
+RBAC-T-0307,Masking,Manager L1,Personal contact (email/mobile),default,view Personal contact (email/mobile),PERMIT — MASKED (e.g. last-4),RBAC §3.9 / FS M01 §2.14,P1
+RBAC-T-0308,Masking,Skip-level,Personal contact (email/mobile),default,view Personal contact (email/mobile),PERMIT — MASKED (e.g. last-4),RBAC §3.9 / FS M01 §2.14,P1
+RBAC-T-0309,Masking,HOD,Personal contact (email/mobile),default,view Personal contact (email/mobile),PERMIT — MASKED (e.g. last-4),RBAC §3.9 / FS M01 §2.14,P1
+RBAC-T-0310,Masking,UAG Head,Personal contact (email/mobile),default,view Personal contact (email/mobile),PERMIT — MASKED (e.g. last-4),RBAC §3.9 / FS M01 §2.14,P1
+RBAC-T-0311,Scope-allow,HRBP,Personal contact (email/mobile),record in asg,view Personal contact (email/mobile),PERMIT (within scope),RBAC §3.9 / FS M01 §2.14,P2
+RBAC-T-0312,Scope-deny,HRBP,Personal contact (email/mobile),record OUTSIDE asg,view Personal contact (email/mobile),DENY — out of scope,RBAC §3.9 / FS M01 §2.14,P1
+RBAC-T-0313,Allow,HR Admin,Personal contact (email/mobile),default,view Personal contact (email/mobile),PERMIT,RBAC §3.9 / FS M01 §2.14,P2
+RBAC-T-0314,Allow,Office Admin,Personal contact (email/mobile),default,view Personal contact (email/mobile),PERMIT,RBAC §3.9 / FS M01 §2.14,P2
+RBAC-T-0315,Deny,Finance Admin,Personal contact (email/mobile),default,attempt view Personal contact (email/mobile),DENY — not authorised,RBAC §3.9 / FS M01 §2.14,P2
+RBAC-T-0316,Deny,Recruiter,Personal contact (email/mobile),default,attempt view Personal contact (email/mobile),DENY — not authorised,RBAC §3.9 / FS M01 §2.14,P2
+RBAC-T-0317,Deny,Recruitment Admin,Personal contact (email/mobile),default,attempt view Personal contact (email/mobile),DENY — not authorised,RBAC §3.9 / FS M01 §2.14,P2
+RBAC-T-0318,Deny,Org Admin,Personal contact (email/mobile),default,attempt view Personal contact (email/mobile),DENY — not authorised,RBAC §3.9 / FS M01 §2.14,P2
+RBAC-T-0319,Ceiling-invariant,Org Admin,Personal contact (email/mobile),PII ceiling (RBAC §1/§6),attempt view Personal contact (email/mobile) as top-tier admin,DENY — ceiling not overridable upward,RBAC §3.9 / FS M01 §2.14,P1
+RBAC-T-0320,Deny,Platform Super Admin,Personal contact (email/mobile),default,attempt view Personal contact (email/mobile),DENY — not authorised,RBAC §3.9 / FS M01 §2.14,P2
+RBAC-T-0321,Ceiling-invariant,Platform Super Admin,Personal contact (email/mobile),PII ceiling (RBAC §1/§6),attempt view Personal contact (email/mobile) as top-tier admin,DENY — ceiling not overridable upward,RBAC §3.9 / FS M01 §2.14,P1
+RBAC-T-0322,Scope-allow,Employee (own),Employment dates (DOJ / confirmation),record in own,view Employment dates (DOJ / confirmation),PERMIT (within scope),RBAC §3.9,P2
+RBAC-T-0323,Scope-deny,Employee (own),Employment dates (DOJ / confirmation),record OUTSIDE own,view Employment dates (DOJ / confirmation),DENY — out of scope,RBAC §3.9,P1
+RBAC-T-0324,Scope-allow,Manager L1,Employment dates (DOJ / confirmation),record in team,view Employment dates (DOJ / confirmation),PERMIT (within scope),RBAC §3.9,P2
+RBAC-T-0325,Scope-deny,Manager L1,Employment dates (DOJ / confirmation),record OUTSIDE team,view Employment dates (DOJ / confirmation),DENY — out of scope,RBAC §3.9,P1
+RBAC-T-0326,Allow,Skip-level,Employment dates (DOJ / confirmation),default,view Employment dates (DOJ / confirmation),PERMIT,RBAC §3.9,P2
+RBAC-T-0327,Scope-allow,HOD,Employment dates (DOJ / confirmation),record in dept,view Employment dates (DOJ / confirmation),PERMIT (within scope),RBAC §3.9,P2
+RBAC-T-0328,Scope-deny,HOD,Employment dates (DOJ / confirmation),record OUTSIDE dept,view Employment dates (DOJ / confirmation),DENY — out of scope,RBAC §3.9,P1
+RBAC-T-0329,Scope-allow,UAG Head,Employment dates (DOJ / confirmation),record in grp,view Employment dates (DOJ / confirmation),PERMIT (within scope),RBAC §3.9,P2
+RBAC-T-0330,Scope-deny,UAG Head,Employment dates (DOJ / confirmation),record OUTSIDE grp,view Employment dates (DOJ / confirmation),DENY — out of scope,RBAC §3.9,P1
+RBAC-T-0331,Scope-allow,HRBP,Employment dates (DOJ / confirmation),record in asg,view Employment dates (DOJ / confirmation),PERMIT (within scope),RBAC §3.9,P2
+RBAC-T-0332,Scope-deny,HRBP,Employment dates (DOJ / confirmation),record OUTSIDE asg,view Employment dates (DOJ / confirmation),DENY — out of scope,RBAC §3.9,P1
+RBAC-T-0333,Allow,HR Admin,Employment dates (DOJ / confirmation),default,view Employment dates (DOJ / confirmation),PERMIT,RBAC §3.9,P2
+RBAC-T-0334,Deny,Office Admin,Employment dates (DOJ / confirmation),default,attempt view Employment dates (DOJ / confirmation),DENY — not authorised,RBAC §3.9,P2
+RBAC-T-0335,Deny,Finance Admin,Employment dates (DOJ / confirmation),default,attempt view Employment dates (DOJ / confirmation),DENY — not authorised,RBAC §3.9,P2
+RBAC-T-0336,Deny,Recruiter,Employment dates (DOJ / confirmation),default,attempt view Employment dates (DOJ / confirmation),DENY — not authorised,RBAC §3.9,P2
+RBAC-T-0337,Deny,Recruitment Admin,Employment dates (DOJ / confirmation),default,attempt view Employment dates (DOJ / confirmation),DENY — not authorised,RBAC §3.9,P2
+RBAC-T-0338,Deny,Org Admin,Employment dates (DOJ / confirmation),default,attempt view Employment dates (DOJ / confirmation),DENY — not authorised,RBAC §3.9,P2
+RBAC-T-0339,Deny,Platform Super Admin,Employment dates (DOJ / confirmation),default,attempt view Employment dates (DOJ / confirmation),DENY — not authorised,RBAC §3.9,P2
+RBAC-T-0340,Approval-routing,Employee (own),Qualifications / education,Tier-2 field,edit Qualifications / education,ROUTE to HR sensitive-change queue (no direct write),FS M01,P1
+RBAC-T-0341,Scope-allow,Manager L1,Qualifications / education,record in team,view Qualifications / education,PERMIT (within scope),FS M01,P2
+RBAC-T-0342,Scope-deny,Manager L1,Qualifications / education,record OUTSIDE team,view Qualifications / education,DENY — out of scope,FS M01,P1
+RBAC-T-0343,Allow,Skip-level,Qualifications / education,default,view Qualifications / education,PERMIT,FS M01,P2
+RBAC-T-0344,Scope-allow,HOD,Qualifications / education,record in dept,view Qualifications / education,PERMIT (within scope),FS M01,P2
+RBAC-T-0345,Scope-deny,HOD,Qualifications / education,record OUTSIDE dept,view Qualifications / education,DENY — out of scope,FS M01,P1
+RBAC-T-0346,Scope-allow,UAG Head,Qualifications / education,record in grp,view Qualifications / education,PERMIT (within scope),FS M01,P2
+RBAC-T-0347,Scope-deny,UAG Head,Qualifications / education,record OUTSIDE grp,view Qualifications / education,DENY — out of scope,FS M01,P1
+RBAC-T-0348,Scope-allow,HRBP,Qualifications / education,record in asg,view Qualifications / education,PERMIT (within scope),FS M01,P2
+RBAC-T-0349,Scope-deny,HRBP,Qualifications / education,record OUTSIDE asg,view Qualifications / education,DENY — out of scope,FS M01,P1
+RBAC-T-0350,Allow,HR Admin,Qualifications / education,default,view Qualifications / education,PERMIT,FS M01,P2
+RBAC-T-0351,Deny,Office Admin,Qualifications / education,default,attempt view Qualifications / education,DENY — not authorised,FS M01,P2
+RBAC-T-0352,Deny,Finance Admin,Qualifications / education,default,attempt view Qualifications / education,DENY — not authorised,FS M01,P2
+RBAC-T-0353,Deny,Recruiter,Qualifications / education,default,attempt view Qualifications / education,DENY — not authorised,FS M01,P2
+RBAC-T-0354,Deny,Recruitment Admin,Qualifications / education,default,attempt view Qualifications / education,DENY — not authorised,FS M01,P2
+RBAC-T-0355,Deny,Org Admin,Qualifications / education,default,attempt view Qualifications / education,DENY — not authorised,FS M01,P2
+RBAC-T-0356,Deny,Platform Super Admin,Qualifications / education,default,attempt view Qualifications / education,DENY — not authorised,FS M01,P2
+RBAC-T-0357,Scope-allow,Employee (own),Competency / skills profile,record in own,view Competency / skills profile,PERMIT (within scope),FS M01 §2.13,P2
+RBAC-T-0358,Scope-deny,Employee (own),Competency / skills profile,record OUTSIDE own,view Competency / skills profile,DENY — out of scope,FS M01 §2.13,P1
+RBAC-T-0359,Scope-allow,Manager L1,Competency / skills profile,record in team,view Competency / skills profile,PERMIT (within scope),FS M01 §2.13,P2
+RBAC-T-0360,Scope-deny,Manager L1,Competency / skills profile,record OUTSIDE team,view Competency / skills profile,DENY — out of scope,FS M01 §2.13,P1
+RBAC-T-0361,Allow,Skip-level,Competency / skills profile,default,view Competency / skills profile,PERMIT,FS M01 §2.13,P2
+RBAC-T-0362,Scope-allow,HOD,Competency / skills profile,record in dept,view Competency / skills profile,PERMIT (within scope),FS M01 §2.13,P2
+RBAC-T-0363,Scope-deny,HOD,Competency / skills profile,record OUTSIDE dept,view Competency / skills profile,DENY — out of scope,FS M01 §2.13,P1
+RBAC-T-0364,Deny,UAG Head,Competency / skills profile,default,attempt view Competency / skills profile,DENY — not authorised,FS M01 §2.13,P2
+RBAC-T-0365,Deny,HRBP,Competency / skills profile,default,attempt view Competency / skills profile,DENY — not authorised,FS M01 §2.13,P2
+RBAC-T-0366,Deny,HR Admin,Competency / skills profile,default,attempt view Competency / skills profile,DENY — not authorised,FS M01 §2.13,P2
+RBAC-T-0367,Deny,Office Admin,Competency / skills profile,default,attempt view Competency / skills profile,DENY — not authorised,FS M01 §2.13,P2
+RBAC-T-0368,Deny,Finance Admin,Competency / skills profile,default,attempt view Competency / skills profile,DENY — not authorised,FS M01 §2.13,P2
+RBAC-T-0369,Deny,Recruiter,Competency / skills profile,default,attempt view Competency / skills profile,DENY — not authorised,FS M01 §2.13,P2
+RBAC-T-0370,Deny,Recruitment Admin,Competency / skills profile,default,attempt view Competency / skills profile,DENY — not authorised,FS M01 §2.13,P2
+RBAC-T-0371,Deny,Org Admin,Competency / skills profile,default,attempt view Competency / skills profile,DENY — not authorised,FS M01 §2.13,P2
+RBAC-T-0372,Deny,Platform Super Admin,Competency / skills profile,default,attempt view Competency / skills profile,DENY — not authorised,FS M01 §2.13,P2
+RBAC-T-0373,Allow,Employee (own),Documents (employee vault),own,view & upload Documents (employee vault),PERMIT,FS M01 / M11,P2
+RBAC-T-0374,Deny,Manager L1,Documents (employee vault),default,attempt view Documents (employee vault),DENY — not authorised,FS M01 / M11,P2
+RBAC-T-0375,Deny,Skip-level,Documents (employee vault),default,attempt view Documents (employee vault),DENY — not authorised,FS M01 / M11,P2
+RBAC-T-0376,Deny,HOD,Documents (employee vault),default,attempt view Documents (employee vault),DENY — not authorised,FS M01 / M11,P2
+RBAC-T-0377,Deny,UAG Head,Documents (employee vault),default,attempt view Documents (employee vault),DENY — not authorised,FS M01 / M11,P2
+RBAC-T-0378,Scope-allow,HRBP,Documents (employee vault),record in asg,view Documents (employee vault),PERMIT (within scope),FS M01 / M11,P2
+RBAC-T-0379,Scope-deny,HRBP,Documents (employee vault),record OUTSIDE asg,view Documents (employee vault),DENY — out of scope,FS M01 / M11,P1
+RBAC-T-0380,Allow,HR Admin,Documents (employee vault),default,view Documents (employee vault),PERMIT,FS M01 / M11,P2
+RBAC-T-0381,Deny,Office Admin,Documents (employee vault),default,attempt view Documents (employee vault),DENY — not authorised,FS M01 / M11,P2
+RBAC-T-0382,Deny,Finance Admin,Documents (employee vault),default,attempt view Documents (employee vault),DENY — not authorised,FS M01 / M11,P2
+RBAC-T-0383,Deny,Recruiter,Documents (employee vault),default,attempt view Documents (employee vault),DENY — not authorised,FS M01 / M11,P2
+RBAC-T-0384,Deny,Recruitment Admin,Documents (employee vault),default,attempt view Documents (employee vault),DENY — not authorised,FS M01 / M11,P2
+RBAC-T-0385,Deny,Org Admin,Documents (employee vault),default,attempt view Documents (employee vault),DENY — not authorised,FS M01 / M11,P2
+RBAC-T-0386,Deny,Platform Super Admin,Documents (employee vault),default,attempt view Documents (employee vault),DENY — not authorised,FS M01 / M11,P2
+RBAC-T-0387,Scope-allow,Employee (own),Attendance / leave summary,record in own,view Attendance / leave summary,PERMIT (within scope),FS M01 / §12,P2
+RBAC-T-0388,Scope-deny,Employee (own),Attendance / leave summary,record OUTSIDE own,view Attendance / leave summary,DENY — out of scope,FS M01 / §12,P1
+RBAC-T-0389,Scope-allow,Manager L1,Attendance / leave summary,record in team,view Attendance / leave summary,PERMIT (within scope),FS M01 / §12,P2
+RBAC-T-0390,Scope-deny,Manager L1,Attendance / leave summary,record OUTSIDE team,view Attendance / leave summary,DENY — out of scope,FS M01 / §12,P1
+RBAC-T-0391,Allow,Skip-level,Attendance / leave summary,default,view Attendance / leave summary,PERMIT,FS M01 / §12,P2
+RBAC-T-0392,Scope-allow,HOD,Attendance / leave summary,record in dept,view Attendance / leave summary,PERMIT (within scope),FS M01 / §12,P2
+RBAC-T-0393,Scope-deny,HOD,Attendance / leave summary,record OUTSIDE dept,view Attendance / leave summary,DENY — out of scope,FS M01 / §12,P1
+RBAC-T-0394,Scope-allow,UAG Head,Attendance / leave summary,record in grp,view Attendance / leave summary,PERMIT (within scope),FS M01 / §12,P2
+RBAC-T-0395,Scope-deny,UAG Head,Attendance / leave summary,record OUTSIDE grp,view Attendance / leave summary,DENY — out of scope,FS M01 / §12,P1
+RBAC-T-0396,Scope-allow,HRBP,Attendance / leave summary,record in asg,view Attendance / leave summary,PERMIT (within scope),FS M01 / §12,P2
+RBAC-T-0397,Scope-deny,HRBP,Attendance / leave summary,record OUTSIDE asg,view Attendance / leave summary,DENY — out of scope,FS M01 / §12,P1
+RBAC-T-0398,Allow,HR Admin,Attendance / leave summary,default,view Attendance / leave summary,PERMIT,FS M01 / §12,P2
+RBAC-T-0399,Deny,Office Admin,Attendance / leave summary,default,attempt view Attendance / leave summary,DENY — not authorised,FS M01 / §12,P2
+RBAC-T-0400,Deny,Finance Admin,Attendance / leave summary,default,attempt view Attendance / leave summary,DENY — not authorised,FS M01 / §12,P2
+RBAC-T-0401,Deny,Recruiter,Attendance / leave summary,default,attempt view Attendance / leave summary,DENY — not authorised,FS M01 / §12,P2
+RBAC-T-0402,Deny,Recruitment Admin,Attendance / leave summary,default,attempt view Attendance / leave summary,DENY — not authorised,FS M01 / §12,P2
+RBAC-T-0403,Deny,Org Admin,Attendance / leave summary,default,attempt view Attendance / leave summary,DENY — not authorised,FS M01 / §12,P2
+RBAC-T-0404,Deny,Platform Super Admin,Attendance / leave summary,default,attempt view Attendance / leave summary,DENY — not authorised,FS M01 / §12,P2
+RBAC-T-0405,Invariant,HRBP,Performance reviews,any,view/open appraisal,DENY — HRBP has no performance access,RBAC §12.5 / FS M01 / CFG-008,P1
+RBAC-T-0406,Invariant,Recruiter,Offer letter,assigned requisition,generate offer,DENY — Recruiter cannot generate offers,RBAC §12.20 / M08 §3.7.2,P1
+RBAC-T-0407,Invariant,Recruiter,Employee directory,any,view directory,PERMIT — standard directory (same as all employees),RBAC §12.20 / §11.2,P2
+RBAC-T-0408,Invariant,Org Admin,Operational employee data,any,act on operational record,"DENY — config hub, not operational actor",RBAC §2.1.1,P1
+RBAC-T-0409,Invariant,Finance Admin,FnF clearance,separation in progress,act on finance clearance line,PERMIT — clearance line only,RBAC §12 / CFG-010,P2
+RBAC-T-0410,Invariant,Finance Admin,Separation,any,initiate separation,DENY — Finance does not initiate,CFG-010,P1
+RBAC-T-0411,Invariant,Manager (L1),Team performance,own team,view employee performance + goal plan,PERMIT — M09 enabled (post-fix),RBAC §12.2 / Artifact 3,P1
+RBAC-T-0412,Invariant,UAG Head,Workflow approval authority,any grant configuration,attempt workflow approval,"DENY — HARD CEILING, never grantable",RBAC §2.3 / §3.5,P1
+RBAC-T-0413,Invariant,Org Admin,Sensitive grant (comp/audit/RBAC),grant action,grant without second approver,DENY — maker-checker mandatory,RBAC §4.4,P1
+RBAC-T-0414,Invariant,Contractor / Consultant,Any module,Phase 1,any access,DENY — role descoped from Phase 1,RBAC §2.3 / §12.26,P1
+RBAC-T-0415,Invariant,Office Admin,National ID,platform grant,view & upload PAN/Aadhaar/Passport/DL,PERMIT — fixed platform grant (not configurable),RBAC §3.4 / §6,P2
+RBAC-T-0416,Invariant,HOD,Department performance,"dept scope, grant OFF",view team rating,DENY by default — grant per-HOD required,RBAC §6 / CFG-004,P1
+RBAC-T-0417,Invariant,Any role,Biometric data,any,view biometric,DENY — no UI for any role,RBAC §6,P1
+RBAC-T-0418,Invariant,Reviewer,Draft performance rating,pre-publish,view draft rating,PERMIT — Reviewer only,RBAC §6,P2
+RBAC-T-0419,Invariant,HR Admin,Draft performance rating,pre-publish,view draft rating,"DENY — Reviewer-only, even HR Admin",RBAC §6,P1

@@ -1,0 +1,681 @@
+PrimeSoft HRMS — Product Vision v2.6
+
+# Part 1 — Product Vision
+What we are building, why, and what it must become
+
+## 1.1 Vision Statement
+PrimeSoft HRMS is a commercial-grade, enterprise-class Human Resource Management platform built to serve organisations across industries, geographies, and scale — from a 50-person startup to a 10,000-employee enterprise with multiple legal entities.
+It is designed as owned IP: a platform that eliminates perpetual vendor licensing dependency, puts HR data under the organisation’s complete control, and compounds in value as it is extended. The platform is AI-native from its foundation — intelligence is embedded in how HR queries are answered, how compliance anomalies are surfaced, and how workforce insights are generated.
+It draws on the best design decisions of PeopleSoft’s workforce administration depth, Darwinbox’s India-first compliance rigour, Keka’s employee experience philosophy, and Workday’s unified data model principle.
+
+## 1.2 Strategic Goals
+| Goal | Description |
+| Own vs Rent | Eliminate perpetual subscription dependency. Built once, owned permanently. Operational costs reduce to hosting and maintenance — not per-employee licensing. |
+| Migration Advantage | Become the migration destination for Darwinbox customers. A structured, tooled migration pathway makes switching seamless. While Darwinbox is a competing product in the market, it is also the primary source system for Release 1 migration — both relationships are first-class concerns. |
+| Configuration over Code | Serve any industry and geography through configuration, not customisation. Segment and geography selection at provisioning drives all defaults. |
+| Compliance First | India’s statutory compliance landscape is a first-class concern — built into the data model, not bolted on. |
+| SaaS Readiness | Onboard a new tenant in hours through automated provisioning and segment-driven default loading. |
+| AI Native | Intelligence embedded in the core — not added as an afterthought. Every module benefits from AI-assisted guidance and insight. |
+
+
+## 1.3 Target Customer Profile
+| Dimension | Release 1 Target | Future Expansion |
+| Industry | IT Services | BFSI, Manufacturing, Retail, Healthcare, Education, Logistics |
+| Scale | Up to 500 employees per tenant | Up to 50,000 employees; multi-entity consolidated |
+| Geography | India (all states and Union Territories) | UAE, Singapore, UK, USA, Australia, Southeast Asia |
+| Language | English | Hindi, regional Indian languages, Arabic, French |
+| Currency | Indian Rupee (INR) | Multi-currency |
+| Primary Migration Source | Darwinbox | SAP, Keka, Zoho People, greytHR, Excel-based systems |
+
+
+## 1.4 Deployment Models
+Three models from Day 1. One codebase, one data model, one feature set across all three.
+Diagram 1 — Deployment models · See Diagrams Addendum
+| Model | Description | Typical Customer |
+| Standalone | Single organisation, single legal entity. Full platform capabilities. Dedicated infrastructure. | Mid-size IT services company (50–500 employees) wanting full data ownership |
+| Multi-Tenant SaaS | Multiple organisations share infrastructure. Each tenant fully isolated at the data layer. | SMB customers (10–200 employees) preferring subscription access |
+| Group Company | One parent with multiple legal entities sharing one HRMS instance. Each entity has its own configuration and payroll while sharing master data and consolidated reporting. | Conglomerate or holding company with 2–50 legal entities |
+
+
+## 1.5 Module Map & Release Plan
+Modules are organised into three delivery phases and one cross-cutting platform layer. Platform modules underpin all functional modules and carry no release boundary — they must be operational before any functional module is built.
+Diagram 2 — Module map · See Diagrams Addendum
+
+### Phase 1 — Foundation & Core Operations
+Establishes the operational backbone. Covers the full hire-to-retire lifecycle, time management, talent acquisition, performance, and document governance. Delivered as a responsive web application.
+| # | Module | Sub-Modules |
+| M01 | Employee Master | Personal & employment profile · Lifecycle state machine · Organisation position · Document vault · Org chart · Dependent & nominee records · Grievance register |
+| M02 | Onboarding | Pre-joining portal · Document collection · IT & asset provisioning tasks · Induction task lists · Buddy assignment |
+| M03 | Exits & Offboarding | Resignation workflow · Notice period management · FnF clearance (parallel) · Exit interview · Rehire eligibility flag |
+| M04 | Leave Management | Leave types & policies · Application & approval · Balance & accrual engine · Holiday calendar · Comp-off & encashment |
+| M05 | Attendance | Shift & roster management · GPS / biometric / app check-in · Regularisation workflow · Overtime tracking · Attendance lock & LOP feed |
+| M08 | Recruitment (ATS) | Job requisition · Pipeline & candidate management · Interview scheduling · Offer letter · BGC trigger · Job board integrations · Careers portal · Agency / vendor management · Candidate portal |
+| M09 | Performance Management | Appraisal cycle configuration · Goal setting (OKR / KRA / Balanced Scorecard) · Continuous feedback · Self & manager review · Skip-level and HR calibration · Rating and contribution level assignment · Probation confirmation · Performance improvement plan tracking |
+| M11 | Document Management | Policy upload & versioning · Acknowledgement tracking · Employee document vault · POSH policy & compliance · Statutory document management |
+| M16 | Analytics & Reports | Phase 1: embedded role-scoped dashboards · pre-built HR reports · compliance reports (data scoped to each user’s own entitlement). Phase 2: custom report builder · standalone Analytics Admin configuration surface. |
+| M17 | Assets & IT + IT Service Desk | Asset master · assignment & return · IT provisioning tasks · asset clearance (FnF) · IT service-desk queue & tickets · facilities / office assets |
+
+Release 1 note — M16 Analytics & Reports (phase split): Phase 1 delivers the embedded role dashboards (each role’s workspace landing) and the pre-built / standard and compliance reports, with data scoped to each user’s own role entitlement. Phase 2 delivers the dedicated Analytics module — the custom report builder and the standalone Analytics Admin configuration surface. There is therefore no standalone M16 functional spec or builder screen in the Release-1 handoff package; the M16 data entities and the Analytics Admin role remain defined in the BRD/RBAC for Phase-2 delivery.
+
+### Phase 2 — Payroll, Compliance, Compensation & Mobile
+Adds financially consequential modules and extends platform access to mobile. M10 Hikes & Compensation is included in this phase because revised salary structures feed directly into the payroll run — both must be stable and tested together. The mobile application is delivered in this phase, extending Phase 1 web functionality to mobile devices.
+| # | Module | Sub-Modules |
+| M06 | Payroll | Salary structure & CTC · Monthly payroll run · Payslip generation · Bank disbursement file · Arrears & revision · FnF settlement payroll · Payroll run approval workflow |
+| M07 | Statutory Compliance | PF / EPF (ECR challan) · ESI (ESIC challan) · TDS / Form 24Q / Form 16 · Professional tax · LWF · Gratuity provision & payout |
+| M10 | Hikes & Compensation | Hike cycle management · Salary revision workflow · Band & grade mapping · Increment & revision letters |
+
+
+### Phase 3 — Extended Workforce & Engagement
+Adds enrichment and lifestyle modules. Each module in this phase can be activated independently — none is a dependency for Phase 1 or Phase 2 delivery.
+| # | Module | Sub-Modules |
+| M12 | Expense & Travel | Claim submission · Policy limits configuration · Approval workflow · Receipt OCR (AI) |
+| M14 | Benefits & Insurance | Group health enrolment · TPA integration · Flexi benefits · Benefits self-service |
+| M15 | Engagement & Surveys | Pulse surveys · Sentiment analysis (AI) · eNPS tracking · Recognition & awards |
+| M18 | Internal Social | Company announcements · Employee feed · Recognition wall · Org-wide communication |
+
+Note: Module numbers M13 and M19 are reserved.
+Phase 3 also delivers two cross-cutting journeys — Microsoft Teams integration and exhaustive cross-module AI — defined in §3.7. Neither is a dependency for Phase 1 or Phase 2, and both inherit the integration and AI-governance principles in §3.10 and §3.11.
+
+### Platform — Cross-Cutting (Day 1)
+Platform modules underpin every functional module. They have no release boundary and must be fully operational before functional module development begins.
+| # | Module | Sub-Modules |
+| P01 | Workflow Engine | Approval flow configuration · Notification engine · SLA & escalation · Delegation · Bulk approval |
+| P02 | RBAC & Security | Role & permission configuration · Field-level access rules · SSO & MFA · Session management |
+| P03 | Chat Agent (AI) | Policy Q&A · Process guidance · Insurance & benefits queries · Document grounding |
+| P04 | Tenant & Org Admin | Tenant provisioning · Master data configuration · Integration settings · Segment & geography defaults |
+| P05 | Audit & Compliance Log | Data mutation log · Security event log · Access control audit log · Integration event log · Export & regulatory reporting |
+| P06 | Migration Toolkit | Darwinbox ETL framework · Dry-run & verification · Data archaeology tools · Source ID traceability |
+
+
+## 1.6 Competitive Positioning
+PrimeSoft HRMS competes directly with Darwinbox in the market while simultaneously providing a structured migration pathway for organisations leaving Darwinbox. This dual relationship is a deliberate strategic position — the quality of the migration toolkit is itself a competitive differentiator.
+| Dimension | PrimeSoft HRMS | Darwinbox | Keka | greytHR |
+| Ownership model | Owned IP — no recurring licence | SaaS subscription | SaaS subscription | SaaS subscription |
+| AI integration | Native — embedded in core | Bolt-on features | Limited | Minimal |
+| Multi-entity support | Native from Day 1 | Available | Limited | Limited |
+| Statutory compliance depth | Full India stack — built into data model | Strong | Moderate | Strong |
+| Migration pathway from Darwinbox | Structured toolkit — Release 1 deliverable | N/A | Manual | Manual |
+| Configuration depth | Segment + geography cascade | Moderate | Moderate | Limited |
+
+
+## 1.7 Success Criteria
+
+### Phase 1 Gate
+A tenant in the IT Services segment can be provisioned and operational within one business day
+Darwinbox migration completes with less than 0.5% data error rate on Dry Run 3
+All Phase 1 modules pass user acceptance with no Priority 1 defects outstanding
+Responsive web application performs within NFR targets across all supported breakpoints
+External security (VAPT) assessment completes with zero Critical and zero High findings unresolved
+
+### Phase 2 Gate
+Indian statutory compliance outputs (PF, ESI, PT, TDS) verified against a parallel manual run for the first payroll cycle
+Payroll run approval workflow tested end-to-end including bank disbursement file generation
+Mobile application meets performance NFRs on mid-range Android and iOS devices
+Hike cycle completed end-to-end with revised salary structures correctly reflected in payroll
+
+### Migration Wave 3 Gate
+Payroll history (36 months), payslip documents, statutory filing history, and project assignments migrated with zero tolerance for numeric discrepancies in payroll amounts
+
+# Part 2 — Platform Architecture
+How the platform is built — infrastructure, security, data integrity, and operational standards
+
+## 2.1 Multi-Tenancy Architecture
+The platform supports three deployment models from one codebase and one data model. The deployment model is selected at provisioning time — no re-engineering is required to move between models.
+Core isolation principles:
+Every database table carries tenant_id as a non-nullable column. All queries are automatically scoped — no query ever returns data from another tenant
+Every table holding organisational data carries entity_id as a child of tenant_id. Cross-entity queries require explicit privilege
+A tenant can be upgraded from Standalone to Multi-Tenant or Group Company through configuration changes only — no data migration required
+Configuration data (leave policies, RBAC rules, workflows, compliance parameters) is tenant-scoped. Platform defaults are overridable per tenant
+
+## 2.2 Authentication & Session Management
+| Mechanism | Description |
+| Google SSO | OAuth 2.0 — primary mechanism for Google Workspace organisations |
+| Username & Password | Standalone option; passwords stored as one-way hashes with appropriate cost factor. Never stored in plain text or reversible form |
+| Multi-Factor Authentication | TOTP (authenticator app) and SMS OTP. Enforced by default for HR Admin and Organisation Admin roles |
+| JWT Sessions | Short-lived access tokens with long-lived refresh tokens stored server-side with blacklist capability. Logout invalidates both |
+| Password Policy | Configurable by Org Admin: minimum length, complexity, maximum age, history restriction |
+| Account Lockout | Configurable failed attempt threshold and lockout duration. All lockout events logged |
+| IP Restriction | Org Admin can restrict login to specified IP ranges. Out-of-range attempts blocked and logged |
+
+
+## 2.3 Authorisation Architecture
+Role-based access control enforced at four layers: module level, field and section level, row level, and action level — defined in full in section 3.2
+Every API endpoint validates the session token, checks module permission, and checks field-level permission before executing any query
+No endpoint is publicly accessible — every endpoint requires a valid authenticated session
+Rate limiting enforced at the API gateway per authenticated user and separately on authentication endpoints
+Row-level security is enforced at the database query layer, not the application layer
+
+## 2.4 Data Encryption
+| Layer | Approach |
+| Data in transit | TLS — minimum version enforced across all connections |
+| PII fields at rest | AES-256-GCM encryption for government identifiers, financial data, biometric identifiers, health data. Keys stored in environment secrets management — never in application code or database |
+| File storage | Server-side encryption with key management service for all documents, payslips, and uploaded files |
+| Database at rest | Storage-layer encryption for the entire database, separate from field-level PII encryption |
+| Key rotation | Envelope encryption pattern — keys rotatable without re-encryption of existing data. All rotation events logged |
+
+
+## 2.5 PII Classification & Handling
+| PII Category | Fields | Handling Rule |
+| Government identifiers | PAN, Aadhaar, Passport, Driving Licence | Encrypted at rest · Masked in all display contexts · Never written to logs · Change requires HR Admin approval via workflow |
+| Financial | Bank account number, IFSC code | Encrypted · Display restricted to last 4 digits · Decrypted at runtime only for payroll disbursement |
+| Biometric | Device punch ID, facial recognition data | Highest protection ceiling · Never transmitted outside biometric integration boundary · No UI display |
+| Health / Medical | Blood group, disability status, insurance claim data | Visible only to HR Admin and the employee · Not transmitted externally without explicit consent |
+| Personal contact | Personal email, mobile, home address, emergency contact | Editable by employee · Visible to HR Admin · Masked from Manager · Not transmitted to third parties without consent |
+| Demographic | Date of birth, gender, marital status, nationality | Visible to HR Admin and employee · Manager sees derived age only — not raw date of birth |
+| Compensation | Salary, CTC, payslip details | Visible to the employee (own data), HR Admin, and Finance Admin (payroll and budgeting context only) · Managers cannot view individual salary or CTC data · Never visible to peers |
+
+PII Protection Ceiling: PII fields have system-enforced protection ceilings. No Organisation Admin, Module Admin, or any other role can override these ceilings upward. All access rules in section 3.2 operate subject to this ceiling. Exceptions are explicit platform-level grants (e.g. Office Admin national ID access) and are fixed — not configurable.
+
+## 2.6 Consent Management
+Consent for data collection and processing is captured at employee onboarding
+Consent records are immutable — they can be superseded but never deleted
+The platform tracks the basis of processing for each PII category (consent, contractual necessity, legal obligation)
+Employees can view their own consent history through the self-service portal
+Consent withdrawal triggers the data erasure workflow for non-statutory data
+
+## 2.7 Data Retention & Right to Erasure
+Retention periods are configurable per data category with mandatory minimums for statutory data
+Statutory data (payroll records, PF, TDS) has a legally mandated minimum retention period that cannot be reduced
+Non-statutory PII is scheduled for automated deletion after the configured retention period following an employee’s exit
+Hard deletion of statutory records is blocked at both the application and database layers — statutory data can only be archived
+Right to erasure requests are tracked in the data principal request register, fulfilled for non-statutory data, and documented with legal basis where erasure is not possible
+Where non-statutory PII exists in the immutable audit log (as old field values), it is overwritten with a redaction marker at erasure time — the audit entry structure is preserved but the PII value is replaced. This is the only permitted mutation of the audit log and is itself logged as a system erasure event
+All deletion and redaction events are logged immutably
+
+## 2.8 Audit & Immutable Logging
+
+### Data Audit Log
+Written by a database-level trigger — not application code. No application bug, developer action, or API bypass can suppress an audit entry
+Captures every INSERT, UPDATE, and soft-DELETE on all tables
+Each entry records: table, record ID, field name, old value, new value, changed by, timestamp (UTC), IP address, user agent
+PII fields stored in masked form only in audit entries — raw PII is never written to the log
+The audit log table has no UPDATE or DELETE permission granted to any database user — entries are write-once and permanent, with the sole exception of system-initiated PII redaction under the right-to-erasure workflow (see 2.7)
+Minimum retention: 7 years. After 2 years, entries may be archived to cold storage but must remain queryable within 24 hours
+
+### Security Audit Log
+Separate from the data audit log
+Captures: authentication events (login, failure, logout, MFA, lockout) · authorisation events (access denied) · administrative events (RBAC changes, role changes, tenant actions) · integration events (external API calls with timestamp, payload hash, response status)
+100% of PII field access events logged
+
+### Access Control Audit
+Every change to any RBAC rule (field-level or module-level) is logged immutably: who changed it, previous rule, new rule, timestamp
+Audit log queries are themselves logged — viewing an audit log is an auditable action
+Organisation Admin can query security audit log for any role change or login event within their tenant
+Audit logs exportable as structured data for submission to auditors or regulatory authorities
+
+## 2.9 Non-Functional Requirements
+
+### Performance
+| Scenario | Target | Phase |
+| Standard API endpoints | p95 < 500ms under 300 concurrent users | Phase 1 |
+| Read-heavy endpoints (directory, reports) | p95 < 300ms cached · p95 < 1,000ms uncached | Phase 1 |
+| Write operations | p95 < 1,500ms | Phase 1 |
+| Web page load (LCP) | < 2.5 seconds on a 4G connection | Phase 1 |
+| Mobile app launch to home screen | < 3 seconds on mid-range Android or iOS device | Phase 2 |
+| Bulk upload — 500 employee records | < 90 seconds end-to-end | Phase 1 |
+| Payroll run — 500 employees | < 15 minutes for full calculation | Phase 2 |
+| Standard report generation | < 30 seconds | Phase 1 |
+| Chat Agent response | < 8 seconds end-to-end including AI API call | Phase 1 |
+
+
+### Availability
+| Scenario | Target |
+| Production uptime | 99.5% per calendar month (< 3.6 hours downtime) |
+| Recovery Time Objective (RTO) | < 4 hours for any failure scenario |
+| Recovery Point Objective (RPO) | < 1 hour data loss maximum |
+| Scheduled maintenance window | Sundays 01:00–04:00 IST only |
+| Production deployments | Zero-downtime — no user-visible interruption |
+
+
+### Scalability
+| Scenario | Target |
+| Release 1 concurrent users | 300 simultaneous active sessions without degradation |
+| Release 1 data volume | 500 active employees + 5 years of historical records |
+| Multi-tenant horizontal scale | Architecture must support 100 tenants without re-engineering |
+| Application layer | Fully stateless — all state held in database or cache |
+
+
+### Security
+| Requirement | Standard |
+| MFA enforcement | Enforced by default for HR Admin and Organisation Admin roles |
+| PII access logging | 100% of PII field access events logged in security audit log |
+| Vulnerability standard | No Critical or High CVEs in production at go-live |
+| Penetration testing | External VAPT before Phase 1 go-live — all critical and high findings resolved before live data is loaded |
+
+
+### Data Integrity
+| Requirement | Standard |
+| Deletions | No hard deletes on any table — soft delete with timestamp only |
+| Referential integrity | All foreign key constraints enforced at the database layer |
+| Unique constraints | Employee ID, company email, PAN (per active employees), Aadhaar — enforced at database layer |
+| Audit completeness | 100% of mutations captured — zero gaps permitted |
+
+
+### Usability & Accessibility
+| Requirement | Standard | Phase |
+| Accessibility | WCAG 2.1 AA compliance — all web screens pass automated checks | Phase 1 |
+| Responsive web application | Fully functional at 375px (mobile), 768px (tablet), 1280px (desktop) | Phase 1 |
+| Mobile touch targets | Minimum 44×44px on all interactive elements | Phase 1 |
+| Native mobile application | iOS and Android — core employee workflows | Phase 2 |
+| Offline capability | Core employee workflows functional without internet — sync on reconnect | Phase 2 |
+
+
+## 2.10 Background Processing Architecture
+A job queue framework handles all asynchronous processing — bulk uploads, payroll runs, report generation, notification dispatch, data export
+A scheduled job engine handles all time-driven processes — leave accrual, attendance lock, payroll cutoff, compliance reminders, data retention deletion, performance cycle triggers
+All job definitions are stored in the database — job types, schedules, retry policies, and failure handling are configuration, not code
+All job executions are logged with start time, end time, status, and error details
+Long-running technical sagas (migration pipeline, BGC lifecycle) follow a saga pattern with compensating transactions on failure
+
+## 2.11 Future Compliance Readiness
+The platform architecture is designed to accommodate compliance obligations beyond India Release 1 without structural re-engineering:
+Multi-geography compliance: Geography-specific statutory rules, tax slabs, and social security contributions are stored as data rows — adding a new geography requires data configuration, not code changes
+DPDPA 2023 (India): Consent capture, data principal request tracking, right to erasure workflow, and data fiduciary obligations are built into the core data model
+GDPR readiness: The data residency, consent, erasure, and portability framework is designed to support GDPR obligations when European geographies are activated
+SOC 2 readiness: Immutable audit logging, access control auditing, encryption standards, and availability targets are aligned with SOC 2 Type II trust service criteria
+ISO 27001 alignment: Information security controls including access management, encryption, incident response, and vendor management are aligned with ISO 27001 requirements
+
+# Part 3 — Solution Architecture
+How the platform serves the business — roles, access control, configuration, module design, workflows, integrations, compliance, and migration
+
+## 3.1 User Roles
+Thirty-four roles span platform administration, organisational administration, HR operations, module administration, manager hierarchy, specialist functions, and individual access. (v2.5 added Document Admin, IT Asset Manager, and Service Desk Admin; a service-desk agent acts operationally under Service Desk Admin. Change Manager is not a Release-1 role.) L3, L4, and L5 Manager are distinct role codes shown as a combined row in the table below. Full permission profiles for each role are defined in the RBAC Design Document.
+Where a user holds more than one role simultaneously, the more restrictive permission applies — the less permissive role never elevates access granted by a more permissive role.
+| Role | Scope | Core Mandate |
+| Platform Super Admin platform_super_admin | All tenants | Tenant provisioning · segment and geography selection · platform master data · cross-tenant analytics |
+| Organisation Admin org_admin | Single tenant — all entities | Org structure · workflow configuration · field-level RBAC · integration credentials · SSO policy |
+| HR Administrator hr_admin | Single entity | Full employee lifecycle · payroll and compliance · policy and document management · recruitment oversight · hikes · FnF · audit log access · leave encashment case-by-case authorisation (HR Admin only). |
+| Finance Admin finance_admin | Single entity | Payroll approval · view and download individual payslips · cost centre management · compensation band visibility for budgeting · joint M10 module admin with Compensation Admin · does not approve hike decisions. Finance Admin holds joint module admin rights on M10 for configuration purposes (hike cycle setup, grade band management) alongside Compensation Admin — this is distinct from approval authority. Finance Admin has no role in the hike approval workflow. Approval authority rests solely with the CEO. |
+| HRBP hrbp | Directly assigned employees — individual or via UAG | HR operations for assigned employees · grievance intake · policy advisory · engagement oversight · leave application approval and rejection for directly assigned employees — without payroll or compensation access. Business unit assignment optional. |
+| Office Admin office_admin | Single entity | Employee directory · date of birth view · national ID view and upload · bank account entry and update — no payroll, compensation, performance, leave, or attendance access. Also covers M17 facilities / office assets. |
+| CEO ceo | Single entity | Final approver for hike and compensation decisions · standard employee self-service access otherwise. |
+| Onboarding Admin onboarding_admin | M02 — single entity | Configure onboarding checklists · manage task assignments · configure buddy assignments · track onboarding completion. |
+| Offboarding Admin offboarding_admin | M03 — single entity | Configure FnF clearance workflows · manage exit interview templates · manage separation checklists · track offboarding completion — FnF payroll settlement remains with HR Admin and Finance Admin. (Canonical role code: offboarding_admin; the Release-1 prototype panel is labelled separation_admin — to be normalised to offboarding_admin.) |
+| Leave Admin leave_admin | M04 — single entity | Configure leave types, policies, accrual rules · override balances · manage holiday calendar · approve and reject individual leave requests within entity scope. Leave encashment case-by-case authorisation is HR Admin only — Leave Admin cannot authorise individual encashment requests regardless of their other approval rights within M04. |
+| Attendance Admin attendance_admin | M05 — single entity | Configure shifts and rosters · manage biometric device mapping · lock and unlock attendance periods · override punch records. |
+| Payroll Admin payroll_admin | M06 — single entity | Initiate payroll runs · manage salary structures · generate disbursement files — Finance Admin approval required before release. |
+| Compliance Admin compliance_admin | M07 — single entity, joint with HR Admin | Manage statutory rates, thresholds, and compliance parameters · generate statutory compliance outputs — joint module ownership with HR Admin, neither role alone constitutes full M07 coverage. |
+| Performance Admin performance_admin | M09 — single entity | Configure appraisal cycles · manage goal frameworks · initiate and close cycles · manage calibration sessions — subject to contribution level, department, field, and section entitlement configuration per user. |
+| Compensation Admin compensation_admin | M10 — single entity, joint with Finance Admin | Configure hike cycles · manage grade bands · manage compensation revision workflows — joint module admin with Finance Admin, neither role alone constitutes full M10 coverage · does not approve hike decisions. |
+| Analytics Admin analytics_admin | M16 — configuration rights only | Create and publish custom report definitions · schedule report delivery · manage dashboard layouts — analytics module available to all users, data visibility governed by each user’s own role entitlement. Analytics Admin is entity-scoped by default. Where tenant-wide report configuration is required, that capability is granted as an individual entitlement by the Organisation Admin. Both entity-scoped and tenant-scoped configurations are valid and audit-logged. |
+| Recruitment Admin recruitment_admin | Recruitment module — all requisitions | Full ATS visibility · offer letter generation · recruiter assignment · pipeline oversight · reporting — subject to all five entitlement dimensions. |
+| Recruiter recruiter | Recruitment module — assigned requisitions only | ATS and pipeline management · candidate communication · BGC initiation · cannot generate offer letters · visibility restricted to assigned requisitions only. |
+| IT Admin it_admin | M17 — single entity | Asset master · device assignment and return · IT provisioning tasks · FnF clearance queue. |
+| IT Asset Manager it_asset_manager | M17 — single entity | Asset lifecycle ownership — procurement-to-retirement, asset audit and certification, stock and allocation. |
+| Service Desk Admin service_desk_admin | M17 — single entity | IT service-desk queue and ticket configuration, categories/SLAs, agent assignment. A service-desk agent acts operationally under this role. |
+| Document Admin document_admin | M11 — single entity | Configure document categories, templates, policy versioning and acknowledgement tracking — HR Admin holds a superset over M11. |
+| Manager (L1) l1_manager | Direct and indirect reports | Full operational permissions — attendance, leave, performance, workflow approvals · team analytics scoped to reporting chain. |
+| L2 Manager l2_manager | Reporting subtree | Progressively reduced vs L1 — see RBAC Design Document for hierarchy comparison. |
+| L3–L5 Manager l3_manager – l5_manager | Reporting subtree | Progressively read-only — see RBAC Design Document for hierarchy comparison. |
+| HOD hod | Entire assigned department | Department-wide read visibility · minimal write · workflow tab access · compensation and rating visibility off by default — configurable per user by Org Admin. Workflow approval authority is off by default and can be enabled per workflow type by the Organisation Admin. |
+| UAG Head uag_head | Assigned User Assignment Group | Same entitlements as HOD scoped to assigned group · compensation and rating visibility off by default — configurable per user by Org Admin. Workflow approval authority cannot be granted under any configuration — this is a hard system ceiling, distinct from HOD where approval authority is configurable. |
+| Skip-level Manager skip_level_manager | Full reporting subtree | Read visibility only — no write or approval actions · retains access to published ratings after calibration window closes. |
+| Dotted Line Manager dotted_line_manager | Dotted-line reportees | Limited read visibility — personal and employment details only. |
+| Employee employee | Own data within entity | Self-service profile · leave and expense requests · payslip and document access · Chat Agent · appraisals · employee directory and org chart · own analytics. |
+| Candidate / Pre-joining candidate | Recruitment portal (candidate state) · Pre-joining portal (post-offer acceptance) | Candidate: own application status · document upload · BGC consent. Pre-joining: offer letter · onboarding forms · policy documents · Chat Agent — no live HRMS access. |
+
+
+## 3.2 RBAC Framework
+Access control operates at four layers. All rules are stored as configuration data — not hard-coded. Full permission profiles, action-level matrices, employment details field-level access, Darwinbox source mapping, and gap analysis are documented in the RBAC Design Document. This section covers: Layer 1 (module-level) · Layer 2 (field and section-level) · Layer 3 (row-level security) · Layer 4 (action-level) · Individual user entitlements · Sensitive data restrictions · Hike and compensation approval chain · Peer visibility.
+PII Protection Ceiling: PII fields carry system-enforced protection ceilings enforced at the platform layer. No Organisation Admin, Module Admin, or any other role can override these ceilings upward. All access rules in this section operate subject to this ceiling. Exceptions are explicit platform-level grants (e.g. Office Admin national ID access) and are fixed — not configurable.
+
+### Layer 1 — Module-Level Access
+Each module is either active or inactive for a role. Inactive modules are fully invisible — not just disabled. Module activation is configured at Platform SuperAdmin level and overridable per tenant. Distinct Module Admin roles exist for each functional module where a separate admin role is warranted — each is scoped to a single module and holds configuration rights within it without requiring the full HR Admin or Organisation Admin role. M01 Employee Master is administered by HR Admin with a configurable capability subset — no distinct Module Admin role exists for M01. M11 Document Management has a distinct Document Admin (document_admin) role (introduced in RBAC v1.4); HR Admin retains a superset capability over M11. Platform modules (P01–P06) are administered by Organisation Admin or Platform SuperAdmin as defined in section 3.7. Admin capabilities within a module are configurable at the individual Module Admin user level — different users with the same Module Admin role can hold different subsets of admin capabilities. M07 Statutory Compliance and M10 Hikes & Compensation are jointly owned — M07 requires HR Admin and Compliance Admin, M10 requires Compensation Admin and Finance Admin. Neither role alone constitutes full module admin coverage for jointly owned modules.
+
+### Layer 2 — Field & Section-Level Access
+| Access Level | Meaning |
+| VISIBLE | Field displayed with full value |
+| MASKED | Field displayed in redacted form (e.g. PAN shown as XXXXX1234X) |
+| HIDDEN | Field not shown at all — its existence is not revealed |
+| EDITABLE | Field can be modified directly by this role |
+| READ_ONLY | Field visible but cannot be modified |
+| APPROVAL_REQUIRED | Modification triggers an approval workflow before the change takes effect |
+| ADMIN | Full configuration rights within the module — manage policies, rules, cycles, and templates. Granted to the designated Module Admin role for each module, or to HR Admin where no distinct Module Admin role exists (M01, M11) |
+
+
+### Layer 3 — Data-Level Access (Row-Level Security)
+Row-level security operates across five scoping dimensions that can be combined per role or per individual entitlement.
+| Dimension | Description |
+| Reporting chain | Direct and indirect reports within the manager’s hierarchy — L1 through L5+ with progressively reduced permissions |
+| Department | All employees within an assigned department regardless of reporting line — used for HOD |
+| User Assignment Group (UAG) | A named group of one or more employees assigned to a specific individual — independent of org hierarchy and department structure. Used for UAG Head and HRBP assignment |
+| Contribution level | Records scoped by grade or job level — Intern · Associate · Individual Contributor · Lead · Senior Lead · Manager · Senior Manager · CEO. Used in compensation, calibration, and senior hiring contexts |
+| Entity | Records scoped to a single legal entity — used for HR Admin, Finance Admin, Office Admin, and all Module Admin roles |
+
+
+### Layer 4 — Action-Level Access
+| Action Level | Description |
+| View Only | Read the record or field — no modifications permitted |
+| Edit | Modify the record or field subject to field-level rules |
+| Approve / Reject | Act on a workflow request submitted by another user — cannot initiate the same request for themselves |
+| Download | Export or download a record, document, or report — granted independently of View. A role may view but not download, or both |
+| Admin Rights | Configure the module — manage policies, rules, cycles, and templates. Admin capabilities configurable at the individual Module Admin user level |
+
+
+### Individual User Entitlements
+For users requiring access beyond their role’s default profile, individual entitlements can be configured by the Organisation Admin. HR Admin can configure entitlements within their entity for non-PII-ceiling fields only — all entitlements remain subject to PII protection ceilings regardless of who grants them. No separate request process is required — entitlement configuration is an administrative action performed directly.
+Entitlements operate across five dimensions: department, contribution level, module, field, and section. All entitlements are time-bound with a mandatory expiry date and cannot exceed PII protection ceilings. Every access event under an entitlement is logged in the security audit log.
+On entitlement expiry, the user’s access reverts immediately to their role default. No gap arises — HR Admin and Organisation Admin retain full access throughout and can continue or close any in-flight actions within their normal scope.
+| Entitlement Type | Description | Example |
+| Department-level | Visibility into a specific department beyond normal scope | HRBP temporarily covering a specific department |
+| Field-level | Specific field made visible beyond role default | Senior HRBP granted salary band view for compensation benchmarking |
+| Section-level | Entire form section made visible | Legal counsel granted access to employment contract section |
+| Module-level | Specific module activated beyond role default | Senior Manager granted read access to Analytics for their assigned group |
+| Contribution-level | Records visible up to a higher grade than role default | VP-level Manager granted visibility of Senior Manager-level direct reports during reorg |
+
+All entitlement grants, modifications, and revocations are audit-logged with the granting admin, the user, the entitlement type, effective date, and expiry date.
+
+### Sensitive Data Restrictions
+The following restrictions are system-enforced and cannot be overridden by any Organisation Admin configuration, except where explicitly noted.
+| Data Category | Permitted Viewers | Restricted From | Notes |
+| Salary / CTC | Employee (own) · HR Admin · Finance Admin (view only for budgeting) | All manager tiers · HOD · UAG Head · HRBP · Recruiter · Recruitment Admin · Office Admin | HOD and UAG Head compensation visibility configurable per user by Org Admin — off by default |
+| Bank account details | Employee (own, masked) · HR Admin · Office Admin (entry only, masked after entry) · Payroll processing (runtime) | All other roles | Masked to last 4 digits in all display contexts |
+| Government IDs | Employee (own, masked) · HR Admin · Office Admin (view and upload) | All other roles | Platform-level grant for Office Admin — not configurable by Org Admin. Changes require HR Admin approval |
+| Date of Birth | Employee (own) · HR Admin · Office Admin (view only) | All other roles | Platform-level grant for Office Admin |
+| Performance ratings — draft | Reviewer only | All other roles including HR Admin | No entitlement grant can expose draft ratings prior to publish event |
+| Performance ratings — published | Employee (own) · Manager (own team) · HR Admin · Skip-level (full subtree, retained post-calibration) · HOD / UAG Head (own dept/group, off by default) | Peers · Finance Admin · HRBP | HOD and UAG Head published rating visibility configurable per user by Org Admin |
+| Performance ratings — calibration | Skip-level Manager · HR Admin · HOD (module-level entitlement required) | All other roles | HOD calibration access requires Org Admin entitlement grant |
+| Payslips | Employee (own) · HR Admin · Finance Admin | All manager tiers · HOD · UAG Head · HRBP · Office Admin | Finance Admin can view and download individual payslips |
+| Medical / health data | Employee (own) · HR Admin | All other roles | Not transmitted externally without explicit consent |
+| Biometric data | No UI display for any role | All roles | Managed at device integration layer only |
+| Compensation bands | HR Admin · Finance Admin (view for budgeting) · Recruitment Admin (offer benchmarking) | Employees · Candidates · Office Admin · Managers · Recruiters (band range for assigned requisition only) | Band range ≠ individual CTC · hike recommendation is not a Manager feature |
+
+
+### Hike & Compensation Approval Chain
+| Stage | Role | Action |
+| 1 | HR Admin | Reviews compensation bands · initiates hike cycle · prepares recommendations |
+| 2 | CEO | Final approval · Approve / Reject |
+
+
+### Peer Visibility
+By default an employee can only see their own data. Two exceptions apply.
+The org chart is visible to all active employees showing name, designation, department, and reporting manager only. Separated, absconded, and pre-joining employees are not shown.
+The employee directory is visible to all active employees showing name, profile photo, designation, department, official email, official phone, and office location. All PII-classified fields are excluded from directory view at the platform layer and are not configurable. Recruiters have limited directory access — name, designation, department, and official email only. Analytics is available to all users — data visible within analytics is governed by each user’s own role entitlement and data scope.
+Role Access Summary
+Diagram 6 — Role access summary · See Diagrams Addendum
+
+## 3.3 Segment & Geography Configuration Framework
+When a tenant is provisioned, the Platform SuperAdmin selects an Industry Segment and a Geography. This single action triggers a cascade load of all configuration defaults for that combination. All defaults are overridable by the Organisation Admin.
+
+### What Segment Selection Activates
+| Area | What Is Loaded |
+| Leave policy | Leave type catalogue and default allocations per employment type and grade |
+| Performance framework | OKR vs KRA vs Balanced Scorecard vs production targets |
+| Attendance model | Knowledge worker GPS check-in vs shift-based biometric vs branch clock-in |
+| Payroll structure | Standard and optional components · compensation bands by grade |
+| Workflow defaults | Approval workflow templates · number of levels · escalation timers |
+| Compliance scope | Which statutory deductions are active · which reports are generated |
+| Analytics defaults | Which HR metrics are surfaced on the default dashboard |
+
+
+### What Geography Selection Activates
+| Area | What Is Loaded |
+| Tax rules | Income tax slabs · professional tax rates per state · surcharges |
+| Social security | PF and ESI contribution rates · ceiling amounts · challan formats |
+| Labour law | Applicable acts · mandatory leave entitlements · working hour regulations |
+| Holiday calendar | National holidays pre-loaded · state holidays per office location |
+| Localisation | Currency · number formats · date formats |
+| Data residency | Data residency requirement flag for the geography |
+
+
+### Configuration Hierarchy
+| Level | Set By | Scope | Overridable? |
+| Platform default | Platform Super Admin | All tenants — baseline for segment + geography | Yes — by Org Admin |
+| Tenant default | Organisation Admin | All entities within a tenant | Yes — by HR Admin |
+| Entity override | HR Admin | Single legal entity within a group | Yes — entity-specific policies |
+| Employee exception | HR Admin | Individual employee exception | Yes — with audit log |
+
+Cascade rule: Configuration cascades downward and can be overridden at each level. Changes at a higher level do not automatically override lower-level customisations — they update only the default for future provisioning.
+Diagram 3 — Configuration hierarchy · See Diagrams Addendum
+
+## 3.4 Master Data Architecture
+Master data is the foundation that all functional modules rest on. It is organised in three layers.
+Platform-level master data is managed by Platform SuperAdmin, consistent across all tenants, and changed only through platform releases. It covers geographies, industry segments, statutory compliance rules (PF rates, ESI thresholds, PT slabs, TDS slabs), national holidays, bank validation data, and document type taxonomy.
+Tenant-level master data is managed by Organisation Admin and HR Admin. It is loaded from segment and geography defaults on provisioning and covers the organisation’s structure, roles, grades, locations, employment types, leave policies, payroll components, and compensation bands. All entities are effective-date versioned.
+Entity-level overrides allow individual legal entities within a group to maintain their own configuration for leave policies, shifts, and compliance parameters, inheriting from tenant defaults where no override exists.
+The complete entity list for each layer is maintained in the Data Dictionary, which is a separate living document updated throughout functional design.
+
+## 3.5 Employee Lifecycle State Machine
+Every employee record exists in one of eight states. Access rights, workflow eligibility, and system visibility are governed by state.
+| State | Description | Key Rules |
+| Candidate | Application submitted · offer not yet accepted | Recruitment portal only — own application status · document upload · BGC consent |
+| Pre-joining | Offer accepted · joining date in future | Pre-joining portal — offer letter · onboarding forms · policy documents · Chat Agent. No live HRMS access. Activated when HR Admin initiates onboarding — not automatically on joining date |
+| Active | Employed and within normal service | Full access per role configuration. Includes Probation sub-state — employees on probation remain in Active state with full system access; probation is tracked as a flag on the employment record, not a separate lifecycle state |
+| Notice period | Resignation accepted · serving notice | Cannot initiate new leave requests above threshold · reduced workflow initiation rights |
+| Last working day | Final day of employment | FnF clearance workflow initiated · access begins to wind down |
+| Separated | Employment ended | Read-only access to own payslips and documents for configurable period · no active system access |
+| Absconded | Unauthorised absence beyond threshold | Flagged status · HR Admin action required · restricted access |
+| Rehire eligible | Separated with positive exit record | Available for re-onboarding without full data re-entry |
+
+State transitions are governed by workflow events — resignation submission, FnF completion, joining date trigger, probation confirmation. No manual state change is possible without an audit log entry.
+| Transition | Trigger event | Role that initiates | Role that confirms |
+| Candidate → Pre-joining | Offer accepted and countersigned | System (on countersignature) | HR Admin |
+| Pre-joining → Active | HR Admin initiates onboarding | HR Admin | HR Admin |
+| Active → Notice period | Resignation submitted | Employee | HR Admin (accept / negotiate) |
+| Active → Absconded | Unauthorised absence beyond threshold | System (scheduled) | HR Admin (required to action) |
+| Notice period → Last working day | Notice period end date reached | System (scheduled) | HR Admin |
+| Last working day → Separated | FnF clearance completed | System (on all-clear) | HR Admin |
+| Separated → Rehire eligible | Positive exit record confirmed | HR Admin | Organisation Admin (if cross-entity) |
+| Any state → Active (rehire) | Rehire initiated | HR Admin | HR Admin |
+| Active (probation) → Active (confirmed) | Probation end date reached | Manager (L1) — recommendation | HR Admin — confirmation |
+
+
+## 3.6 Workflow Engine Framework
+A single configurable engine drives all approval and notification processes across all modules. Workflow definitions are configuration data — adding a new workflow type requires no code deployment.
+
+### Engine Capabilities
+| Capability | Description |
+| Multi-stage sequential | N approval stages in sequence — each must complete before the next begins |
+| Parallel all-of | All approvers must approve simultaneously (e.g. FnF clearance: IT + Finance + Admin + Manager + HR) |
+| Parallel any-of | Any one of a group can approve to proceed |
+| Conditional routing | Routing rules based on field values at initiation (e.g. leave > 5 days → add HR Admin stage) |
+| Dynamic approver resolution | Approver resolved by: named role · reporting chain position · named individual · cost centre head. Where a workflow references “Manager” as approver, the system resolves to the L1 Manager by default. For employees whose L1 Manager is above a configurable seniority threshold, resolution escalates to HR Admin. HOD, Skip-level, and Dotted Line Manager roles do not receive workflow approval authority by default — HOD approval authority is configurable per workflow type by the Organisation Admin. UAG Head workflow approval authority cannot be granted under any configuration. |
+| SLA with auto-escalation | Configurable SLA per stage · reminder on breach · escalation to next level · auto-approve or auto-reject on escalation timeout |
+| Delegation | Approver can delegate authority to another user for a date range · conflict of interest check enforced |
+| Return for revision | Return to previous stage or originator without full rejection |
+| Withdrawal | Requestor can withdraw before final approval unless downstream actions have been triggered |
+| Bulk approval | Multiple pending requests of same type approved in one action · same audit rules apply |
+| Versioning | In-flight requests continue on the version they were created with — new requests use updated version |
+
+
+### Representative Workflow Types
+| Workflow | Key Architectural Decision | Module | Phase |
+| Leave application | Conditional routing — HR Admin stage added for requests > 5 days or during notice period | M04 Leave | 1 |
+| FnF clearance | Parallel all-of — IT, Finance, Admin, Manager, HR must all clear simultaneously; payroll FnF settlement blocked until all clear | M03 Exits | 1 |
+| Sensitive field change | PAN, Aadhaar, and bank account changes always route to HR Admin — not configurable below this floor | M01 Employee | 1 |
+| Probation confirmation | Calendar-driven trigger at probation end date — cannot be manually bypassed without HR Admin override | M09 Performance | 1 |
+| Offer letter | Finance Admin stage activates above a configurable CTC threshold — this applies to offer letters in recruitment only and is separate from the hike approval chain | M08 Recruitment | 1 |
+| Payroll run approval | Finance Admin must approve before bank disbursement file is generated — file is never auto-transmitted | M06 Payroll | 2 |
+| Hike / salary revision | HR Admin initiates hike cycle · CEO gives final approval | M10 Compensation | 2 |
+
+
+### Notification & Scheduled Flows
+| Flow Type | Examples | Phase |
+| Threshold alerts | Leave balance below minimum · expense claim pending beyond threshold | 1 |
+| Calendar-driven | Probation end approaching (30 days) · contract expiry (60 and 30 days) · birthday and work anniversary | 1 |
+| Compliance reminders | PF / ESI / TDS filing deadlines · POSH annual report due | 2 |
+| Payroll calendar | Attendance lock on cutoff date · payroll run initiation · bank file generation trigger | 2 |
+| Scheduled engine | Monthly leave accrual · annual carry-forward and encashment · data retention deletion · performance cycle auto-open | 1 |
+
+
+## 3.7 Module Descriptions
+Diagram 4 — Module dependency map · See Diagrams Addendum
+
+### Phase 1 Modules
+
+### M01 — Employee Master (Phase 1)
+Central reference entity for the entire platform. Manages the complete employee record from pre-joining through separation.
+Sub-modules: Personal & employment profile · Lifecycle state machine · Organisation position (department, designation, grade, reporting manager) · Document vault · Dependent and nominee records · Org chart · Grievance register
+Key design decisions: Single employee record with versioned employment history — no duplicate records across entities. Employee ID is immutable once assigned. Soft delete only — separated employees remain in the system in read-only state. M01 is administered by HR Admin with configurable capability subsets — no distinct Module Admin role exists for this module, consistent with M11 Document Management.
+
+### M02 — Onboarding (Phase 1)
+Manages the end-to-end new joiner experience from offer acceptance to first-day readiness.
+Sub-modules: Pre-joining portal (candidate-facing) · Document collection and verification · IT and asset provisioning task list · Induction and orientation task management · Buddy assignment · Welcome communication
+Key design decisions: Pre-joining portal is accessible to the Candidate role before the employee record is activated. Document uploads in pre-joining populate the employee document vault on activation. Onboarding task completion is tracked per joiner with a configurable checklist per segment and grade. A benefits enrolment task is included in the onboarding checklist — employees select their benefit preferences (group health cover, flexi benefits) during onboarding and the selections are stored in the employee record. TPA integration and live insurance processing are Phase 3 (M14) — the Phase 1 onboarding step captures intent and preference data only, which M14 consumes when activated.
+
+### M03 — Exits & Offboarding (Phase 1)
+Manages the employee separation lifecycle from resignation to final settlement.
+Sub-modules: Resignation submission and acceptance workflow · Notice period management and tracking · Exit interview (structured questionnaire) · FnF clearance (parallel multi-department) · Rehire eligibility determination · Separation letter generation
+Key design decisions: FnF clearance is a parallel workflow — all clearance departments act simultaneously, not sequentially. The payroll engine’s FnF settlement calculation (Phase 2) is triggered only after all clearances are received. Exit interview responses are stored but anonymised in aggregate analytics.
+
+### M04 — Leave Management (Phase 1)
+Manages all leave types, balances, accruals, and approvals.
+Sub-modules: Leave type configuration · Policy assignment by employment type and grade · Leave application and approval workflow · Balance tracking and accrual engine · Holiday calendar (national + state + company) · Comp-off generation and redemption · Leave encashment
+Key design decisions: The Holiday Calendar is a sub-module of Leave Management and is configured as part of Phase 1 setup. It is the authoritative source for working day calculations across all modules — attendance, payroll LOP, notice period countdown, and SLA timers in the workflow engine. Leave balances are owned by this module. Two feeds flow from this module into the Phase 2 payroll run: the leave encashment feed (balance and entitlement data for encashment calculation) and, jointly with M05, the LOP feed (loss-of-pay days). These are distinct feeds with distinct data contracts, defined in the Phase 2 integration specification.
+Leave Admin can approve and reject individual leave requests for all employees within their entity. Leave encashment case-by-case authorisation is reserved for HR Admin only — Leave Admin cannot authorise individual encashment requests regardless of their other approval rights within M04.
+
+### M05 — Attendance (Phase 1)
+Manages attendance capture, shift assignment, and the LOP feed to payroll.
+Sub-modules: Shift and roster management · GPS mobile check-in · Biometric device integration · Web / app check-in · Regularisation workflow · Overtime and comp-off generation · Attendance lock and LOP calculation · Anomaly flagging
+Key design decisions: Biometric punch takes precedence over app check-in when both exist for the same period. Attendance records are locked on a configurable monthly cutoff date — post-cutoff corrections require HR Admin override with audit log. The LOP feed is one of two feeds into the Phase 2 payroll run (see M04). The data contract for this feed — fields, frequency, lock behaviour, and late resubmission handling — is defined in the Phase 2 integration specification.
+
+### M08 — Recruitment (ATS) (Phase 1)
+Manages the end-to-end hiring process from requisition through offer and BGC.
+Sub-modules: Job requisition and approval · Candidate pipeline management · Interview scheduling and feedback · Offer letter generation · Background check (BGC) integration · Job board posting integrations · Careers portal integration · Recruitment agency and vendor management · Candidate portal
+Key design decisions: Every candidate is source-tagged (job board, referral, agency, direct) and deduplicated by email across all sources — deduplication is visible only to Recruitment Admin and HR Admin, not to individual Recruiters. The candidate portal is the external-facing interface for offer acceptance, document upload, and BGC consent. Recruiter scoping rules and Recruitment Admin entitlement configuration are defined in section 3.2 and the RBAC Design Document.
+
+### M09 — Performance Management (Phase 1)
+Manages the complete performance appraisal lifecycle.
+Sub-modules: Appraisal cycle configuration (monthly rolling — 12 concurrent goal plans) · Goal setting (OKR with sub-goals — Phase 1 methodology) · Self-assessment · L1 Manager evaluation · Multi-Source Feedback (L1-initiated, non-rating, captured for reference) · Calibration moderation (Performance Admin / HR) · Employee acknowledgement · Promotion recommendation capture (handover to M10 Phase 2)
+Key design decisions: Appraisal workflow is a fixed 5-stage sequence: Self-Assessment → L1 Evaluator → Calibration → Employee Acknowledgement. Dotted Line Manager has no direct appraisal access (read-only role per RBAC §2.3). Multi-Source Feedback is the mechanism for capturing input beyond L1: L1 Manager can add any active employee in the tenant as a Feedback Contributor during the L1 Evaluator stage. Feedback is free-text only, captured for reference, does not gate workflow, does not affect ratings, and does not participate in calibration. Feedback Contributor is a runtime assignment — no persistent RBAC role or capability flag. Ratings feed into M10 Hikes & Compensation (Phase 2). Calibration visibility rules, draft and published rating access, and Performance Admin entitlement configuration are defined in section 3.2 and the RBAC Design Document.
+
+### M11 — Document Management (Phase 1)
+Manages HR policy documents, statutory documents, and the employee document vault.
+Sub-modules: Policy document upload and versioning · Acknowledgement assignment and tracking · Bulk acknowledgement status reporting · Employee document vault (personal, statutory, company-issued) · POSH policy management and annual acknowledgement · Statutory document management (appointment letters, contracts, increment letters)
+Key design decisions: Every published policy version is immutable — updates create a new version, not an edit. Acknowledgement is tracked per employee per version. The Chat Agent is grounded on documents uploaded to this module and on platform-managed help guide documents. It will not answer questions outside these two sources. M11 is administered by HR Admin with configurable capability subsets — no distinct Module Admin role exists for this module, consistent with M01 Employee Master.
+
+### M16 — Analytics & Reports (Phase 1)
+Provides pre-built and configurable HR reporting across all modules. Analytics scope expands automatically as Phase 2 and Phase 3 modules are activated.
+Sub-modules: Workforce dashboard (headcount, attrition, demographics) · Leave and attendance analytics · Recruitment funnel analytics · Performance distribution reports · Compliance reports (PF, ESI, PT, TDS outputs — active from Phase 2) · Compensation and hike analytics (active from Phase 2) · Custom report builder · Scheduled report delivery
+Key design decisions: Analytics is available to all users — data visible within analytics is governed entirely by each user’s own role entitlement and data scope, not by the Analytics Admin role. Managers see only their team. HRBPs see only their assigned employees. HR Admins see their entity. The Analytics Admin role holds configuration rights only — creating report definitions and managing dashboard layouts. The custom report builder allows Org Admin to define new report formats without developer involvement. The Manager (L1) team dashboard maps to the Darwinbox Manager Hub (STDPERM_1) and is scoped entirely by the reporting chain and PII constraints defined in sections 3.1 and 3.2.
+Analytics Admin is entity-scoped by default. An Analytics Admin user operates within a single legal entity. Where tenant-wide report configuration is required, the Organisation Admin may grant a tenant-scope individual entitlement to a designated Analytics Admin user. Both configurations are valid and audit-logged.
+
+### M17 — Assets & IT (Phase 1)
+Manages IT asset inventory and employee asset assignments.
+Sub-modules: Asset master (type, make, serial number, value, condition) · Assignment and return tracking · IT provisioning task list (integrated with M02 Onboarding) · Asset clearance queue (integrated with M03 Exits FnF workflow)
+Key design decisions: Asset assignment is triggered automatically from the onboarding task list when an IT Admin marks provisioning complete. Asset clearance is a parallel stage in the FnF workflow — FnF cannot complete until IT Admin records the return of all assigned assets.
+
+### Phase 2 Modules
+
+### M06 — Payroll (Phase 2)
+Manages salary computation, payslip generation, and disbursement.
+Sub-modules: Salary structure and CTC breakdown · Monthly payroll run · Variable pay processing · Arrears and revision · Payslip generation and distribution · Bank disbursement file (NEFT / RTGS format) · FnF settlement payroll · Payroll run approval workflow · Payroll register and reconciliation
+Key design decisions: Payroll is Phase 2 because it depends on Attendance (LOP feed) and Leave (encashment feed) being stable and audited through at least one full cycle first. Payroll runs are versioned — a run cannot be overwritten, only superseded by a revision run. The payroll run approval workflow requires Finance Admin sign-off before the bank disbursement file is generated. Bank disbursement files are never auto-transmitted — Payroll Admin initiates generation and Finance Admin approval is required before release.
+
+### M07 — Statutory Compliance (Phase 2)
+Manages all Indian statutory deduction calculations and government filing outputs.
+Sub-modules: EPF / PF calculation and ECR challan · ESI calculation and ESIC challan · TDS calculation and Form 24Q / Form 16 · Professional tax (state-wise) · Labour Welfare Fund (state-wise) · Gratuity provision tracking and FnF payout
+Key design decisions: All statutory rates, slabs, thresholds, and ceiling amounts are stored as platform-level master data rows — government revisions are applied through data updates, not code releases. Statutory compliance outputs are files for portal upload — direct API filing with government portals is a future capability dependent on portal availability. M07 is jointly administered by HR Admin and Compliance Admin — neither role alone constitutes full module admin coverage.
+
+### M10 — Hikes & Compensation (Phase 2)
+Manages salary revision cycles and individual compensation changes.
+Sub-modules: Hike cycle setup and budgeting · HR Admin recommendation within budget bands · HR Admin review and CEO approval · Revision effective date management · Increment and revision letter generation · Revised salary structure push to payroll
+Key design decisions: M10 is Phase 2 because revised salary structures feed directly into the payroll run (M06) — both must be available, stable, and tested in the same phase. Hike cycles are initiated and managed by HR Admin within compensation bands configured by Compensation Admin. All hike decisions are audit-logged with the reviewer, approver, and justification captured. M10 is jointly administered by Compensation Admin and Finance Admin — see hike approval chain in section 3.2. Finance Admin holds joint module admin rights for configuration purposes only and does not participate in the hike approval workflow — approval authority rests solely with the CEO.
+
+### Phase 3 Modules
+M12 — Expense & Travel: Employee expense claim submission, travel advance, policy limit enforcement by grade, approval workflow, and receipt OCR using AI for amount and vendor extraction.
+M14 — Benefits & Insurance: Group health insurance enrolment and de-enrolment, TPA integration, flexi benefits configuration, and employee benefits self-service. Enrolment preference data captured during M02 Onboarding in Phase 1 is consumed by M14 when activated.
+M15 — Engagement & Surveys: Pulse survey design and distribution, AI-powered sentiment analysis on open-text responses, eNPS tracking, and peer recognition.
+M18 — Internal Social: Company announcements, employee activity feed, peer recognition wall, and org-wide communication channels. Content moderation and HR Admin oversight controls are required before go-live.
+
+### Phase 3 — Teams Integration & Exhaustive AI Journey
+Beyond the enrichment modules above, Phase 3 delivers two cross-cutting journeys that extend the platform's reach and intelligence. Each is activated independently, is not a dependency for any Phase 1 or Phase 2 deliverable, and inherits the configuration-driven, gracefully-degrading integration model of §3.10 and the AI governance principles of §3.11.
+Microsoft Teams Integration Journey. Employees and managers transact day-to-day HRMS actions without leaving Microsoft Teams. Workflow approvals — leave, attendance regularisation, requisitions, and other tasks — are delivered as actionable Teams cards that can be approved, rejected, or sent back inline. The document-grounded Chat Agent (P03) is surfaced as a Teams bot for policy and process queries. Notifications, reminders, and SLA escalations route to Teams channels and direct messages, and single sign-on carries the employee's identity and access scope from the platform into Teams. The integration is registered in §3.10, is credential- and mapping-driven per tenant, and degrades gracefully — Teams is an additive channel, never the system of record.
+Exhaustive AI Integration Journey. Phase 3 expands AI from the document-grounded Chat Agent and isolated per-module helpers (receipt OCR, sentiment analysis) into a cross-module intelligence layer spanning the employee lifecycle: recruitment screening and candidate-summary assistance, attendance and leave anomaly detection, performance review and goal-drafting support, document auto-classification, and predictive insights such as attrition risk. An agentic assistant can guide users through — and pre-fill — multi-step workflows, always returning to a human for confirmation before any state change. Every capability in this journey operates strictly within the AI Governance Principles in §3.11: backend-only API calls, server-side PII stripping under the §2.5 and §3.2 protection ceilings, human-in-the-loop for any decision-affecting output, and full audit logging. No AI capability triggers an automated approval or irreversible action on its own. Employees reach this intelligence through three interaction surfaces that share the same grounding and governance: a conversational chat interface, a voice-based assistant, and Microsoft Teams (delivered via the Teams Integration Journey above — approval cards, the Chat Agent as a Teams bot, and notifications, all carrying the user's access scope). Voice queries are transcribed and processed server-side, the spoken or on-screen response is drawn only from data within the querying user's access scope, captured audio is not retained beyond the transaction, and the same PII-stripping and human-in-the-loop rules apply identically to typed and spoken interaction.
+
+### Platform Modules (Day 1)
+P01 — Workflow Engine: Single configurable engine for all approval and notification flows. Workflow definitions are data rows — no code deployment required for new workflow types. Administered by Organisation Admin.
+P02 — RBAC & Security: Module-level, field-level, and row-level access control. All rules stored as configuration. SSO, MFA, session management, IP restriction. Administered by Organisation Admin.
+P03 — Chat Agent (AI): Document-grounded AI assistant. Answers queries from two sources: HR policy and statutory documents uploaded by the organisation (via M11), and platform-managed help guide documents covering HRMS workflows. Available to all active employee roles and to Candidates in pre-joining state. It will not answer questions outside these sources. All AI calls made from the backend — API key never exposed to the browser. PII never sent to the AI model. Administered by HR Admin via M11 document management.
+P04 — Tenant & Org Admin: Tenant provisioning and configuration. Segment and geography selection. Master data management. Integration settings. User management. Administered by Organisation Admin and Platform SuperAdmin.
+P05 — Audit & Compliance Log: Immutable data mutation log (DB trigger). Security event log. Access control audit. Integration event log. Export for regulatory and audit purposes. Administered by Organisation Admin.
+P06 — Migration Toolkit: Darwinbox ETL framework. Data archaeology and profiling. Field mapping management. Dry-run and verification framework. Source ID traceability on all migrated records. Access restricted to Platform SuperAdmin (tenant-level operations: provisioning, staging environment management, dry run execution) and HR Admin (entity-level data verification and field mapping review only). No other role has access to migration scripts, ETL outputs, or staging data. All migration actions are logged in the audit trail. Administered by Platform SuperAdmin for tenant-level operations and HR Admin for entity-level data verification.
+Sequencing note: P06 requirements must be gathered in parallel with M01 (Employee Master), not after it. Wave 1 migration covers employee master data, and field mapping decisions made during M01 requirements directly shape what the ETL framework must handle. Finalising M01 field definitions before P06 requirements are in place risks a data model that was not designed with migration in mind. The M01 data dictionary and the Darwinbox field mapping document are co-authored artefacts.
+
+## 3.8 Darwinbox Migration Framework
+Migration from Darwinbox is a Release 1 deliverable and a strategic differentiator. PrimeSoft HRMS competes with Darwinbox in the market while providing a best-in-class migration pathway for organisations choosing to leave — the quality and reliability of this migration toolkit directly supports the competitive positioning.
+Migration tooling access is restricted to Platform SuperAdmin for tenant-level operations (provisioning, staging environment management, dry run execution) and HR Admin for entity-level data verification and field mapping review. No other role has access to migration scripts, ETL outputs, or staging data. All migration actions are logged in the audit trail.
+
+### Migration Principles
+Every field in any Darwinbox template is mapped to its HRMS counterpart. No template field is discarded without an explicit recorded business decision
+Every migrated table carries a darwinbox_source_id column — permanent traceability from source to current state
+Scripts follow the ETL+V pattern: Extract → Validate → Transform → Load → Verify
+Migration scripts are idempotent — running the same script twice produces the same result
+Three mandatory dry runs against a staging environment before any production cutover
+
+### Migration Waves
+| Wave | Data Domains | Dry Run 3 Gate |
+| Wave 1 | Employee master · employment types · org structure · leave balances and 2-year history · attendance records (24 months) | < 0.5% failure rate |
+| Wave 2 | Performance history (last 4 cycles) · job history and promotions · employee contracts · separation records · active recruitment pipeline · holiday calendars | < 0.5% failure rate |
+| Wave 3 | Payroll history (36 months) · payslip documents · statutory filing history · project assignments | Zero tolerance for numeric discrepancies in payroll amounts |
+
+
+### Data Quality Approach
+Phase 0 is dedicated to Data Archaeology — profiling all available Darwinbox data to identify every field, enum value, data quality issue, and referential integrity problem before migration scripts are written
+A Field Mapping Document records every Darwinbox field → HRMS field mapping with transformation rule, migration risk level, and data quality notes
+Data quality issues discovered in Darwinbox are remediated during transformation, not after load
+Darwinbox is kept in read-only mode for a minimum of 4 weeks after go-live before the subscription is cancelled
+Wave sequencing relative to phase delivery: Wave 1 (employee master, org structure, leave and attendance history) must complete before Phase 1 go-live. Wave 2 (performance history, contracts, recruitment pipeline, holiday calendars) completes before or concurrent with Phase 1 go-live. Wave 3 (payroll history, payslip documents, statutory filing history) cannot begin until Phase 2 modules are stable and must complete before Phase 2 go-live. These sequencing dependencies are absolute — no wave may proceed to production load until its prerequisite phase is confirmed ready.
+
+## 3.9 Indian Statutory Compliance
+India’s statutory compliance obligations are a Phase 2 deliverable, with the exception of POSH and DPDPA which are embedded in Phase 1 modules.
+| Act / Regulation | Obligation | Phase |
+| EPF Act 1952 | PF deduction + employer contribution · ECR challan · EPFO portal file | 2 |
+| ESI Act 1948 | ESI deduction for gross ≤ threshold · ESIC challan | 2 |
+| Income Tax Act 1961 | TDS deduction · Form 24Q (quarterly) · Form 16 (annual) | 2 |
+| Payment of Gratuity Act 1972 | Gratuity provision tracking · automated payout in FnF | 2 |
+| Professional Tax | State-wise slab deduction · location-based automatic application | 2 |
+| Labour Welfare Fund | State-wise LWF deduction · state-level configuration | 2 |
+| Shops & Establishments Act | State-wise leave entitlements and working hour rules · location-based policy overrides | 1 |
+| POSH Act 2013 | Mandatory policy · complaint intake · ICC reporting · training completion tracking | 1 |
+| DPDPA 2023 | Consent capture · right of access, correction, erasure · data fiduciary obligations | 1 |
+
+All statutory rates, slabs, and thresholds are stored as platform master data rows. Government revisions are applied through data updates, not code releases. Statutory compliance outputs are generated only after the payroll run has received Finance Admin approval — compliance files are never produced from an unapproved payroll run.
+
+## 3.10 Integration Architecture
+Diagram 5 — Integration context · See Diagrams Addendum
+All integrations are configuration-driven — credentials, field mappings, sync frequency, and error handling are stored as tenant-level configuration, not hardcoded. The platform degrades gracefully when any integration is unavailable — integrations are additive, not load-bearing. All integration errors are surfaced in an Integration Health dashboard. Every integration call is logged with timestamp, direction, endpoint, payload hash (not content), response status, latency, and retry count.
+
+### Integration Register
+| Category | Integration | Direction | Phase | Key Behaviour |
+| Recruitment — Job Boards | Careers portal (company website) | Outbound + Inbound | 1 | Job posting sync · application inbound · source tagging |
+|  | Naukri.com | Outbound + Inbound | 1 | Job posting · candidate applications with source tag |
+|  | LinkedIn Jobs | Outbound + Inbound | 1 | Job posting · candidate applications with source tag |
+|  | Other job boards | Outbound + Inbound | 1 | Generic adapter — configurable per board |
+| Recruitment — Agencies | Recruitment agencies and vendors | Inbound | 1 | Agency portal for candidate submission · vendor management |
+| Recruitment — BGC | BGC vendor (primary) | Outbound + Inbound | 1 | Auto-trigger on offer acceptance · webhook inbound for result · adverse result holds offer |
+|  | Additional BGC vendors | Outbound + Inbound | 1 | Generic BGC adapter — configurable per vendor |
+| Attendance | Biometric devices | Inbound | 1 | Device pushes punch records · biometric user ID mapped to employee ID · multi-device, multi-location · device health heartbeat |
+| Payroll | Payroll bank — NEFT / RTGS | Outbound | 2 | Bank-format disbursement file generated post payroll approval · never auto-transmitted |
+| Government Portals | EPFO (PF) | Outbound | 2 | ECR challan file generation for portal upload |
+|  | ESIC | Outbound | 2 | ESIC challan file generation for portal upload |
+|  | Income Tax (TDS) | Outbound | 2 | Form 24Q XML and Form 16 PDF generation |
+| Productivity | Calendar integration | Outbound | 1 | Interview invites to interviewer calendars · holiday calendar sync via iCal |
+| Insurance | Insurance TPA / provider | Outbound + Inbound | 3 | Enrol on joining · de-enrol on exit · claim status display — active from Phase 3 (M14) |
+| AI | Claude API (Anthropic) | Outbound | 1 | All calls from backend proxy · document-grounded responses only · PII excluded from all prompts |
+| Collaboration | Microsoft Teams | Outbound + Inbound | 3 | Actionable approval cards · Chat Agent bot · notifications & SLA escalations · SSO continuity — see §3.7 Teams Integration Journey |
+
+
+## 3.11 AI & Chat Agent Framework
+
+### AI Use Cases
+| Capability | Purpose | Grounding Source | Module | Phase |
+| Chat Agent — HR policy Q&A | Answer queries about HR policies and compliance in natural language | Organisation’s uploaded HR policy documents (M11) | P03 | 1 |
+| Chat Agent — process guidance | Guide users through HRMS workflows step by step | Platform-managed help guide documents | P03 | 1 |
+| Chat Agent — pre-joining access | Policy and process queries for candidates in pre-joining state — no live HRMS data accessible | Organisation’s uploaded HR policy documents (M11) · Platform-managed help guide documents | P03 | 1 |
+| Chat Agent — insurance & benefits | Answer queries about group insurance and benefits | Uploaded insurance policy documents (M11) | P03 / M14 | 3 |
+| Engagement sentiment analysis | Identify themes and disengagement signals from survey responses | Survey response data (anonymised) | M15 | 3 |
+| Receipt OCR | Extract amount, date, and vendor from photographed receipts | Receipt image | M12 | 3 |
+
+| Cross-module AI assistance | Embedded assistance across modules — recruitment screening, anomaly detection, review/goal drafting, document classification | Module data within the querying role's access scope (PII-stripped) | All | 3 | | Agentic workflow assistant | Guide and pre-fill multi-step workflows; human confirmation required before any state change | Platform help guides · in-scope module data | P01 / P03 | 3 | | Predictive insights | Surface signals such as attrition risk and workforce trends for informational use | Aggregated, PII-stripped HRMS data | M16 | 3 |
+| Voice-based assistant | Hands-free chat and workflow queries via speech — transcribe, process, and respond within the user's access scope | Same grounding sources as the Chat Agent · in-scope module data (PII-stripped) | P03 | 3 |
+The Phase 3 capabilities above constitute the Exhaustive AI Integration Journey (§3.7) and operate within the governance principles below without exception.
+
+### AI Governance Principles
+The Chat Agent answers only from the two defined grounding sources — organisation-uploaded documents and platform help guides. If the answer is not in these sources, it says so
+All AI API calls are made from the backend — never from the browser. The API key is never exposed to the client
+Voice interactions are transcribed and processed server-side; captured audio is not retained beyond the transaction, and transcripts follow the same no-content-logging and PII-stripping rules as text
+AI-generated outputs that inform HR decisions are informational only — they do not trigger automated actions or workflow approvals without human confirmation
+PII is never sent to the AI model — all context is stripped of personal identifiers server-side before the API call is made. This stripping mechanism is governed by the same PII protection ceilings defined in sections 2.5 and 3.2 — fields classified as government identifiers, financial, biometric, or health data are excluded from AI context regardless of the querying role’s access level
+Every AI call is logged: model, user role, query type, token usage, response latency. Query content and response content are not logged (privacy)
+PrimeSoft Solutions, Inc. · PrimeSoft HRMS · Product Vision, Platform Architecture & Solution Architecture · v2.5 · Confidential

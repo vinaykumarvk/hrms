@@ -1,0 +1,740 @@
+PrimeSoft HRMS ��� RBAC Design Document v1.7
+
+# PrimeSoft HRMS — Role-Based Access Control (RBAC) Design Document
+| Version | v1.7 (Manager-review R3 follow-up: Admin-workspace exclusivity, manager on-behalf action gating, reportee full-parity view; prior v1.6 Manager-review: bulk-action permission, manager notice-period edit, Admin-workspace exclusivity; prior v1.5 Employee-review: promotion-readiness, cost-centre & SD-SLA sensitivity rows; AI chat role-scoping) — prior v1.4 |
+| Classification | Confidential |
+| Source Documents | Solution Architecture v2.4 · Darwinbox Standard Permissions Export (STDPERM_1–STDPERM_8) · M02 Onboarding Requirements · M03 Exits & Offboarding Requirements · M04 Leave Management Requirements · M05 Attendance Requirements · M11 Document Management Requirements · Admin Settings Requirements |
+| Audience | CEO · CTO · CHRO · Product Architect · Implementation Lead |
+
+Revision | v1.3 — OPEN-RBAC-01 closed (BRD §3 single-source authority note + §3.10 four-flag correction applied); title version corrected. v1.2 — capability-flag registry consolidated (Asset Custodian + Dept-Head Audit Certify added; Change Manager dropped); M17 operational roles added. v1.1 — reconciled against BRD v7.5 (§3.1–3.10), the 8 Standard Permissions exports, and the configured-content exports. Extends v1.0; no v1.0 content removed. |
+
+# Document Control — v1.1 Reconciliation Summary
+This revision extends v1.0 without removing any content. It (a) records where the access-control model is duplicated between this document and BRD v7.5 §3, (b) closes the Org Admin configuration-ownership gap (§2.1.1), and (c) opens a reconciliation register (Appendix A) for items requiring product confirmation before build. This document remains the single source of truth for the access-control model; the Platform Spec P02 owns enforcement, and the per-module / admin FS own per-screen projection.
+Change log (v1.0 → v1.1)
+Added §2.1.1 — configuration ownership (build vs bind); extended the Org Admin mandate with form/custom-field configuration and notification configuration.
+Added Appendix A — Open Items, Conflicts & Recommendations (reconciliation register from the BRD / exports pass).
+No roles, scoping rules, matrix cells, capability flags, field-access rules, or per-role summaries from v1.0 were removed or altered.
+Change log (v1.1 → v1.2)
+§4.3 — consolidated the capability-flag registry to the four Phase-1 flags (BGV review, Letter Admin, Asset Custodian, Department Head — Asset Audit Certify); Change Manager dropped (not Phase 1). Added the HOD configurable-grants note. Resolves OPEN-RBAC-03.
+§2.2 — added the M17 entity-scoped operational roles (IT Admin, IT Asset Manager, Service Desk Admin; Facilities/Office Admin via office_admin), per BRD §3.7.6.
+Appendix A — OPEN-RBAC-02 and OPEN-RBAC-03 marked resolved.
+No v1.0/v1.1 content removed; all additions are marked.
+Change log (v1.2 → v1.3)
+OPEN-RBAC-01 closed: the BRD §3 now carries a single-source authority note pointing to this document, and BRD §3.10 is corrected to the four-flag set. This document is the authoritative access-control model.
+Title version corrected to v1.3 (the v1.0/v1.1 title line had not been bumped).
+No roles, scoping rules, matrix cells, capability flags, field-access rules, or per-role summaries changed.
+Change log (v1.3 → v1.4)
+Added §4.4 — RBAC Administration Surface, describing the two Org Admin management screens: cfg-rbac (roles list + role × permission matrix, FR-P02-001) and cfg-rbac-role (role permission editor with per-module action toggles and scope selectors, RBAC §4.4). No roles, scoping rules, matrix cells, capability flags, field-access rules, or per-role summaries were removed or altered; §5 remains the authoritative permission depth.
+
+# 1. Overview
+Access control in PrimeSoft HRMS operates at four layers, applied in combination for every user session:
+| Layer | What It Controls |
+| Module-Level | Whether a module is visible at all. Inactive modules are fully invisible — not just disabled. Includes a distinct Module Admin tier for configuration rights. |
+| Field & Section Level | Visibility and editability of individual fields and form sections within a module. |
+| Data-Level (Row-Level Security) | Which records a role can see — scoped by reporting chain, department, contribution level, or entity. |
+| Action-Level | What a user can do within a record: View Only · Edit · Approve/Reject · Download · Admin Rights. |
+
+PII Protection Ceiling. PII fields carry system-enforced protection ceilings. No Organisation Admin, Module Admin, or any other role can override these ceilings upward. All references to PII restrictions elsewhere in this document operate subject to this ceiling. Exceptions are explicitly stated as platform-level grants (e.g. Office Admin national ID access) and are fixed — not configurable.
+Conflict Resolution Rule. Where a user holds more than one role simultaneously, the more restrictive permission always applies. A less permissive role never elevates access granted by a more permissive one.
+All rules are stored as configuration data.
+
+# 2. Role Taxonomy
+Roles are grouped into four categories. A user may hold more than one role simultaneously — conflict resolution rule applies (see §1).
+
+## 2.1 Platform Roles
+| Role | Code | Scope |
+| Platform Super Admin | platform_super_admin | All tenants — provisioning, master data, cross-tenant analytics |
+| Organisation Admin | org_admin | Single tenant — org structure, RBAC configuration, SSO, integrations, process-flow / workflow configuration, form &** custom-field configuration, notification configuration** (see §2.1.1) |
+
+
+## 2.1.1 Configuration ownership — build vs bind (added v1.1)
+References: §2.1 (Platform Roles), §4 (Module-Level Admin Rights); BRD §3.2; Platform Spec §W.1/W.2/W.3 + P02 (enforcement).
+Organisation Admin is the single tenant-level owner of all reusable configuration definitions: process flows / workflows, approval flows, skip and SLA settings, decision matrices, form and custom-field definitions, notification configuration, field-level RBAC, integration credentials, and SSO. Entity-scoped HR Admin and the module admins do not build these definitions — they bind a pre-built flow or form to an operational policy or transaction within their own entity (e.g. attaching an approval flow to a leave policy, or selecting a form on a leave type). Platform Super Admin owns cross-tenant provisioning, platform master data, and migration tooling — not the day-to-day configuration builders.
+How this is enforced at runtime is specified in Platform Spec P02; the builder screens are specified in the Org Admin — Configuration FS and the binder screens in the HR Admin FS. Reconciliation note: BRD §3.2 lists workflow configuration and field-level RBAC under Org Admin but omits form and notification configuration; this section closes that gap — see Open Item OPEN-RBAC-02.
+
+## 2.2 Entity-Scoped Operational Roles
+| Role | Code | Key Boundary |
+| HR Administrator | hr_admin | Full lifecycle access within their entity |
+| Finance Admin | finance_admin | Payroll approval and compensation data within their entity |
+| HRBP | hrbp | HR operations for directly assigned employees — business unit assignment is optional. See §3.3. |
+| Office Admin | office_admin | Strictly scoped to entity level — peer directory access + bank account entry + national ID view and upload (PAN, Aadhaar, Passport Number, Driving Licence) + DOB view. See §3.4. |
+| Onboarding Admin | onboarding_admin | Onboarding module (M02) only — entity level. See §4. |
+| Offboarding Admin | offboarding_admin | Exits & Offboarding module (M03) only — entity level. See §4. |
+| Leave Admin | leave_admin | Leave Management module (M04) only — entity level. See §4. |
+| Attendance Admin | attendance_admin | Attendance module (M05) only — entity level. See §4. |
+| IT Admin | it_admin | Assets & IT Service Mgmt (M17) — asset register, assignment, CMDB, service-desk config; entity level. See BRD §3.7.6 / M17 FS. |
+| IT Asset Manager | it_asset_manager | Asset lifecycle, assignment & audit within M17; entity level. |
+| Service Desk Admin | service_desk_admin | Service-desk queue, catalog, KB, SLA configuration (M17); entity level. |
+| Facilities / Office Admin (assets) | office_admin | Office/facilities assets (M17 Office Assets) — uses the office_admin role. |
+| Payroll Admin | payroll_admin | Payroll module (M06) only — entity level. See §4. |
+| Compliance Admin | compliance_admin | Statutory Compliance module (M07) — joint ownership with HR Admin. Neither role alone constitutes full module admin coverage. Entity level. See §4. |
+| Performance Admin | performance_admin | Performance module (M09) only — entity level. Subject to entitlement scope per §8.3. See §4. |
+| Compensation Admin | compensation_admin | Hikes & Compensation module (M10) — joint ownership with Finance Admin. Neither role alone constitutes full module admin coverage. Entity level. See §4. |
+| Analytics Admin | analytics_admin | Analytics & Reports module (M16) — configuration rights only. Analytics module is available to all users — data visibility for every user governed by their own role entitlements. Entity level. See §4. |
+| Recruiter | recruiter | Assigned requisitions and candidates only — see §8. |
+| Recruitment Admin | recruitment_admin | All requisitions within entity — distinct role, subject to entitlement scope in §8. |
+| Document Admin | document_admin | Document Management module (M11) only — entity level. See §4.2, §4.3 (Letter Admin capability flag), §5.1 Notes 31–32, and §12. |
+| IT Admin | it_admin | Asset and IT provisioning module (M17) only — entity level. See §4. |
+
+
+## 2.3 Manager Hierarchy
+| Role | Code | Data Scope | Darwinbox Source |
+| Manager (L1) | l1_manager | Direct and indirect reports | STDPERM_1 |
+| L2 Manager | l2_manager | Reporting subtree — reduced vs L1 | STDPERM_4 |
+| L3 Manager | l3_manager | Reporting subtree — reduced vs L2 | STDPERM_5 |
+| L4 Manager | l4_manager | Reporting subtree — reduced vs L3 | STDPERM_6 |
+| L5 Manager+ | l5_manager | Reporting subtree — minimal permissions | STDPERM_7 |
+| HOD | hod | Entire assigned department — compensation visibility off by default, configurable per HOD user by Org Admin. Workflow approval authority off by default, configurable per workflow type per HOD user by Org Admin. See §6. | STDPERM_2 |
+| User Assignment Group Head | uag_head | Assigned UserAssignment Group — same entitlements as HOD except workflow approval authority. Compensation visibility off by default, configurable per UAG Head user by Org Admin. Workflow approval authority: hard ceiling — cannot be granted under any configuration. See §3.5. | — |
+| Skip-level Manager | skip_level_manager | Full reporting subtree — read only, no approvals. Retains access to published ratings after calibration window closes. See §6. | — |
+| Dotted Line Manager | dotted_line_manager | Dotted-line reportees only | STDPERM_8 |
+
+
+## 2.4 Individual Access Roles
+| Role | Code | Access Boundary | Status |
+| Employee | employee | Own data only | Active |
+| Candidate / Pre-joining | candidate | Recruitment portal (pre-offer) · Pre-joining portal (post-offer acceptance, pre-onboarding) — see §3.6 | Active |
+| Contractor / Consultant | contractor | Own attendance and documents — scoped to engagement period | To Be Decided |
+
+
+# 3. Data-Level Access — Scoping Rules
+
+## 3.1 Scoping Dimensions
+Five dimensions can be combined to define what records a user can see:
+Reporting Chain — Manager roles see records of their direct and indirect reports only. Skip-level Managers see their full subtree but cannot approve or edit.
+Department — HOD sees all employees in their assigned department regardless of reporting line.
+UserAssignment Group — A named group of one or more employees assigned to a specific individual. UAG Head has the same entitlements as HOD scoped to their group, with the exception of workflow approval authority — see §3.5.
+HRBP Assignment — Business unit assignment is optional. HRBPs are assigned employees directly — individually or via UAG. Data scope limited to directly assigned employees, further refined by entitlement dimensions — see §3.3.
+Contribution Level — An additional filter applied within a role’s normal scope. Contribution levels are:
+| Level | Description |
+| Intern | Entry-level, fixed-term learning engagement |
+| Associate | Junior professional — early career |
+| Individual Contributor | Mid-level professional — independent delivery |
+| Lead | Senior professional — leads work, may guide others |
+| Senior Lead | Senior specialist or team lead — cross-functional scope |
+| Manager | People manager — direct reports |
+| Senior Manager | Senior people manager — manages managers |
+| CEO | Organisation head |
+
+Contribution levels are used in performance calibration scoping, hike recommendation banding, and recruitment entitlement configuration.
+Configuration note. Contribution levels are a RBAC scoping dimension. The tenant-level master mapping of designation/grade to contribution level is Org Admin configuration. Individual employee contribution level on the employment record is editable by HR Admin (direct edit — see §7).
+Entity — HR Admin, Finance Admin, and Office Admin are scoped to their single entity. Cross-entity access requires explicit privilege granted by Organisation Admin and is audit-logged.
+Individual Entitlement — Time-bound access beyond a role’s default profile, granted by Organisation Admin within PII protection ceilings (see §1).
+
+## 3.2 Individual Entitlements
+The authoritative narrative is in Product Vision §3.2 (Individual User Entitlements). The five dimensions across which individual entitlements operate are reproduced here for accessibility.
+| Entitlement Type | Example Use Case |
+| Department-level grant | HRBP temporarily covering a specific department |
+| Field-level grant | Senior HRBP granted view of salary band (not individual CTC) for benchmarking |
+| Section-level grant | Legal counsel granted access to the employment contract section for compliance review |
+| Module-level grant | Senior Manager granted read access to Analytics for their assigned group |
+| Contribution-level uplift | VP-level Manager granted visibility of Senior Manager-level direct reports during a reorg |
+
+Operating rules. All individual entitlements require Organisation Admin approval, are audit-logged, carry a mandatory expiry date, are automatically revoked on expiry, and are subject to PII protection ceilings (see §1).
+
+## 3.3 HRBP — Entitlement Scope
+An HRBP’s data scope is defined by direct employee assignment — individually or via UAG. Within that assigned population, access is governed by all five entitlement dimensions:
+| Entitlement Dimension | Default | Configurable by Org Admin? |
+| Contribution level | All contribution levels within assigned employees visible | Yes — can be restricted to specific levels |
+| Department | All departments within assigned employees | Yes — can be restricted to specific departments |
+| Field level | Standard HR fields visible; compensation fields hidden | Yes — within PII protection ceiling (see §1) |
+| Section level | Employment and lifecycle sections visible; compensation section hidden | Yes — within PII protection ceiling (see §1) |
+| Module level | HR operational modules within entity | Yes — additional module access via individual entitlement only |
+
+
+## 3.4 Office Admin — Access Scope
+The Office Admin role is strictly scoped to entity level:
+| Access Type | Detail |
+| Entity scope | Single entity only — Office Admin in Entity A cannot access employees in Entity B |
+| Employee Directory | Same as standard employee directory — name, profile photo, designation, department, official email, official phone, office location, reporting manager |
+| Date of Birth | View only — all employees within the entity |
+| National Identity Documents | View and upload — PAN, Aadhaar, Passport Number, and Driving Licence. Cannot delete. Field values and identity documents are treated as the same — no distinction between field value and document. All four are platform-level grants for Office Admin — fixed, not configurable by Org Admin upward or downward. Changes to any field value require HR Admin approval via workflow before the change is committed (E · AR per §7). |
+| Bank Account Entry | Enter and update employee bank account details — direct write, no approval workflow required. Cannot view full account numbers — masked to last 4 digits after entry. All entries and updates are audit-logged. |
+| All other data | No access |
+
+National ID and DOB access are explicit platform-level grants — fixed and not configurable upward or downward by Org Admin.
+
+## 3.5 UserAssignment Groups
+| Rule | Detail |
+| Configuration | Created and managed by Organisation Admin |
+| Scope | One or more employees across different departments or reporting lines |
+| UAG Head entitlements | Same as HOD — scoped to assigned group. Compensation visibility off by default (see §6). Published ratings visibility off by default (see §6). Configurable per UAG Head user by Org Admin. |
+| Workflow approval authority | UAG Head: hard ceiling — workflow approval authority cannot be granted under any configuration. This is a platform-enforced ceiling, not a default setting. Org Admin has no configuration option to enable workflow approval authority for UAG Head users. HOD: workflow approval authority is off by default — Org Admin can enable per workflow type per individual HOD user. The authoritative source is Solution Architecture §3.1. |
+| HRBP use | Primary assignment mechanism for HRBPs where business unit assignment is not used |
+| Overlap | An employee can be a member of more than one UAG |
+| Audit | All UAG creation, modification, and membership changes are audit-logged |
+
+
+## 3.6 Candidate & Pre-joining Access
+| State | Trigger | Access |
+| Candidate | Application submitted | Recruitment portal only — view own application status, upload documents, complete BGC consent |
+| Pre-joining | Offer accepted and countersigned | Pre-joining portal — view and download offer letter, complete onboarding forms, upload required documents, view company policy documents, access Chat Agent (policy queries only). No access to live HRMS |
+| Employee (Active) | HR Admin initiates onboarding | Pre-joining portal access terminates automatically. Full Employee role access activated. If BGC is still in progress, HR Admin is warned but can proceed |
+
+Joining date is not the automatic activation trigger — HR Admin explicitly initiating onboarding is the trigger.
+
+# 4. Module-Level Admin Rights
+
+## 4.1 Design rules
+Module Admin rights do not expand a role’s data scope or PII access ceiling (see §1).
+Admin capabilities are configurable at the individual Module Admin user level — within the same module, different Module Admin users can hold different subsets of admin capabilities as granted by Organisation Admin.
+Every module must have at least one designated Module Admin.
+Distinct Module Admin roles inherit the action rights (View, Edit, Approve/Reject, Download, Admin) of their assigned module scope. They do not appear as separate columns in the action matrix — their access within their module is equivalent to HR Admin scoped to that module only.
+Module Admin roles have no access outside their assigned module unless an individual entitlement is explicitly granted by Organisation Admin (§3.2).
+Joint ownership modules (M07, M10) require both designated admins to be assigned — neither role alone constitutes full module admin coverage.
+
+## 4.2 Module-by-module Module Admin assignments
+| Module | Module Admin Role | Distinct Role? | Configurable Admin Capabilities |
+| Employee Master (M01) | HR Admin | No — configurable capability subsets | Configure employee data fields · Manage org structure (employee org position within entity — department assignment, reporting line, designation assignment on employee records; does not include creating or modifying department, designation, or grade master lists — master list management is Org Admin at tenant level) · Configure lifecycle state rules |
+| Onboarding (M02) | Onboarding Admin | Yes | Configure onboarding processes · configure onboarding forms (Standard and Workflow form templates) · configure document clusters (Sign-Off · Undertaking · Reference) · configure onboarding workflows (stages · assignees · SLA · escalation · skip conditions) · configure welcome page · configure email templates · manage BGV vendor profiles · assign verification packages to onboarding processes · configure auto-initiation rules · configure mandatory initiation attributes. Optional capability flag: BGV review (see §4.3). |
+| Exits & Offboarding (M03) | Offboarding Admin | Yes | Configure FnF clearance workflows · Manage exit interview templates · Manage separation checklists |
+| Leave Management (M04) | Leave Admin | Yes | Configure leave types and policies · Manage accrual rules · Override balances · Manage holiday calendar · Manage leave reasons · Manage Leave Settings jointly with HR Admin and Org Admin · Approve and reject individual leave requests · Raise on behalf · Revoke approved leave · Leave encashment case-by-case authorisation is HR Admin only. Bypass permissions: Organisation Admin and HR Admin can bypass global restriction periods and past-dated / special leave application restrictions. Manager (L1) and HRBP bypass is disabled. Platform SuperAdmin can also bypass past-dated and special leave application restrictions. HOD calendar visibility is fixed off — not configurable by Leave Admin or Org Admin. |
+| Attendance (M05) | Attendance Admin | Yes | Configure shifts and rosters · Manage biometric device mapping · Lock/unlock attendance periods · Override punch records · Approve and reject all attendance request types (regularisation, out duty, shift change, planned overtime) for all employees within the entity. Attendance Admin is an eligible approver at any stage of the standard attendance flow alongside HRBP and HR Admin. Attendance escalation fires after 5 days (not 10 days as in M04). On 24th and 25th of each month, escalation cadence overrides to 2-hourly notifications. |
+| Payroll (M06) | Payroll Admin | Yes | Initiate payroll runs · Manage salary structures · Generate disbursement files — Finance Admin approval required before release |
+| Statutory Compliance (M07) | HR Admin + Compliance Admin (joint) | Yes — joint | Manage statutory rates and thresholds · Generate compliance outputs |
+| Recruitment (M08) | Recruitment Admin | Yes — already distinct | Manage requisitions · Assign recruiters · Configure job boards · Manage agency/vendor access · Generate offer letters · Recruitment reporting |
+| Performance (M09) | Performance Admin | Yes | Configure appraisal cycles · Manage goal frameworks · Initiate and close cycles · Manage calibration sessions |
+| Hikes & Compensation (M10) | Compensation Admin + Finance Admin (joint) | Yes — joint | Configure hike cycles · Manage grade bands · Manage revision workflows. Finance Admin holds joint M10 admin rights for configuration purposes alongside Compensation Admin — this is distinct from approval authority. Finance Admin does not appear in the hike approval workflow at any stage. |
+| Document Management (M11) | Document Admin | Yes — distinct role | Configure policy library register · manage policy clusters and acknowledgement requirements · configure letter template register and merge fields · manage employee document vault settings (storage policies · retention windows · disposal rules) · configure sign-off and acknowledgement engine · manage versioning rules · manage visibility and access control profiles · manage POSH compliance records. Optional capability flag: Letter Admin (see §4.3). |
+| Analytics & Reports (M16) | Analytics Admin | Yes | Create and publish custom report definitions · Schedule report delivery · Manage dashboard layouts · Analytics available to all users — data visibility governed by each user’s own role entitlement |
+| Assets & IT (M17) | IT Admin | Yes — already distinct | Manage asset master · Configure asset categories · Manage device-to-employee mappings |
+| Chat Agent (P03) | HR Admin | No — via M11 document management | Manage grounded documents · Manage platform help guides |
+| Audit & Compliance Log (P05) | Organisation Admin | No change | Query and export audit logs · Manage retention settings |
+| Workflow Engine (P01) | Organisation Admin | No change | Configure workflow definitions · Manage SLA rules · Define escalation paths |
+| RBAC & Security (P02) | Organisation Admin | No change | Configure role permissions · Manage field-level access rules · Manage SSO and MFA settings |
+| Tenant & Org Admin (P04) | Organisation Admin / Platform Super Admin | No change | Tenant provisioning · Master data configuration · Segment and geography defaults |
+| Migration Toolkit (P06) | Platform Super Admin / HR Admin | No change | ETL framework access · Dry-run execution · Data verification. No other role has access to migration scripts, ETL outputs, or staging data — access is strictly limited to Platform SuperAdmin (tenant-level operations) and HR Admin (entity-level data verification and field mapping review only). |
+
+
+## 4.3 Capability Flag Registry
+Capability flags are grantable extensions to existing roles. A flag is NOT a role — it is an opt-in capability that an Organisation Admin grants to a specific user’s existing role assignment. Grant and revoke events are audit-logged.
+| Flag | Grantable on | Capability granted | Capability NOT granted | Governance |
+| BGV review | Onboarding Admin · HR Admin | View Verification Reports tab on candidate records · view vendor BGV results per check (Verified · Discrepancy · Pending · Unable to Verify) · record disposition on Discrepancy alerts (retain · investigate · initiate separation) · view BGV result history on Employee Profile post-completion | Edit candidate-submitted form fields (per M02 §A.1 ‘Allow BGV Admin to edit user inputs’ = No) · view BGV results for employees outside the role’s existing data scope · approve onboarding completion (governed by Onboarding Admin / HR Admin role, not by this flag) | Organisation Admin only. Grant and revoke both audit-logged to P05. Capability survives role transitions only if the destination role is in the ‘grantable on’ list — otherwise revoked automatically with notification to Org Admin. |
+| Letter Admin | Document Admin · HR Admin | Author and manage letter templates in the M11 letter template register · configure merge-field bindings · designate additional editors per template · approve template content for activation · publish and unpublish templates · manage template versioning | Edit policy library content (governed by Document Admin role, not by this flag) · manage employee document vault contents · alter retention or disposal rules · access documents outside the role’s existing data scope | Organisation Admin only. Grant and revoke both audit-logged to P05. Capability survives role transitions only if the destination role is in the ‘grantable on’ list — otherwise revoked automatically with notification to Org Admin. |
+| Asset Custodian | IT Admin · IT Asset Manager | Hold custodial responsibility for a set of assigned assets · confirm periodic asset audit for held assets | Edit the asset register · reassign or write-off assets (IT Admin only) | Organisation Admin only; grant/revoke audit-logged to P05. |
+| Department Head — Asset Audit Certify | HOD / UAG Head | Certify the periodic asset-audit attestation for the department’s assigned assets | Edit the asset register · reassign/write-off (IT Admin only) | Organisation Admin only; audit-logged to P05. |
+
+Configurable role grants (added v1.2). Two HOD grants are configured per user by Org Admin rather than as binary flags, because they are scoped per-user / per-workflow: (a) HOD report visibility (off by default, enabled per HOD user) and (b) per-workflow approval authority (off by default, enabled per HOD user per workflow type). Both are audit-logged to P05. Together with the four flags above, this is the complete Phase-1 capability/grant inventory. Change Manager is not a Phase-1 flag.
+Design rule. Capability flags are introduced sparingly. The bar for introducing a new flag is: the capability must be narrow and bounded (single data surface or action set), must not justify role proliferation, and must align with the Module Admin tier pattern where the parent role exists. Future modules adding new flags must register them here in §4.3.
+
+## 4.4 RBAC Administration Surface — prototype screens (added v1.4)
+RBAC is administered through two screens in the Org Admin configuration hub. These screens are the management surface for the access-control model defined in this document; they do not redefine it. The authoritative permission depth is §5 of this document and the StandardPermissionsExport files (CFG-MAP-053…060); the screens present that model representatively, consistent with the configuration source-of-truth convention (values and full inventory → the export and this document; screen and interaction → the prototype).
+RBAC roles & permissions — cfg-rbac (FR-P02-001). The landing screen. It lists the standard roles (role, scope / assignee context, permission count, users assigned) with an action to open each role for modification, and renders a role × permission matrix covering every module group (Employee Master, Onboarding, Exits & Offboarding, Leave, Attendance, Recruitment, Performance, Documents, Assets & IT, Org & Platform configuration, RBAC & Security) against the key roles, using the §5.1 legend. The on-screen matrix carries the key actions per module for at-a-glance “who can do what”; the exhaustive per-permission inventory remains §5.1 and the per-module FS. Org Admin is the only role that can modify; HR Admin and functional admins reach the screen read-only via the configuration-hub fallback. A provenance banner names the source files and the map IDs.
+Role permission editor — cfg-rbac-role (RBAC §4.4). Opened by selecting a role (or “New role”). It is the screen through which a role is modified, and has two parts. (a) Role definition — role name, status, assignee context / scope (Self · Team · Department · Entity · All tenants), standard-vs-custom type, and description. (b) Permissions by module — one section per module group, each listing that module’s actions (View · Add · Edit · Delete · Approve · Export and module-specific actions) with an allow / deny toggle and a per-action scope selector, plus a per-module “enable all”. Saving updates the role policy and writes a change entry to the P05 audit log (actor, role, permissions changed, timestamp); sensitive grants (compensation, audit, RBAC, platform enforcement) follow the maker–checker rule where configured. The toggle and scope set shown are representative — the complete action set per module is governed by §5 of this document and the module FS.
+Boundary. Role definition lives in these Org Admin screens (cfg-rbac / cfg-rbac-role). Platform-level enforcement and security posture live in Platform Super Admin (psa-security, Platform Spec P02). These administration screens are tagged to this section (RBAC §4.4); they are distinct from the Platform Spec P02 enforcement requirements FR-P02-001 (authorization resolution) and FR-P02-002 (field-level enforcement), which the screens bind but do not implement. The configurable per-user grants in §4.3 (capability flags, HOD report visibility, per-workflow approval authority) are administered through the same role/grant surface and remain audit-logged to P05.
+
+# 5. Action-Level Access
+| Action | Description |
+| View Only | Read the record or field. No modifications. |
+| Edit | Modify the record or field, subject to field-level rules. |
+| Approve / Reject | Act on a workflow request from another user. Cannot approve own requests. |
+| Download | Export or download a record, document, or report. Granted independently of View. |
+| Admin Rights | Configure the module — manage policies, rules, cycles, templates. Admin capabilities configurable at individual Module Admin user level — see §4 for full design rules. |
+
+
+## 5.1 Action Matrix by Role and Module
+Legend: V = View Only · E = Edit · A = Approve/Reject · D = Download · Adm = Admin Rights · — = No Access · * = Conditional (see notes following the matrix)
+| Module / Scope | Employee | Manager (L1) | HOD / UAG Head | HRBP | HR Admin | Finance Admin | Office Admin | Recruiter | Recruitment Admin | Skip-level Manager | Dotted Line Manager |
+| Employee Profile |  |  |  |  |  |  |  |  |  |  |  |
+| Own profile | E ¹ | — | — | — | Adm | — | — | — | — | — | — |
+| Team / assigned profile | — | V | V | V | Adm | — | — | — | — | V | V |
+| Leave |  |  |  |  |  |  |  |  |  |  |  |
+| Own leave | E ² | — | — | — | Adm | — | — | — | — | — | — |
+| Team / assigned leave | — | A ²¹ | V | E · A ³ | Adm ²¹ | — | — | — | — | — | — |
+| Leave — raise on behalf | — | E ²² | — | E ²² | Adm ²¹ | — | — | — | — | — | — |
+| Leave — revocation | — | — ²³ | — | A ²³ | Adm ²³ | — | — | — | — | — | — |
+| Leave Settings | — | — | — | — | Adm ²⁰ | — | — | — | — | — | — |
+| Attendance |  |  |  |  |  |  |  |  |  |  |  |
+| Own attendance | E ⁴ | — | — | — | Adm | — | — | — | — | — | — |
+| Team / assigned attendance | — | E · A | V ⁵ | E · A | Adm | — | — | — | — | — | — |
+| Payroll |  |  |  |  |  |  |  |  |  |  |  |
+| Own payslip | V · D | — | — | — | Adm | — | — | — | — | — | — |
+| Team payroll run | — | — | — | — | E · Adm | A | — | — | — | — | — |
+| Individual payslips | — | — | — | — | V · D · Adm | V · D | — | — | — | — | — |
+| Performance |  |  |  |  |  |  |  |  |  |  |  |
+| Own appraisal | E ⁶ | — | — | — | Adm | — | — | — | — | — | — |
+| Team / assigned performance | — | E · A | V ⁷ | V | Adm | — | — | — | — | V ⁷ | — |
+| Hike &** Compensation** | — | — | V* ⁸ | — | Adm | V ⁹ | — | — | — | — | — |
+| Recruitment |  |  |  |  |  |  |  |  |  |  |  |
+| Job requisitions | — | V ¹⁰ | — | V | E · A | V ¹¹ | — | E ¹² | E · Adm | — | — |
+| Candidate pipeline | — | — | — | — | E | — | — | E ¹² | E · Adm | — | — |
+| Offer letters | — | — | — | — | E | — | — | — | E · Adm | — | — |
+| Assets |  |  |  |  |  |  |  |  |  |  |  |
+| Own assets | V | — | — | — | V | — | — | — | — | — | — |
+| Team / assigned assets | — | V | V | V | V | — | — | — | — | — | — |
+| Documents |  |  |  |  |  |  |  |  |  |  |  |
+| Policy documents | V · D | V · D | V · D | V · D | Adm | — | — | — | — | V · D | V · D |
+| Own document vault | E · D ¹³ | — | — | — | Adm | — | — | — | — | — | — |
+| Employee documents | — | — | — | — | V · D · Adm | — | — | — | — | — | — |
+| National ID documents | — | — | — | — | V · Adm | — | V · E ¹⁴ | — | — | — | — |
+| Bank Account | — | — | — | — | E · Adm | — | E ¹⁵ | — | — | — | — |
+| Analytics | V · D ¹⁶ | V · D ¹⁶ | V · D ¹⁶ | V · D ¹⁶ | V · D · Adm ¹⁶ | V · D ¹⁶ | — | — | V · D ¹⁶ | — | — |
+| Workflow — Lifecycle | — | A ¹⁷ | — / A ²⁵ | A ¹⁸ | Adm | — | — | — | — | — | — |
+| Workflow — Escalation | — | A ²⁴ | — | A ²⁴ | Adm ²⁴ | — | — | — | — | — | — |
+| Employee Directory | V · D | V · D | V · D | V · D | V · D | V · D | V · D | V · D ¹⁹ | V · D | V · D | V · D |
+
+Notes
+Limited fields only — sensitive field changes require approval workflow.
+Apply for leave; balance and history are view-only.
+Edit on behalf of and approve/reject leave for directly assigned employees only.
+Submit regularisation requests only.
+HOD has view-only access to attendance — no edit or approval actions.
+Self-review participation only.
+Skip-level Manager retains access to published ratings after calibration window closes — see §6.
+HOD / UAG Head compensation visibility off by default — configurable per user by Org Admin. See §6.
+Finance Admin has view-only access to compensation bands for budgeting — does not approve hike decisions.
+Own job requests only.
+CTC data only — for payroll approval context.
+Assigned requisitions and candidates only — see §8.
+Upload and download own documents only.
+View and upload only — cannot delete. See §3.4.
+Entry and update only — direct write, no approval required. See §3.4.
+Analytics available to all users — data visible within analytics governed entirely by each user’s own role entitlement and data scope.
+Manager (L1) can approve/reject lifecycle workflow requests for direct and indirect reports.
+HRBP can approve/reject lifecycle workflow requests for directly assigned employees.
+Directory access for Recruiters limited to name, designation, department, and official email only.
+Leave Settings configurable by Leave Admin, HR Admin, and Org Admin — all three hold Adm rights for this area. Leave Admin and HR Admin are entity-scoped; Org Admin is tenant-scoped.
+HR Admin cell represents full Adm rights for the Leave module. Leave Admin inherits A · E · Adm within M04 scope — can approve/reject, edit, and configure leave for all employees within their entity. Standard flow: Manager (L1) notified at submission — any eligible role (Manager any level · HRBP · HR Admin · Leave Admin) can approve at any stage. Two-stage flow (ML · SPL · SBL): Stage 1 = standard flow. Stage 2 = HRBP · HR Admin · Leave Admin — mandatory, cannot be bypassed. Balance deducted only after Stage 2 approval. Leave encashment case-by-case authorisation is HR Admin only — Leave Admin cannot authorise individual encashment requests.
+Manager (L1) and HRBP / Leave Admin can raise leave on behalf of employees within their scope. Leave Admin can raise on behalf of any employee within the entity.
+HRBP · Leave Admin · HR Admin can revoke approved leave directly or approve employee revoke requests. Managers cannot revoke leave under any circumstances — this applies to all manager levels in all revocation scenarios including leave conflicts.
+Leave escalation fires after 10 days of inaction. Attendance escalation fires after 5 days. On 24th and 25th of each month, attendance escalation cadence overrides to 2-hourly notifications. Next level manager AND HRBP / HR Admin / Leave Admin (for leave) or Attendance Admin (for attendance) notified simultaneously. No auto-approval at any point.
+HOD: workflow approval authority off by default — configurable per workflow type per individual HOD user by Org Admin. UAG Head: hard ceiling — workflow approval authority cannot be granted under any configuration. See §3.5.
+Attendance Admin approval authority: Attendance Admin can approve and reject all attendance request types (regularisation, out duty, shift change, planned overtime) for all employees within the entity. Attendance Admin is an eligible approver at any stage of the standard attendance flow alongside HRBP and HR Admin. SPL has zero quota by default — does not appear in employee leave selector until Leave Admin or HR Admin credits a balance. Routes through two-stage approval flow once granted.
+Module Admin roles (Onboarding Admin · Offboarding Admin · Leave Admin · Attendance Admin · Payroll Admin · Compliance Admin · Performance Admin · Compensation Admin · Analytics Admin · Document Admin · IT Admin) do not appear as separate columns in this matrix. Their action access within their assigned module is equivalent to HR Admin scoped to that module only, per §4.1 design rules. Outside their assigned module they have no access unless an individual entitlement is granted by Organisation Admin.
+Onboarding Admin BGV review capability is governed by the capability flag in §4.3 — not by a row in this matrix. Document Admin Letter Admin capability is governed by the same flag mechanism.
+BGV review capability flag (§4.3). Holders of this flag can view BGV results on candidate records and act on Discrepancy alerts — capability is grantable on Onboarding Admin and HR Admin only. Survives role transitions only if the destination role is in the grantable list.
+Onboarding Admin is a distinct Module Admin role. Onboarding Admin appears in §2.2 Entity-Scoped Operational Roles and in §4 with Distinct Role = Yes. The role follows the same Module Admin tier pattern as Leave Admin and Attendance Admin: scoped to a single module (M02), entity-level data scope, configurable capability subsets within the module. No ‘BGV Admin’ role exists — BGV functions are governed by the BGV review capability flag, not by a separate role.
+Document Admin is a distinct Module Admin role. Document Admin appears in §2.2 Entity-Scoped Operational Roles and in §4.2 with Distinct Role = Yes. The role follows the same Module Admin tier pattern as Leave Admin, Attendance Admin, and Onboarding Admin: scoped to a single module (M11), entity-level data scope, configurable capability subsets within the module. Document Admin’s data and action scope within M11 is equivalent to HR Admin scoped to M11 only, per §4 design rule — no row addition to the §5.1 action matrix.
+Letter Admin capability flag. The Letter Admin capability is a flag grantable on Document Admin and HR Admin role assignments. The flag is NOT a role. Holders of the flag gain author / manage / publish access to letter templates in M11’s letter template register, including merge-field configuration. Holders cannot edit policy library content (governed by Document Admin role), manage employee document vault contents, or alter retention rules. The flag is grantable by Organisation Admin only. Grant and revoke events are audit-logged. See §4.3 Capability Flag Registry for the full definition.
+Organisation Admin and Platform SuperAdmin have Admin Rights across all modules within their scope and are omitted from this table.
+
+## 5.1.1 Module-specific capability matrices
+Some modules carry granular capability matrices that decompose their module-level role assignments into per-action rows. These matrices are catalogued here so they are canonical in RBAC and not restated in module BRDs.
+
+### 5.1.1.1 M03 Exits & Offboarding — Separation capability matrix
+Roles align with §2.2 and §4. Conditional entries reference the per-policy elevation rules in M03’s Separation Policy register (M03 §B). UAG = User Authorisation Group as defined in §3.1 Scoping Dimensions.
+| Capability | Employee (Self) | L1 Manager | HRBP | HR Admin | Org Admin | CHRO |
+| Initiate own resignation | Yes | — | — | Yes (on behalf) | Yes (on behalf) | — |
+| Revoke own resignation (pre-approval) | Yes (subject to M03 §A.1 hide-revoke) | — | — | Yes (on behalf) | Yes | — |
+| View own separation status | Yes | — | Yes (UAG) | Yes | Yes | Yes |
+| View team separations (own reportees) | — | Yes | Yes (UAG) | Yes | Yes | Yes |
+| Approve / Reject Stage 1 (Manager) | — | Yes | — | — | — | — |
+| Approve / Reject Stage 2 (HR Final) | — | — | Conditional (per policy elevation) | Yes | — | Conditional (per policy elevation) |
+| Override notice period (per case) | — | — | — | Yes | — | Yes |
+| Initiate Termination | — | — | — | Yes | — | Yes (mandatory final approval on Termination) |
+| Initiate Death case | — | — | — | Yes | — | Informational |
+| Convert Absconding flag to separation | — | — | — | Yes | — | Mandatory approver |
+| Configure Separation Policy | — | — | — | Yes (with Org Admin shared rights) | Yes | Informational |
+| Configure Separation Workflow (Workflow Builder) | — | — | — | Conditional (capability) | Yes | — |
+| Configure Notice Period master | — | — | — | Yes | Yes | — |
+| View confidential separation fields | Own only | — | Conditional (per policy Confidential column) | Yes | Yes | Yes |
+| View raw exit interview responses | — | — | Yes (UAG) | Yes | — | Yes |
+| Generate / Re-generate letters | — | — | — | Yes | — | — |
+| Update FLWD post-approval | — | — | — | Yes | — | — |
+| Bulk import separation | — | — | — | Yes | — | — |
+| View attrition analytics (M16) | — | Team only · aggregated | UAG · aggregated | Entity · aggregated | Tenant | Tenant |
+
+Reading the matrix. Yes = capability granted unconditionally to that role at the role’s standard data scope. Yes (on behalf) = the role can perform the action for another employee, not just for themselves. UAG = scoped to the role’s User Authorisation Group. Conditional = governed by the per-policy elevation flag in M03 Separation Policy register (M03 §B), not by RBAC alone. Mandatory approver = role appears as a required signatory in the workflow, not optional. Informational = role can view the case but takes no action.
+M03 module-specific overrides. Two elevation flags in M03 Separation Policy can promote roles into this matrix beyond their RBAC defaults: (a) the “HRBP elevation” flag promotes HRBP to Stage 2 approver for policies where it is set; (b) the “CHRO elevation” flag promotes CHRO into Stage 2 for policies where it is set. Both are policy-level configurations in M03 §B and do not require a separate RBAC entitlement.
+
+# 6. Sensitive Data Restrictions
+System-enforced restrictions subject to PII protection ceilings (see §1). Exceptions are explicitly noted.
+| Data Category | Permitted Access | Restricted From | Notes |
+| Salary / CTC | Employee (own) · HR Admin · Finance Admin (view only for budgeting) | All manager tiers · HOD · UAG Head · HRBP · Recruiter · Recruitment Admin · Office Admin | HOD and UAG Head compensation visibility can be enabled per user by Org Admin — off by default |
+| Bank account details | Employee (own, masked) · HR Admin · Office Admin (entry only — see §3.4) · Payroll processing at runtime | All other roles | Masked to last 4 digits for all display contexts |
+| Government IDs / National ID | Employee (own, masked) · HR Admin · Office Admin (view and upload — see §3.4) | All other roles | Platform-level grant for Office Admin covers PAN, Aadhaar, Passport Number, and Driving Licence. Changes require HR Admin approval via workflow. |
+| Date of Birth | Employee (own) · HR Admin · Office Admin (view only — see §3.4) | All other roles | Platform-level grant for Office Admin |
+| Performance ratings — draft | Reviewer only | All other roles including HR Admin | No entitlement grant can expose draft ratings prior to publish event |
+| Performance ratings — published | Employee (own) · Manager (own team) · HR Admin · Skip-level (full subtree, retained post-calibration) · HOD / UAG Head (own dept/group — off by default) | Peers · Finance Admin · HRBP | HOD and UAG Head published rating visibility configurable per user by Org Admin |
+| Performance ratings — calibration | Skip-level Manager (full subtree) · HR Admin · HOD (module-level entitlement grant required) | All other roles | HOD calibration access is a module-level entitlement grant by Org Admin |
+| Payslips | Employee (own) · HR Admin · Finance Admin | All manager tiers · HOD · UAG Head · HRBP · Office Admin | Finance Admin can view and download individual payslips |
+| Medical / health data | Employee (own) · HR Admin | All other roles | Not transmitted externally without explicit consent |
+| Biometric data | No UI display for any role | All roles | Managed at device integration layer only |
+| Compensation bands | HR Admin · Finance Admin (view for budgeting) · Recruitment Admin (offer benchmarking) | Employees · Candidates · Office Admin · All manager tiers · Recruiters (band range for assigned requisition only) | Manager compensation band visibility removed — hike recommendation is not a feature |
+| Promotion readiness | Manager (own team) · HR Admin · Skip-level · Calibration moderators | Employee (own self-view) · Peers | Promotion-readiness is a calibration/performance output (M09); not shown on the employee self-profile (Employee-review). |
+| Cost centre / budget code (IT) | IT / Service Desk roles · approving Manager / Finance (approval context) | Employee (raise-ticket form) | Not requested from or shown to the employee on the ticket form (Employee-review / data-minimisation). |
+| Service-desk SLA timers | IT Admin · Service Desk Admin / Agent | Employee (ticket views) | Response/Resolution SLA is an internal metric — hidden from the employee my-tickets and ticket-detail views. |
+
+AI Assistant / Chat Agent — role-scoped responses. The assistant answers HR-policy, HRMS-usage, and knowledge-base questions, but its responses are bound by the requester’s own field- and module-level visibility — it never surfaces data or capabilities the role cannot otherwise access. The knowledge base is answered through the assistant (no separate KB surface).
+
+# 7. Employment Details — Field-Level Access
+Field-level access rules for the Employment Details section of an employee profile. Rules apply within each role’s data scope as defined in §3 and §5.
+Legend: V = Visible · M = Masked · H = Hidden · E = Editable · AR = Approval Required to edit
+| Field | Employee (own) | Manager (L1) | HOD / UAG Head | HRBP | HR Admin | Finance Admin | Office Admin | Skip-level Mgr | Dotted Line Mgr |
+| Organisational Information |  |  |  |  |  |  |  |  |  |
+| Employee ID | V | V | V | V | V | V | V | V | V |
+| Designation / Job Title | V | V | V | V | E | H | V | V | V |
+| Department | V | V | V | V | E | H | V | V | V |
+| Business Unit | V | V | V | V | E | H | V | V | V |
+| Legal Entity | V | V | V | V | E | H | V | V | V |
+| Office Location | V | V | V | V | E | H | V | V | V |
+| Reporting Manager | V | V | V | V | E | H | V | V | V |
+| Dotted Line Manager | V | V | V | V | E | H | V | V | V |
+| Cost Centre | H | H | H | H | E | V | H | H | H |
+| Employment Terms |  |  |  |  |  |  |  |  |  |
+| Employment Type | V | V | V | V | E | H | H | V | V |
+| Employment Status | V | V | V | V | E | H | H | V | V |
+| Date of Joining | V | V | V | V | E | H | H | V | V |
+| Probation Status | V | V | H | V | E | H | H | H | H |
+| Confirmation Date | V | V | H | V | E | H | H | H | H |
+| Contract Start Date | V | V | H | V | E | H | H | H | H |
+| Contract End Date | V | V | H | V | E | H | H | H | H |
+| Notice Period | V | V | H | V | E | H | H | H | H |
+| Grade &** Classification** |  |  |  |  |  |  |  |  |  |
+| Grade / Band | V | V | V | V | E | V | H | V | V |
+| Contribution Level | V | V | V | V | E | V | H | V | V |
+| Compensation |  |  |  |  |  |  |  |  |  |
+| CTC / Salary | V | H | H ¹ | H | E | V | H | H | H |
+| Identity |  |  |  |  |  |  |  |  |  |
+| PAN | M | H | H | H | E · AR | H | V · E | H | H |
+| Aadhaar | M | H | H | H | E · AR | H | V · E | H | H |
+| Passport Number | M | H | H | H | E · AR | H | V · E | H | H |
+| Driving Licence | M | H | H | H | E · AR | H | V · E | H | H |
+| Work History |  |  |  |  |  |  |  |  |  |
+| Previous Employment History | V | H | H | V | E | H | H | H | H |
+| Internal Job History / Promotions | V | V | V | V | E | H | H | V | H |
+
+Notes
+HOD / UAG Head compensation visibility off by default — see §6.
+Design rules
+Fields marked H are not displayed at all — their existence is not revealed.
+Fields marked M are displayed in redacted form (e.g. PAN shown as XXXXX1234X).
+E · AR fields (PAN, Aadhaar, Passport, Driving Licence) require HR Admin approval via workflow before the change is saved.
+Office Admin can view and upload identity documents — no distinction between field value and document. Cannot delete — see §3.4.
+Finance Admin visibility of CTC, Grade/Band, Contribution Level, and Cost Centre is for payroll and budgeting context only — no edit rights on any employment detail field.
+Contribution Level: HR Admin can edit the contribution level on an individual employee record directly — no approval workflow required. The tenant-level master mapping of designation/grade to contribution level is Org Admin configuration — see §3.1.
+This table applies within each role’s data scope — a Manager (L1) sees these fields only for their direct and indirect reports.
+
+# 8. Recruiter & Recruitment Admin — Scoping Rules
+
+## 8.1 Recruiter
+| Rule | Detail |
+| Requisition visibility | Only requisitions explicitly assigned to the Recruiter are visible. Unassigned requisitions are fully invisible. |
+| Candidate visibility | Only candidates on assigned requisitions. If a candidate applies to multiple requisitions, the Recruiter sees only their assigned application. |
+| Cross-pipeline visibility | No visibility into other Recruiters’ pipelines. |
+| Existing employee data | No access to any existing employee records. Directory access limited to name, designation, department, and official email for hiring manager identification only. |
+| Offer letters | Cannot generate offer letters — restricted to Recruitment Admin and HR Admin. |
+| Compensation | Salary band range for the role being hired surfaced as read-only for offer benchmarking. Individual CTC never visible. |
+| Self-assignment | Cannot assign requisitions to themselves or others. Only Recruitment Admin or HR Admin can assign. |
+
+
+## 8.2 Recruitment Admin
+Subject to all five entitlement dimensions from §3.2:
+| Entitlement Dimension | Default | Configurable by Org Admin? |
+| Contribution level | All contribution levels visible | Yes — senior/executive hiring can be scoped separately |
+| Department | All departments visible | Yes — can be restricted to specific departments |
+| Field level | Compensation fields in offer letters masked above a configurable threshold | Yes |
+| Section level | Compensation section of candidate profile visible | Yes — can be restricted |
+| Module level | Recruitment module only | Yes — additional module access via individual entitlement only |
+
+Clarifying rule. Recruitment Admin authority ends at offer acceptance. Employee record activation — transitioning a candidate from Pre-joining state to active Employee — is not within Recruitment Admin’s authority under any configuration. This action requires HR Admin to explicitly initiate onboarding (see §3.6). Recruitment Admin has no access to the onboarding module (M02) or the employee activation workflow unless an individual entitlement is explicitly granted by Organisation Admin.
+
+## 8.3 Performance Admin
+Subject to all five entitlement dimensions from §3.2, configured per individual Performance Admin user by Org Admin:
+| Entitlement Dimension | Default | Configurable by Org Admin? |
+| Contribution level | All contribution levels visible during calibration and cycle management | Yes — can be restricted to specific levels |
+| Department | All departments within the entity | Yes — can be scoped to specific departments |
+| Field level | All performance fields visible including ratings, comments, and goal scores | Yes — specific fields can be masked |
+| Section level | All appraisal sections visible | Yes — sections can be restricted |
+| Module level | Performance module admin rights only | Yes — cross-module access via individual entitlement only |
+
+Draft ratings and PII restrictions apply regardless of entitlement configuration — see §6.
+
+# 9. Hike & Compensation — Approval Chain
+| Stage | Role | Action |
+| 1 | HR Admin | Initiates hike cycle · prepares recommendations |
+| 2 | CEO | Final approval · Approve/Reject |
+
+Rules
+Finance Admin holds joint M10 module admin rights for configuration purposes alongside Compensation Admin — this is distinct from approval authority. Finance Admin does not appear in the hike approval workflow at any stage.
+No individual CTC visibility at any stage.
+HOD and UAG Head can view hike decisions for their department/group only if compensation visibility is enabled by Org Admin (off by default — see §6).
+All hike decisions are audit-logged with initiator, approver, and justification.
+
+# 10. Chat Agent — Access & Scope
+| Role | Access | Scope |
+| Employee | Yes | Company HR policy documents (M11) · Platform help guide documents |
+| Candidate / Pre-joining | Yes (Pre-joining state only) | Company HR policy documents · Platform help guide documents |
+| All other roles | Yes | Company HR policy documents (M11) · Platform help guide documents |
+
+Design rules
+Answers queries from two sources only — organisation-uploaded HR policy documents (M11) and platform-managed help guides. Does not answer questions outside these sources.
+PII is never sent to the AI model — all context stripped server-side before the API call.
+No access to any employee records, payroll data, or operational module data.
+All AI calls made from the backend — API key never exposed to the client.
+
+# 11. Peer Visibility — Employee Access to Other Employee Data
+
+## 11.1 Organisation Chart
+| Rule | Detail |
+| Access | All active employees |
+| Fields visible | Name · Designation · Department · Reporting Manager |
+| Fields not visible | CTC · Salary · Bank details · Government IDs · Personal contact · Performance ratings · Leave balances · Attendance records |
+| Scope | All entities within the tenant (Group Company scope included) |
+| Restrictions | Separated, absconded, and pre-joining employees not shown |
+
+
+## 11.2 Employee Directory / People Search
+| Rule | Detail |
+| Access | All active employees |
+| Fields visible | Name · Profile photo · Designation · Department · Official email · Official phone · Office location · Reporting Manager |
+| Fields not visible | Personal email · Personal mobile · Home address · CTC · Bank details · Government IDs · Date of birth · Performance ratings · Leave or attendance data · Any PII-classified field |
+| Scope | All active employees across all entities within the tenant |
+| Profile photo | Displayed by default · employees can opt out — replaced with initials avatar |
+| Configurable | Org Admin can suppress specific non-PII fields (e.g. hide phone number) |
+| Contractor / Consultant | Not included — TBD |
+| Restrictions | Separated, absconded, and pre-joining employees not shown |
+| Recruiter access | Limited to name, designation, department, and official email only |
+
+PII-classified fields are excluded from both org chart and directory views for all roles — enforced at platform layer, not configurable.
+
+# 12. Role Permission Summaries
+
+## 12.1 Employee
+View and edit own profile (limited fields) · apply for leave · view leave balance and history · view own attendance and submit regularisation · view and download own payslips and tax documents · submit expense claims (Phase 3) · self-review in performance appraisal · access Chat Agent (policy queries only) · view employee directory and org chart · view own analytics. Cannot view any other employee’s compensation, payslip, leave, or attendance data. Leave type selector shows only types with available balance — zero-balance types are hidden. SPL has zero quota by default and does not appear in the selector until Leave Admin or HR Admin credits a balance.
+
+## 12.2 Manager (L1)
+View personal and employment details of direct and indirect reports · approve/reject leave and attendance requests · edit team attendance and assign shifts · view team timesheets and schedules · review team performance · view team-level analytics. Cannot view salary, CTC, payslips, bank details, compensation bands, or government IDs of any employee.
+
+## 12.3 HOD
+Read-only view of all employees in their department · view attendance (no edit or approval actions) · view workflow lifecycle tab · view analytics scoped to department with toggle between reporting chain view and entire department view. Team leave not shown on calendar — HOD uses the team leave dashboard. Dashboard fields: employee name · leave type · from/to dates · status · reporting chain position. Compensation and published ratings visibility off by default — see §6. Workflow approval authority off by default — Org Admin can enable per workflow type per individual HOD user.
+
+## 12.4 UAG Head
+Same as HOD scoped to assigned UserAssignment Group. Compensation visibility off by default — configurable per user by Org Admin. Published ratings visibility off by default — configurable per user by Org Admin. Workflow approval authority: hard ceiling — cannot be granted under any configuration. See §3.5.
+
+## 12.5 HRBP
+View and edit attendance for directly assigned employees · approve/reject leave requests and attendance requests for assigned employees · view all lifecycle workflow events for assigned employees · view analytics scoped to assigned population. Business unit assignment optional — employee assignment (individual or via UAG) is the primary scoping mechanism. Access governed by entitlement dimensions — see §3.3. No payroll, CTC, or compensation access.
+
+## 12.6 Office Admin
+Access strictly limited to entity level: employee directory · date of birth (view) · national identity documents (view and upload — PAN, Aadhaar, Passport Number, and Driving Licence) · bank account details (entry and update — direct write, no approval required, masked after entry). See §3.4. No access to payroll, payslips, compensation, performance, leave, attendance, or recruitment data.
+
+## 12.7 HR Administrator
+Full access to all employee records within their entity · full lifecycle management · payroll initiation (Finance Admin approval required before disbursement — see §4) · statutory compliance outputs (Phase 2) · policy and document management · recruitment oversight · audit log access · Module Admin rights across all HR modules.
+HR Administrator is eligible for two capability flags: the BGV review flag and the Letter Admin flag (see §4.3). When the BGV review flag is granted, HR Admin gains the BGV-specific capabilities listed in §4.3 — without the flag, HR Admin does not see the Verification Reports tab and cannot record disposition on BGV Discrepancy alerts. When the Letter Admin flag is granted, HR Admin gains the letter-template-management capabilities listed in §4.3 — without the flag, HR Admin does not have author / publish rights on the letter template register (those remain with Document Admin by default). Neither flag is auto-granted — Organisation Admin must explicitly grant each.
+
+## 12.8 Finance Admin
+Payroll run approval · view and download individual payslips · payroll aggregates and cost centre data · view compensation bands for budgeting · joint M10 module admin rights for configuration purposes alongside Compensation Admin — Finance Admin does not appear in the hike approval workflow at any stage (see §9). Cannot view personal PII fields outside the payroll approval context.
+
+## 12.9 CEO
+Final approver for hike and compensation decisions (see §9). No other system permissions beyond standard Employee self-service access unless additional roles are assigned.
+
+## 12.10 Onboarding Admin
+Onboarding Admin is a distinct Module Admin role scoped to M02 only, entity level. Capabilities (configurable per individual user by Organisation Admin):
+Configure onboarding processes (consolidated ‘BGV Form Standard’ process; BGV Skip toggle for candidates not requiring BGV)
+Configure onboarding form templates — Standard Onboarding Form and Onboarding Workflow Form (field types · System Field flag · Database Mapping to M01)
+Configure document clusters — Sign-Off · Undertaking · Reference (per-document employer signature; per-cluster auto-rejection on DOJ change)
+Configure onboarding workflows — stages · assignees (role · user · UAG · manager · HRBP · HOD) · SLA · escalation · skip conditions
+Configure welcome page (Group Company display)
+Configure email templates (invitation · reminder · completion notifications)
+Manage BGV vendor profiles — capability subset under Onboarding Admin
+Assign verification packages (Onboarding BGV · ID Verification · Trigger Verification) to onboarding processes
+Configure auto-initiation rules (enabled · DOJ-based · 14 days before DOJ)
+Configure mandatory initiation attributes
+Initiate onboarding for candidates · approve/reject candidate fields and documents · send back onboarding · complete onboarding
+Assign Key People (Buddy · Teammates · Onboarding SPOC · Recruiter)
+Optional capability flag (granted separately by Org Admin): BGV review — see §4.3.
+Boundaries. Onboarding Admin has no access to payroll, compensation, performance, leave, attendance, or recruitment data outside the onboarding context. Cannot edit candidate-submitted form fields directly — admin actions are limited to approve / reject / send back. Data scope: entity level; subject to entitlement dimensions per §3.2.
+
+## 12.11 Offboarding Admin
+Configure FnF clearance workflows · manage exit interview templates and separation checklists · track offboarding task completion. Entity level. FnF payroll settlement remains with HR Admin and Finance Admin. No access to payroll, compensation, performance, or recruitment data.
+
+## 12.12 Leave Admin
+Configure leave types, policies, and accrual rules · override leave balances · manage holiday calendar · manage Leave Settings jointly with HR Admin and Org Admin · approve and reject individual leave requests · edit leave records · raise leave on behalf of any employee within entity scope · revoke approved leave directly or approve employee revoke requests. Entity level. Leave encashment case-by-case authorisation is HR Admin only — Leave Admin cannot authorise individual encashment requests. No access to payroll, compensation, attendance configuration, or performance data.
+Leave approval flows.
+Standard flow: Leave Admin is an eligible approver at any stage alongside Manager (L1), HRBP, and HR Admin.
+Two-stage flow (ML · SPL · SBL): Leave Admin is a Stage 2 eligible approver alongside HRBP and HR Admin — Stage 2 is mandatory.
+Escalation: Leave Admin is notified simultaneously with next level manager and HRBP / HR Admin when SLA is breached (10 days).
+Revocation: Leave Admin can revoke directly or act on employee revoke requests — Managers cannot revoke under any circumstances.
+Leave type visibility — platform-enforced rules.
+During probation: only Unpaid / LOP available. All other leave types hidden.
+During notice period: only Sick Leave (if balance > 0) and Unpaid / LOP available. All other leave types hidden.
+Zero-balance leave types are never shown in the selector. Unpaid / LOP always shown regardless of balance.
+
+## 12.13 Attendance Admin
+Configure shifts, rosters, and attendance policies · manage biometric device mapping · lock and unlock attendance periods · override punch records · approve and reject all attendance request types (regularisation, out duty, shift change, planned overtime) for all employees within the entity. Attendance Admin is an eligible approver at any stage of the standard attendance flow alongside HRBP and HR Admin. Attendance escalation fires after 5 days — on 24th and 25th of each month, escalation cadence overrides to 2-hourly notifications. Entity level. No access to payroll, compensation, leave configuration, or performance data.
+
+## 12.14 Payroll Admin
+Initiate payroll runs · manage salary structures · generate disbursement files. Finance Admin approval required before disbursement files are released (see §4). Entity level. No access to performance ratings, recruitment pipelines, or personal PII fields outside payroll context.
+
+## 12.15 Compliance Admin
+Manage statutory rates, thresholds, and compliance parameters jointly with HR Admin · generate statutory compliance outputs. Entity level. Joint ownership with HR Admin for M07 — see §4. No access to recruitment, performance, or individual employee personal data beyond compliance filing requirements.
+
+## 12.16 Performance Admin
+Configure appraisal cycles · manage goal frameworks · initiate and close performance cycles · manage calibration sessions. Entity level. Subject to contribution level, department, field, and section entitlement configuration per user by Org Admin — see §8.3. Draft ratings and PII restrictions apply regardless of entitlement — see §6.
+
+## 12.17 Compensation Admin
+Configure hike cycles · manage grade bands · manage compensation revision workflows jointly with Finance Admin. Entity level. Joint ownership with Finance Admin for M10 — see §4. Does not approve hike decisions — CEO is the defined approver (see §9). HR Admin initiates the hike cycle. No access to individual payslips or personal PII fields.
+
+## 12.18 Analytics Admin
+Create and publish custom report definitions · schedule report delivery · manage dashboard layouts. Configuration rights entity level. Analytics module available to all users — Analytics Admin does not control who can access analytics. Data visibility for every user governed by their own role entitlements.
+
+## 12.19 Document Admin
+Document Admin is a distinct Module Admin role scoped to M11 only, entity level. Capabilities (configurable per individual user by Organisation Admin):
+Configure the policy library register — policy categories, applicability rules, version control
+Manage policy clusters and acknowledgement requirements (single global acknowledgement text; per-template override deferred to Phase 2)
+Configure the letter template register and merge-field bindings (per M11 §D)
+Manage employee document vault settings — storage policies, retention windows (7 years post-exit baseline · indefinite for acknowledgement records), disposal rules
+Configure the sign-off and acknowledgement engine — including non-repudiation backbone
+Manage versioning rules (per M11 §H)
+Manage visibility and access control profiles (per M11 §F)
+Manage POSH compliance records
+Optional capability flag (granted separately by Org Admin): Letter Admin — see §4.3.
+Boundaries. Document Admin has no access to payroll, compensation, performance, leave, attendance, recruitment, or onboarding data outside the document-management context. Cannot edit business rules of consuming modules (M02, M03, M08, M09 own their respective business semantics; M11 owns only the document substrate per the M11 module boundary statement). Data scope: entity level; subject to entitlement dimensions per §3.2.
+
+## 12.20 Recruiter
+View and manage assigned requisitions and candidate pipelines only · schedule interviews · initiate BGC · limited directory access (name, designation, department, official email only). Cannot generate offer letters. See §8.1 for full scoping rules.
+
+## 12.21 Recruitment Admin
+Full pipeline visibility · generate offer letters · assign recruiters · configure job boards and agency access · recruitment reporting. Subject to entitlement configuration — see §8.2. Individual admin capability subsets configurable per user by Org Admin.
+
+## 12.22 Skip-level Manager
+Read-only view of full reporting subtree — personal and employment details only. Participates in calibration sessions. Retains read access to published ratings for full subtree after calibration window closes — see §6. No edit, approval, or download actions on operational data.
+
+## 12.23 Dotted Line Manager
+Read-only view of dotted-line reportees — personal and employment details only. View policy documents. View team assets. No edit, approval, or payroll access.
+
+## 12.24 IT Admin
+Asset master management · device assignment and return · IT provisioning tasks linked to onboarding · FnF asset clearance. Cannot view employee personal or employment data beyond asset assignment requirements.
+
+## 12.25 Candidate / Pre-joining
+See §3.6 for full state definitions, access scope, and transition rules.
+
+## 12.26 Contractor / Consultant
+Status: To Be Decided. Interim assumption: own attendance and document access scoped to engagement period. No payroll visibility. Not included in employee directory.
+
+# 13. Audit & Configuration Governance
+Audit Coverage
+Every RBAC rule change (module, field, or section level) immutably logged: who changed it, previous state, new state, timestamp
+Every individual entitlement grant and expiry logged
+Capability flag grant and revoke events logged to P05 (event types: capability_flag_grant / capability_flag_revoke; payload includes grantor, grantee, flag name, target role, timestamp, IP, optional justification)
+Recruiter-to-requisition assignment changes logged
+UAG creation, modification, and membership changes logged
+Module Admin capability assignments and changes per user logged
+HOD and UAG Head compensation and rating visibility grants and revocations logged
+Office Admin bank account entries and updates logged
+Candidate-to-Pre-joining and Pre-joining-to-Employee state transitions logged
+All PII field access events logged (100% coverage)
+Viewing an audit log is itself an auditable event
+Configuration Hierarchy
+| Level | Set By | Scope | Overridable? |
+| Platform default | Platform Super Admin | All tenants — baseline per segment + geography | Yes — by Org Admin |
+| Tenant default | Organisation Admin | All entities within tenant | Yes — by HR Admin |
+| Entity override | HR Admin | Single legal entity within a group | Yes — entity-specific |
+| Individual entitlement | Organisation Admin | Specific user — time-bound | Yes — with audit log, subject to PII ceiling (see §1) |
+
+MFA Enforcement. MFA is enforced by default for HR Admin and Organisation Admin — the two roles with RBAC write access.
+
+# 14. RBAC Working-Group Outstanding Items
+This section catalogues capability flag and role proposals that have been raised by module BRDs but are not yet implemented in RBAC. Each item is registered here on entry, reviewed by the RBAC working group, and either implemented in a future revision or formally declined with rationale.
+
+## 14.1 Items registered
+| # | Source | Proposal | Rationale (per source BRD) | Status |
+| WG-01 | M03 J.2 R1 | Separation Admin — capability flag grantable on HR Admin (not a separate role) | Mirrors BGV Admin pattern — capability flag where a distinct module-admin role isn’t justified. Avoids role proliferation; HR Admin is the natural primary actor for separations. | Registered. Needs review against §4.3 and §12 HR Admin definition before landing — possible that existing HR Admin scope already covers this. |
+| WG-02 | M03 J.2 R2 | Separation Initiator (on-behalf) — capability flag grantable on Admin / HRBP roles | Allows on-behalf initiation of separation without granting full HR Admin. Used for HRBPs operating in their UAG. | Registered. Needs review — overlaps may exist with §3.2 Individual Entitlements (UAG-based scoping already supports HRBP on-behalf actions in current §5.1 actions). |
+| WG-03 | M03 J.2 R3 | Exit Interview Reader — capability flag grantable on HRBP / CHRO | Per M03 §F.3 exit-interview confidentiality rules — explicit capability rather than UAG-derived. Allows HRBP/CHRO to read raw exit interview responses without elevating to HR Admin. | Registered. Needs review — current §5.1.1 capability matrix gives HRBP UAG-scoped read access already; whether this needs a discrete flag is the open question. |
+
+Note on FnF Clearance Actor capabilities. M03 J.2 originally proposed per-department FnF clearance capability flags for IT Admin · Finance Admin · Admin Ops · Attendance Admin · Leave Admin. These are not registered as outstanding items because they are already module-native capabilities (IT Admin per M17 · Finance Admin per cover-role definitions · Leave Admin per M04 §A · Attendance Admin per M05 §A · Admin Ops as a §12 role). No action required at the RBAC layer.
+
+## 14.2 Process
+Registration. A module BRD identifies a needed capability flag or role and lists it in its Decision log with rationale.
+Review. RBAC working group reviews each registered item against the current §4.3 capability registry and §12 role summaries to determine: (a) is the gap real, or already covered? (b) if real, does it warrant a new flag, a new role, or a modification to an existing role?
+Implementation. Accepted items land in a future revision.
+Decline. Declined items are moved to §14.3 archive with documented rationale.
+
+# Appendix A — Darwinbox Source Mapping
+
+## A.1 Key Permissions Enabled by Default — L1 Manager (STDPERM_1)
+Core: View Personal Details · View Employment Details · View profile flag · Download Profile PDF · Future Transactions (View)
+Workflows: Probation Confirmation · Separation · Contract · Workflow tab
+Attendance: View Attendance & Leave · View Attendance Page · View Overtime · View Overview · Edit Attendance One View · Edit Shift & Weekly Off · Assign Shift & Policy · Roster Import
+Leave: View Leave Page · View History · Apply Leave One View · Raise on Behalf · Comp-off Payout
+Scheduling: View Schedule Page · View Open Shift Board · On Behalf Open Shift · Assign Cover Shift
+Timesheets: View TimeSheets
+Travel &** Expense:** View Trip Summary · View Travel Requests
+Payroll: All Disabled
+Manager Hub: Enabled (L1 only — maps to team dashboard in M16 Analytics for PrimeSoft HRMS)
+
+## A.2 Manager Hierarchy Permission Comparison
+| Permission | L1 | L2 | L3 | L4 | L5+ | HOD | Dotted Line |
+| View Personal & Employment Details | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Download Profile PDF | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| View Overview Page (Attendance) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| Workflow Tab | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Probation / Separation / Contract View | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| View Attendance & Leave | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Edit Attendance | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Assign Shift & Policy | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Leave — Apply / Raise on Behalf | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Roster Import | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Scheduling (View & Actions) | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Manager Hub | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| All Payroll Permissions | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+
+
+# Appendix B — Gap Analysis: Darwinbox vs PrimeSoft HRMS
+| Darwinbox Feature | Source Role(s) | PrimeSoft Decision | Notes |
+| Manager Hub | L1 Manager (on) · Dotted Line (off) | Map to M16 Analytics team dashboard | No standalone equivalent needed. Manager (L1) accesses team analytics via M16 scoped to their reporting chain. Functional scope defined below — to be carried forward as a baseline requirement into M16 functional design. |
+| MSF module | HRBP | Descope | Darwinbox-specific — no equivalent |
+| Talent Pool Reviewer | HOD · HRBP | Future phase | No Phase 1–2 module |
+| Succession Dashboards | HOD · HRBP | Future phase | Succession planning out of scope |
+| Helpdesk module | All manager roles (off) | Descope | Grievance workflow in M01 covers the use case |
+| Fair Workweek Policy | L1 Manager (on) | Descope for India R1 | US/UK concept — not applicable |
+| Delete Face Enrollment Import | All roles (off) | Not required | Managed at biometric device layer in M05 |
+| Focus View — Org/Functional | HOD (off) | Evaluate | May map to org chart in M01 |
+| Employee Learning Center | Multiple roles (off) | Future phase | No LMS in current module map |
+| Role-based Succession Dashboard | HOD | Future phase | As above |
+
+
+## Manager (L1) Team Dashboard — Derived Scope
+Data scope: Direct and indirect reports only (reporting chain — §3.1). All metrics below are scoped to this population.
+| Category | Metrics Available | Constraints |
+| Headcount | Team headcount · active vs inactive · employment type breakdown · new joiners · separations | Reporting chain only |
+| Attendance | Attendance summary · present / absent / late counts · overtime summary · shift coverage | Reporting chain only |
+| Leave | Leave balance summary · leave utilisation · pending leave requests · leave type breakdown | Reporting chain only · leave reason not shown |
+| Performance | Goal completion status · appraisal cycle status · contribution level distribution | Reporting chain only · draft ratings never visible · published ratings visible after publish event only |
+| Timesheets | Timesheet submission status · pending timesheets | Reporting chain only |
+| Scheduling | Open shift coverage · shift assignment status | Reporting chain only |
+
+Team leave dashboard fields. Employee name · Leave type · From date · To date · Status · Reporting chain position. Leave reason is explicitly not shown. Team leave is not shown on the manager calendar — the dedicated dashboard is the only leave visibility mechanism for Manager (L1).
+
+## HOD Dashboard — Derived Scope
+Data scope: Entire assigned department. HOD dashboard includes a toggle to filter between:
+Reporting chain view — direct and indirect reports only (default when dashboard opens — platform fixed, not configurable)
+Department view — all employees in the assigned department regardless of reporting line
+All metrics and field constraints from the Manager (L1) dashboard apply equally to HOD, within the toggled scope.
+Team leave dashboard fields for HOD. Employee name · Leave type · From date · To date · Status · Reporting chain position. Leave reason not shown. Team leave is not shown on the HOD calendar — HOD uses the dedicated team leave dashboard, same as Manager (L1). HOD calendar visibility is fixed off — not configurable by Leave Admin or Org Admin.
+The following categories are explicitly excluded from both Manager (L1) and HOD dashboards:
+| Category | Reason |
+| Salary / CTC / Compensation | PII ceiling — §6 |
+| Payslips | PII ceiling — §6 |
+| Bank details / Government IDs | PII ceiling — §6 |
+| Draft performance ratings | PII ceiling — §6 |
+| Compensation bands | PII ceiling — hike recommendation is not a feature |
+| Recruitment pipeline | No recruitment access — §8 |
+| Statutory compliance data | No payroll module access |
+| Cross-team / cross-department data | Row-level security — reporting chain or department scope only — §3.1 |
+| Leave reason | Explicitly excluded |
+
+This scope is derived entirely from access constraints defined in this document. No new permissions are introduced. This should be adopted as the baseline requirement for the Manager and HOD tier analytics views during M16 functional design.
+
+# Appendix A. Open Items, Conflicts & Recommendations (v1.1 reconciliation register)
+Source of this register: reconciliation of v1.0 against BRD v7.5 §3.2–3.10, the 8 Standard Permissions exports (STDPERM_1–8), and the configured-content exports. Each item carries a proposed resolution marked PROPOSED — confirm before build; none is silently resolved in the model body above.
+| Id | Type | What’s missing / in conflict | Owner | PROPOSED resolution (confirm before build) |
+| OPEN-RBAC-01 | RESOLVED | The full model — role taxonomy, the 152×18 action matrix, the 29-field employment field-access table, sensitive-data restrictions, and the capability-flag registry — is authored in both this document and BRD v7.5 §3.2–3.10, creating two sources that can drift. | Product / Architecture | Adopt this RBAC document as the single source for the model; reduce BRD §3.2–3.10 to a short summary that references this document by section. Do not edit the BRD until agreed. |
+| OPEN-RBAC-02 | RESOLVED | BRD §3.2 and v1.0 §2.1 list workflow configuration + field-level RBAC under Org Admin but omit form/custom-field configuration and notification configuration ownership. | Product | Confirm §2.1.1: Org Admin owns form-config and notification-config (build); HR Admin / module admins bind. Actioned: BRD §3 carries a single-source authority note pointing to this document; §3.10 corrected to the four-flag set. |
+| OPEN-RBAC-03 | RESOLVED | Consolidated in §4.3 to four Phase-1 flags (BGV review, Letter Admin, Asset Custodian, Department Head — Asset Audit Certify) + the two HOD configurable grants; Change Manager dropped. | Product / Architecture | Consolidate one capability-flag registry in §4.3 covering all flags; have BRD §3.10 reference it. Confirm the final list and each flag’s grant authority. |
+| OPEN-RBAC-04 | Reconcile (data) | The action matrix (§5.1) must be validated cell-by-cell against the 8 Standard Permissions exports, which show 85 enabled / 1048 disabled permissions, concentrated in Core, Time Management, and Workflows (e.g. Manager: 24 Time-Mgmt + 5 Core + 4 Workflows enabled; HRBP: 14 Time-Mgmt + 4 Core + 4 Workflows; HOD/L2–L5: ~3–4 Core each). | Engineering / Product | Run a mechanical diff of §5.1 manager-hierarchy/HRBP rows against the export Enabled flags. Where they disagree, the export reflects what is actually enforced — confirm per row whether the doc or the config is intended. |
+| OPEN-RBAC-05 | Scope note | The exports and BRD §3.7.4 full matrix include modules beyond Phase 1 (Payroll, Travel & Expense, Rewards & Recognition, Talent Management, MSF), mostly disabled. | Product | Confirm these rows are retained for forward-compatibility but flagged out-of-Phase-1 so they are not built now. |
+| OPEN-RBAC-06 | Format | v1.0 was distributed as markdown inside a .docx wrapper — inconsistent with the BRD and FS (true .docx). | Architecture | This v1.1 output is a true .docx with heading styles; adopt it as the canonical format going forward. |
+
+End of Appendix A. This register is the only place reconciliation items are recorded; the model body above is unchanged from v1.0 except for the two clearly-marked v1.1 additions (§2.1.1 and the Org Admin scope cell).
+
+## Manager-role review (Round 3)
+Bulk-action permission: a bulk approve/reject/delegate requires the same permission as the single-item action on that queue — no separate grant. Bulk actions are audit-logged per item.
+Manager notice-period edit: a new permission governs a manager/reviewer editing the notice period during manager-initiated separation (distinct from the existing edit Recovery Days flag). Default off; configurable in Notice settings.
+Workspace exclusivity: the Admin workspace is exclusive — admin permission roles do not surface Employee/Manager screens while the user is acting as Admin. Workspace availability = held permission roles + has-reportees flag. See OPEN-FS-FND-05 (BRD §3.4 reconciliation).
+
+## Manager-role review (Round 3 follow-up)
+Admin-workspace exclusivity (OPEN-FS-FND-05 resolved). Holding an admin permission role grants an exclusive admin workspace: while acting as Admin the user sees only admin functions; the employee self-service surface is not rendered. Employee/Manager/HOD/CEO retain self-service. Workspace availability = held permission roles + (derived) has-reportees flag.
+Manager on-behalf action gating. In the employee-context (reportee) view the manager sees the employee's full structure but may perform only the actions their role permits on a reportee (approve regularisation/leave, apply-on-behalf where allowed, rate/comment on performance, initiate probation/separation). All on-behalf actions are audit-logged with both actor and subject.
+Reportee field visibility. The reportee view shows the same information the employee sees, except the intentional masks (full Aadhaar/PAN, bank account number, statutory IDs) — restricted to the employee and authorised HR/Finance roles. This supersedes the earlier "manager = HOD narrow scope (§3.9)" restriction on the manager reportee record.

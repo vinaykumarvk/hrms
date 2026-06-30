@@ -1,0 +1,7 @@
+﻿"Format Name","Format Code","Document Template Folder",Default,"Document Template Format",Prefix,Suffix,"Created On","Created By","Updated On","Updated By",Status
+"company custom",DOCFORMAT_1,"company custom",Yes,"Employee Name_Employee ID_Company Letter_Generated On",,,"09-02-2025 14:47:21",,,,Active
+"Employee onboarding",DOCFORMAT_2,"Employee onboarding",Yes,"Employee Name_Employee ID_Onboarding Document_Generated On",,,"09-02-2025 14:47:21",,,,Active
+"During the course of employment",DOCFORMAT_3,"During the course of employment",Yes,"Employee Name_Employee ID_Employment Related Document_Generated On",,,"09-02-2025 14:47:21",,,,Active
+"Employee separation",DOCFORMAT_4,"Employee separation",Yes,"Employee Name_Employee ID_Separation Document_Generated On",,,"09-02-2025 14:47:22",,,,Active
+"Merit Planning",DOCFORMAT_5,"Merit Planning",Yes,"Employee Name_Employee ID_Merit Planning Letter_Generated On",,,"09-02-2025 14:47:22",,,,Active
+"Confidential Letters",DOCFORMAT_6,"Confidential Letters",Yes,"Employee Name_Employee ID_Confidential Letter_Generated On",,,"09-02-2025 14:47:22",,,,Active

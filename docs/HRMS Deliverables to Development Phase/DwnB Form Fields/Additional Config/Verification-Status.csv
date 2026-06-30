@@ -1,0 +1,8 @@
+﻿"Verification Status Name",Description
+"On Hold",
+"BGV In Progress",
+"Completed Sucessfully",
+"BGV Failed",
+"Documents Awaited",
+VerificationCompleted,
+VerificationInitiated,

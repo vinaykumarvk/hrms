@@ -1,0 +1,41 @@
+﻿"Field Name","Field Id",Type,"Display in","Is Required","Is Editable","Allow Decimals","Number Separator",FOR
+"Reason for letter",a64902e57de4a6,Dropdown,"HR Documents",No,No,No,,Others
+"Manager Comments(If Any)",a6493ed5098c79,"Text Area","Separation Manager",Yes,Yes,No,,Others
+"Notice Period payable days",a6493ef9968b87,"Text Field","Separation Admin",No,Yes,No,,Others
+"Project Manager",a64980ad43a7ab,"Text Field","Recruitment Requisition",Yes,Yes,No,,Others
+"Duration of Project",a649a7a073bb9a,"Text Field","Recruitment Requisition",Yes,Yes,No,,Others
+"Please mention the number of rounds that are required for this Position.",a649a8722ddfca,"Text Field","Recruitment Requisition",Yes,Yes,No,,Others
+"Please mention the Interview Rounds for this position.",a649a87990fda3,"Multi Select Dropdown","Recruitment Requisition",Yes,Yes,No,,Others
+"Client Location",a649aaa2ed5f70,Dropdown,"Recruitment Requisition",Yes,No,No,,Others
+"Notice Period date",a64b4de2d76100,Date,"Employee Termination",No,No,No,,Others
+"Notice Period Buyout days",a64b79252dd9e8,"Text Field","Separation Reviewer",No,No,No,,Others
+Comments,a64c9e10b19901,"Text Field","Separation Employee",Yes,No,No,,Others
+"HRBP Comments",a64c9e1463e172,"Text Field","Separation Admin",Yes,No,No,,Others
+"Retention Amount",a64d1cad60734d,"Text Field","HR Documents",Yes,No,No,,Others
+"Performance Bonus Amount",a64d1cafd51897,"Text Field","HR Documents",Yes,No,No,,Others
+"One Time Bonus",a64d31f8c6f7b3,"Text Field","HR Documents",No,No,No,,Others
+Metric,a64dc8f88b835b,"Text Field",Performance,No,No,No,,Others
+Comments,a64ddb972d38fe,"Text Area",Performance,No,No,No,,Others
+Comments,a64ddb98268215,"Text Area",Performance,No,No,No,,Others
+"Final Last Working Date",a64e47478566a1,Date,"HR Documents",Yes,No,No,,Others
+"Project Start Date",a64ec3a8d5ed86,Date,"Recruitment Requisition",Yes,No,No,,Others
+"Customer Name",a64ec3f04b3e36,Dropdown,"Recruitment Requisition",Yes,No,No,,Others
+"Designation Alias",a64fed8d3caad1,"Text Field","HR Documents",Yes,No,No,,Others
+"Additional Reason",a6513c59ccaa75,"Text Area","HR Documents",No,No,No,,Others
+"Letter Expiry Date",a6515224b70307,Date,"HR Documents",Yes,No,No,,Others
+"Joining Bonus Payout",a652f7f6203452,"Text Field","HR Documents",No,No,No,,Others
+"Goal Measurement",a6539fc2a76467,"Text Area",Performance,No,No,No,,Others
+"Joining Date",a653a3392c61d2,"Text Field","HR Documents",Yes,No,No,,Others
+"Contract Period",a653a678519931,"Text Field","HR Documents",Yes,No,No,,Others
+"Notice Period",a653a6cb08af4c,"Text Field","HR Documents",Yes,No,No,,Others
+"Annual Compensation",a66c4614e7f7ac,"Text Field","HR Documents",Yes,No,No,,Others
+"new joining date",a66cead086405f,Date,"HR Documents",Yes,No,No,,Others
+"office city cust",a66ceafc17e869,Dropdown,"HR Documents",Yes,No,No,,Others
+"office address cust",a66ceb0368835b,Dropdown,"HR Documents",No,No,No,,Others
+"Insurance clause",a6728357e0aa5e,Dropdown,"HR Documents",No,No,No,,Others
+"internship period",a679b448e19dc7,"Text Field","HR Documents",No,No,No,,Others
+"Notice Period Employer",a681073b48683a,"Text Field","HR Documents",Yes,No,No,,Others
+"Notional Basic",a681073d938d26,"Text Field","HR Documents",Yes,No,No,,Others
+"Revised CTC in words",a69537629be352450052765,"Text Field","HR Documents",Yes,No,No,,Others
+"Custom Revised CTC",a69537703d74e4349288210,"Text Field","HR Documents",No,No,No,,Others
+"Custom Effective Date",a69538bb59260d282884674,Date,"HR Documents",No,No,No,,Others
