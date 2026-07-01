@@ -2,3 +2,8 @@
 # macOS
 .DS_Store
 **/.DS_Store
+
+# pipeline runtime
+docs/spec/pipeline/.state/
+docs/spec/pipeline/logs/
+docs/spec/pipeline/approvals/

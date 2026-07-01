@@ -1,0 +1,61 @@
+# HRMS build pipeline manifest — consumed by run.sh (the external driver).
+# Per the council verdict (doc/evaluations/autonomous-master-goal-loop-council-report-20260701.md):
+#   - the driver automates SEQUENCING; exit_criteria is verified OUTSIDE the model; gates are hard stops.
+#   - one fresh session per phase; resumable; hard-stop on red; human gates park for an approval token.
+#
+# Fields per phase:
+#   id            : stable id (also the state/approval key)
+#   name          : human label
+#   prompt        : the /goal prompt file fed to a fresh agent session
+#   exit_criteria : a shell command that returns 0 (GREEN) / non-zero (RED), run by the driver, NOT the agent.
+#                   If a phase's success cannot be expressed as a command yet, leave it as the `false` placeholder
+#                   and set gate: human — the driver will always park for human verification.
+#   gate          : auto  -> advance automatically when exit_criteria is GREEN
+#                   human -> after GREEN, PARK and wait for approvals/<id>.approved before advancing
+#   depends_on    : ids that must be `done` first
+
+version: 1
+defaults:
+  phase_timeout_seconds: 3600        # per-phase wall-clock cap (blast-radius limiter)
+  branch_required: true              # driver refuses to --execute on main
+
+phases:
+  - id: PH-00A
+    name: Inventory, provenance, and golden tests
+    prompt: docs/spec/pipeline/prompts/PH-00A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-00a.sh
+    gate: human                      # discovery feeds the whole program → human signs off before extraction
+    depends_on: []
+
+  - id: PH-00B
+    name: Thin PUDA strangler boundary
+    prompt: docs/spec/pipeline/prompts/PH-00B.md
+    # TODO: replace with checks/ph-00b.sh asserting P01-workflow.yaml parses + boundary conformance tests pass +
+    #       PUDA golden suite still green. Until then this phase always parks for human verification.
+    exit_criteria: "false"
+    gate: human
+    depends_on: [PH-00A]
+
+  - id: PH-00C
+    name: Minimum workflow-core extraction
+    prompt: docs/spec/pipeline/prompts/PH-00C.md
+    # TODO: checks/ph-00c.sh -> workflow-core builds+typechecks, unit tests green, no PUDA identifiers leak, golden parity.
+    exit_criteria: "false"
+    gate: human
+    depends_on: [PH-00B]
+
+  - id: PH-00D
+    name: Persistence, config, and adapter SPI
+    prompt: docs/spec/pipeline/prompts/PH-00D.md
+    # TODO: checks/ph-00d.sh -> packages build, resolver SPI + hooks contract tests green, full 00->14 schema load clean.
+    exit_criteria: "false"
+    gate: human
+    depends_on: [PH-00C]
+
+  - id: PH-00E
+    name: PUDA and HRMS conformance proof (PH-00 gate)
+    prompt: docs/spec/pipeline/prompts/PH-00E.md
+    # TODO: checks/ph-00e.sh -> PUDA adapter golden parity + HRMS synthetic flows + P01 OpenAPI validation all green.
+    exit_criteria: "false"
+    gate: human
+    depends_on: [PH-00D]
