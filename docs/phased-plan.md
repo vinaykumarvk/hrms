@@ -2,7 +2,7 @@
 
 **Scope:** 14 government modules (G01–G14) on the existing PrimeSoft platform.
 **Companion contract:** `docs/contracts/dependency-register.yaml` (machine-readable per-module dependencies).
-**Grounded in:** `docs/brd/v3/*` · `docs/brd/PLATFORM_FOUNDATION.md` · `docs/brd/MODULE_RECONCILIATION.md` · `docs/data-model/README.md` (403-table validated schema, 15-file load order 00→14).
+**Grounded in:** `docs/brd/v3/*` · `docs/brd/PLATFORM_FOUNDATION.md` · `docs/brd/MODULE_RECONCILIATION.md` · `docs/data-model/README.md` (447-table validated schema, 15-file load order 00→14).
 
 > **Non-greenfield rule.** Every module *consumes* platform engines P01–P06 / X.1–X.3 / W.1–W.3 by id and never re-authors them. The only things authored from scratch are the net-new statutory engines (SR ledger, pension, disciplinary due-process, qualifying-service, transfer/relieving/joining, seniority/promotion). This plan sequences *those* against the shared contracts.
 
@@ -43,7 +43,7 @@ Phase 0 Platform Core  →  G01 (Employee Master)  →  G12 (SR ingestion contra
 | G13 | Document Management | extend | 24 | **L** | Statutory doc classes/retention on M11 vault |
 | G14 | Dashboard & Analytics | extend | 26 | **L** | Read-only marts over all sources; RLS = P02 |
 
-Program totals: **403 tables · 1,769 FKs · 399 RLS tables · 673 enums** (validated end-to-end, `docs/data-model/README.md`).
+Program totals: **447 tables · 1,769 FKs · 399 RLS tables · 673 enums** (validated end-to-end, `docs/data-model/README.md`).
 
 ---
 

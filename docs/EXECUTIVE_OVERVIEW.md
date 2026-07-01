@@ -45,7 +45,7 @@ ones a commercial HCM lacks — and even those run on the existing platform serv
    multi-tenancy, and the platform API/error conventions — with `G01–G14` codes.
 5. **Cross-module integration review + remediation (v3.1):** five integration audits found and fixed the
    seams independent authoring introduced (a single SR ingestion contract, id-namespace hygiene, no entity forks).
-6. **Consolidated data model:** a 403-table PostgreSQL schema, **validated end-to-end** against a live
+6. **Consolidated data model:** a 447-table PostgreSQL schema, **validated end-to-end** against a live
    PostgreSQL instance (1,769 foreign keys, 399 row-level-security tables, 673 enums, all seed data inserting).
 
 ## 4. Quality evidence
@@ -66,7 +66,7 @@ ones a commercial HCM lacks — and even those run on the existing platform serv
 | `docs/brd/v1/`, `docs/brd/v2/` | Draft and council-revised lineage |
 | `docs/evaluation/` | 14 adversarial council reports |
 | `docs/review/` | 5 integration reviews + remediation spec |
-| `docs/data-model/` | 403-table validated PostgreSQL schema (core + 14 modules) |
+| `docs/data-model/` | 447-table validated PostgreSQL schema (core + 14 modules) |
 | `docs/platform-grounding/` | Extracted PrimeSoft governing-document text |
 | `docs/tools/md2docx.py` | Markdown → styled .docx renderer |
 

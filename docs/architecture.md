@@ -5,7 +5,7 @@
 **Grounded in (upstream contracts — referenced, never re-authored):**
 - `docs/brd/PLATFORM_FOUNDATION.md` — platform build contract (P01–P06, X.1–X.3, W.1–W.3, RBAC v1.7, multi-tenancy, API/error conventions, NFR baseline).
 - `docs/brd/MODULE_RECONCILIATION.md` — G01–G14 map, net-new vs extend, convention overrides (§C), net-new entity register (§D).
-- `docs/data-model/README.md` + `docs/data-model/CONVENTIONS.md` — the validated 403-table PostgreSQL schema, build order, conventions.
+- `docs/data-model/README.md` + `docs/data-model/CONVENTIONS.md` — the validated 447-table PostgreSQL schema, build order, conventions.
 - `docs/EXECUTIVE_OVERVIEW.md` — programme overview and rigor trail.
 - `docs/brd/v3/G01…G14` — the 14 authoritative platform-grounded module BRDs.
 
@@ -57,7 +57,7 @@ Deployed at the **CGG (Centre for Good Governance) Data Centre / government clou
 **Decision (ADR-01, §10):** the government HRMS is delivered as a **modular monolith** — a single deployable application with strong internal module boundaries (G01–G14) sharing one PostgreSQL database — layered on the PrimeSoft platform services, **not** a fleet of independently deployed microservices.
 
 **Rationale:**
-- **Consistency with the platform.** PrimeSoft's platform engines (P01 workflow, P02 authz, P05 audit) are cross-cutting shared services with a single logical database and cross-module referential integrity (1,769 FK constraints across the 403-table schema). Splitting modules into separate databases/services would break the FK graph, the DB-trigger audit substrate, and the SR ledger's cross-module posting contract.
+- **Consistency with the platform.** PrimeSoft's platform engines (P01 workflow, P02 authz, P05 audit) are cross-cutting shared services with a single logical database and cross-module referential integrity (1,907 FK constraints across the 447-table schema). Splitting modules into separate databases/services would break the FK graph, the DB-trigger audit substrate, and the SR ledger's cross-module posting contract.
 - **Transactional integrity.** Net-new statutory flows (transfer → relieving → joining → SR event; disciplinary due-process → penalty → SR event) require multi-table transactions and a single append-only SR ledger. A monolith gives ACID guarantees without distributed-transaction complexity.
 - **Operational simplicity for a government data centre.** One deployment unit, one backup/DR posture, one RLS-enforced database — appropriate for a 99.5%/month availability target and a government ops team.
 - **Module boundaries preserved logically,** not physically: each module owns its schema slice and service layer; shared systems of record (G01 employees, G12 SR, G13 documents) are read/written through owning-module contracts.
@@ -74,7 +74,7 @@ Every business table carries `tenant_id` (NOT NULL) and, where entity-scoped, `e
 |---|---|---|
 | Frontend | **React + TypeScript + Tailwind CSS + shadcn/ui** | Single-page app; WCAG 2.1 AA; responsive breakpoints 375/768/1280 px; touch targets ≥ 44×44 px; canonical UI-state standard (empty/loading/error/no-permission/partial-data). W.2 form definitions and RBAC field visibility drive rendered fields. No skeleton UI — real fields, data, API calls, states. |
 | Backend | Application service tier exposing `/api/v1` REST, hosting the module service layers and consuming the PrimeSoft platform engines | Physical framework is an engineering choice within the platform's logical architecture (`MODULE_RECONCILIATION.md` §C); the government spec fixes behaviour, API conventions and NFRs, not the framework. Connects to PostgreSQL as a **non-superuser** role and sets per-request RLS GUCs from the validated session. |
-| Data store | **PostgreSQL** (validated on PG14; individual module files validated up to PG17) | Single logical database, 403 tables, 1,769 FKs, 399 RLS-enabled tables, 673 enum types. `pgcrypto` for `gen_random_uuid()`. |
+| Data store | **PostgreSQL** (validated on PG14; individual module files validated up to PG17) | Single logical database, 447 tables, 1,769 FKs, 399 RLS-enabled tables, 673 enum types. `pgcrypto` for `gen_random_uuid()`. |
 | Object storage | Encrypted object store for documents & large binaries (G13 vault, migration payloads) | `documents`/`document_versions` hold metadata + storage-object references; binaries live in object storage, not the RDBMS. |
 | Async / jobs | X.1 background-jobs runner | Effective-dating, SR posting/relay, retention/disposal, pension runs, analytics mart refresh. |
 
@@ -177,9 +177,9 @@ Each module owns a schema slice (build order in `data-model/README.md`) and a se
 
 ## 5. Data Architecture
 
-### 5.1 The 403-table schema
+### 5.1 The 447-table schema
 
-The consolidated PostgreSQL schema is authored and **validated end-to-end** (load 00→14 in order into a clean cluster with `ON_ERROR_STOP=1`, all seed inserting): **403 tables · 1,769 FK constraints · 399 RLS-enabled tables · 673 enum types.** Build/load order and per-file ownership are defined in `docs/data-model/README.md`; conventions in `docs/data-model/CONVENTIONS.md`. Highlights:
+The consolidated PostgreSQL schema is authored and **validated end-to-end** (load 00→14 in order into a clean cluster with `ON_ERROR_STOP=1`, all seed inserting): **447 tables · 1,907 FK constraints · 399 RLS-enabled tables · 673 enum types.** Build/load order and per-file ownership are defined in `docs/data-model/README.md`; conventions in `docs/data-model/CONVENTIONS.md`. Highlights:
 
 - **Shared core** (`00-platform-core.sql`, 35 tables): tenancy, RBAC, employee master, P01 workflow, P05 audit, G12 SR core, G13 documents core, notifications/jobs/migration. Module schemas **reference, never redefine** these canonical tables (FK by `id`).
 - **Keys:** `id uuid PRIMARY KEY DEFAULT gen_random_uuid()`; business keys (`service_no`, `case_no`, `order_no`, …) are separate `UNIQUE` columns, tenant-scoped where applicable.
@@ -332,9 +332,9 @@ User-facing messages reference shared `ERR-*` ids (`ERR-FORBIDDEN`, `ERR-LOADFAI
 | **ADR-01** | **Build on the PrimeSoft platform** (extend/configure engines; author only net-new statutory logic) | Programme is explicitly not greenfield; PrimeSoft is a commercial-grade multi-tenant HRMS. Reuse of P01–P06/X/W collapses risk and cost. | Greenfield HRMS; buy a different COTS HCM | Modules consume contracts by id; cannot re-author engines; must track platform OPEN-* items (e.g. OPEN-PLAT-03). |
 | **ADR-02** | **Modular monolith** (single deployable + single PostgreSQL DB with strong module boundaries), not microservices | Preserves the 1,769-FK cross-module graph, DB-trigger audit substrate, single SR ledger, and ACID multi-table statutory transactions; simpler gov-datacentre ops for 99.5% SLA. | Per-module microservices + DB-per-service; modular monolith with schema-per-module in one DB | Modules release together; scale horizontally via stateless instances; boundaries are logical, enforced by ownership + review. |
 | **ADR-03** | **SR ledger built on the P05 audit/immutability substrate** (append-only, DB-trigger, hash-chained), owned by G12 with a single ingestion contract | Statutory system-of-record needs 100% tamper-evident capture; P05 already guarantees it — no parallel mechanism. | Bespoke SR audit table; external blockchain ("blockchain SR" — rejected as overstated) | No module mutates SR directly; corrections are corrigenda; tamper-evidence tracks OPEN-PLAT-03. |
-| **ADR-04** | **RLS as the P02 data-scope substrate** — tenant/entity isolation enforced in the database, masking + cross-entity above it | An application bug must not leak across tenants; deny-by-default at the row layer. | App-layer tenant filtering; separate DB per tenant | App connects as non-superuser, sets per-request GUCs; unscoped query returns no rows; 399/403 tables RLS-forced. |
+| **ADR-04** | **RLS as the P02 data-scope substrate** — tenant/entity isolation enforced in the database, masking + cross-entity above it | An application bug must not leak across tenants; deny-by-default at the row layer. | App-layer tenant filtering; separate DB per tenant | App connects as non-superuser, sets per-request GUCs; unscoped query returns no rows; 399/447 tables RLS-forced. |
 | **ADR-05** | **All approval/maker-checker flows are configured P01/W.1 definitions**, not per-module code | One engine, SoD enforced centrally, in-flight version pinning, SLA/escalation for free. | Bespoke workflow per statutory module | Government flows authored as W.1 definitions + W.2 forms; engine never re-implemented. |
-| **ADR-06** | **Single logical PostgreSQL database + external object storage** for binaries | Cross-module referential integrity + transactions; keep large binaries out of the RDBMS. | Polyglot persistence; blobs in DB | 403 tables, one backup/DR posture; documents store references, binaries in object storage. |
+| **ADR-06** | **Single logical PostgreSQL database + external object storage** for binaries | Cross-module referential integrity + transactions; keep large binaries out of the RDBMS. | Polyglot persistence; blobs in DB | 447 tables, one backup/DR posture; documents store references, binaries in object storage. |
 | **ADR-07** | **Adopt platform API conventions & 8-code error taxonomy verbatim** (`/api/v1`, cursor paging, idempotency, `X-Correlation-Id`, canonical envelope) | Consistency across 14 modules + PrimeSoft; overrides the invented `SHARED_FOUNDATION` conventions. | Per-module API styles; invented error codes | Modules author only `VAL-G0x`/`MSG-G0x`/`ERR-G0x` ids, registered in Foundation indexes. |
 | **ADR-08** | **G14 analytics as a read-model/mart layer** scoped by P02/RLS, off read replicas | Protect transactional p95; enforce that dashboards respect row scope. | Live queries against transactional tables | Marts refreshed by X.1; a user's dashboard cannot exceed their data scope. |
 | **ADR-09** | **Government roles as ADDITIONS to RBAC v1.7**, SoD via P01/P02 | No parallel access scheme; auditable grants; maker ≠ checker enforced by the engine. | Invented parallel gov role list | New roles/flags registered in RBAC §4.3/§2.2; Auditor → Org-Admin read, System Admin → Org/Platform Admin. |
@@ -348,7 +348,7 @@ User-facing messages reference shared `ERR-*` ids (`ERR-FORBIDDEN`, `ERR-LOADFAI
 
 - The PrimeSoft platform engines (P01–P06, X.1–X.3, W.1–W.3), RBAC v1.7, VAL-* library, and multi-tenancy substrate are **available and stable** at build time; the government build consumes them by id.
 - The physical backend framework is an engineering choice **within** the platform's logical architecture; this document fixes behaviour, API conventions, module boundaries, and NFRs, not the runtime language.
-- The 403-table schema is the validated baseline; changes go through the data-model amendment workflow, not ad-hoc DDL.
+- The 447-table schema is the validated baseline; changes go through the data-model amendment workflow, not ad-hoc DDL.
 - CGG Data Centre provides managed PostgreSQL, object storage, and container orchestration meeting the NFR baseline (§8).
 - G10 Payroll depends on Phase-2 PrimeSoft M06/M07 being live.
 
@@ -362,7 +362,7 @@ User-facing messages reference shared `ERR-*` ids (`ERR-FORBIDDEN`, `ERR-LOADFAI
 | Monolith scaling / release coupling | Throughput + change blast radius | Stateless horizontal scale, mart/read-replica offload for G14, disciplined module boundaries enforced by ownership + review. |
 | Legacy data quality on P06 migration | Cutover risk to a statutory system-of-record | 3 mandatory staging dry runs, waves, `migration_runs` ledger, `<gov>_source_id` traceability, failed-record logging. |
 | Statutory retention vs DPDP erasure conflict | Compliance exposure | Statutory retention floors override erasure; erasure is a redaction marker on non-statutory data, itself audited. |
-| RLS misconfiguration / superuser bypass | Tenant data leak | App connects as non-superuser with FORCE RLS; unscoped query returns no rows; RLS coverage verified on 399/403 tables in the load test. |
+| RLS misconfiguration / superuser bypass | Tenant data leak | App connects as non-superuser with FORCE RLS; unscoped query returns no rows; RLS coverage verified on 399/447 tables in the load test. |
 | G10 dependency on Phase-2 platform slips | Payroll delivery slips | G10 explicitly sequenced last; not on the critical path for the statutory Phase-1 modules. |
 
 ---

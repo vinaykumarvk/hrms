@@ -86,7 +86,7 @@ docs/
 - `contracts/` — machine-readable contracts: **OpenAPI 3.1** (`openapi/G01–G14.yaml`, 1,182 operations),
   `auth-matrix.yaml`, `error-taxonomy.yaml` (311 codes), `state-machines.yaml` (73 machines),
   `dependency-register.yaml`. See `contracts/README.md`.
-- `data-model/` — validated 403-table PostgreSQL schema (core + 14 modules). See `data-model/README.md`.
+- `data-model/` — validated 447-table PostgreSQL schema (core + 14 modules). See `data-model/README.md`.
 - `phased-plan.md` — dependency-ordered build plan (Phase 0 core → G01/G12/G13 → G02/G03 → SR writers → G10/G11 → G14).
 - `tests/` — **1,530 acceptance & E2E test cases** across 14 modules (every FR covered, 0 gaps), asserted
   against the contracts. See `tests/README.md`.
