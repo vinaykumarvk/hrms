@@ -1,0 +1,19 @@
+SCREEN: add-skill
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+e.g. Python
+
+LABELS/FIELD TEXT:
+Add skill
+Advanced
+Beginner
+Expert
+Intermediate
+Last used
+My profile
+Proficiency
+Skill name
+Years of experience

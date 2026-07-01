@@ -1,0 +1,35 @@
+SCREEN: cfg-custom
+
+TABLE COLUMNS (<th>):
+Action
+Display in
+Field ID
+Field name
+For
+Required
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Add / edit custom fields
+Allow decimals
+Client Office Location
+Custom fields
+Display in
+Dropdown
+Employee
+Employee Group
+Employment
+Field ID
+Field name
+For
+Is editable
+Is required
+Org Admin
+Performance Appraisal Month
+Required
+Text
+Type

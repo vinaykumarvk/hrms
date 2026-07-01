@@ -1,0 +1,56 @@
+SCREEN: psa-monitoring
+
+TABLE COLUMNS (<th>):
+Affected tenants
+Date
+Description
+Duration
+Error rate (24h)
+P95 latency
+Service
+Severity
+Status
+Throughput
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+API Gateway
+API requests (24h)
+Affected tenants
+All
+All systems operational
+Date
+Description
+Duration
+Email queue backed up briefly
+Error rate (24h)
+FR-P04
+Healthy
+LinkedIn integration token expired
+M01 Employee Service
+M04 Leave Service
+M05 Attendance Service
+M08 Recruitment
+M08 Recruitment Service
+M09 Performance
+M09 Performance Service
+M11 Document Service
+P03 AI Chat Service
+P05 Notification
+P05 Notification Service
+P95 latency
+Platform Admin
+Platform monitoring
+PostgreSQL primary
+Recent incidents (90 days)
+Redis cache
+S3 storage
+Service
+Service health
+Severity
+Slow
+Status
+Throughput
+Uptime (30d)

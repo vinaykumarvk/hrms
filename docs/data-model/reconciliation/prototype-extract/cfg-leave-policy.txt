@@ -1,0 +1,80 @@
+SCREEN: cfg-leave-policy
+
+TABLE COLUMNS (<th>):
+Action
+Assignment Framework
+Carry forward
+Code
+Default annual entitlement
+Employees matched
+Encashable
+Group Company
+Leave
+Leave policy set
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+ADL
+Accrued from OT/weekend work
+Action
+Active
+Adoption Leave
+All
+Assignment Framework
+COFF
+Carry forward
+Casual Leave
+Code
+Comp-off
+Configured leave types
+Custom
+Default annual entitlement
+Define
+Each leave policy is targeted to an
+Employees matched
+Encashable
+FR-M04-001
+Group Company
+HRL
+Holiday group
+Hourly leave
+LOP
+Lapses 90 days
+Leave
+Leave policies
+Leave policies (per leave type)
+Leave policy set
+Leave types
+Leave-policy assignment
+Loss of Pay
+Maternity Leave
+N/A
+Optional Holiday
+Org Admin
+PAT
+PL India
+PL UK
+PL USA
+PSL only
+Paternity Leave
+Privilege Leave
+RBAC-configurable
+SBL
+SPL
+Sabbatical Leave
+Sick Leave
+Special Leave (bereavement)
+Standard
+Status
+Statutory
+System
+System-credited
+Type
+Unlimited (with cap per HR Admin)
+Up to 45 days
+Variation by population
+Wedding Leave

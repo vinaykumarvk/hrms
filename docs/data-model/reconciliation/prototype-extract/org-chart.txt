@@ -1,0 +1,15 @@
+SCREEN: org-chart
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Dev Khanna
+Direct only
+Manager One
+Org chart
+Organisation chart
+Person A Surname

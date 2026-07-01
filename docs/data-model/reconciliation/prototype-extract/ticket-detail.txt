@@ -1,0 +1,32 @@
+SCREEN: ticket-detail
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Add reply
+Approver(s)
+Asset
+Assigned to
+Category
+Conversation
+Dashboard
+FR-M17-008
+In progress
+Incident
+My tickets
+N. Surname9 (agent)
+Network / Connectivity
+Network Queue
+PSI-LAP-7821
+Post reply
+Priority
+Queue
+REQ-2026-04821
+Status
+Ticket
+Type
+You

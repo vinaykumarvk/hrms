@@ -1,0 +1,43 @@
+SCREEN: my-org
+
+TABLE COLUMNS (<th>):
+Designation
+ID
+Name
+Reporting level
+Reports to
+Status
+
+INPUT PLACEHOLDERS:
+Search reportees by name, ID, team…
+
+LABELS/FIELD TEXT:
+Active
+Akash Surname9
+Dashboard
+Designation
+Direct (L1)
+Direct only
+Divya Surname2
+Indirect (L2)
+Indirect (L3)
+Kavya Surname5
+My organisation
+Name
+On ML
+On probation
+PSI000789
+PSI000832
+PSI000847
+PSI000910
+PSI000958
+Person A Surname1
+Reporting level
+Reports to
+Rohan Surname4
+SDET
+SWE
+SWE II
+Sr SWE
+Status
+You

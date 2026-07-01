@@ -1,0 +1,51 @@
+SCREEN: geofencing
+
+TABLE COLUMNS (<th>):
+Action
+Active employees
+Address
+Date
+Employee
+Lat / Long
+Radius
+Reason
+Site
+Type
+
+INPUT PLACEHOLDERS:
+Full street address
+Max employees
+e.g. 13.0827
+e.g. 80.2707
+e.g. Chennai
+
+LABELS/FIELD TEXT:
+Action
+Active employees
+Add new office site
+Add site
+Address
+Approve
+Attendance Admin
+Bangalore HQ
+Date
+Employee
+FR-M05-004
+Geofence radius (meters)
+Geofencing
+Hyderabad
+Lat / Long
+Latitude
+Longitude
+Magarpatta City Tower IV
+Mumbai
+Off-site client visit
+Off-site prospect meetings
+Office capacity
+Office sites
+Pune
+Radius
+Reason
+Site
+Site name
+Type

@@ -1,0 +1,45 @@
+SCREEN: sd-queue
+
+TABLE COLUMNS (<th>):
+Action
+Category
+Priority
+Ref
+SLA
+State
+Subject
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Account / Access
+Action
+Auto-assign
+Category
+Hardware
+In progress
+My tickets
+Network
+New
+Open
+P1 open
+Pending approval
+Pick up
+Priority
+Query / How-to
+Queue
+REQ-2026-04821
+REQ-2026-04822
+REQ-2026-04823
+REQ-2026-04824
+Re-route
+Ref
+SLA
+Service desk
+Service desk queue
+State
+Subject
+Tickets
+Unassigned
+Work

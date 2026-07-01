@@ -1,0 +1,26 @@
+SCREEN: attendance-approvals
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Search by name, request type…
+
+LABELS/FIELD TEXT:
+All types
+Approvals
+Approve
+Approve all
+Attendance regularisation
+Clear
+Dashboard
+Export
+Late waiver
+Missed punch
+Out-duty
+Regularisation
+Reject
+Reject all
+SLA breached
+Sorted by urgency
+Updated 4 min ago

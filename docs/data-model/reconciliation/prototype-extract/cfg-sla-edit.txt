@@ -1,0 +1,85 @@
+SCREEN: cfg-sla-edit
+
+TABLE COLUMNS (<th>):
+Breach output
+Cancel dependent
+Delegate to
+Duration
+Level name
+Trigger type
+When
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+After
+Approval
+Approval stage
+Auto-approve
+Auto-reject
+Before
+Both
+Breach notification
+Breach output
+Business days only
+Calculation basis
+Calendar basis
+Calendar days
+Cancel dependent
+Change control
+Code
+Confirmation
+Custom HR flow
+Cut-off day
+Delegate to
+Disabled
+Duration
+Edit SLA setting
+Email only
+Escalate
+Exclude days
+FR-P01-002
+HOD
+HR Admin
+HRBP
+Holidays only
+Hours of business
+In-app only
+Initiator
+L1 Manager
+L2 Manager
+Level 1 breach
+Level 2 breach
+Level name
+M01 Employee Master
+M02 Onboarding
+M03 Exits & Offboarding
+M04 Leave
+M05 Attendance
+M08 Recruitment
+M09 Performance
+M11 Documents
+M17 Assets & IT
+Module transaction
+Name
+None
+Notification
+Org Admin
+SLA levels
+SLA setting definition
+SLA setting editor
+SLA settings for
+SLA timers
+Stage assigned
+Status
+Task
+Trigger type
+Verification
+Weekend
+Weekly offs only
+When
+Workflow action type
+Workflow stage
+Working hours

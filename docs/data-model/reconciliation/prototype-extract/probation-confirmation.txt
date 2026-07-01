@@ -1,0 +1,26 @@
+SCREEN: probation-confirmation
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Comments to HRBP
+Confirm
+Dashboard
+Employee One
+Extend (max 3 months)
+FR-M09-005
+Joined
+Mentor
+Outcome
+Probation
+Probation confirmation
+Probation period
+Role
+Save draft
+Software Engineer
+Terminate
+Your decision

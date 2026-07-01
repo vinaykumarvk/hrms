@@ -1,0 +1,29 @@
+SCREEN: appraisal-review
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+ACHIEVED
+Active
+Computed goal score
+Customer
+Cycle
+Dashboard
+Description
+Due 29 May
+Employee One
+FR-M09-021
+FR-M09-025
+L1 progress
+L1 rating
+Per FR-M09-019 formula
+Plan summary
+Reviews
+SLA
+Self overall rating
+Submitted 18 May 2026
+Your evaluation (L1)

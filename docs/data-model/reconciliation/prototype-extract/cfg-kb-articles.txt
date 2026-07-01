@@ -1,0 +1,49 @@
+SCREEN: cfg-kb-articles
+
+TABLE COLUMNS (<th>):
+Action
+Category
+Code
+Status
+Title
+Version
+
+INPUT PLACEHOLDERS:
+Role / department (blank = all)
+comma,separated
+
+LABELS/FIELD TEXT:
+Action
+Add / edit article
+Archived
+Articles
+Audience
+Body
+Category
+Code
+Connect to corporate VPN
+Draft
+Encrypt an external drive
+Hardware
+IT Admin
+KB-000118
+KB-000201
+KB-000233
+Knowledge base articles
+Network
+Owner role
+Publish
+Published
+Reset your password
+Save draft
+Security
+Service Desk Admin
+Service Desk usage
+Service desk admin
+Software
+Software Lead
+Status
+Summary
+Tags
+Title
+Version

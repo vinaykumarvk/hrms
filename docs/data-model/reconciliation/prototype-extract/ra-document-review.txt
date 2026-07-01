@@ -1,0 +1,62 @@
+SCREEN: ra-document-review
+
+TABLE COLUMNS (<th>):
+Action
+Candidate
+Discrepancies
+Position
+SLA
+State
+Uploaded
+Verified
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Aditi Sinha
+All
+All in review
+All positions
+Assigned to me
+At risk (day 4-5)
+Awaiting upload
+Candidate
+Candidate One
+Day 1 of 5
+Day 2 of 5
+Day 3 of 5
+Day 4 of 5
+Discrepancies
+Docs uploading
+Document review
+Document review queue
+Documents under review
+Escalated to HRBP
+FR-M08-010
+Filter
+HR Admin pool
+In progress
+Issue final offer
+Joint review authority.
+On track
+On track (day 1-3)
+Open
+Person A Surname1
+Position
+Pradeep Surname2
+Recruitment Admin
+Recruitment Admin pool
+Remind
+Resolve
+Review in progress
+Reviewer
+Reviewer Three Joshi
+SLA
+Sneha Bose
+State
+Tanvi Mishra
+Unassigned
+Uploaded
+Verified

@@ -1,0 +1,46 @@
+SCREEN: holiday-calendar
+
+TABLE COLUMNS (<th>):
+Action
+Date
+Day
+Holiday
+Locations
+Type
+
+INPUT PLACEHOLDERS:
+Filter holidays…
+
+LABELS/FIELD TEXT:
+Action
+All
+Ambedkar Jayanti
+Apply
+Apply for optional holiday
+Christmas
+Date
+Day
+Dussehra
+FR-M04-006
+FR-M04-015
+Fri
+Gandhi Jayanti
+Ganesh Chaturthi
+Holiday
+Holiday calendar
+Independence Day
+Labour Day
+Leave
+Locations
+Mandatory
+Mon
+National
+New Year
+Optional
+Republic Day
+Request flexible date change
+Sat
+State
+Tue
+Type
+Wed

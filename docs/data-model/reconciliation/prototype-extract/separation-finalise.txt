@@ -1,0 +1,38 @@
+SCREEN: separation-finalise
+
+TABLE COLUMNS (<th>):
+Action
+Document
+Generated on
+Mailed to
+Status
+
+INPUT PLACEHOLDERS:
+Reason
+
+LABELS/FIELD TEXT:
+Action
+All clearance stages are complete. On
+All clearances done
+Cleared
+Computed
+Document
+Done
+Download
+Experience Certificate
+Finalisation checklist
+FnF settlement
+Generated documents
+Generated on
+HR Ops
+Last working day
+Mailed to
+Personal email on file
+Provisional (Phase 2 payroll)
+Re-send
+Rehire eligible
+Rehire note
+Relieving Letter
+Sent
+Separation Stage-2
+Status

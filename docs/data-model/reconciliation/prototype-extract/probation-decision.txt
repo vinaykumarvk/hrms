@@ -1,0 +1,24 @@
+SCREEN: probation-decision
+
+TABLE COLUMNS (<th>):
+DOJ
+Decision
+Employee
+Probation ends
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Confirm
+DOJ
+Decision
+Due for decision
+Employee
+Employee Four
+Employee Three
+Extend
+Probation decision
+Probation ends
+Separate
+Tasks

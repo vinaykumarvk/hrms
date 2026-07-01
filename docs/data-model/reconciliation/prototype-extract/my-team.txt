@@ -1,0 +1,39 @@
+SCREEN: my-team
+
+TABLE COLUMNS (<th>):
+DOJ
+Employee
+Last review
+Role
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Akash Surname9
+Candidate One
+DOJ
+Dashboard
+Employee
+Employee Four
+Employee One
+Exceeds (FY25)
+FR-M01-005
+FR-M09-015
+Kavya Surname5
+Last review
+Meets (FY25)
+My team
+On ML
+On probation
+Person A Surname1
+Pooja Joshi
+Pre-joining
+Role
+Senior Software Engineer
+Software Engineer
+Software Engineer II
+Software Engineer III
+Status

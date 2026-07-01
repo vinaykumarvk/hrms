@@ -1,0 +1,33 @@
+SCREEN: cfg-signers
+
+TABLE COLUMNS (<th>):
+Access
+Action
+Company
+Setting name
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Access
+Action
+Active
+Add / edit signing authorities
+Company
+Default signing authority 1
+Default signing authority 2
+HR Admin
+HR letter generation setting name
+Inactive
+Letter generation access
+Org Admin
+PSG HR Letters
+PSI HR Letters
+PrimeSoft Global Inc
+PrimeSoft IP Solutions
+Select company
+Setting name
+Signing authorities
+Status

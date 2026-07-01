@@ -1,0 +1,46 @@
+SCREEN: team-leave
+
+TABLE COLUMNS (<th>):
+Employee
+Fri 30
+Leave history
+Mon 2
+Mon 26
+Thu 29
+Tue 27
+Tue 3
+Wed 28
+Wed 4
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Akash Surname9
+Approved this month
+Avg balance
+Candidate One
+Dashboard
+Employee
+Employee Four
+Employee One
+FR-M04-008
+Fri 30
+Kavya Surname5
+Leave history
+Mon 2
+Mon 26
+NEW
+On leave this week
+On leave today
+PL across team
+Person A Surname1
+Pooja Joshi
+Team leave
+Team leave overview
+Thu 29
+Tue 27
+Tue 3
+WFH
+Wed 28
+Wed 4

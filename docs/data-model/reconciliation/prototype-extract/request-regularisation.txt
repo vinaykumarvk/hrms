@@ -1,0 +1,31 @@
+SCREEN: request-regularisation
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+At Client Location
+Attendance
+Client Visit
+Comments
+Date
+FR-M05-007
+Forgot to Punch In
+Forgot to Punch Out
+Logged in from home
+Missed punch in
+Missed punch out
+Out-duty
+Punch in
+Punch out
+Reason
+Regularisation
+Request attendance regularisation
+Type
+WFH
+Working from Home
+Working on a holiday/weekly off
+Wrong time

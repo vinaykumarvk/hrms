@@ -1,0 +1,63 @@
+SCREEN: hrbp-my-employees
+
+TABLE COLUMNS (<th>):
+Designation
+ID
+Manager
+Name
+Status
+Team
+§3.9 flags
+
+INPUT PLACEHOLDERS:
+Search assigned employees by name, ID, team…
+
+LABELS/FIELD TEXT:
+Accommodation
+Accommodations active
+Active
+Akash Surname9
+All
+Assigned employees
+Dependents 2
+Dependents 4
+Designation
+Dev Khanna
+Engineering Manager
+Engineering function
+FR-M01-008
+HRBP
+Identity
+Kavya Surname5
+Manager
+Manager One
+Manish Surname13
+My assigned employees
+Name
+Notice (LWD 28 Jun)
+On ML
+On notice
+On probation
+PIP active
+PSI000200
+PSI000321
+PSI000408
+PSI000789
+PSI000832
+PSI000847
+PSI000914
+Payments
+Person A Surname1
+Person B Surname9
+Person K Tewari
+Platform
+SWE
+SWE II
+Sneha Surname6
+Sr SWE
+Staff Engineer
+Status
+Team
+Visa exp 90d
+Visa expiring (90d)
+Wei Chen

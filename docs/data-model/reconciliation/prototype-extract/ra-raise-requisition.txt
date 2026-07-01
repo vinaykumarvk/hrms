@@ -1,0 +1,64 @@
+SCREEN: ra-raise-requisition
+
+TABLE COLUMNS (<th>):
+Contribution level *
+Designation alias
+Employee group *
+Location *
+Position no
+Replacement for *
+Reporting manager
+Type
+
+INPUT PLACEHOLDERS:
+Employee being replaced
+From
+Search employees
+Select
+Skills unique to this hiring request, beyond the standard JD
+To
+
+LABELS/FIELD TEXT:
+Approved Active
+Auto-numbering.
+Client location
+Comments / instructions
+Company
+Create manually
+Customer name
+Department
+Designation
+Designation alias
+Duration of project
+Engineering
+Executive Inside Sales
+Experience range
+FR-M08-001
+FR-M08-012
+Hiring lead
+Hiring manager
+Inside Sales
+Interview rounds
+New
+Number of new position(s)
+Number of position(s)
+Number of replacement position(s)
+Number of rounds required
+Position details
+Position no
+Position-specific requirements
+Position-specific skills
+PrimeSoft
+Project manager
+Project start date
+Raise a requisition
+Raise requisition
+Recruitment Admin
+Recruitment start date
+Replacement
+Reporting manager
+Requisitions
+Select
+Select department
+Select designation
+Type

@@ -1,0 +1,42 @@
+SCREEN: it-masters
+
+TABLE COLUMNS (<th>):
+Action
+Name
+Risk grade
+Status
+Support SLA
+Support portal
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit master record
+Apple
+Blue Dart (courier)
+Dell
+Inactive
+Low
+Manufacturer
+Manufacturers
+NBD
+Name
+OEM direct
+Record type
+Redington India
+Reseller
+Risk grade
+Service provider
+Status
+Support SLA
+Support SLA / risk grade
+Support portal
+Support portal / contract ref
+Type
+Type (vendor)
+Vendor
+Vendors

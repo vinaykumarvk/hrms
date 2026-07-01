@@ -1,0 +1,55 @@
+SCREEN: pa-exclusions
+
+TABLE COLUMNS (<th>):
+Action
+BU
+Detail
+Employee
+Reason
+Status
+
+INPUT PLACEHOLDERS:
+Search by name or ID
+
+LABELS/FIELD TEXT:
+Action
+Add exclusion
+Add manual exclusion
+All
+All reasons
+Awaiting role transition
+Cycle
+Cycle exclusions
+Detail
+Employee
+Engineering
+Exclusion reason
+Extended leave
+FR-M09-003
+FY26 Annual
+FY26 Mid
+Filters
+HRBP discretion
+Justification
+LWD 28 Jun 2026
+Long-term medical leave
+Manual exclusion
+Marketing
+New joiner
+New joiner (post-cutoff)
+On notice
+On probation
+Other (specify)
+Performance Admin
+Performance plan elsewhere
+Permanent
+Permanent (cycle past tipping point)
+Probation ends 11 Sep 2026
+Product
+Re-evaluate at confirmation
+Re-include
+Reason
+Reversible
+Reversible (can re-include)
+Sales
+Status

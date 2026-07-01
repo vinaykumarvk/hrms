@@ -1,0 +1,76 @@
+SCREEN: attendance-reasons
+
+TABLE COLUMNS (<th>):
+Auto-approve (DA02: off)
+Code
+Documentation
+Frequency cap
+Reason
+Status
+
+INPUT PLACEHOLDERS:
+Helps employees pick the right reason
+e.g. Forgot to swipe — physical card lost
+e.g. SWIPE_LOST_CARD
+
+LABELS/FIELD TEXT:
+Active
+Active reasons
+Add / edit attendance reason
+Always auto-approve (system downtime)
+Applicable to
+Attendance Admin
+Auto-approve threshold
+Code
+Custom upload
+Description (visible to employees)
+Disciplinary (repeated late)
+Documentation
+Documentation required
+EMRG
+Early departure
+Email screenshot / proof
+Event link
+FR-M05-005
+Frequency cap
+IT ticket ID
+Inactive
+Late arrival
+MED
+MISS
+Manager approval message
+Medical (self / dependent)
+Medical note if pattern
+Meeting reference required
+Missed clock-in (forgot to swipe)
+Missed clock-out
+Missed swipe (in or out)
+N/A
+No (DA02)
+None
+None (free text)
+Off-site training / conference
+Optional note
+Outdoor duty (client meeting)
+Personal emergency
+Reason
+Reason category
+Reason code
+Reason name
+Reasons
+Regularisation reasons
+Regularization (full day)
+SYS
+Save reason
+Status
+System / biometric down
+System / network downtime
+System issue (no employee fault)
+TRN
+TRV
+Travel reference
+Unlimited
+Usage limit per quarter
+WFH
+WFH conversion (last-minute)
+Work from home (WFH)

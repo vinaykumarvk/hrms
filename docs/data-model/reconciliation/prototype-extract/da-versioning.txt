@@ -1,0 +1,45 @@
+SCREEN: da-versioning
+
+TABLE COLUMNS (<th>):
+Cold retention
+Examples
+Final disposition
+Hot retention
+Retention class
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acknowledgement record
+After 90 days unchanged
+All versions
+Archived (audit-only)
+Cannot be disabled at tenant level.
+Cold retention
+Cold-tier transition trigger
+Contract
+Document Admin
+Examples
+FR-M11-001
+Final disposition
+HR Policy cron frequency (DM03)
+Hot retention
+Hot version retention count (DM10)
+Indefinite
+Indefinite (audit-only)
+Manual only
+Manual review only
+Max file size (DM06)
+Non-statutory PII
+Permanent purge
+Retention class
+Retention class rules
+Right-of-erasure carve-out (DM18)
+Sign-off cron frequency (DM04)
+Sign-off transactions
+Statutory PII
+Subject to right-of-erasure carve-out
+Unlimited
+Versioning configuration
+Virus scan (DM08)

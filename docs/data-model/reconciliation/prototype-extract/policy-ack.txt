@@ -1,0 +1,23 @@
+SCREEN: policy-ack
+
+TABLE COLUMNS (<th>):
+Action
+Document
+Due
+Issued
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acknowledge
+Action
+Awaiting your acknowledgement
+Code of Conduct 2026
+Document
+Due
+Issued
+Pending acknowledgements
+Read
+Self
+Updated Leave Policy

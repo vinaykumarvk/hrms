@@ -1,0 +1,30 @@
+SCREEN: cfg-att-platform
+
+TABLE COLUMNS (<th>):
+Action
+Scope
+Setting
+Value
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Add / edit attendance platform settings
+Attendance platform settings
+Cycle-based
+Enable geofencing
+Enable infraction framework
+Enable night-shift differential
+Enable planned overtime
+Enabled
+Geofencing at location level
+Infraction framework
+Org Admin
+Regularisation restriction
+Scope
+Setting
+Tenant
+Use payroll cycle
+Value

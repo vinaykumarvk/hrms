@@ -1,0 +1,49 @@
+SCREEN: cfg-exit-interview-form
+
+TABLE COLUMNS (<th>):
+Action
+Analytics dimension
+Question / category
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Add / edit question
+Analytics dimension
+Answer type
+Burnout signal
+Comp competitiveness
+Confidential (raw)
+Culture index
+Employee NPS
+Exit interview form
+Form settings
+Free text
+Growth index
+In-person only
+Manager relationship
+Mandatory
+Mandatory for
+Mode
+Multi-select
+Operational support
+Preview
+Primary reason for leaving
+Publish version
+Question / category
+Question text
+Questions
+Reason taxonomy (M16)
+Save draft
+Schedule trigger
+Self-service only
+Separation admin
+Single-select
+Skipped for
+Submission window
+Template name
+Type
+Would recommend PrimeSoft (eNPS)

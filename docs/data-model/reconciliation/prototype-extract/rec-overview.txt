@@ -1,0 +1,41 @@
+SCREEN: rec-overview
+
+TABLE COLUMNS (<th>):
+Action
+Due
+Follow-up
+Job
+Last activity
+Task
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Act
+Action
+Add Venkata Sai Sunil M. to pending list
+Candidate yet to upload documents
+Due
+Events
+FR-M08-016
+Follow-up
+Follow-ups
+Hiring stage tasks
+Job
+Last activity
+Misc tasks
+My approvals
+Offer generation
+Open
+Overview
+Priority tasks
+Recruiter overview
+Recruitment Admin
+Remind
+Screening / shortlisting
+Self
+Task
+Team
+Today
+Yesterday

@@ -1,0 +1,30 @@
+SCREEN: clearance-facilities
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+Item
+LWD
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Clear
+Corporate card
+Employee
+Facilities clearance
+Facilities exit clearance
+Hold
+ID / access card
+Item
+LWD
+Library card
+Locker key
+Manish Surname13
+Parking sticker
+Pending
+Pending facilities clearance
+Skip-level Reviewer
+Tasks

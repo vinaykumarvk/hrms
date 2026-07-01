@@ -1,0 +1,36 @@
+SCREEN: my-assets
+
+TABLE COLUMNS (<th>):
+Action
+Asset tag
+Condition
+Issued on
+Model
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Asset tag
+Assigned
+Condition
+Corporate Vodafone postpaid
+Dashboard
+FR-M17
+Good
+Issued on
+Laptop
+Manage
+Model
+Monitor
+My assets
+PSI-LAP-7821
+PSI-MON-2104
+PSI-PHN-0455
+SIM card
+Status
+Type

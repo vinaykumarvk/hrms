@@ -1,0 +1,70 @@
+SCREEN: leave-reasons
+
+TABLE COLUMNS (<th>):
+Applies to
+Category
+Doc required
+HRBP auto-route
+Reason
+Status
+
+INPUT PLACEHOLDERS:
+Brief description shown in the leave application dropdown
+e.g. MED_SELF
+e.g. Medical · self
+
+LABELS/FIELD TEXT:
+Active
+Active reasons
+Add / edit leave reason
+Applicable leave types
+Applies to
+Auto-approve threshold (days)
+Bereavement
+Bereavement (immediate family)
+Bereavement Leave
+Career
+Casual Leave (CL)
+Category
+Comp Off
+Compassionate
+Death certificate
+Description (visible to employees)
+Doc required
+Documentation required
+Earned Leave (EL)
+Effective from
+FR-M04-003
+Family
+General
+HRBP auto-route
+Inactive
+Leave Admin
+Leave reasons
+Leave reasons configuration
+Long-term
+Marriage
+Marriage Leave
+Marriage certificate / invitation
+Maternity
+Maternity / Paternity
+Maternity Leave
+Medical
+Medical (dependant)
+Medical (self)
+None (default)
+Other
+Paternity
+Paternity Leave
+Personal
+Reason
+Reason category
+Reason code
+Reason name
+SAB
+Save reason
+Sick Leave (SL)
+Status
+Statutory
+Study / Education leave
+Vacation / Travel

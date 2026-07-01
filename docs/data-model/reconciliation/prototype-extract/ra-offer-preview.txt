@@ -1,0 +1,50 @@
+SCREEN: ra-offer-preview
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Applied for
+Buy-out support
+Candidate
+Candidate One
+Candidate must accept by this date
+Compensation breakdown
+Custom
+Delivery method
+Designation
+Dev Khanna (HOD Eng)
+DocuSign e-signature
+ESOP grant (vesting 4 yr)
+Email
+Expected joining date
+FR-M08-004
+Grade
+Hiring lead
+In-app candidate portal
+Internal CC on release
+Interview rounds
+Joining details
+Joint generation rule.
+Merge field validation
+Negotiable
+None
+Notice period (candidate current)
+Offer letter template
+Offer queue
+Offer validity
+Person E M.
+Phone
+Probation
+Recruiter
+Recruitment Admin
+Reporting manager
+Senior Software Engineer
+Signature configuration
+Software Engineer III
+Source
+Template
+Total annual CTC

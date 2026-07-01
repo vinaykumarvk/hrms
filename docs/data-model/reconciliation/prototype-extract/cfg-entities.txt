@@ -1,0 +1,45 @@
+SCREEN: cfg-entities
+
+TABLE COLUMNS (<th>):
+Action
+Code
+Country
+Entity
+Registered office
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit legal entities
+Bangalore
+Bangkok
+Code
+Colombo
+Country
+Delaware
+Entity
+Entity code
+Entity name
+Inactive
+India
+Legal entities
+Org Admin
+PSG
+PSI
+PSL
+PST
+PrimeSoft Global Inc
+PrimeSoft IP Solutions Pvt Ltd
+PrimeSoft Lanka (Pvt) Ltd
+PrimeSoft Thailand Co.
+Registered office
+Registered office address
+Sri Lanka
+Status
+Tax ID / registration no.
+Thailand
+USA

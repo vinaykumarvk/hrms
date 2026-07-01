@@ -1,0 +1,39 @@
+SCREEN: cfg-workflows
+
+TABLE COLUMNS (<th>):
+Description
+Feature
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Attendance
+Auto-action
+Available capabilities per workflow
+Conditional routing
+Custom approver picker
+Description
+Documents
+Employee lifecycle
+FR-P01-001
+Feature
+L1 Manager initiates
+Leave
+Multi-stage approval
+Onboarding
+Org Admin
+Performance
+Phase 1
+Recruitment
+SLA 3 days
+SLA 5 days
+Separation
+Skip rules
+Status
+Travel (Phase 2)
+Trigger
+Workflow features
+Workflows
+Workflows by category

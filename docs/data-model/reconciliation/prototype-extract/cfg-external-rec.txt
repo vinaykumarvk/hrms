@@ -1,0 +1,25 @@
+SCREEN: cfg-external-rec
+
+TABLE COLUMNS (<th>):
+Action
+Group name
+Recruiters assigned
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit external recruiter groups
+Assign external recruiters
+External recruiter group name
+External recruiter groups
+Group name
+Inactive
+Leadership Search
+Org Admin
+Recruiters assigned
+Status
+Tech Vendors

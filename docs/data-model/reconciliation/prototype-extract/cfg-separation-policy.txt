@@ -1,0 +1,71 @@
+SCREEN: cfg-separation-policy
+
+TABLE COLUMNS (<th>):
+Action
+Action (form)
+Additional roles
+Alias for on-notice flag
+Approval flow
+Approval flow on revoke
+Confidential
+Default recipient
+Exception
+Exclude capture
+Initiator
+Order
+Separation category
+Templates
+Type
+Workflow
+
+INPUT PLACEHOLDERS:
+Optional
+
+LABELS/FIELD TEXT:
+Action
+Action (form)
+Additional roles
+Admin
+Alias for on-notice flag
+All employees
+Applicable to
+Approval flow
+Approval flow configuration
+Approval flow on revoke
+Associate
+Attendance cycle boundary
+Confidential
+Contract / Consultant
+Default
+Default approval flow on revoke
+Default recipient
+Description
+Exception
+Exclude capture
+Exit Initiation Form
+Full Time
+HR Admin only
+HR Team
+Initiator
+Month end
+No restriction
+On Notice
+Open builder
+Order
+Payroll cycle boundary
+Policy title
+Preview
+Resignation Approval Flow
+Resignation Revoke Approval Flow
+Restrict last working day on
+Save policy
+Self
+Separation Workflow Updated (Ver 1)
+Separation admin
+Separation category
+Separation initiated
+Separation policy
+Templates
+Type
+Workflow
+Workflow configuration

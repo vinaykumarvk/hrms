@@ -1,0 +1,33 @@
+SCREEN: cfg-grades
+
+TABLE COLUMNS (<th>):
+Action
+Band
+Code
+Designation
+Grade
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Band
+Code
+Contribution level
+DSG-EM
+DSG-SE
+DSG-SSE
+Designation
+Designation code
+Designation name
+Effective from
+Engineering Manager
+Grade
+Inactive
+Org Admin
+Senior Software Engineer
+Software Engineer
+Status

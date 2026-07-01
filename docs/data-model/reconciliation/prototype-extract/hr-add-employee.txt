@@ -1,0 +1,60 @@
+SCREEN: hr-add-employee
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+ABCPM1234J
+G6 · B3
+Search by name/ID
+XXXX-XXXX-XXXX
+name@primesoft.in
+
+LABELS/FIELD TEXT:
+Aadhaar
+Add employee
+Bangalore HQ
+Contract
+Core identity
+Create employee
+Date of birth
+Date of joining
+Department
+Designation
+Directory
+Employment
+Employment type
+Engineering
+Entity
+FR-M01-001
+Female
+First name
+Gender
+Grade
+HR Ops
+Intern
+Last name
+Male
+Middle name
+Mrs
+Mumbai
+Nationality
+New employee record.
+Official email
+Operations
+Other
+PAN
+Personal email
+Personal mobile
+Prefer not to say
+PrimeSoft Global Inc (PSG)
+PrimeSoft IP Solutions Pvt Ltd (PSI)
+Product
+Prof
+Remote
+Reporting manager
+Sales
+Salutation
+Save draft
+Statutory IDs
+Work location

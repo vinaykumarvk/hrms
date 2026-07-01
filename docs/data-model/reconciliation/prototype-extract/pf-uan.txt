@@ -1,0 +1,28 @@
+SCREEN: pf-uan
+
+TABLE COLUMNS (<th>):
+Employee
+PF number
+Status
+UAN
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+EPS members
+Employee
+Employee One
+FR-M10-004
+Finance Admin
+KA/BNG/12345
+KA/BNG/12351
+PF & UAN
+PF / UAN register
+PF number
+PF-enrolled
+Person A Surname1
+Status
+UAN
+UAN pending

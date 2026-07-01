@@ -28,6 +28,21 @@
 --     These are POLICY CONFIGURATION, not data attributes: they live in the existing
 --     module_config table or in the new per-policy `*_config jsonb` columns — NOT as first-class
 --     schema columns. Only genuine DATA attributes were promoted to columns.
+--
+-- RECON (prototype) (2026-07-01) — PrimeSoft M04/M05 prototype leave & attendance screens.
+--   Source: docs/data-model/reconciliation/prototype-extract/*.txt
+--   Report: docs/data-model/reconciliation/prototype-g03-leave-attendance.md
+--   Added (SECTION 13c, ADD-ONLY): 5 DATA tables — leave_reasons + attendance_reasons
+--     (tenant-configurable reason masters, CONVENTIONS §4), leave_balance_adjustments
+--     (FR-M04-021 adjustment request → ledger), leave_revocations (FR-M04-005 post-approval
+--     revocation), attendance_lock_periods (FR-M05-007 monthly lock cycle) — plus true DATA
+--     columns: leave_applications (approver_note, hourly_minutes), overtime_records (reason,
+--     worked_on_holiday, worked_on_weekly_off), shifts (shift_type), holidays (holiday_category,
+--     description), geofences (address, max_employees), attendance_devices (biometric_modality),
+--     attendance_policies (wfh_cap_per_month, working_days_per_week, daily_required_minutes).
+--   Screen behaviour toggles (leave-config, attendance-config, request windows, display/route
+--     switches) and manager/team roll-ups (team-*, office-attendance) remain config/derived —
+--     module_config / *_config jsonb / read views, NOT new columns.
 -- =====================================================================================
 -- BUILD NOTES (read before running)
 -- =====================================================================================
@@ -1316,6 +1331,214 @@ CREATE INDEX ix_comp_off_ot_policy ON comp_off_ledger(overtime_policy_id);
 
 
 -- =====================================================================================
+-- SECTION 13c — PROTOTYPE-RECON DATA MASTERS & COLUMNS (ADD-ONLY; see RECON (prototype) note)
+-- =====================================================================================
+-- Grounds five prototype-screen DATA entities that had no schema home, plus promotes the
+-- genuine DATA attributes surfaced by the leave/attendance/OT/holiday/device screens. All
+-- screen behaviour/display toggles stay in module_config / *_config jsonb (config, not data).
+
+-- New enums (module-unique closed enumerations; g03_ prefix) ---------------------------
+CREATE TYPE g03_shift_type           AS ENUM ('FIXED','FLEXIBLE','ROTATIONAL');
+CREATE TYPE g03_leave_adjustment_type AS ENUM ('CREDIT','DEBIT','RESET');
+CREATE TYPE g03_adjustment_status    AS ENUM ('SUBMITTED','APPROVED','REJECTED','APPLIED','CANCELLED');
+CREATE TYPE g03_revocation_type      AS ENUM ('FULL','PARTIAL');
+CREATE TYPE g03_lock_resolution_mode AS ENUM ('AUTO_APPROVE','AUTO_DENY','MANUAL');
+CREATE TYPE g03_lock_status          AS ENUM ('OPEN','LOCKED','REOPENED');
+CREATE TYPE g03_biometric_modality   AS ENUM ('FINGERPRINT','FACE','IRIS','CARD','NONE');
+CREATE TYPE g03_holiday_category     AS ENUM ('NATIONAL','REGIONAL','RELIGIOUS','COMPANY_SPECIFIC');
+
+-- leave_reasons (leave-reasons screen; FR-M04-003) — tenant-configurable reason master ----
+-- CONVENTIONS §4: a value set with code/category/doc/route/threshold attributes is a MASTER
+-- table, not a free-text + config allowed-list. Tenant-wide catalog -> entity_id NULLABLE.
+CREATE TABLE leave_reasons (
+    id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- leave_reason_id
+    tenant_id                 uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                 uuid REFERENCES entities(id) ON DELETE RESTRICT,   -- null = tenant-wide
+    reason_code               varchar(30) NOT NULL,                 -- MED_SELF, BEREAVEMENT...
+    name                      varchar(120) NOT NULL,                -- Reason name
+    category                  varchar(40),                          -- Medical/Compassionate/Family/Statutory... (tenant-configurable)
+    description               text,                                 -- shown in the leave dropdown
+    applicable_leave_type_ids jsonb,                                -- ["EL","SL"] applicable leave types
+    doc_required              boolean NOT NULL DEFAULT false,       -- Doc required
+    hrbp_auto_route           boolean NOT NULL DEFAULT false,       -- HRBP auto-route
+    auto_approve_threshold_days numeric(5,2),                       -- Auto-approve threshold (days)
+    effective_from            date,
+    status                    g03_active_status NOT NULL DEFAULT 'ACTIVE',
+    created_at                timestamptz NOT NULL DEFAULT now(),
+    updated_at                timestamptz NOT NULL DEFAULT now(),
+    created_by                uuid,
+    updated_by                uuid,
+    is_deleted                boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_leave_reasons_code UNIQUE (tenant_id, reason_code)
+);
+CREATE INDEX ix_leave_reasons_tenant ON leave_reasons(tenant_id);
+CREATE INDEX ix_leave_reasons_entity ON leave_reasons(entity_id);
+CREATE INDEX ix_leave_reasons_status ON leave_reasons(status);
+
+-- attendance_reasons (attendance-reasons screen; FR-M05-005) — regularisation reason master
+CREATE TABLE attendance_reasons (
+    id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- attendance_reason_id
+    tenant_id                 uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                 uuid REFERENCES entities(id) ON DELETE RESTRICT,   -- null = tenant-wide
+    reason_code               varchar(30) NOT NULL,                 -- SWIPE_LOST_CARD, MED, SYS...
+    name                      varchar(120) NOT NULL,
+    category                  varchar(40),                          -- MISS/MED/SYS/TRV/TRN/EMRG/WFH (tenant-configurable)
+    description               text,                                 -- visible to employees
+    applicable_scope          jsonb,                                -- Applicable to (leave types / regularisation kinds)
+    doc_required              boolean NOT NULL DEFAULT false,       -- Documentation required
+    auto_approve              boolean NOT NULL DEFAULT false,       -- Always auto-approve (system downtime)
+    auto_approve_threshold_days numeric(5,2),                       -- Auto-approve threshold
+    frequency_cap             int,                                  -- Usage limit per period (null = unlimited)
+    frequency_period          varchar(20),                          -- MONTH/QUARTER/YEAR
+    status                    g03_active_status NOT NULL DEFAULT 'ACTIVE',
+    created_at                timestamptz NOT NULL DEFAULT now(),
+    updated_at                timestamptz NOT NULL DEFAULT now(),
+    created_by                uuid,
+    updated_by                uuid,
+    is_deleted                boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_attendance_reasons_code UNIQUE (tenant_id, reason_code)
+);
+CREATE INDEX ix_attendance_reasons_tenant ON attendance_reasons(tenant_id);
+CREATE INDEX ix_attendance_reasons_entity ON attendance_reasons(entity_id);
+CREATE INDEX ix_attendance_reasons_status ON attendance_reasons(status);
+
+-- leave_balance_adjustments (leave-balance-adjust screen; FR-M04-021) ----------------------
+-- The approvable REQUEST that, once applied, posts an ADJUSTMENT entry to leave_ledger_entries
+-- (the append-only SSOT). Mirrors the leave_encashment_requests pattern (request -> ledger).
+CREATE TABLE leave_balance_adjustments (
+    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- adjustment_id
+    tenant_id                uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    employee_id              uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    leave_type_id            uuid NOT NULL REFERENCES leave_types(id) ON DELETE RESTRICT,
+    adjustment_type          g03_leave_adjustment_type NOT NULL,   -- Credit / Debit / Reset
+    amount_days              numeric(6,2),                         -- for CREDIT/DEBIT (signed magnitude)
+    reset_to_value           numeric(6,2),                         -- for RESET (target balance)
+    reason_category          varchar(60),                          -- One-time award / Prior-period correction / ...
+    detailed_reason          text NOT NULL,                        -- "Why justified" (audit-logged)
+    supporting_reference     varchar(120),                         -- Ticket ID, email, etc.
+    effective_date           date NOT NULL,
+    workflow_instance_id     uuid REFERENCES workflow_instances(id) ON DELETE SET NULL,
+    resulting_ledger_entry_id uuid REFERENCES leave_ledger_entries(id) ON DELETE SET NULL,
+    status                   g03_adjustment_status NOT NULL DEFAULT 'SUBMITTED',
+    created_at               timestamptz NOT NULL DEFAULT now(),
+    updated_at               timestamptz NOT NULL DEFAULT now(),
+    created_by               uuid,
+    updated_by               uuid,
+    is_deleted               boolean NOT NULL DEFAULT false
+);
+CREATE INDEX ix_leave_bal_adj_tenant   ON leave_balance_adjustments(tenant_id);
+CREATE INDEX ix_leave_bal_adj_entity   ON leave_balance_adjustments(entity_id);
+CREATE INDEX ix_leave_bal_adj_employee ON leave_balance_adjustments(employee_id);
+CREATE INDEX ix_leave_bal_adj_type     ON leave_balance_adjustments(leave_type_id);
+CREATE INDEX ix_leave_bal_adj_wf       ON leave_balance_adjustments(workflow_instance_id);
+CREATE INDEX ix_leave_bal_adj_ledger   ON leave_balance_adjustments(resulting_ledger_entry_id);
+CREATE INDEX ix_leave_bal_adj_status   ON leave_balance_adjustments(status);
+
+-- leave_revocations (leave-revocation screen; FR-M04-005) ----------------------------------
+-- Post-approval revocation of an already-approved leave (distinct from pre-start withdrawal
+-- captured by leave_applications.status). Refund posts an AVAIL_REVERSAL to the ledger.
+CREATE TABLE leave_revocations (
+    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- revocation_id
+    tenant_id                uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    application_id           uuid NOT NULL REFERENCES leave_applications(id) ON DELETE RESTRICT,
+    employee_id              uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    revocation_type          g03_revocation_type NOT NULL DEFAULT 'FULL',  -- Full (Phase-1) / Partial
+    days_to_revoke           numeric(5,2),
+    reason_category          varchar(60),                          -- Admin correction / Employee returned early / ...
+    detailed_reason          text NOT NULL,                        -- "Why justified" (audit-logged)
+    refund_to_balance        boolean NOT NULL DEFAULT true,        -- Refund to balance
+    initiated_by             uuid REFERENCES users(id) ON DELETE SET NULL,
+    workflow_instance_id     uuid REFERENCES workflow_instances(id) ON DELETE SET NULL,
+    resulting_ledger_entry_id uuid REFERENCES leave_ledger_entries(id) ON DELETE SET NULL,
+    status                   g03_regularisation_status NOT NULL DEFAULT 'SUBMITTED',  -- reuse: DRAFT/SUBMITTED/APPROVED/REJECTED/CANCELLED
+    created_at               timestamptz NOT NULL DEFAULT now(),
+    updated_at               timestamptz NOT NULL DEFAULT now(),
+    created_by               uuid,
+    updated_by               uuid,
+    is_deleted               boolean NOT NULL DEFAULT false
+);
+CREATE INDEX ix_leave_revocations_tenant   ON leave_revocations(tenant_id);
+CREATE INDEX ix_leave_revocations_entity   ON leave_revocations(entity_id);
+CREATE INDEX ix_leave_revocations_app      ON leave_revocations(application_id);
+CREATE INDEX ix_leave_revocations_employee ON leave_revocations(employee_id);
+CREATE INDEX ix_leave_revocations_wf       ON leave_revocations(workflow_instance_id);
+CREATE INDEX ix_leave_revocations_ledger   ON leave_revocations(resulting_ledger_entry_id);
+CREATE INDEX ix_leave_revocations_status   ON leave_revocations(status);
+
+-- attendance_lock_periods (attendance-lock screen; FR-M05-007) -----------------------------
+-- Monthly attendance lock cycle at org-scope level (distinct from the per-employee
+-- payroll_attendance_feed.is_locked flag). Drives the M06 payroll handoff.
+CREATE TABLE attendance_lock_periods (
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- lock_period_id
+    tenant_id             uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id             uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    lock_month            varchar(7) NOT NULL,                    -- YYYY-MM
+    scope_org_unit_id     uuid REFERENCES org_units(id) ON DELETE SET NULL,  -- null = entity-wide
+    lock_deadline         date,
+    total_employee_days   int,                                    -- Employee-days in the cycle
+    pending_at_lock       int,                                    -- Pending regularisations at lock
+    resolution_mode       g03_lock_resolution_mode NOT NULL DEFAULT 'MANUAL',  -- Auto-approve/Auto-deny/Manual
+    auto_trigger_payroll  boolean NOT NULL DEFAULT false,         -- Auto-trigger M06 Payroll on lock
+    lock_note             text,                                   -- visible in audit log
+    locked_by             uuid REFERENCES users(id) ON DELETE SET NULL,
+    locked_at             timestamptz,
+    payroll_status        varchar(60),                            -- "Payroll closed 12 Feb"
+    payroll_closed_at     timestamptz,
+    status                g03_lock_status NOT NULL DEFAULT 'OPEN',
+    created_at            timestamptz NOT NULL DEFAULT now(),
+    updated_at            timestamptz NOT NULL DEFAULT now(),
+    created_by            uuid,
+    updated_by            uuid,
+    is_deleted            boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_attendance_lock_periods UNIQUE (tenant_id, lock_month, scope_org_unit_id)
+);
+CREATE INDEX ix_att_lock_periods_tenant ON attendance_lock_periods(tenant_id);
+CREATE INDEX ix_att_lock_periods_entity ON attendance_lock_periods(entity_id);
+CREATE INDEX ix_att_lock_periods_month  ON attendance_lock_periods(lock_month);
+CREATE INDEX ix_att_lock_periods_scope  ON attendance_lock_periods(scope_org_unit_id);
+CREATE INDEX ix_att_lock_periods_status ON attendance_lock_periods(status);
+
+-- Promote genuine DATA attributes onto existing tables (ADD-ONLY) -----------------------
+-- leave_applications: hourly-leave duration + approver note are per-application DATA.
+ALTER TABLE leave_applications
+    ADD COLUMN approver_note  text,   -- Message to approver ("Optional context for your manager")
+    ADD COLUMN hourly_minutes int;    -- Hourly leave duration (FR-M04-017; total_days remains the debit basis)
+
+-- overtime_records: request reason + worked-on-holiday/weekly-off context are DATA.
+ALTER TABLE overtime_records
+    ADD COLUMN reason               text,                          -- Reason / Comments (request-ot)
+    ADD COLUMN worked_on_holiday    boolean NOT NULL DEFAULT false, -- Worked on holiday
+    ADD COLUMN worked_on_weekly_off boolean NOT NULL DEFAULT false; -- Worked on weekly off
+
+-- shifts: fixed/flexible/rotational structural type (attendance-shifts).
+ALTER TABLE shifts
+    ADD COLUMN shift_type g03_shift_type NOT NULL DEFAULT 'FIXED';  -- Fixed/Flexible/Rotational (flex window rides in shift_config)
+
+-- holidays: religious/regional/national/company category + description (holiday-calendar-config).
+ALTER TABLE holidays
+    ADD COLUMN holiday_category g03_holiday_category,               -- National/Regional/Religious/Company-specific
+    ADD COLUMN description      text;                               -- Notes / description
+CREATE INDEX ix_holidays_category ON holidays(holiday_category);
+
+-- geofences: physical street address + office capacity (geofencing).
+ALTER TABLE geofences
+    ADD COLUMN address       text,   -- Full street address
+    ADD COLUMN max_employees int;    -- Office capacity / Max employees
+
+-- attendance_devices: biometric modality (Finger/Face) (biometric-mgmt).
+ALTER TABLE attendance_devices
+    ADD COLUMN biometric_modality g03_biometric_modality;          -- FINGERPRINT/FACE/IRIS/CARD/NONE
+
+-- attendance_policies: WFH monthly cap + working-week / daily-hours caps (attendance-policies).
+ALTER TABLE attendance_policies
+    ADD COLUMN wfh_cap_per_month    int,           -- WFH cap per month
+    ADD COLUMN working_days_per_week numeric(3,1), -- Working days/week
+    ADD COLUMN daily_required_minutes int;         -- Daily hours required (stored as minutes)
+
+
+-- =====================================================================================
 -- SECTION 14 — ROW-LEVEL SECURITY (P02 data-scope substrate; CONVENTIONS §6)
 -- =====================================================================================
 -- Apply the canonical tenant-isolation policy to every G03-owned table (append-only
@@ -1334,7 +1557,10 @@ DECLARE
         'leave_year_close_runs','leave_entitlements','module_config','approval_delegations',
         'dependent_leave_eligibility','punch_anomaly_reviews',
         -- SECTION 13b CSV-recon masters:
-        'attendance_policies','overtime_policies','attendance_networks','geofences'
+        'attendance_policies','overtime_policies','attendance_networks','geofences',
+        -- SECTION 13c prototype-recon masters:
+        'leave_reasons','attendance_reasons','leave_balance_adjustments','leave_revocations',
+        'attendance_lock_periods'
     ];
 BEGIN
     FOREACH t IN ARRAY g03_tables LOOP
@@ -1507,10 +1733,65 @@ VALUES
  ('03ef0001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
   'GFRS_2','Axis Securities, Airoli',19.132600,73.037790,700,'Office','33333333-3333-3333-3333-333333333301','ACTIVE');
 
+-- SECTION 13c prototype-recon masters — sample rows --------------------------------------
+-- leave_reasons (dropdown reason master; FR-M04-003) -------------------------------------
+INSERT INTO leave_reasons (id, tenant_id, entity_id, reason_code, name, category, description,
+    applicable_leave_type_ids, doc_required, hrbp_auto_route, auto_approve_threshold_days, effective_from, status)
+VALUES
+ ('03cb0001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111',NULL,
+  'MED_SELF','Medical (self)','Medical','Own illness / medical treatment','["SL","HPL"]',false,false,2.00,'2026-01-01','ACTIVE'),
+ ('03cb0001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111',NULL,
+  'BEREAVEMENT','Bereavement (immediate family)','Compassionate','Death of an immediate family member','["EL","CL"]',true,true,NULL,'2026-01-01','ACTIVE'),
+ ('03cb0001-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111',NULL,
+  'MARRIAGE','Marriage','Family','Own / immediate-family marriage','["EL"]',true,false,NULL,'2026-01-01','ACTIVE');
+
+-- attendance_reasons (regularisation reason master; FR-M05-005) --------------------------
+INSERT INTO attendance_reasons (id, tenant_id, entity_id, reason_code, name, category, description,
+    applicable_scope, doc_required, auto_approve, auto_approve_threshold_days, frequency_cap, frequency_period, status)
+VALUES
+ ('03ca0001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111',NULL,
+  'SWIPE_LOST_CARD','Missed swipe (in or out)','MISS','Forgot to swipe / physical card lost','["REGULARISATION"]',false,false,NULL,5,'QUARTER','ACTIVE'),
+ ('03ca0001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111',NULL,
+  'SYS','System / biometric down','SYS','System / network downtime (no employee fault)','["REGULARISATION"]',false,true,NULL,NULL,NULL,'ACTIVE'),
+ ('03ca0001-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111',NULL,
+  'WFH','Work from home','WFH','Last-minute WFH conversion','["WFH_CONVERSION"]',false,false,1.00,2,'MONTH','ACTIVE');
+
+-- leave_balance_adjustments (adjustment request -> ledger; FR-M04-021) -------------------
+INSERT INTO leave_balance_adjustments (id, tenant_id, entity_id, employee_id, leave_type_id, adjustment_type,
+    amount_days, reset_to_value, reason_category, detailed_reason, supporting_reference, effective_date,
+    resulting_ledger_entry_id, status)
+VALUES
+ ('03ba0001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  '99999999-9999-9999-9999-999999999901','03a12001-0000-0000-0000-000000000001','CREDIT',3.00,NULL,
+  'Prior-period correction','EL under-credited during 2025 migration; corrected per audit ticket.','HELP-2026-0091','2026-02-01',NULL,'APPLIED'),
+ ('03ba0001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  '99999999-9999-9999-9999-999999999902','03a12001-0000-0000-0000-000000000002','DEBIT',1.00,NULL,
+  'One-time award','Reversal of erroneous HPL grant.','EMAIL-8842','2026-03-05',NULL,'SUBMITTED');
+
+-- leave_revocations (post-approval revocation; FR-M04-005) ------------------------------
+INSERT INTO leave_revocations (id, tenant_id, entity_id, application_id, employee_id, revocation_type,
+    days_to_revoke, reason_category, detailed_reason, refund_to_balance, status)
+VALUES
+ ('03cd0001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  '03a16001-0000-0000-0000-000000000001','99999999-9999-9999-9999-999999999901','FULL',0.50,
+  'Plans changed','Employee cancelled the half-day; requesting balance refund.',true,'APPROVED');
+
+-- attendance_lock_periods (monthly lock cycle; FR-M05-007) ------------------------------
+INSERT INTO attendance_lock_periods (id, tenant_id, entity_id, lock_month, scope_org_unit_id, lock_deadline,
+    total_employee_days, pending_at_lock, resolution_mode, auto_trigger_payroll, lock_note, locked_at,
+    payroll_status, status)
+VALUES
+ ('03ce0001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  '2026-01','33333333-3333-3333-3333-333333333301','2026-02-05',620,0,'AUTO_APPROVE',true,
+  'January cycle locked; all regularisations cleared.',now(),'Payroll closed 12 Feb','LOCKED'),
+ ('03ce0001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  '2026-02',NULL,'2026-03-05',640,3,'MANUAL',false,'February cycle — 3 pending regularisations at lock.',now(),
+  'Payroll closed 11 Mar','LOCKED');
+
 -- Reset session GUCs after seeding.
 RESET app.current_tenant_id;
 RESET app.is_platform_admin;
 
 -- =====================================================================================
--- END 03-G03-attendance-leave.sql  (31 base + 4 CSV-recon = 35 module-owned tables; load AFTER 00-platform-core.sql)
+-- END 03-G03-attendance-leave.sql  (31 base + 4 CSV-recon + 5 prototype-recon = 40 module-owned tables; load AFTER 00-platform-core.sql)
 -- =====================================================================================

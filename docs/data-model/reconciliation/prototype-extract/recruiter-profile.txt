@@ -1,0 +1,19 @@
+SCREEN: recruiter-profile
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active JRs
+Closures MTD
+DOJ 14 Aug 2020
+Departments
+Hiring leads
+My assignments
+My profile
+PSI000455
+Person Q Surname6
+Recruiter

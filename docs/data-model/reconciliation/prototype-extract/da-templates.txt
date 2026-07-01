@@ -1,0 +1,69 @@
+SCREEN: da-templates
+
+TABLE COLUMNS (<th>):
+Code
+Invoked by
+Signature
+Status
+Template name
+Trigger
+Version
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active templates
+Appointment Letter
+Code
+Confidentiality Undertaking
+Document Admin
+Draft (Phase 2)
+Experience / Service Letter
+FR-M11-003
+Full-and-Final (FnF) Statement
+HR Admin
+HR Admin manual
+Increment / Salary Revision Letter
+Invoked by
+Letter template register
+Letter templates
+M01 lifecycle
+M02 Onboarding
+M03 Separation
+M08 Recruitment
+M09 Performance / M10
+M10 Compensation (Phase 2)
+NDA
+Offer Letter
+On FnF settlement
+On LWD clearance
+On confirmation by HR Admin
+On dept transfer approval
+On disciplinary action
+On extension by HR Admin
+On increment approval
+On involuntary termination
+On location transfer approval
+On offer extension
+On onboarding completion
+On promotion approval
+On separation acceptance
+On sign-off cluster generation
+Probation Confirmation Letter
+Probation Extension Letter
+Promotion Letter
+Published
+Relieving Letter
+Separation Acceptance Letter
+Show-Cause Notice
+Signature
+Status
+Template inventory (DM20).
+Template name
+Termination Letter
+Transfer Letter (Department)
+Transfer Letter (Location)
+Trigger
+Version
+Warning Letter

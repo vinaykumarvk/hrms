@@ -1,0 +1,58 @@
+SCREEN: hod-employees
+
+TABLE COLUMNS (<th>):
+Designation
+Grade
+ID
+Manager
+Name
+Probation / status
+Team
+
+INPUT PLACEHOLDERS:
+Search department employees by name, ID, team…
+
+LABELS/FIELD TEXT:
+Akash Surname9
+All
+Confirmed
+Confirmed 12 Feb 2020
+Confirmed 14 Jun 2022
+Confirmed 20 Jan 2019
+Confirmed 3 Sep 2018
+Department employees
+Department headcount
+Designation
+Dev Khanna
+Engineering Manager
+Engineering function
+FR-M01-005
+Grade
+HOD
+Identity
+Kavya Surname5
+Manager
+Manager One
+Manish Surname13
+Name
+On notice
+On probation
+PSI000094
+PSI000118
+PSI000200
+PSI000321
+PSI000789
+PSI000832
+PSI000847
+Payments
+Person A Surname1
+Person B Surname9
+Platform
+Probation / status
+SWE
+SWE II
+Sneha Surname6
+Sr SWE
+Team
+Teams
+Whole department

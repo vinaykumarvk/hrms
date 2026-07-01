@@ -1,0 +1,37 @@
+SCREEN: psa-migration-detail
+
+TABLE COLUMNS (<th>):
+Action
+Failed
+Failure %
+Failure reason
+Loaded
+Source ID
+Source rows
+Status
+Table
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Email domain not in tenant whitelist
+FR-P06
+Failed
+Failed records (5)
+Failure reason
+Gate status
+Loaded
+Loaded successfully
+Next steps
+P06 Migration Toolkit
+PASS
+Per-table results
+Platform Admin
+Review
+Source ID
+Source rows
+Status
+Table
+Total records

@@ -1,0 +1,50 @@
+SCREEN: ra-pre-offer-queue
+
+TABLE COLUMNS (<th>):
+Action
+Candidate
+Docs uploaded
+Final round
+Indicative band
+Issued
+Position
+Position · Req
+Recommended by
+State
+Validity
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active pre-offers
+Aman Surname8
+Awaiting pre-offer issuance
+Candidate
+Candidate One
+Docs uploaded
+Expired
+FR-M08-009
+Filter
+Final round
+Indicative band
+Issue pre-offer
+Issued
+Karan Bhatia
+Person A Surname1
+Position
+Pradeep Surname2
+Pre-offer / Intent-to-Hire queue
+Pre-offer queue
+Re-extend
+Recommended by
+Recruitment Admin
+Remind
+Review docs
+Reviewer Three Joshi
+Riya Joshi
+Sneha Bose
+State
+Tanvi Mishra
+Validity

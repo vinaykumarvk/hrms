@@ -1,0 +1,42 @@
+SCREEN: requisitions
+
+TABLE COLUMNS (<th>):
+Candidates
+Confidential
+Hiring manager
+JR ID
+Locations
+Stage
+Title
+
+INPUT PLACEHOLDERS:
+Search by JR ID, title, hiring manager…
+
+LABELS/FIELD TEXT:
+All
+Bangalore
+Candidates
+Confidential
+Dev Khanna
+FR-M08-001
+Filled
+Hiring manager
+JR ID
+JR-2026-0105
+JR-2026-0118
+JR-2026-0135
+JR-2026-0138
+JR-2026-0142
+Job requisitions
+Locations
+Manager One
+On hold
+Open
+Recruiter
+Requisitions
+Reviewer Three K
+SWE
+SWE II
+Sr Software Engineer
+Stage
+Title

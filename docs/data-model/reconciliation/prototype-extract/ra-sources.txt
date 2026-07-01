@@ -1,0 +1,44 @@
+SCREEN: ra-sources
+
+TABLE COLUMNS (<th>):
+Candidates
+Conv. rate
+Cost / hire
+Hires
+Interviews
+Offers
+Quality score
+Source
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Budget allocation calculator
+Campus hire
+Candidates
+Cap Elite Search
+Career site (direct)
+Conv. rate
+Cost / hire
+Expand campus hire programme
+FR-M08-008
+Hires
+Internal Job Posting
+Interviews
+LinkedIn Recruiter
+LinkedIn Recruiter seats
+Naukri renewal
+Naukri.com
+Offers
+Plan next quarter's source spend
+Quality score
+Recruitment Admin
+Referral
+Renegotiate Naukri.com contract
+Renew full
+Reset
+Save plan
+Source
+Source analytics
+Target hires next quarter

@@ -1,0 +1,35 @@
+SCREEN: psa-environments
+
+TABLE COLUMNS (<th>):
+Environment
+Last deploy
+Purpose
+Status
+Version
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Active environments
+All production tenants route to
+Developer sandbox
+Environment
+Environments
+FR-P04
+Healthy
+Hourly
+Internal
+Last deploy
+Migration Dry-Run
+Platform Admin
+Pre-prod release validation
+Production
+Purpose
+Staging
+Staging environments
+Status
+Tenant-to-environment routing
+UAT (Group Company 2)
+Version

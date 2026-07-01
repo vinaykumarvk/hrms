@@ -1,0 +1,44 @@
+SCREEN: cfg-approval-flows
+
+TABLE COLUMNS (<th>):
+Action
+Code
+Exception
+Levels
+Module transaction
+Name
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+AF-LV1
+AF-OFFER
+AF-OT
+AF-POS
+AF-SEP
+Action
+Active
+Approval flow builder
+Attendance
+Builder
+By hours threshold
+Code
+Employee
+Exception
+Joint authority
+Leave
+Leave approval
+Levels
+Module transaction
+Name
+Offer Letter
+Offer letter approval
+Org Admin
+Overtime approval
+Position Update
+Position update
+Separation approval
+Stage configuration
+Status

@@ -1,0 +1,16 @@
+SCREEN: apply-optional-holiday
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Apply
+Apply for optional holiday
+Apply optional holiday
+FR-M04-006
+Holiday calendar
+Message to approver
+Select

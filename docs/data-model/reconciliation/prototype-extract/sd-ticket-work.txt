@@ -1,0 +1,37 @@
+SCREEN: sd-ticket-work
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Internal note (not visible to requester)
+Root cause · steps taken · parts replaced · follow-up
+
+LABELS/FIELD TEXT:
+Add note
+Asset
+CMDB impact
+Cancelled
+Category
+Creator
+Details
+Escalate
+FR-M17-008
+Floor-2 WAP cluster
+In progress
+Internal notes
+Mark resolved
+Network / Connectivity
+Network Queue
+Out-of-scope
+Pending (Awaiting User)
+Pending (Awaiting Vendor)
+Pending approval
+Queue
+REQ-2026-04821
+Resolution SLA
+Resolution notes
+Resolved (requires Resolution Notes)
+Response SLA
+Service desk
+State transition

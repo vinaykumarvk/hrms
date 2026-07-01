@@ -1,0 +1,47 @@
+SCREEN: pa-goal-plans
+
+TABLE COLUMNS (<th>):
+Action
+Employees
+Goals per employee
+Linked cycle
+Methodology
+Plan name
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Active goal plans
+All
+All years
+Archived
+Custom
+Draft
+Employees
+FR-M09-002
+FY25
+FY25 Annual
+FY25 Annual Goal Plan v1
+FY26
+FY26 Annual
+FY26 Annual Goal Plan v1
+FY26 Mid
+FY26 Mid-year Goal Plan v2
+FY27 Annual (planned)
+Filters
+Goal plans
+Goals per employee
+KRA
+Linked cycle
+Manage
+Methodology
+OKR
+Performance Admin
+Plan name
+SMART
+Status
+Year

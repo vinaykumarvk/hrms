@@ -1,0 +1,28 @@
+SCREEN: da-categories
+
+TABLE COLUMNS (<th>):
+Category
+Examples
+Notes
+Policy count
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Archived
+COVID-19
+Category
+Document Admin
+Examples
+FR-M11-001
+Finance
+Legal
+Notes
+Policy categories
+Policy count
+Reference-only.
+Return-to-Office Policy (2022)
+Status

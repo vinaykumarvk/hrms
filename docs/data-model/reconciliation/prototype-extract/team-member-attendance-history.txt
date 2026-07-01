@@ -1,0 +1,43 @@
+SCREEN: team-member-attendance-history
+
+TABLE COLUMNS (<th>):
+Action
+Date
+Duration
+In
+Out
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Add private note
+Approve
+Attendance history
+Avg work duration
+Current
+Dashboard
+Date
+Duration
+Early-outs (MTD)
+Export
+FR-M05
+Late mark
+Late marks (MTD)
+Manager view.
+Out
+PSI000789
+Pending regularisations
+Person A Surname1
+Present
+Present (90d)
+Raise regularisation on behalf
+Records
+Regularise on behalf
+Reject
+Reports to you
+Run pattern report
+Status
+Team attendance

@@ -1,0 +1,48 @@
+SCREEN: psa-tenants
+
+TABLE COLUMNS (<th>):
+API (24h)
+Deployment
+Plan
+Provisioned
+Status
+Storage
+Tenant
+Users
+
+INPUT PLACEHOLDERS:
+Search tenants...
+
+LABELS/FIELD TEXT:
+API (24h)
+Acme Manufacturing
+Active
+All deployments
+All plans
+All status
+All tenants
+Archived
+Degraded
+Deployment
+Enterprise
+FR-P04-001
+Group Company 2 Group Holdings
+Growth
+Helix BioTech
+NeoBank Capital
+Plan
+Platform Admin
+Provisioned
+Provisioning
+Quill Education
+STANDALONE
+Starter
+Status
+Storage
+Suspended
+Synergy Logistics
+Tenant
+Tenant management
+Today
+Users
+Verde Energy

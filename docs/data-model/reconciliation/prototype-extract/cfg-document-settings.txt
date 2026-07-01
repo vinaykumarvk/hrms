@@ -1,0 +1,25 @@
+SCREEN: cfg-document-settings
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Access audit
+Block HR policy on mobile
+Disabled
+Document settings
+Enable OCR auto-fill on document uploads
+Enabled
+Encryption at rest
+HR letter acknowledgement text
+HR policy sign-off text
+I acknowledge receipt of this letter.
+Letter CTC font
+Letter CTC font size
+Letter CTC padding
+Module-wide toggles (Req A.1)
+Org Admin
+Retention default

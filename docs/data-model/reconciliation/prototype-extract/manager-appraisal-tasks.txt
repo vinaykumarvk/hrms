@@ -1,0 +1,28 @@
+SCREEN: manager-appraisal-tasks
+
+TABLE COLUMNS (<th>):
+Action
+Due
+Employee
+Stage
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Akash Surname9
+Due
+Employee
+Employee Four
+Employee One
+FR-M09
+Goal plan approval
+Manager rating
+Open
+Pooja Joshi
+Self-review sign-off
+Stage
+Tasks
+Team appraisal tasks
+Team appraisals

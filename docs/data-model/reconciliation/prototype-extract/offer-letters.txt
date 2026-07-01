@@ -1,0 +1,57 @@
+SCREEN: offer-letters
+
+TABLE COLUMNS (<th>):
+Approver
+Candidate
+Created
+Created by
+DOJ
+Designation
+Status
+Version
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Accepted
+Annual CTC
+Approver
+Awaiting approval
+Band
+Bangalore HQ
+Candidate
+Candidate One
+Compensation
+Contribution level
+Created
+Created by
+DOJ
+DOJ proposed
+Designation
+FR-M08-004
+FR-M08-005
+Fixed annual
+Grade
+HR Director
+Joining bonus
+Location
+None
+Notice period
+Offer letters
+Onboarding Admin
+Position
+Preview letter
+R. Surname6
+RSU / ESOP grant
+Recruitment
+Save draft
+Senior Software Engineer
+Service bond
+Software Engineer
+Status
+Subject to BGV clearance
+Submit for approval
+Superseded
+Variable annual
+Version

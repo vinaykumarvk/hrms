@@ -1,0 +1,32 @@
+SCREEN: cfg-bu
+
+TABLE COLUMNS (<th>):
+Action
+Business unit
+Code
+Company
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit business units
+BU-CORP
+BU-SALES
+BU-TECH
+Business unit
+Business unit code
+Business unit name
+Business units
+Code
+Company
+Corporate
+Inactive
+Org Admin
+PrimeSoft IP Solutions
+Sales & Marketing
+Status
+Technology

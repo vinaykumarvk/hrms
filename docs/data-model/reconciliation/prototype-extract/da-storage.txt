@@ -1,0 +1,40 @@
+SCREEN: da-storage
+
+TABLE COLUMNS (<th>):
+Action taken
+Configuration
+Date
+Detail
+Event type
+Layer
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Access URLs
+Action taken
+Cold-tier archive
+Configuration
+Contracts
+DR replica
+Date
+Detail
+Document Admin
+Employee re-uploaded compressed version
+Encryption at rest
+Encryption in transit
+Event type
+FR-M11-002
+Identity docs
+Large file rejected
+Layer
+Object storage
+Pre-signed URL audit
+Primary region
+Recent security events (90d)
+Storage architecture (DM13)
+Storage usage by category
+Total storage
+Virus quarantine
+Virus scanning

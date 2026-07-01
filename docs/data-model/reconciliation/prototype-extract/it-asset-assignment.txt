@@ -1,0 +1,29 @@
+SCREEN: it-asset-assignment
+
+TABLE COLUMNS (<th>):
+Action
+Asset
+Employee
+Status
+Tag
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Access badge
+Action
+Asset
+Asset assignment
+Assigned
+Assigned assets
+BDG-5521
+Employee
+Employee One
+MacBook Pro 14
+New assignment
+PSI-LT-0142
+Person A Surname1
+Reassign
+Status
+Tag

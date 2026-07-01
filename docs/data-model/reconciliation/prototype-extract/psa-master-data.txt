@@ -1,0 +1,45 @@
+SCREEN: psa-master-data
+
+TABLE COLUMNS (<th>):
+Compliance regime
+Default data region
+Description
+Geography
+Model
+Tenants
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+BFSI
+Compliance regime
+DPDPA 2023
+Default data region
+Deployment models
+Description
+Education
+Energy
+FR-P04
+GDPR
+Geographies
+Geography
+Healthcare
+IT Services
+Industry segments
+LGPD (Brazil)
+Logistics
+Manufacturing
+Media
+Model
+Other
+PDPA Singapore / per-country
+POPIA (S. Africa)
+Platform Admin
+Platform master data
+Read-only across all tenants
+Retail
+STANDALONE
+Tenants
+UAE PDP Law
+UK GDPR

@@ -1,0 +1,20 @@
+SCREEN: candidate-profile
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+CTC offered
+Candidate
+Candidate One
+Candidate profile
+Email
+Full name
+Joining date
+My profile
+Phone
+Position
+Senior Software Engineer

@@ -1,0 +1,54 @@
+SCREEN: bgv-upload
+
+TABLE COLUMNS (<th>):
+Action
+Check
+Document
+Particulars
+Status
+Verified on
+
+INPUT PLACEHOLDERS:
+Vendor case ID
+
+LABELS/FIELD TEXT:
+Action
+Address
+BGV reports
+BGV vendor
+Check
+Clear
+Court record check
+Criminal record
+Discrepancy
+Document
+Education
+Govt ID match
+Identity (Aadhaar / PAN)
+In progress
+Insufficient
+Major discrepancy
+Minor discrepancy
+Modify
+OnGrid
+Onboarding
+Overall outcome
+Particulars
+Pending
+Permanent address verification
+Prior employment
+Remarks
+Report date
+Report reference no.
+Save step
+Status
+Supporting document
+Unable to verify
+Update verification step
+Upload report
+Upload report (PDF)
+Upload third-party BGV report
+Verification step
+Verification steps
+Verified
+Verified on

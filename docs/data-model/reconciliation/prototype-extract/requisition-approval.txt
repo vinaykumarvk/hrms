@@ -1,0 +1,34 @@
+SCREEN: requisition-approval
+
+TABLE COLUMNS (<th>):
+Action
+Dept
+Escalated by
+Raised by
+Requisition
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Approve
+CEO sign-off
+Decline
+Dept
+Engineering
+Escalated by
+Finance
+HR Admin
+HR Admin approval
+HRBP
+L1 Manager
+Raised by
+Reject
+Requisition
+Requisition approval
+Send to CEO
+Senior Backend Engineer (REQ-204)
+Sign off
+Tasks
+VP Finance (REQ-205)

@@ -1,0 +1,31 @@
+SCREEN: report-posh
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Brief subject line
+
+LABELS/FIELD TEXT:
+Anonymity
+Anonymous
+Attachments
+Compensation
+Concern category
+Critical
+Dashboard
+Description
+High
+Identified
+Incident date
+Low
+Manager
+Medium
+Other
+POSH Act 2013
+Report a POSH concern
+Routing
+Save draft
+Severity
+Subject
+Workplace

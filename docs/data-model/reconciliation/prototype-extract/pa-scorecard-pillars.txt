@@ -1,0 +1,28 @@
+SCREEN: pa-scorecard-pillars
+
+TABLE COLUMNS (<th>):
+Action
+Description
+Goals tagged
+Pillar code
+Pillar name
+
+INPUT PLACEHOLDERS:
+What category of goals belong to this pillar?
+e.g. Operations
+e.g. SP_OPS
+
+LABELS/FIELD TEXT:
+Action
+Active pillars
+Add new pillar
+Customer
+Description
+Financial
+Goals tagged
+Performance Admin
+Pillar code
+Pillar name
+Reset
+Save pillar
+Scorecard pillars

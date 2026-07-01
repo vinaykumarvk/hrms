@@ -1,0 +1,26 @@
+SCREEN: payroll-export
+
+TABLE COLUMNS (<th>):
+Action
+Cycle
+Generated
+Headcount
+LOP days
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Apr 2026
+Cycle
+Download
+FR-M10-008
+Finance Admin
+Generate
+Generated
+Headcount
+LOP days
+May 2026
+Payroll export
+Payroll input exports

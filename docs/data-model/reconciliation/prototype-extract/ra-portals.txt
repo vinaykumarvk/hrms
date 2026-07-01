@@ -1,0 +1,55 @@
+SCREEN: ra-portals
+
+TABLE COLUMNS (<th>):
+Active postings
+Applications LTM
+Connection
+Hires LTM
+Portal
+Status
+
+INPUT PLACEHOLDERS:
+From portal dashboard
+recruitment@primesoft.com
+
+LABELS/FIELD TEXT:
+API key
+API key / Client ID
+Account email
+Active portals
+Active postings
+AngelList Talent
+Applications LTM
+Auth method
+Auto-sync frequency
+Career site (primesoft.com/careers)
+Connect new portal
+Connection
+Cutshort
+Daily
+Default job board category
+Enterprise software
+Every 4 hours
+Every hour
+FR-M08
+Glassdoor
+Healthy
+Hires LTM
+Hirist
+Indeed
+Instahyre
+Job portal management
+Job portals
+LinkedIn Recruiter
+Mandatory per FR-M08-008
+Manual only
+Manual posting only
+Native integration
+Naukri.com
+OAuth 2.0 (recommended)
+Other (custom API)
+Portal
+Posting templates
+Recruitment Admin
+SaaS
+Status

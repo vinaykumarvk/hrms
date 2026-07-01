@@ -1,0 +1,23 @@
+SCREEN: my-letters
+
+TABLE COLUMNS (<th>):
+Action
+Document
+Issued on
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Dashboard
+Document
+Download
+ID card
+Issued documents
+Issued on
+Letter
+My letters
+Offer letter
+Type

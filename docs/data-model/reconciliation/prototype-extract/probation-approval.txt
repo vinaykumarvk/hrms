@@ -1,0 +1,27 @@
+SCREEN: probation-approval
+
+TABLE COLUMNS (<th>):
+Action
+Decision
+Employee
+Manager
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Approve
+Confirm
+Decision
+Employee
+Employee Three
+Extend 60d
+Karan Shah
+Manager
+Manager One
+Pending HR approval
+Probation approval
+Reviewer Three Das
+Send back
+Tasks

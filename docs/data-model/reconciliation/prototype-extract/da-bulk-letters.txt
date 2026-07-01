@@ -1,0 +1,36 @@
+SCREEN: da-bulk-letters
+
+TABLE COLUMNS (<th>):
+ETA
+Failed
+Job
+Progress
+Records
+Status
+Template
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active jobs
+Awaiting ack
+Awaiting employee action
+Bulk letter generation
+Bulk letter jobs
+Bulk throughput (DM23).
+Complete
+Document Admin
+ETA
+FR-M11-005
+Failed
+Held
+In progress
+Job
+Progress
+Q1 Confirmation batch
+Q1 POSH refresh acknowledgement
+Records
+Sign-off (no letter)
+Status
+Template

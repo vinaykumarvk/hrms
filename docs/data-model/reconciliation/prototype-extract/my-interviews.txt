@@ -1,0 +1,13 @@
+SCREEN: my-interviews
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+FR-M08-016
+History
+My interviews
+Upcoming interviews

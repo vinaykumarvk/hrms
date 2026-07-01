@@ -1,0 +1,70 @@
+SCREEN: hr-project-master
+
+TABLE COLUMNS (<th>):
+Client
+Current UAG
+Designation
+Employee
+Employees
+Entity
+Holiday set
+Leave policy
+Locations
+Project
+Shift
+Status
+UAG
+UAGs
+
+INPUT PLACEHOLDERS:
+e.g. Apollo · Hyderabad Ops
+
+LABELS/FIELD TEXT:
+Active
+An employee can be tagged to only
+Apollo Retail
+Apollo Retail Platform
+Bangalore
+Bangalore HQ
+Chennai
+Client
+Current UAG
+Designation
+Employee
+Employees
+Entity
+FR-M01-014
+HR Operations
+Holiday set
+Hyderabad
+Karnataka 2026
+Leave policy
+Locations
+Manage
+Manage UAGs
+Managed by HR Admin and Org Admin.
+Meridian Bank
+Meridian Bank Core
+Mumbai
+Person B Pillai
+Person G Thomas
+Person I Surname2
+PrimeSoft (internal)
+PrimeSoft Services Ltd
+PrimeSoft Tech Pvt Ltd
+Project
+Project location(s)
+Projects
+QA Analyst
+Reviewer Three Shetty
+Shift
+Status
+Support Engineer
+Support Lead
+Tag employees present in the project
+Tamil Nadu 2026
+UAG
+UAG name
+UAGs
+Unassigned
+User Access Groups (UAGs)

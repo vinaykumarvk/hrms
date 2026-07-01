@@ -1,0 +1,42 @@
+SCREEN: da-policies
+
+TABLE COLUMNS (<th>):
+Acknowledgement rate
+Category
+Last updated
+Policy name
+Sign-off
+Status
+Version
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acknowledgement rate
+Anti-Bribery Policy
+Archived (DM15)
+Attendance Policy
+BYOD Policy
+COVID-19
+COVID-19 Return-to-Office Policy
+Category
+Code of Conduct
+Document Admin
+FR-M11-001
+Finance
+IT Acceptable Use Policy
+Information Security Policy
+Last updated
+Leave Policy
+POSH Policy
+Policies by category
+Policy library
+Policy name
+Published
+Reference-only
+Sign-off
+Status
+Travel Policy
+Version
+Whistleblower Policy

@@ -1,0 +1,60 @@
+SCREEN: attendance-config
+
+TABLE COLUMNS (<th>):
+Action
+Date
+Employee
+Manager status
+Reason
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Akash Surname9
+Approve
+Approved by Manish K.
+Approved by Person E N.
+Attendance Admin
+Attendance configuration
+Attendance lock day
+Auto-approve threshold
+Auto-mark (no attestation)
+Below this duration counts as half-day
+Client meeting at HSBC Bangalore
+Configuration
+Date
+Disabled
+Employee
+Employee One
+FR-M05-001
+Geofencing
+Grace period (late arrival)
+Half-day threshold
+Lock pre-notification
+Manager status
+Manual lock only
+Min daily hours required
+Missed swipe (out)
+Mobile check-in (default)
+No grace (FR-M05-001)
+No minimum
+Optional
+Outdoor duty
+Person A Surname1
+Primary capture method
+Reason
+Regularisation back-dated window
+Required (anti-spoofing)
+Required for in-office days
+Reviewer Three K.
+Selfie capture on check-in
+Type
+Up to 2 instances/month
+Up to 5 instances/month
+WFH attendance method
+WFH conversion
+Web check-in
+Web check-in only

@@ -1,0 +1,25 @@
+SCREEN: upload-document
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Aadhaar
+Category
+Degree certificate
+Document details
+Document type
+Documents
+Effective date
+Employment Documents
+File
+Notes
+PAN
+Passport
+Personal Identification
+Relieving letter
+Upload
+Upload document

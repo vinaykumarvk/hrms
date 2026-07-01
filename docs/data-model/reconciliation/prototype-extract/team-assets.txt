@@ -1,0 +1,73 @@
+SCREEN: team-assets
+
+TABLE COLUMNS (<th>):
+Age
+Asset
+Assigned
+Next refresh
+Status
+Tag
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+AC-BLR-04482
+Access card / ID
+Active
+Age
+Akash Surname9 (probation)
+All
+All categories
+All reportees (24)
+Asset
+Asset age (oldest first)
+Asset category
+Assigned
+Dell U2723QE 4K monitor
+Employee One
+Export team report
+Filters
+In repair
+Jan 2027
+Kavya Surname5 (ML)
+LG UltraFine 5K
+Laptop / Workstation
+M17
+Manager
+Manish Surname13
+Manish Surname13 (notice)
+Mar 2027
+Mar 2028
+Mobile device
+Monitor / Display
+Next refresh
+No refresh cycle
+Office access card
+Overdue return
+Overdue returns
+PSI-AUD-0892
+PSI-LAP-2841
+PSI-LAP-3284
+PSI-MOB-0481
+PSI-MON-1842
+PSI-MON-2284
+Person A Surname1
+Refresh due
+Reportee
+Reportee assets
+Reportee name
+Reportees with assets
+Returned
+Sep 2027
+Sep 2029
+Software licence
+Sony WH-1000XM5 headset
+Sort by
+Status
+Status urgency
+Tag
+Team asset visibility (FR-M17-002).
+Team assets
+Total assets assigned
+View profile

@@ -1,0 +1,22 @@
+SCREEN: dept-headcount
+
+TABLE COLUMNS (<th>):
+B2
+B3
+B4
+B5+
+Team
+Total
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Department headcount
+FR-M16-002
+HOD
+Identity
+Payments
+Platform
+Team
+Total

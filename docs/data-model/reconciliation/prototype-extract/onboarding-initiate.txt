@@ -1,0 +1,62 @@
+SCREEN: onboarding-initiate
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Aadhaar Card
+All
+All educational qualifications
+Auto-assign from same team
+Auto-initiation 14 days before DOJ.
+BGV initiation timing
+BGV package
+BGV vendor
+Bank account proof
+Buddy assignment
+Candidate
+Code of Conduct acknowledgement
+Confirmed joining date
+Custom doc
+Disability cert
+Driving licence
+Education years to verify
+Employment years to verify
+Engineering joining welcome
+Expected BGV TAT
+FR-M02-001
+Highest education certificate
+IT Acceptable-Use Policy (AUP)
+Immediate (on init)
+Initiate onboarding
+Joining location
+Last 10 years
+Last 2 educational qualifications
+Last 5 years
+Last 7 years
+Manual
+Marriage cert (dependents)
+Mumbai office
+No buddy
+On candidate consent (delayed)
+On document submission (auto)
+OnGrid (default)
+Onboarding Admin
+Only highest
+Optional documents (toggle as needed)
+Other education certs
+PAN Card
+POSH policy acknowledgement
+Passport (travel role)
+Photograph
+Pipeline
+Pre-joining portal access
+Previous relieving letter
+Pune office
+Senior IC joining welcome
+Source mode
+Standard joining welcome (current)
+Welcome email template

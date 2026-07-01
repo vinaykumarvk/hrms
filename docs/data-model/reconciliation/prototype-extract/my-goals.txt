@@ -1,0 +1,45 @@
+SCREEN: my-goals
+
+TABLE COLUMNS (<th>):
+Category
+Goal
+Pillar
+Weightage
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+AI suggest goals
+Behavioural
+COACHING
+Category
+Complete CKAD recertification
+Customer
+Dashboard
+Development
+FR-M09-001
+FR-M09-013
+FR-M09-019
+FY25
+FY26
+FY26 Annual goal plan
+FY26 Mid-year review
+Feedback
+Feedback from Manager One
+Goal
+Goal plan
+How this works.
+L1 Manager
+Lead 2 internal tech talks
+Manager One
+Mentor 2 new joiners through onboarding
+Next cycle (FY27 Annual)
+Performance
+Pillar
+Reviews
+Self-review due 30 Sep
+Ship payments-v2 to GA
+Start self-review
+View summary
+Weightage

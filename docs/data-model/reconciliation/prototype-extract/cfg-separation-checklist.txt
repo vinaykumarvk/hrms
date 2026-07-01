@@ -1,0 +1,49 @@
+SCREEN: cfg-separation-checklist
+
+TABLE COLUMNS (<th>):
+Action
+Action type
+Item
+Mandatory
+Owner
+SLA
+Stage
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acknowledgment
+Action
+Action type
+Attendance Admin
+Clear / hold (deduction)
+Clearance stages
+Compute PL encash
+Conditional
+Confirm return / hold
+Confirm returned
+Confirm revoked
+Document Upload
+Employee
+Finance Admin
+HR Admin / Offboarding Admin
+HRBP
+Handover document
+IT Admin
+Item
+L1 Manager
+Leave Admin
+M03 Part D.5 / Part E
+Mandatory
+Office Admin
+Owner
+Payroll Admin
+Phase 2
+Policy sign-off
+Pre-LWD checklist stages
+Reconcile
+SLA
+Separation admin
+Stage
+Tracked only

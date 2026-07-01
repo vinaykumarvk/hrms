@@ -1,0 +1,31 @@
+SCREEN: cfg-duplicity
+
+TABLE COLUMNS (<th>):
+Action
+Applies to
+Fields
+Reapply (days)
+Rule name
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Add / edit duplicity check rules
+All sources
+Allow multiple positions
+Applies to
+Days before reapplication (candidate)
+Duplicity check rules
+Duplicity check settings name
+External recruiters
+Field 1
+Field 2
+Field 3
+Fields
+Org Admin
+Reapply (days)
+Rule name
+Standard Duplicity
+Strict Duplicity

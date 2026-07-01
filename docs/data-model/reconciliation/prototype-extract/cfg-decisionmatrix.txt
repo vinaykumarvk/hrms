@@ -1,0 +1,32 @@
+SCREEN: cfg-decisionmatrix
+
+TABLE COLUMNS (<th>):
+Action
+Code
+Matrix name
+Status
+Used by
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit decision matrices
+Code
+DM-LEAVE-PL-ELIGIBILITY
+DM12
+Decision matrices
+Description
+Employee master
+Inactive
+Leave eligibility matrix
+Leave policy
+Matrix code
+Matrix name
+Org Admin
+Sensitive change (Tier-1)
+Status
+Used by
+Used by module

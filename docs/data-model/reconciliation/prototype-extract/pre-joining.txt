@@ -1,0 +1,28 @@
+SCREEN: pre-joining
+
+TABLE COLUMNS (<th>):
+Status
+Step
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Accept offer
+Background verification consent
+Candidate
+Done
+FR-M02-001
+Given
+Not started
+Pre-joining
+Pre-joining checklist
+PrimeSoft Group
+Rohan Mehta
+Say hello
+Sign onboarding forms
+Status
+Step
+Upload documents
+Welcome to
+Your onboarding buddy

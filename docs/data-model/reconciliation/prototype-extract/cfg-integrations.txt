@@ -1,0 +1,34 @@
+SCREEN: cfg-integrations
+
+TABLE COLUMNS (<th>):
+Action
+Integration
+Last sync
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+API key / secret
+Action
+Active
+Add / edit integration credentials
+BGV Vendor
+Connected
+Endpoint URL
+Inactive
+Inbound
+Integration
+Integration credentials
+Integration name
+Integration type
+Last sync
+Live
+Org Admin
+Outbound
+Payroll API
+SSO IdP
+Status
+Type

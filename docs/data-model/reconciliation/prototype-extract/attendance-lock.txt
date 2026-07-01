@@ -1,0 +1,44 @@
+SCREEN: attendance-lock
+
+TABLE COLUMNS (<th>):
+Employee-days
+Locked by
+Locked on
+Month
+Payroll status
+Pending at lock
+
+INPUT PLACEHOLDERS:
+Optional context for this lock cycle
+
+LABELS/FIELD TEXT:
+Attendance Admin
+Attendance lock
+Auto-approve pending (lax)
+Auto-deny pending (strict)
+Auto-trigger M06 Payroll on lock
+Employee-days
+FR-M05-007
+February 2026
+January 2026
+Lock April 2026
+Lock deadline
+Lock note (visible in audit log)
+Locked by
+Locked on
+Locked status
+Manual trigger
+March 2026
+Month
+Monthly attendance lock
+Payroll closed 11 Mar
+Payroll closed 12 Apr
+Payroll closed 12 Feb
+Payroll handoff
+Payroll status
+Pending at lock
+Pending regularisations
+Recent lock history
+Resolution mode for pending items
+Run diagnostics
+Total employee-days

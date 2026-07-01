@@ -1,0 +1,112 @@
+SCREEN: cfg-assign
+
+TABLE COLUMNS (<th>):
+Action
+Applies to
+Assignment name
+Code
+Process
+Status
+
+INPUT PLACEHOLDERS:
+Search & add employees…
+UAS_n (auto)
+e.g. 0 – 2
+e.g. 30 – 45
+
+LABELS/FIELD TEXT:
+ASG-ENG-BLR
+ASG-PERM
+ASG-SR
+Action
+Active
+Add / edit assignment rules
+Age
+All Permanent Employees
+Any
+Applicable for process
+Applies to
+Assignment code
+Assignment name
+Assignment rules
+Associate
+Attendance
+Attendance policy
+Bengaluru
+Between
+CEO
+Code
+Consultant
+Contract
+Contribution level
+Default / Multi-purpose
+Department
+Description
+Designation
+Document generation
+Employee group
+Employee type
+Engineering
+Exclude department
+Exclude employee type
+Exclude filters
+Exclude location
+Experience (DOJ)
+Explicit employee overrides
+Female
+Finance
+From / to (years)
+Full Time
+Gender
+Goal plan
+Greater than
+Group Company 1
+Group Company 2
+Group Company 3
+Human Resources
+Hyderabad
+Include filters
+Included employees
+Individual Contributor
+Is HOD
+Is HRBP
+L1 Manager and above
+Lead
+Leave
+Leave policy
+Less than
+Male
+Manager
+Manager level / flags
+Mumbai
+Notification scope
+ODC
+Office location
+On notice
+On probation
+Onboarding
+Operations
+Org Admin
+Parent company
+Part Time
+Performance
+Performance review
+Process
+Project A
+Project B
+Project C
+Project H
+Project allocated
+Quality Assurance
+Range conditions
+Recruitment requisition
+Report filter
+Senior Admin Executive
+Senior Band
+Senior Management
+Separation policy
+Shift
+Staffing
+Status
+Unassigned
+Workflow

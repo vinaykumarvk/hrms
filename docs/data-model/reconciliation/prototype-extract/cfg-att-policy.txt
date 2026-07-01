@@ -1,0 +1,38 @@
+SCREEN: cfg-att-policy
+
+TABLE COLUMNS (<th>):
+Applies to
+Half-day rules
+Late grace
+Policy name
+Required Clock-in
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Active attendance policies
+Applies to
+Attendance policies
+Attendance policy
+FR-M05-001
+Geofencing
+Half-day rules
+Hourly contractors only
+Infraction
+Late grace
+N/A
+No half-day enforcement
+Optional
+Optional (mobile GPS)
+Org Admin
+Overtime
+Policy name
+Regularisation
+Required Clock-in
+Shift rules
+Status
+Weekly off
+Zero grace (FR-M05-001)

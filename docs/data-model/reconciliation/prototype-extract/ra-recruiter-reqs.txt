@@ -1,0 +1,53 @@
+SCREEN: ra-recruiter-reqs
+
+TABLE COLUMNS (<th>):
+Action
+Candidates
+Hiring Lead
+Open since
+Position · Dept
+Priority
+Req ID
+Stage
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active candidates
+Active requisitions
+All
+All active
+All stages
+Aman K. (Data Lead)
+Assigned requisitions
+Avg time-to-fill
+BGV
+Candidates
+Critical
+Dev K.
+FR-M08
+Filter recruiter's requisitions
+High
+Hires LTM
+Hiring Lead
+Interview
+Manish K.
+Normal
+Offer
+On hold
+Open
+Open since
+Person B S. (CEO)
+Priority
+Reassign
+Recruiter
+Recruiter assignment
+Recruitment Admin
+Req ID
+Screening
+Sourcing
+Stage
+Status
+View profile

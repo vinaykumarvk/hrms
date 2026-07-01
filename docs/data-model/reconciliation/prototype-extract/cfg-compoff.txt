@@ -1,0 +1,36 @@
+SCREEN: cfg-compoff
+
+TABLE COLUMNS (<th>):
+Action
+Calc frequency
+Code
+Lapse (days)
+Policy
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit comp-off policies
+Allow half-day
+Approval flow
+CO-SR
+CO-STD
+Calc frequency
+Calculation frequency
+Code
+Comp-off lapse (days)
+Comp-off policies
+Comp-off policy name
+Inactive
+Lapse (days)
+Min duration to credit one day
+Monthly
+Org Admin
+Policy
+Senior Comp-off
+Standard Comp-off
+Status

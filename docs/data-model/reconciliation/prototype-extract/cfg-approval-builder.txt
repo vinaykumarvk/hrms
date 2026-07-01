@@ -1,0 +1,89 @@
+SCREEN: cfg-approval-builder
+
+TABLE COLUMNS (<th>):
+Additional
+CC roles
+Default recipients
+Email
+Event
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Add CC role
+Add CC user
+Additional
+Allotted time
+Allow send back
+Approval flow builder
+Approval flow definition
+Approval flows
+Approval levels
+ApprovalflowsExport.csv
+Approver
+Approver assigned
+Approver context
+By grade
+By job level
+CC role
+CC roles
+Confirmation
+Cost-centre head
+Custom HR flow
+DM-LEAVE-01
+DM-SEP-01
+Decision matrix
+Default recipients
+Department
+Disabled
+Draft
+Edit approval flow
+Email
+Event
+Exception L1
+Exception L2
+Exception levels
+Flow code
+Flow name
+HOD
+HR Admin
+HRBP
+Initiator
+L1 Manager
+L2 Manager
+Level 1
+Level 2
+Level 3
+M01 Employee Master
+M02 Onboarding
+M03 Exits & Offboarding
+M04 Leave
+M05 Attendance
+M08 Recruitment
+M09 Performance
+M11 Documents
+M17 Assets & IT
+Module transaction
+Named individual
+None
+Notifications
+Org Admin
+Re-route approval flow
+Replace Approve/Reject with Submit
+Revoke permission
+SLA setting
+SLA-ESCALATE-3D
+SLA-STD-2D
+Save flow
+Select others
+Skip level if no approvers
+Stage controls
+Status
+Subject employee
+To HR Admin
+To HRBP
+Trigger even if previous rejected
+Use decision matrix
+Version

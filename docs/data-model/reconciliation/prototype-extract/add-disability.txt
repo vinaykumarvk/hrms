@@ -1,0 +1,28 @@
+SCREEN: add-disability
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+UDID/XX/XXXXX
+e.g. 40
+
+LABELS/FIELD TEXT:
+Add disability
+Autism spectrum disorder
+Date of certification
+Disclosure is voluntary.
+FR-M01-012
+Hearing impairment
+Intellectual disability
+Kind of disability
+Locomotor disability
+Mental illness
+Multiple disabilities
+My profile
+Other (specify below)
+Percentage of disability
+Specific learning disability
+Speech and language disability
+UDID number
+Visual impairment

@@ -1,0 +1,32 @@
+SCREEN: interview-detail
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Candidate
+Comments
+Date / time
+Evaluation
+Hire
+Hold
+Interview detail
+Interview summary
+Mode
+No hire
+Overall rating
+Panel
+Proceed
+Re-schedule
+Recommendation
+Recruitment
+Reject
+Role / Requisition
+Round
+Status
+Strong hire
+Strong no hire
+Submit feedback

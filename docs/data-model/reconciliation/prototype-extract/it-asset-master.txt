@@ -1,0 +1,81 @@
+SCREEN: it-asset-master
+
+TABLE COLUMNS (<th>):
+Action
+Assignee
+Class
+Condition
+Make / model
+State
+Tag
+
+INPUT PLACEHOLDERS:
+MacBook Pro 14 M3
+ORG-LPT-00142
+ORG-LPT-… / serial
+capitalisation gate ₹15,000
+
+LABELS/FIELD TEXT:
+A. Krishnan
+Access card
+Action
+Add / edit asset
+All
+Apple
+Apple MacBook Pro 14 M3
+Asset ID (internal)
+Asset class
+Asset master
+Asset tag (physical)
+Assets
+Assignee
+Bengaluru
+Class
+Condition
+Datacentre
+Dell
+Dell Latitude 5430
+Dell Latitude 5440
+Desktop
+Fair
+Filters
+Good
+Hyderabad (Q City)
+In Stock
+In Use
+In stock
+Laptop
+Lenovo
+Location
+Lost
+Lost (30d clock)
+Make / manufacturer
+Make / model
+Mobile
+Model
+Monitor
+Mumbai
+Network
+New
+ORG-LPT-00091
+ORG-LPT-00142
+ORG-LPT-00143
+ORG-MOB-00088
+ORG-MON-00211
+Person A Surname1
+Purchase date
+Remote (WFH)
+Reserved
+Retired
+SaaS token
+Search tag / serial
+Serial number
+Server
+Software licence
+State
+Tag
+Total assets
+Under Maintenance
+Vendor
+Warranty expiry
+Written Off

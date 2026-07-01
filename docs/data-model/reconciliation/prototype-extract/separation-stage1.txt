@@ -1,0 +1,26 @@
+SCREEN: separation-stage1
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+Notice
+Proposed LWD
+Resigned
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Apply
+Employee
+FR-M03
+Manish Surname13
+Notice
+Object
+Pending Stage-1
+Proposed LWD
+Recommend
+Resigned
+Skip-level Reviewer
+Tasks

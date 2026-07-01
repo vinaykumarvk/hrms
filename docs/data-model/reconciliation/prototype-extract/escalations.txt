@@ -1,0 +1,27 @@
+SCREEN: escalations
+
+TABLE COLUMNS (<th>):
+Action
+Age
+From
+Item
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Age
+Escalated items
+Escalations
+FR-M01-010
+From
+HRBP
+Item
+Leave
+Leave rejection appeal
+PSI000321
+Performance
+Review
+Type

@@ -1,0 +1,26 @@
+SCREEN: access-control
+
+TABLE COLUMNS (<th>):
+Badge ID
+Employee
+Status
+Zones
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Access control
+Active
+All floors
+BNG-4821
+Badge / access cards
+Badge ID
+Candidate One
+Employee
+FR-M17-005
+Office Admin
+Pending (joins 1 Jun)
+Person A Surname1
+Status
+Zones

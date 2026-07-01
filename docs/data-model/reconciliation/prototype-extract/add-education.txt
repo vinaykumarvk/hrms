@@ -1,0 +1,26 @@
+SCREEN: add-education
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+School/college name
+e.g. Computer Science
+
+LABELS/FIELD TEXT:
+Add education
+Bachelors
+CGPA
+Certificate
+Degree
+End year
+GPA
+Grade
+Grade type
+Institution
+Masters
+My profile
+Percentage
+PhD
+Specialisation
+Start year

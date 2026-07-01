@@ -1,0 +1,52 @@
+SCREEN: leave-balance-adjust
+
+TABLE COLUMNS (<th>):
+Action
+Current balance
+Employee
+Leave type
+Reason
+Requested adjustment
+
+INPUT PLACEHOLDERS:
+Search by name or PSI number
+Ticket ID, email, etc.
+Why is this adjustment justified? Visible in audit log.
+e.g. 3
+
+LABELS/FIELD TEXT:
+Action
+Adjustment amount (days)
+Adjustment type
+All balance adjustments are audit-logged.
+Apply adjustment
+Balance adjustments
+Casual Leave (CL)
+Comp-off accrual catch-up
+Compensatory Off (COMP)
+Create balance adjustment
+Credit (add days)
+Current balance
+Debit (remove days)
+Detailed reason
+Earned Leave (EL)
+Effective date
+Employee
+FR-M04-021
+Leave Admin
+Leave balance adjustments
+Leave type
+One-time award
+Other (specify)
+Pending adjustment requests
+Prior-period correction
+Reason
+Reason category
+Requested adjustment
+Reset to specific value
+Review
+Sabbatical credit reversal
+Sick Leave (SL)
+Statutory leave grant
+Supporting reference
+System migration adjustment

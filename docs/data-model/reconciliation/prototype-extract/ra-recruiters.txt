@@ -1,0 +1,62 @@
+SCREEN: ra-recruiters
+
+TABLE COLUMNS (<th>):
+Action
+Active reqs
+Avg time-to-fill
+Capacity
+Hires LTM
+Quality score
+Recruiter
+Specialisation
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active reqs
+All
+All specialisations
+Avg time-to-fill
+Avg time-to-fill (days)
+Below 4.0
+Candidate experience score
+Capacity
+Current quarter
+Developing
+Development areas
+FR-M08
+FY25 annual
+Filters
+Hires LTM
+Hires achieved
+Hiring manager satisfaction
+Internal recruiters
+Karthik R.
+LTM (last 12 months)
+Optimal
+Overall rating
+Performance concern
+Performance review form
+Performance window
+Person C J.
+Person E M.
+Person L S.
+Q1 FY26 (Apr-Jun 2026)
+Q4 FY25
+Quality score
+Recruiter
+Recruiter management
+Recruitment Admin
+Review period
+Sahil M.
+Save draft
+Solid performer
+Specialisation
+Strengths
+Strong performer
+Submit review
+Vipul S.
+Workload status
+YTD

@@ -1,0 +1,39 @@
+SCREEN: directory
+
+TABLE COLUMNS (<th>):
+Department
+Designation
+Manager
+Name
+Office location
+Official email
+Official phone
+
+INPUT PLACEHOLDERS:
+Search by name, designation, department…
+
+LABELS/FIELD TEXT:
+Active employees
+All
+Bengaluru
+Department
+Designation
+Dev Khanna
+Director Two
+Directory
+Employee directory
+Engineering Manager
+Manager
+Manager One
+Mumbai
+Name
+Office location
+Official email
+Official phone
+People
+Person A Surname
+Person B Surname
+Platform Engineering
+Product
+Product Manager
+Senior Engineer

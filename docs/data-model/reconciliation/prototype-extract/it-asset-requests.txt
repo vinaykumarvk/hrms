@@ -1,0 +1,25 @@
+SCREEN: it-asset-requests
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+Raised
+Request
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Approve
+Asset Request Flow
+Asset requests
+Employee
+Employee Four
+Employee Three
+External monitor
+Pending requests
+Raised
+Reject
+Request
+VPN access

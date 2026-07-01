@@ -1,0 +1,35 @@
+SCREEN: cfg-geofence
+
+TABLE COLUMNS (<th>):
+Action
+Code
+Company
+Distance (m)
+Fencing name
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit geofencing
+Bangalore HQ Fence
+Code
+Company
+Distance (m)
+Distance (metres)
+Fencing code
+Fencing name
+GEO-BLR
+GEO-MUM
+Geofencing
+Inactive
+Latitude
+Longitude
+Mumbai Fence
+Org Admin
+PrimeSoft IP Solutions
+Status
+Tags

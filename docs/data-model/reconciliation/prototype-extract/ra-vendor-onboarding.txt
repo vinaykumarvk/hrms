@@ -1,0 +1,57 @@
+SCREEN: ra-vendor-onboarding
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
++91-XXXXX-XXXXX
+If different from legal name
+Statutory ID
+account.manager@vendor.com
+e.g. TalentForge Recruitment Pvt Ltd
+
+LABELS/FIELD TEXT:
+Add vendor
+Bangalore
+Brand / trading name
+Chennai
+Commission model
+Commission percentage
+Contract duration
+Contract start date
+Country of operation
+Customer Success
+Delhi NCR
+Expected hires LTM
+External recruiters
+FR-M08-006
+Flat fee per hire
+GST / PAN
+Geography focus
+Global
+Hyderabad
+India
+Initial requisition allocation
+Mumbai
+NET-45
+NET-60
+None
+None (PrimeSoft credentials)
+Number of vendor user accounts
+Payment terms
+Percentage of CTC (standard)
+Primary contact email
+Primary contact name
+Primary contact phone
+Product
+Pune
+Recruitment Admin
+Registered address
+Replacement guarantee
+Restrictions / exclusions
+SSO integration
+Specialisation areas
+Vendor SSO (SAML 2.0)
+Vendor legal name
+Vendor onboarding
+Volume tiered

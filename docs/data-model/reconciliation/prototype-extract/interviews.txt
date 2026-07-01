@@ -1,0 +1,40 @@
+SCREEN: interviews
+
+TABLE COLUMNS (<th>):
+Candidate
+Date / Time
+Mode
+Panellist
+Stage
+Status
+
+INPUT PLACEHOLDERS:
+Search by candidate, panellist…
+
+LABELS/FIELD TEXT:
+Aakash Bansal
+Candidate
+Date / Time
+Dev Khanna
+FR-M08-007
+Interview scheduling
+Interviews
+L1 (Screening)
+L2 (Tech)
+L3 (Skip)
+Maya Krishnan
+Mode
+Panellist
+Pending
+Phone
+Recruiter
+Recruiter Phone
+Scheduled
+Stage
+Status
+This week
+To schedule
+Today
+Vikas Surname3
+Virtual
+Virtual (Zoom)

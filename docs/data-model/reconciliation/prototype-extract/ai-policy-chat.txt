@@ -1,0 +1,22 @@
+SCREEN: ai-policy-chat
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Ask about policies, benefits, or how to do something...
+
+LABELS/FIELD TEXT:
+AI Assistant
+Ask about
+Coming soon
+Conversation
+Dashboard
+Draft my self-review from my goals
+HR policies
+Leave Policy FY26 (v2.3)
+My leave
+Raise an IT ticket from chat
+Send
+Try one of these
+What I can help with

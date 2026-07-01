@@ -1,0 +1,38 @@
+SCREEN: psa-licenses
+
+TABLE COLUMNS (<th>):
+Consumed
+Contract end
+Licensed
+MRR
+Plan
+Tenant
+Utilisation
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acme Manufacturing
+Consumed
+Contract end
+Enterprise
+FR-P04
+Group Company 2 Group
+Growth
+Helix BioTech
+Licensed
+Licenses
+MRR
+Monthly recurring revenue
+NeoBank Capital
+Per-tenant utilisation
+Plan
+Platform Admin
+Renewals next 90d
+Seats consumed
+Synergy Logistics
+Tenant
+Total seats licensed
+Utilisation
+Verde Energy

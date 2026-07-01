@@ -1,0 +1,60 @@
+SCREEN: cfg-skip-edit
+
+TABLE COLUMNS (<th>):
+Condition subject
+Initiator roles
+Reassign to role
+Reassign?
+Rule
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Approval stage
+Auto-approve
+Both
+Change control
+Code
+Condition subject
+Confirmation
+Custom HR flow
+Disabled
+Edit skip setting
+Equals
+Greater than
+HOD
+HR Admin
+HRBP
+Initiator
+Initiator roles
+Is empty
+L1 Manager
+L2 Manager
+Less than
+M01 Employee Master
+M02 Onboarding
+M03 Exits & Offboarding
+M04 Leave
+M05 Attendance
+M08 Recruitment
+M09 Performance
+M11 Documents
+M17 Assets & IT
+Module transaction
+Name
+Not equals
+Org Admin
+Reassign
+Reassign to role
+Rule
+Skip conditions
+Skip output
+Skip setting definition
+Skip setting editor
+Skip settings
+Skip settings for
+Skip stage
+Status
+Workflow stage

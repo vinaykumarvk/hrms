@@ -1,0 +1,38 @@
+SCREEN: pa-metrics
+
+TABLE COLUMNS (<th>):
+Action
+Attached to plans
+Formula name
+Status
+Type
+
+INPUT PLACEHOLDERS:
+e.g. Sales step-function scoring
+
+LABELS/FIELD TEXT:
+Achievement input
+Action
+Applies to
+Attach at
+Attached to plans
+Build a custom formula
+Custom formulas
+Custom score formulas
+Default scoring formula
+FR-M09-019
+Formula
+Formula expression
+Formula name
+Formula type
+Goal-plan level (during cycle creation)
+How goal scores are computed.
+Individual goal level
+Multi-input (weighted combination)
+Non-linear (exponential / logarithmic)
+Over-achievement cap
+Performance Admin
+Save formula
+Status
+Type
+Uncapped

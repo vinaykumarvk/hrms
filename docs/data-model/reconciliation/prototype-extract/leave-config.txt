@@ -1,0 +1,38 @@
+SCREEN: leave-config
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Advance application window
+After 14 days
+After 7 days
+Auto-credit accruals on 1st of each month
+Auto-rejection if no manager action
+Back-dated leave window
+Calendar year (Jan-Dec)
+Carry-forward cap
+Configuration
+Custom anchor date
+FR-M04-001
+Financial year (Apr-Mar)
+Half-day enabled
+Leave Admin
+Leave configuration
+Leave year basis
+Maternity extension
+Module behaviour
+Negative balance allowed
+No cap
+Notify HRBP on Stage-2 leave applications
+Reset
+Save changes
+Stage-2 auto-route for
+Up to 12 months ahead
+Up to 14 days
+Up to 3 months ahead
+Up to 6 months ahead
+Up to 7 days (default)

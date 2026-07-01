@@ -1,0 +1,21 @@
+SCREEN: knowledge-base
+
+TABLE COLUMNS (<th>):
+Action
+Article
+Category
+
+INPUT PLACEHOLDERS:
+Search the knowledge base…
+
+LABELS/FIELD TEXT:
+Action
+Article
+Browse by category
+Category
+Dashboard
+FR-M17-011
+Knowledge base
+Network
+Open
+Popular articles

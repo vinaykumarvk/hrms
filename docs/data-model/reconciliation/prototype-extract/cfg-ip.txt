@@ -1,0 +1,36 @@
+SCREEN: cfg-ip
+
+TABLE COLUMNS (<th>):
+Action
+Code
+Company
+IP from
+IP to
+Network name
+Tag
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Add / edit ip whitelist
+Code
+Company
+Group company
+HQ Wifi
+IP address from
+IP address to
+IP from
+IP to
+IP whitelist
+NET-HQ
+NET-VPN
+Network code
+Network name
+Office
+Org Admin
+PrimeSoft IP Solutions
+Remote
+Tag
+VPN

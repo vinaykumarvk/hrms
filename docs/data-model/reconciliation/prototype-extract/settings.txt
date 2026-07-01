@@ -1,0 +1,38 @@
+SCREEN: settings
+
+TABLE COLUMNS (<th>):
+Device
+Last active
+Location
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Account & security
+Active sessions
+Authenticator app enabled
+Bangalore
+Change password
+Dark
+Dashboard
+Device
+Email notifications
+English
+FR-P02
+In-app notifications
+Language
+Last active
+Light
+Location
+Multi-factor authentication
+Notification preferences
+Now
+Password
+SMS for approvals
+Settings
+Sign out
+System
+Task reminders
+Theme
+This device

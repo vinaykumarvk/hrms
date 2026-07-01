@@ -1438,5 +1438,227 @@ RESET app.is_platform_admin;
 
 
 -- =====================================================================================
+-- SECTION 7 — RECON (prototype) ADDITIONS (2026-07-01) — additive-only reconciliation
+--   of the PrimeSoft prototype employee-profile screens against G01 + platform-core.
+-- =====================================================================================
+-- Source of truth: docs/data-model/reconciliation/prototype-g01-profile.md.
+-- Screens reconciled: add-skill, add-visa, add-certification (professional), add-education,
+--   add-experience, bank-entry, nominees, add-dependent, plus the *-employee-detail /
+--   my-profile / directory / org-chart display surfaces. ADD-only: new enums, new tables,
+--   ADD COLUMN, ALTER TYPE ADD VALUE. Nothing above is modified; core employees /
+--   employee_dependents are NOT redefined (only satellites + data inserts). Runs in psql
+--   autocommit so ALTER TYPE ... ADD VALUE is usable by seeds below.
+
+-- 7.1 — new module enums (prototype-driven closed sets) -------------------------------
+CREATE TYPE g01_skill_proficiency  AS ENUM ('BEGINNER','INTERMEDIATE','ADVANCED','EXPERT');   -- add-skill "Proficiency"
+CREATE TYPE g01_visa_sponsor_type  AS ENUM ('SELF_SPONSORED','EXTERNAL_SPONSOR');             -- add-visa "Sponsored by"
+CREATE TYPE g01_penny_drop_status  AS ENUM ('PENDING','VERIFIED','FAILED');                   -- bank-entry "Penny drop status"
+
+-- nominees "Type": ESIC is a statutory nomination class absent from the benefit enum.
+ALTER TYPE g01_benefit_type ADD VALUE IF NOT EXISTS 'ESIC';
+
+-- 7.2 — in-place column adds on existing satellites -----------------------------------
+-- add-education: "Start year" + "Grade type" (CGPA/GPA/Percentage/Grade) — value already
+-- stored in grade_or_percentage; the qualifier and the start year were absent.
+ALTER TABLE employee_education
+    ADD COLUMN start_year smallint,                       -- add-education "Start year" (year_of_passing = End year)
+    ADD COLUMN grade_type varchar(20),                    -- add-education "Grade type" (CGPA/GPA/PERCENTAGE/GRADE)
+    ADD CONSTRAINT ck_employee_education_start_year
+        CHECK (start_year IS NULL OR start_year BETWEEN 1950 AND 2100);
+
+-- add-experience: free-text "Description" of the prior role.
+ALTER TABLE employee_experience
+    ADD COLUMN job_description varchar(500);               -- add-experience "Description"
+
+-- bank-entry: "Penny drop status" is tri-state (Pending/Verified/Failed); is_verified alone
+-- cannot represent FAILED. Add the status column (is_verified retained for back-compat).
+ALTER TABLE employee_bank_accounts
+    ADD COLUMN penny_drop_status g01_penny_drop_status NOT NULL DEFAULT 'PENDING';
+
+-- ---------------------------------------------------------------------------------
+-- 7.3 — employee_profile_skills (add-skill: Skill name / Proficiency / Years of experience / Last used)
+-- ---------------------------------------------------------------------------------
+CREATE TABLE employee_profile_skills (
+    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id           uuid NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
+    entity_id           uuid REFERENCES entities(id)           ON DELETE RESTRICT,
+    employee_id         uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    skill_name          varchar(120) NOT NULL,                -- "Skill name" (e.g. Python)
+    proficiency         g01_skill_proficiency,                -- "Proficiency"
+    years_of_experience numeric(4,1),                         -- "Years of experience"
+    last_used_date      date,                                 -- "Last used"
+    is_verified         boolean NOT NULL DEFAULT false,
+    row_version         integer NOT NULL DEFAULT 1,
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    updated_at          timestamptz NOT NULL DEFAULT now(),
+    created_by          uuid,
+    updated_by          uuid,
+    is_deleted          boolean NOT NULL DEFAULT false,
+    CONSTRAINT ck_employee_skills_years CHECK (years_of_experience IS NULL OR years_of_experience >= 0)
+);
+CREATE INDEX ix_employee_profile_skills_tenant   ON employee_profile_skills(tenant_id);
+CREATE INDEX ix_employee_profile_skills_entity   ON employee_profile_skills(entity_id);
+CREATE INDEX ix_employee_profile_skills_employee ON employee_profile_skills(employee_id);
+-- one non-deleted row per (employee, skill)
+CREATE UNIQUE INDEX uq_employee_skills_name
+    ON employee_profile_skills(employee_id, lower(skill_name)) WHERE is_deleted = false;
+
+-- ---------------------------------------------------------------------------------
+-- 7.4 — employee_visas (add-visa: Country / Visa type / Number / Issue-Valid-till /
+--       Issuing authority / Max stay / Sponsor / scan). Distinct from statutory IDs.
+-- ---------------------------------------------------------------------------------
+CREATE TABLE employee_visas (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
+    entity_id          uuid REFERENCES entities(id)           ON DELETE RESTRICT,
+    employee_id        uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    country            varchar(80) NOT NULL,                  -- "Country"
+    visa_type          varchar(80) NOT NULL,                  -- "Visa type" (Employment Pass, Dependent visa, Schengen Short-stay, Other)
+    visa_number        varchar(60),                           -- "Visa number" (As printed)
+    issue_date         date,                                  -- "Issue date"
+    valid_till         date,                                  -- "Valid till"
+    issuing_authority  varchar(160),                          -- "Issuing authority"
+    max_stay_days      smallint,                              -- "Maximum stay (days per entry)"
+    sponsor_type       g01_visa_sponsor_type,                 -- "Sponsored by" (Self/External)
+    sponsored_by       varchar(200),                          -- external sponsor name
+    is_dependent_visa  boolean NOT NULL DEFAULT false,        -- "Dependent visa"
+    scan_document_id   uuid REFERENCES documents(id)          ON DELETE SET NULL,  -- "Visa scan / soft copy"
+    row_version        integer NOT NULL DEFAULT 1,
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    updated_at         timestamptz NOT NULL DEFAULT now(),
+    created_by         uuid,
+    updated_by         uuid,
+    is_deleted         boolean NOT NULL DEFAULT false,
+    CONSTRAINT ck_employee_visas_dates CHECK (valid_till IS NULL OR issue_date IS NULL OR valid_till >= issue_date),
+    CONSTRAINT ck_employee_visas_maxstay CHECK (max_stay_days IS NULL OR max_stay_days >= 0)
+);
+CREATE INDEX ix_employee_visas_tenant   ON employee_visas(tenant_id);
+CREATE INDEX ix_employee_visas_entity   ON employee_visas(entity_id);
+CREATE INDEX ix_employee_visas_employee ON employee_visas(employee_id);
+CREATE INDEX ix_employee_visas_doc      ON employee_visas(scan_document_id);
+CREATE INDEX ix_employee_visas_expiry   ON employee_visas(valid_till) WHERE valid_till IS NOT NULL;
+
+-- ---------------------------------------------------------------------------------
+-- 7.5 — employee_professional_certifications (add-certification: professional creds e.g.
+--       AWS Solutions Architect). Distinct from statutory employee_certificates (E25:
+--       caste/EWS/PWD_UDID/domicile). Grounds: add-certification.txt.
+-- ---------------------------------------------------------------------------------
+CREATE TABLE employee_professional_certifications (
+    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id              uuid NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
+    entity_id              uuid REFERENCES entities(id)           ON DELETE RESTRICT,
+    employee_id            uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    certification_name     varchar(200) NOT NULL,             -- "Certification name"
+    issuing_organisation   varchar(200),                      -- "Issuing organisation"
+    credential_id          varchar(120),                      -- "Credential ID"
+    issue_date             date,                              -- "Issue date"
+    expiry_date            date,                              -- "Expiry date"
+    is_verified            boolean NOT NULL DEFAULT false,
+    certificate_document_id uuid REFERENCES documents(id)     ON DELETE SET NULL,  -- "Certificate file"
+    row_version            integer NOT NULL DEFAULT 1,
+    created_at             timestamptz NOT NULL DEFAULT now(),
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    created_by             uuid,
+    updated_by             uuid,
+    is_deleted             boolean NOT NULL DEFAULT false,
+    CONSTRAINT ck_prof_cert_dates CHECK (expiry_date IS NULL OR issue_date IS NULL OR expiry_date >= issue_date)
+);
+CREATE INDEX ix_prof_cert_tenant   ON employee_professional_certifications(tenant_id);
+CREATE INDEX ix_prof_cert_entity   ON employee_professional_certifications(entity_id);
+CREATE INDEX ix_prof_cert_employee ON employee_professional_certifications(employee_id);
+CREATE INDEX ix_prof_cert_doc      ON employee_professional_certifications(certificate_document_id);
+CREATE INDEX ix_prof_cert_expiry   ON employee_professional_certifications(expiry_date) WHERE expiry_date IS NOT NULL;
+
+-- ---------------------------------------------------------------------------------
+-- 7.6 — employee_dependent_details (add-dependent extras + "Insurance covered" column on
+--       the *-employee-detail dependents grid). 1:1 satellite of core employee_dependents
+--       (which is NOT redefined); carries the fields the core golden record lacks.
+-- ---------------------------------------------------------------------------------
+CREATE TABLE employee_dependent_details (
+    id                          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                   uuid NOT NULL REFERENCES tenants(id)             ON DELETE RESTRICT,
+    entity_id                   uuid REFERENCES entities(id)                     ON DELETE RESTRICT,
+    dependent_id                uuid NOT NULL REFERENCES employee_dependents(id) ON DELETE RESTRICT,
+    nationality                 varchar(40),                  -- add-dependent "Nationality"
+    phone                       varchar(20),                  -- add-dependent "Phone"
+    country_code                varchar(5) DEFAULT '+91',
+    address_line                varchar(320),                 -- add-dependent "Address"
+    same_as_employee_address    boolean NOT NULL DEFAULT false,  -- "Same as employee address?"
+    is_covered_group_insurance  boolean NOT NULL DEFAULT false,  -- "Add to group medical insurance" / detail grid "Insurance covered"
+    row_version                 integer NOT NULL DEFAULT 1,
+    created_at                  timestamptz NOT NULL DEFAULT now(),
+    updated_at                  timestamptz NOT NULL DEFAULT now(),
+    created_by                  uuid,
+    updated_by                  uuid,
+    is_deleted                  boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_employee_dependent_details UNIQUE (dependent_id)
+);
+CREATE INDEX ix_dependent_details_tenant    ON employee_dependent_details(tenant_id);
+CREATE INDEX ix_dependent_details_entity    ON employee_dependent_details(entity_id);
+CREATE INDEX ix_dependent_details_dependent ON employee_dependent_details(dependent_id);
+
+-- 7.7 — RLS for the prototype RECON tables (CONVENTIONS §6 tenant-isolation template).
+DO $$
+DECLARE
+    t text;
+    recon_tables text[] := ARRAY['employee_profile_skills','employee_visas',
+                                  'employee_professional_certifications','employee_dependent_details'];
+BEGIN
+    FOREACH t IN ARRAY recon_tables LOOP
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
+        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY;', t);
+        EXECUTE format($f$
+            CREATE POLICY tenant_isolation ON %I
+            USING (
+                tenant_id = current_setting('app.current_tenant_id', true)::uuid
+                OR current_setting('app.is_platform_admin', true) = 'true'
+            )
+            WITH CHECK (
+                tenant_id = current_setting('app.current_tenant_id', true)::uuid
+                OR current_setting('app.is_platform_admin', true) = 'true'
+            );
+        $f$, t);
+    END LOOP;
+END $$;
+
+-- 7.8 — prototype RECON sample seed rows (reuse fixed tenant/entity/employee UUIDs).
+SET app.is_platform_admin = 'true';
+SET app.current_tenant_id = '11111111-1111-1111-1111-111111111111';
+
+-- employee_profile_skills ----------------------------------------------------------------------
+INSERT INTO employee_profile_skills (id, tenant_id, entity_id, employee_id, skill_name, proficiency, years_of_experience, last_used_date, is_verified)
+VALUES
+ ('5c110000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','Python','ADVANCED', 8.0,'2026-06-01', true),
+ ('5c110000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','PostgreSQL','INTERMEDIATE', 5.5,'2026-05-15', false),
+ ('5c110000-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999902','Project Management','EXPERT', 15.0,'2026-06-20', false);
+
+-- employee_visas -----------------------------------------------------------------------
+INSERT INTO employee_visas (id, tenant_id, entity_id, employee_id, country, visa_type, visa_number, issue_date, valid_till, issuing_authority, max_stay_days, sponsor_type, sponsored_by, is_dependent_visa)
+VALUES
+ ('71540000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','Singapore','Employment Pass','EP-4471228','2025-02-10','2027-02-09','Ministry of Manpower', 90,'EXTERNAL_SPONSOR','PrimeSoft Pte Ltd', false),
+ ('71540000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999902','Germany','Schengen Short-stay','C-90887711','2026-01-05','2026-07-04','U.S. Consulate, Chennai', 180,'SELF_SPONSORED', NULL, false);
+
+-- employee_professional_certifications -------------------------------------------------
+INSERT INTO employee_professional_certifications (id, tenant_id, entity_id, employee_id, certification_name, issuing_organisation, credential_id, issue_date, expiry_date, is_verified)
+VALUES
+ ('ce270000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','AWS Solutions Architect – Associate','Amazon Web Services','AWS-ASA-88213','2024-09-01','2027-09-01', true),
+ ('ce270000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999902','PMP','Project Management Institute','PMP-552310','2019-03-15','2025-03-15', false);
+
+-- dependents (core table; data insert only — NOT a redefinition) + 1:1 detail satellite -
+INSERT INTO employee_dependents (id, tenant_id, entity_id, employee_id, full_name, relationship, dob, gender, is_dependent, national_id_masked)
+VALUES
+ ('de900000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','Spouse One','SPOUSE','1986-08-20','MALE', true,'XXXX XXXX 4321'),
+ ('de900000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','Child One','SON','2014-04-02','MALE', true, NULL);
+
+INSERT INTO employee_dependent_details (id, tenant_id, entity_id, dependent_id, nationality, phone, address_line, same_as_employee_address, is_covered_group_insurance)
+VALUES
+ ('dd900000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','de900000-0000-0000-0000-000000000001','Indian','+91 98XXXX4455', NULL, true, true),
+ ('dd900000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','de900000-0000-0000-0000-000000000002','Indian', NULL, NULL, true, true);
+
+RESET app.current_tenant_id;
+RESET app.is_platform_admin;
+
+
+-- =====================================================================================
 -- END 01-G01-employee-profile.sql
 -- =====================================================================================

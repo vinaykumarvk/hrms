@@ -1,0 +1,51 @@
+SCREEN: pa-cycle-detail
+
+TABLE COLUMNS (<th>):
+BU
+Eligible
+L1 evaluated
+SLA breach
+Self submitted
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Calibration
+Clone
+Close cycle
+Code
+Customer Success
+Cycle configuration
+Days remaining
+Design
+Eligible
+Engineering
+FR-M09-003
+FY26 Mid-year Check-in
+Goal plan
+Healthy
+L1 evaluated
+L1 evaluations
+Marketing
+Mid-year check-in
+Normalization
+On track
+Performance Admin
+Period
+Product
+Quick actions
+Rating scale
+Review cycles
+SLA breach
+Sales
+Scope
+Self reviews
+Self submitted
+Stage progress by BU
+Stages
+Status
+Type
+View SLA breaches
+Watch

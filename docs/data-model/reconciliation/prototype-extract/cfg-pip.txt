@@ -1,0 +1,30 @@
+SCREEN: cfg-pip
+
+TABLE COLUMNS (<th>):
+Action
+Duration
+Policy
+Review cadence
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Accelerated PIP
+Action
+Active
+Add / edit pip policy
+Auto-escalate to HRBP
+Bi-weekly
+Duration
+Duration (days)
+Inactive
+Org Admin
+PIP policy
+PIP policy name
+Policy
+Review cadence
+Standard PIP
+Status
+Weekly

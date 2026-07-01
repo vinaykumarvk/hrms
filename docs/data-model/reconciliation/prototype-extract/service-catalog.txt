@@ -1,0 +1,13 @@
+SCREEN: service-catalog
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Dashboard
+FR-M17-010
+Hardware
+Service catalog

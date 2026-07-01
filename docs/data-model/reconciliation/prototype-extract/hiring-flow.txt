@@ -1,0 +1,39 @@
+SCREEN: hiring-flow
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Candidate
+Candidates
+Completed
+Event name
+FR-M08-013
+Generate offer
+HR Round
+Hiring flow
+Initiate Pre-Offer
+Interview type
+Interview window
+Interviewer's decision
+Jennifer Kochhar (21700014)
+Mark as completed
+Offer Stage
+Online
+Optional interviewers
+Pending
+Pending for feedback
+Pending for scheduling
+Pre-Offer
+Re-schedule interview
+Recruitment Admin
+Schedule interview
+Screening
+Selected
+Technical Round 1
+Technical Round 2
+Technical Round 3
+Venkata Sai Sunil M.

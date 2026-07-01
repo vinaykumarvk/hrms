@@ -1,0 +1,32 @@
+SCREEN: review-goal-plan
+
+TABLE COLUMNS (<th>):
+Goal
+Pillar
+Source
+Weight
+
+INPUT PLACEHOLDERS:
+What did you like? What needs adjustment?
+
+LABELS/FIELD TEXT:
+Akash Surname9
+Approve plan
+Author 2 design documents
+Comments
+Complete onboarding milestones
+Customer
+Dashboard
+FR-M09-002
+Goal
+Goal approvals
+Manager-set
+Operational excellence
+Pass CKAD certification
+People
+Pillar
+Return for redraft
+Self-set
+Source
+Weight
+Your comments to Akash

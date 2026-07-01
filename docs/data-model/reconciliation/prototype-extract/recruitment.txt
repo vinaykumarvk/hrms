@@ -1,0 +1,38 @@
+SCREEN: recruitment
+
+TABLE COLUMNS (<th>):
+Action
+Approval stage
+Candidates
+Department
+Dept
+Raised by
+Requisition
+Stage
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Approval stage
+CEO sign-off
+Candidates
+Comment
+Department
+Dept
+Engineering
+Finance
+HR Admin review
+HRBP
+Interview
+L1 Manager
+Product
+Raised by
+Recruitment (view)
+Requisition
+Requisitions in your population
+Screening
+Senior Backend Engineer (REQ-204)
+Stage
+VP Finance (REQ-205)

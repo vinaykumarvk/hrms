@@ -1,0 +1,36 @@
+SCREEN: audit-log
+
+TABLE COLUMNS (<th>):
+Action
+Entity
+Fields changed
+IP
+Record ID
+Timestamp (IST)
+User
+
+INPUT PLACEHOLDERS:
+Search by user, entity, action…
+
+LABELS/FIELD TEXT:
+APPROVE
+Action
+All
+Audit log
+CREATE
+Create
+Entity
+FR-P05-001
+Fields changed
+HR Ops
+LV-2026-1042
+Login
+PII access
+PSI000789
+READ
+Record ID
+System
+Timestamp (IST)
+UPDATE
+Update
+User

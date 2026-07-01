@@ -1,0 +1,23 @@
+SCREEN: consent-history
+
+TABLE COLUMNS (<th>):
+Action
+Captured on
+Purpose
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Captured on
+Consent history
+DPDPA
+Employee data processing (onboarding)
+Granted
+My profile
+Purpose
+Status
+Withdraw
+Withdrawn

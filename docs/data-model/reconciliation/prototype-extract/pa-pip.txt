@@ -1,0 +1,68 @@
+SCREEN: pa-pip
+
+TABLE COLUMNS (<th>):
+Action
+BU
+Employee
+Manager L1
+Milestone
+PIP start
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Accelerated 60-day PIP
+Action
+Active PIPs
+Below-expectations rating (1 or 2)
+Bi-weekly
+Check-in cadence
+Closure decision needed
+Critical project failure
+Customer escalation
+Daily (first 14 days)
+Day 30 of 90
+Day 45 of 90
+Day 60 of 90
+Day 78 of 90
+Decide outcome
+Design
+Employee
+End date
+Engineering
+Extended 120-day PIP (complex roles)
+FR-M09-PIP
+Final 30-day PIP (after one extension)
+HRBP assigned
+Initiate new PIP case
+Initiating manager
+Manager L1
+Manager One
+Manager-recommended after coaching
+Manual override...
+Mid-check pending
+Milestone
+On track
+PIP cases
+PIP start
+PIP success criteria
+PIP type
+Performance Admin
+Performance Improvement Plan
+Performance Improvement Plans (PIP)
+Performance gaps (specific)
+Person C J.
+Review
+Rohit T.
+Sales
+Select employee...
+Specific behavioural concern
+Standard 90-day PIP
+Start date
+Status
+Support plan (employer commitment)
+Trigger reason
+Vipul S.
+Weekly (default)

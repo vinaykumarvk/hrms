@@ -1,0 +1,80 @@
+SCREEN: onboarding-form
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Search institute
+
+LABELS/FIELD TEXT:
+AB-
+Alternate mobile number
+B.Sc
+B.Tech
+BGV Form Standard
+Bangalore
+Blood group
+Candidate
+Candidate mobile no
+Chennai
+Commerce
+Computer Science
+Current address
+Current city
+Current country
+Current pincode
+Current state
+Date of birth
+Diploma
+Disability proof attachment
+Education degree
+Educational category
+Educational proof / marksheet
+Electronics
+Email ID
+Emergency contact name
+Emergency contact number
+Emergency contact relation
+FR-M02-001
+Father's full name
+Female
+Field of specialisation
+First name
+Form variant
+Gender
+Graduation
+India
+Institute
+Karnataka
+Kind of disability
+Last name
+M.Tech
+MBA
+Maharashtra
+Male
+Marital status
+Married
+Middle name
+Mumbai
+Non-binary
+Onboarding form
+Other
+Parent
+Percentage
+Permanent address
+Permanent city
+Permanent country
+Permanent pincode
+Permanent state
+Post-graduation
+Prefer not to say
+Registration number
+Scan ID for auto-fill (OCR)
+Schooling
+Sibling
+Singapore
+Single
+Spouse
+Tamil Nadu
+United States
+Wedding anniversary

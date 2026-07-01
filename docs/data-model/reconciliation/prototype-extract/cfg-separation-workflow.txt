@@ -1,0 +1,69 @@
+SCREEN: cfg-separation-workflow
+
+TABLE COLUMNS (<th>):
+Action / form
+Assign role
+Order
+Stage
+Trigger
+Visibility
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+AND
+Accounts
+Accounts Clearance (1.0)
+Action / form
+Admin
+Admin Clearance (1.0)
+Administration
+Applicable to
+Archive tasks (days from trigger)
+Assign role
+Conditional
+Email Notification
+Enable custom archival of tasks
+Enable custom escalation
+Enable custom flow based
+Everyone in workflow
+Execution mode
+Exit Interview Form
+Exit Interview Form (1.0)
+Experience Letter
+Experience Letter Form (2.0)
+Finance Team
+HR Clearance form (1.0)
+HR Team
+HRBP
+IT Admin
+IT Clearance (3.0)
+IT No-Due
+Insurance Deletion
+L1 Manager
+Manager
+NDA Acknowledgement
+Name
+No approver
+No restriction
+Order
+Parallel
+Payroll cycle boundary
+Reporting Manager
+Reporting Manager Clearance (1.0)
+Restrict last working day on
+Restriction condition
+Select approver before Admin
+Self
+Separation Workflow Completion
+Separation admin
+Separation policy
+Separation workflow
+Series
+Stage
+Standard configurations
+Trigger
+Visibility
+Workflow Completion
+Workflow stages

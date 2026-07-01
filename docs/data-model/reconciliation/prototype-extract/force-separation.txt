@@ -1,0 +1,35 @@
+SCREEN: force-separation
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Absconding
+Ajay Surname5 (PSI00412)
+Death
+Employee
+Force-initiate separation
+Full waiver
+HR Admin
+HR Ops
+In progress
+Initiate exit
+Last working day
+Layoff
+Not eligible
+On FLWD
+On initiation
+Partial waiver
+Person C Roy (PSI00256)
+Queued
+Reason details
+Rehire eligibility defaults to
+Retirement
+Save draft
+Separation type
+Supporting documents
+Termination (cause)
+Termination (without cause)

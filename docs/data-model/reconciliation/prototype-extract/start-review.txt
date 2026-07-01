@@ -1,0 +1,31 @@
+SCREEN: start-review
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Akash submitted self-review on 14 Sep.
+Akash's evidence
+Akash's rating
+Below
+Comments
+Evidence
+Exceeded expectations.
+Exceeds
+FR-M09-003
+Far exceeds
+Manager comments (visible after publish)
+Meets
+Overall
+Partially meets
+Reviews
+Save draft
+Send back to employee
+Stage 2 of 4 (Manager review)
+Submit to skip
+Suggested overall rating
+Your comments
+Your rating

@@ -1,0 +1,63 @@
+SCREEN: ra-document-review-detail
+
+TABLE COLUMNS (<th>):
+Action
+Document
+OCR match
+Reviewer notes
+Status
+Tier
+Uploaded
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Aadhaar Card
+Action
+Applied for
+Awaiting review
+Bank account proof
+Candidate
+Candidate One
+Critical for CTC reconciliation
+Declared CTC
+Declared current CTC
+Declared designation
+Declared notice period
+Document
+Document review
+Document verification status
+Documents
+FR-M08-010
+Highest education cert (B.Tech CSE)
+Issued 3 days ago
+N/A
+OCR match
+PAN Card
+Pending upload
+Photograph
+Photograph (awaiting review)
+Pre-offer accepted
+Pre-offer band
+Pre-offer issued
+Previous relieving letter
+Previous salary slip (last 3 months)
+Reassign
+Recruitment Admin
+Remind
+Reminder sent 1 day ago
+Review
+Reviewer notes
+Salary slip awaiting upload
+Senior Software Engineer
+Status
+Target DOJ
+Tier
+Tier 1 PII
+Tier 2 PII
+Uploaded
+Verification action
+Verification rules (FR-M08-010).
+Verified
+View as candidate

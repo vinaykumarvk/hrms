@@ -31,6 +31,30 @@ were kept as configurable content (W.1–W.3 / `*_config` jsonb), not exploded i
 - **G13:** `document_categories`, `document_category_profile_fields`, `document_template_name_formats`,
   `policy_letter_settings`, `self_generate_settings`.
 
+## Prototype pass (`PrimeSoft_HRMS_Prototype_v2_6.html` — 296 screens)
+A second reconciliation extracted the field inventory from the React prototype's **296 screens**
+(per-screen field files in `prototype-extract/`) and reconciled the gov-relevant ones. Screen classification
+in `prototype-screen-map.md`: **183 screens in gov scope** (G01 32, G02 2, G03 33, G08 31, G13 20,
+platform-core 12, platform-config 53) · **113 out-of-scope commercial** (Recruitment 45, Separation/FnF 18,
+IT assets & Service Desk 21, Platform-super-admin 13, Onboarding/BGV 12, Payroll/TDS 4).
+
+Prototype gap reports: `prototype-g01-profile.md`, `prototype-g02.md`, `prototype-g03-leave-attendance.md`,
+`prototype-g08-performance.md`, `prototype-g13-documents.md`, `prototype-g14-dashboards.md`. Added (data only):
+- **G01:** `employee_profile_skills` (self-declared; distinct from G07's assessed `employee_skills`), `employee_visas`,
+  `employee_professional_certifications`, `employee_dependent_details` + education/experience/bank columns.
+- **G03:** `leave_reasons`, `attendance_reasons` masters, `leave_balance_adjustments`, `leave_revocations`,
+  `attendance_lock_periods` + application/OT/shift/holiday/geofence columns.
+- **G08:** `appraisal_cycle_exclusions`, `probation_confirmations` + goal/self-appraisal/calibration-ack/PIP columns.
+- **G13:** `merge_field_catalog`, `letter_generation_requests`, `bulk_letter_jobs`, `acknowledgement_campaigns`,
+  `document_acknowledgements`.
+- **G14:** no new tables — dashboard tiles resolve to seeded `kpi_definitions` + `analytics_datamart` (+`HOURS` unit).
+- **G02:** `field_sensitivity_catalog.pii_tier_id` (DPDPA PII-tier axis) + seeded `pii_tiers`.
+
+One cross-module collision the full-load test caught and fixed: G01's prototype-added `employee_skills` clashed
+with G07's authoritative skill inventory → renamed to `employee_profile_skills`.
+
+**Net after both passes: 403 → 447 tables** (CSV +28, prototype +16), schema loads clean end-to-end (1,907 FKs, 443 RLS, 700 enums).
+
 ## Migration-source note
 The CSV value lists (528 designations, 57 separation reasons, holiday calendars, etc.) are **not inlined** in
 the schema — the CSVs are the P06 migration seed source. The schema carries 2–3 sample rows per new table;

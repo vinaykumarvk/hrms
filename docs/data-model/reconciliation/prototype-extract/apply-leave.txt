@@ -1,0 +1,47 @@
+SCREEN: apply-leave
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Optional context for your manager
+max 4h (FR-M04-017)
+
+LABELS/FIELD TEXT:
+Application impact
+Apply
+Apply for leave
+Approval flow
+Attachment
+Balance after
+Balance debited from
+Bereavement
+Dashboard
+Days requested
+FR-M04-001
+Family emergency
+First half (morning)
+From
+Full day
+HRBP / HR Admin / Leave Admin
+Half day
+Half-day session
+Hourly (FR-M04-017)
+Hours
+Leave
+Leave application
+Leave type
+Manager One
+Message to approver
+Not feeling well
+Others
+Personal Work
+Planned long leave / Vacation
+Reason
+Sandwich rule (FR-M04-009)
+Save draft
+Second half (afternoon)
+Submit application
+To
+Travelling
+Unit

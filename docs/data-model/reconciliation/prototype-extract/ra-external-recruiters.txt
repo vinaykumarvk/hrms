@@ -1,0 +1,50 @@
+SCREEN: ra-external-recruiters
+
+TABLE COLUMNS (<th>):
+Action
+Active reqs
+Commission
+Contract end
+Hires LTM
+Quality
+Specialisation
+Vendor
+
+INPUT PLACEHOLDERS:
+By vendor name, contact, specialisation...
+
+LABELS/FIELD TEXT:
+Action
+Active
+Active external recruiters
+Active reqs
+All
+Below 3.5 (review)
+BlueOak Talent
+Commission
+Contract end
+Contract status
+Elite Search Partners
+Ending in 30 days
+Ending in 90 days
+Executive search
+Expired
+External recruiter management
+External recruiters
+FR-M08-006
+Filters
+HireOn Tech
+Hires LTM
+Hireverse
+Manage
+Mid-senior Eng
+Quality
+Quality threshold
+Recruitment Admin
+Renew
+Review
+Search
+SkillBridge Partners
+Specialisation
+TopTalent Inc
+Vendor

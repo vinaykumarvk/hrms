@@ -1,0 +1,33 @@
+SCREEN: it-postmortems
+
+TABLE COLUMNS (<th>):
+Action
+Due
+Incident
+PM ID
+Stage
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+CTO signed off
+Drafting
+Due
+Edit draft
+FR-M17-013
+IT Director review
+Incident
+P1 incident post-mortems
+P1 post-mortems
+PM ID
+PM-2026-0039
+PM-2026-0041
+PM-2026-0042
+Payroll DB latency
+Post-mortems
+Service desk admin
+Site-wide WiFi outage
+Stage
+VPN gateway failover

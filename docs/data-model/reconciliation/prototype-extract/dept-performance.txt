@@ -1,0 +1,20 @@
+SCREEN: dept-performance
+
+TABLE COLUMNS (<th>):
+Count
+Rating band
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Avg rating
+Count
+Department performance
+FR-M09-022
+FY25 cycle
+HOD
+PIP active
+Rating band
+Reviews complete
+Top performers

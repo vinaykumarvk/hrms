@@ -1,0 +1,25 @@
+SCREEN: office-attendance
+
+TABLE COLUMNS (<th>):
+Capacity
+Floor
+Occupancy
+Present
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Bangalore HQ
+Capacity
+Desk occupancy
+FR-M05-018
+Floor
+Floor-wise presence
+In office today
+Occupancy
+Office Admin
+Office attendance
+Peak hour
+Present
+Visitors

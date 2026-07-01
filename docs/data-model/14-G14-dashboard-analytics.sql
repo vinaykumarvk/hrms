@@ -54,6 +54,26 @@
 
 
 -- =====================================================================================
+-- RECON (prototype) — reconciled against PrimeSoft dashboard/analytics screens
+--   Screens read: dashboard, dept-view, dept-headcount, dept-leave, dept-attendance,
+--     dept-performance, my-team, audit-log, leadership-ai-chat, ai-policy-chat,
+--     notifications, tasks, calendar.
+--   Finding: all dashboard/dept-view tiles are DATA-DERIVED — they resolve to KPI
+--     DEFINITIONS + marts + widgets, not new columns. The kpi_definitions /
+--     dashboard_widgets / saved_reports / analytics_datamarts model represents every
+--     concrete tile/column (headcount by grade band, dept leave/attendance/performance,
+--     attrition, AI text-to-query, per-engineer attrition risk).
+--   Structures added by this recon (additive only): (1) g14_kpi_unit += 'HOURS' for the
+--     dept-attendance "Avg work hrs" tile; (2) a seed set of marts + kpi_definitions +
+--     widgets covering the dept LEAVE/ATTENDANCE/APPRAISAL/WORKFORCE tiles (Section S).
+--   Out of G14 ownership (referenced, not seeded here): audit-log -> core audit_log/
+--     security_audit_log (P05); notifications -> core notifications (X.2); tasks -> P01
+--     workflow_actions; calendar -> cross-module (G03 leave/holiday, recruitment,
+--     G01 birthdays); ai-policy-chat -> P03 knowledge assistant (not analytics NLQ).
+-- =====================================================================================
+
+
+-- =====================================================================================
 -- SECTION 1 — ENUM TYPES (G14 closed enumerations; BRD §5.5)
 -- =====================================================================================
 
@@ -66,7 +86,7 @@ CREATE TYPE g14_refresh_hint          AS ENUM ('LIVE','MART','CACHED');
 
 -- KPI / shared analytics --------------------------------------------------------------
 CREATE TYPE g14_domain                AS ENUM ('WORKFORCE','LEAVE','ATTENDANCE','PAYROLL','TRAINING','APPRAISAL','DISCIPLINARY','TRANSFER','PROMOTION','PENSION','COMPLIANCE','SR');
-CREATE TYPE g14_kpi_unit              AS ENUM ('COUNT','PERCENT','RATIO','CURRENCY','DAYS','SCORE');
+CREATE TYPE g14_kpi_unit              AS ENUM ('COUNT','PERCENT','RATIO','CURRENCY','DAYS','SCORE','HOURS');  -- RECON: HOURS added for "Avg work hrs" dept-attendance tile
 CREATE TYPE g14_grain                 AS ENUM ('EMPLOYEE','ORG_UNIT','CADRE','PERIOD','ENTERPRISE');
 CREATE TYPE g14_period                AS ENUM ('DAY','WEEK','MONTH','QUARTER','YEAR','ROLLING_12M');
 CREATE TYPE g14_kpi_direction         AS ENUM ('HIGHER_BETTER','LOWER_BETTER','ON_TARGET');
@@ -1054,6 +1074,32 @@ INSERT INTO establishment_positions (id, tenant_id, entity_id, position_code, or
 INSERT INTO data_subject_changes (id, tenant_id, entity_id, employee_id, change_type, source_event_ref, requested_by, legal_basis, affected_snapshots, status, completed_at) VALUES
  ('14e30001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','RECTIFICATION','DPO-REQ-2026-0441','14000000-0000-0000-0000-0000000000aa',NULL, 36,'COMPLETED', now()),
  ('14e30001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999902','ERASURE','DPO-REQ-2026-0452','14000000-0000-0000-0000-0000000000aa','Pension statutory retention 7y', 0,'BLOCKED_RETENTION',NULL);
+
+-- RECON (prototype) SEEDS — dept-view tile coverage --------------------------------------
+-- Additional read-model marts for the operational dept dashboards (LEAVE/ATTENDANCE/
+-- APPRAISAL). Marts are DEFINITIONS over contracted G03/G08 source views (not forks).
+INSERT INTO analytics_datamarts (id, tenant_id, entity_id, mart_code, name, mart_type, grain, source_modules, source_objects, contract_id, refresh_strategy, refresh_job_id, refresh_cron, freshness_sla_minutes, watermark_column, health_status, contains_pii) VALUES
+ ('14a10001-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','MART_LEAVE','Leave Fact','FACT','employee x org_unit x day','{G03}','{g03.v_leave_ledger_v2}',NULL,'CDC','JOB-G14-MART-LEAVE','*/30 * * * *', 60,'updated_at','HEALTHY', true),
+ ('14a10001-0000-0000-0000-000000000004','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','MART_ATTENDANCE','Attendance Fact','FACT','employee x org_unit x day','{G03}','{g03.v_attendance_daily_v2}',NULL,'CDC','JOB-G14-MART-ATT','*/15 * * * *', 30,'work_date','HEALTHY', true),
+ ('14a10001-0000-0000-0000-000000000005','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','MART_APPRAISAL','Appraisal Rating Aggregate','AGGREGATE','employee x org_unit x cycle','{G08}','{g08.v_appraisal_ratings_v1}',NULL,'INCREMENTAL','JOB-G14-MART-APPR','0 2 * * *', 720,'finalised_at','HEALTHY', false);
+
+-- kpi_definitions matching the concrete dept-view tiles (LEAVE / ATTENDANCE / APPRAISAL /
+-- WORKFORCE). Each resolves to a mart; slicing dimensions (grade_band, team) are config,
+-- not columns. HEADCOUNT_ACTIVE already covers dept-headcount (add grade_band to its
+-- dimensions_allowed — data config, not a schema change).
+INSERT INTO kpi_definitions (id, tenant_id, entity_id, kpi_code, name, description, domain, version, definition_hash, source_mart_id, expression, unit, grain, default_period, dimensions_allowed, direction, sensitivity, status, approved_by) VALUES
+ ('14b10001-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','LEAVE_ON_TODAY','On Leave Today','Count of employees on approved leave for the current day (dept-attendance / dept-leave tile).','LEAVE', 1,'sha256:lv1a01','14a10001-0000-0000-0000-000000000003','count_distinct(employee_id) where leave_status = ''APPROVED'' and work_date = current_date','COUNT','ORG_UNIT','DAY','{org_unit,team,leave_type}','LOWER_BETTER','INTERNAL','ACTIVE','14000000-0000-0000-0000-0000000000aa'),
+ ('14b10001-0000-0000-0000-000000000004','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','ATT_PRESENT_PCT','Present Today %','Share of team present today (dept-attendance "Present today").','ATTENDANCE', 1,'sha256:at1p01','14a10001-0000-0000-0000-000000000004','100 * count(distinct employee_id) filter (where status = ''PRESENT'') / nullif(count(distinct employee_id),0)','PERCENT','ORG_UNIT','DAY','{org_unit,team}','HIGHER_BETTER','INTERNAL','ACTIVE','14000000-0000-0000-0000-0000000000aa'),
+ ('14b10001-0000-0000-0000-000000000005','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','ATT_WFH_TODAY','WFH Today','Count of employees working from home today (dept-attendance "WFH").','ATTENDANCE', 1,'sha256:at1w01','14a10001-0000-0000-0000-000000000004','count_distinct(employee_id) where status = ''WFH'' and work_date = current_date','COUNT','ORG_UNIT','DAY','{org_unit,team}','ON_TARGET','INTERNAL','ACTIVE','14000000-0000-0000-0000-0000000000aa'),
+ ('14b10001-0000-0000-0000-000000000006','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','ATT_AVG_WORK_HRS','Avg Work Hours','Average worked hours per present employee for the day (dept-attendance "Avg work hrs").','ATTENDANCE', 1,'sha256:at1h01','14a10001-0000-0000-0000-000000000004','avg(worked_minutes)/60.0','HOURS','ORG_UNIT','DAY','{org_unit,team}','ON_TARGET','INTERNAL','ACTIVE','14000000-0000-0000-0000-0000000000aa'),
+ ('14b10001-0000-0000-0000-000000000007','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','PERF_AVG_RATING','Average Rating','Mean final appraisal rating for the cycle (dept-performance "Avg rating"; band distribution via rating_band dimension).','APPRAISAL', 1,'sha256:pf1r01','14a10001-0000-0000-0000-000000000005','avg(final_rating)','SCORE','ORG_UNIT','YEAR','{org_unit,team,rating_band}','HIGHER_BETTER','RESTRICTED','ACTIVE','14000000-0000-0000-0000-0000000000aa'),
+ ('14b10001-0000-0000-0000-000000000008','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','ATTRITION_LTM_PCT','Attrition % (LTM)','Rolling 12-month attrition rate by org unit (dept-view "Attrition (LTM)").','WORKFORCE', 1,'sha256:wf1a01','14a10001-0000-0000-0000-000000000001','100 * separations_ltm / nullif(avg_headcount_ltm,0)','PERCENT','ORG_UNIT','ROLLING_12M','{org_unit,team,cadre}','LOWER_BETTER','INTERNAL','ACTIVE','14000000-0000-0000-0000-0000000000aa');
+
+-- dashboard_widgets binding the new dept KPIs onto the MGR_TEAM dashboard --------------
+INSERT INTO dashboard_widgets (id, tenant_id, entity_id, dashboard_id, title, widget_type, kpi_id, position_json, refresh_hint, display_order) VALUES
+ ('14d30001-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','14d10001-0000-0000-0000-000000000002','Present Today %','KPI_TILE','14b10001-0000-0000-0000-000000000004','{"x":3,"y":0,"w":3,"h":2}','LIVE', 2),
+ ('14d30001-0000-0000-0000-000000000004','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','14d10001-0000-0000-0000-000000000002','On Leave Today','KPI_TILE','14b10001-0000-0000-0000-000000000003','{"x":6,"y":0,"w":3,"h":2}','LIVE', 3),
+ ('14d30001-0000-0000-0000-000000000005','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','14d10001-0000-0000-0000-000000000002','Team Avg Rating','KPI_TILE','14b10001-0000-0000-0000-000000000007','{"x":9,"y":0,"w":3,"h":2}','MART', 4);
 
 -- Reset session GUCs after seeding.
 RESET app.current_tenant_id;

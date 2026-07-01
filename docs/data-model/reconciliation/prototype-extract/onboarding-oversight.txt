@@ -1,0 +1,68 @@
+SCREEN: onboarding-oversight
+
+TABLE COLUMNS (<th>):
+Action
+BGV
+Candidate
+Cluster status
+Documents
+Position · Joining
+Stage
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Aditi S.
+All
+All stages
+All upcoming
+Apply
+BGV
+BGV cleared
+BGV in progress
+BGV pending
+BGV review
+Candidate
+Candidate One
+Clear
+Cluster assignment pending
+Cluster completion
+Cluster status
+Customer Success
+Department
+Design
+Discrepancy
+Documents
+Documents pending
+Engineering
+FR-M02
+Filters
+In progress
+Joined (Day 1 complete)
+Joining window
+Just countersigned
+Karan Bhatia
+Next 2 weeks
+Next 30 days
+Next 60 days
+Not started
+Onboarding Admin
+Open
+Overdue (joining date passed)
+Person A Surname1
+Pradeep Surname2
+Pre-joining candidates
+Pre-joining pipeline
+Product
+Ready to join
+Reset
+Resolve
+Reviewer Three Joshi
+Sales
+Sneha Bose
+Stage
+Tanvi Mishra
+This week
+Waived (rehire)

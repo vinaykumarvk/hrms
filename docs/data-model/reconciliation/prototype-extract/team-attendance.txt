@@ -1,0 +1,34 @@
+SCREEN: team-attendance
+
+TABLE COLUMNS (<th>):
+Detail
+Employee
+Late MTD
+Punch in
+Punch out
+Today
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Akash Surname9
+Dashboard
+Detail
+Employee
+Employee Four
+Employee One
+FR-M05
+Kavya Surname5
+Late
+Late MTD
+On leave (ML)
+Out duty
+Person A Surname1
+Pooja Joshi
+Present
+Punch in
+Punch out
+Team attendance
+Today
+WFH

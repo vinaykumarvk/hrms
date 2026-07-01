@@ -1,0 +1,61 @@
+SCREEN: cfg-shifts
+
+TABLE COLUMNS (<th>):
+Action
+Assignment Framework
+Code
+Company
+Employees matched
+End
+Group Company
+Overnight
+Shift
+Shift / attendance policy
+Start
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit shifts master
+All
+Assign / edit
+Assignment Framework
+Assignment Framework rule
+Code
+Company
+Employees matched
+End
+End time
+Flexi
+Flexible Shift
+Group Company
+Group Company (optional)
+Group Company 1
+Group Company 2
+Group Company 3
+Group company
+Inactive
+India Day Shift
+Is WFH shift
+Org Admin
+Overnight
+Overnight shift
+PrimeSoft IP Solutions
+SH-FLEX
+SH-IND-DAY
+SH-US-NGT
+Save assignment
+Shift
+Shift / attendance policy
+Shift code
+Shift name
+Shifts master
+Standard working hours
+Start
+Start time
+Status
+US Night Shift

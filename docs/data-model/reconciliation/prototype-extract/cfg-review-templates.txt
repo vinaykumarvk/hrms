@@ -1,0 +1,34 @@
+SCREEN: cfg-review-templates
+
+TABLE COLUMNS (<th>):
+Action
+Align to cycle
+Final review
+ID
+Review template
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit review templates
+Align to cycle
+Align to review cycle
+Annual Review FY26
+Enable calibration
+Enable self review
+Final review
+Inactive
+Is final review
+Mid-year Check-in
+Org Admin
+REV-FY26
+REV-MID
+Review description
+Review name
+Review template
+Review templates
+Status

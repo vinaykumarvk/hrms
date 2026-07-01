@@ -1,0 +1,48 @@
+SCREEN: da-signoff-tracker
+
+TABLE COLUMNS (<th>):
+Acknowledged
+Audience
+Deadline
+Field
+Overdue
+Policy / Letter
+Purpose
+Started
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acknowledged
+Acknowledgement record fields (DM25)
+Active sign-off campaigns
+Audience
+Audit linkage
+Browser / app version
+Closing
+Code of Conduct v4.2 (annual refresh)
+Complete
+Deadline
+Document Admin
+FR-M11-001
+Field
+IT AUP v3.5 (annual refresh)
+InfoSec Policy v4.0 (annual refresh)
+Multi-tenant safety
+Non-repudiation
+Overdue
+POSH Policy v3.1 (annual refresh)
+Policy / Letter
+Promotion Letter (FY26 cycle)
+Purpose
+Sign-off SLA (DM24).
+Sign-off cron runs every 12 hours
+Sign-off tracker
+Snapshot of the consent text shown
+Started
+Status
+What was acknowledged
+Which version was active at the time
+Who acknowledged

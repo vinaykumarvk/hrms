@@ -1,0 +1,28 @@
+SCREEN: notifications
+
+TABLE COLUMNS (<th>):
+Category
+Notification
+When
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Approval
+Attendance
+Category
+Dashboard
+FR-P01
+IT ticket
+IT ticket update
+Leave approved
+Mark all read
+New task
+Notification
+Notifications
+Policy
+Recent
+Regularisation pending
+Task
+When

@@ -1,0 +1,66 @@
+SCREEN: team-member-leave-history
+
+TABLE COLUMNS (<th>):
+Action
+Approval
+Dates
+Days
+Reason
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+All statuses
+All time
+All types
+Approval
+Approval rate (yours)
+Approved
+Avg approval turnaround
+Avg duration
+Bangalore civic election polling
+Cancelled
+Casual Leave
+Casual Leave (CL)
+Comp-off
+DOJ 14 Mar 2022 (4y 2m)
+Dashboard
+Dates
+Days
+Export
+FR-M04-008
+FY26
+FY26 to date
+Family / personal (5 of 16 days)
+Family event (cousin's wedding)
+Full profile
+LWP / unpaid days
+Leave history
+Leave records
+Manager One (you)
+Manager view (FR-M04-008).
+Message
+Most-used reason
+Optional Holiday
+PSI000789
+Pending
+Person A Surname1
+Privilege Leave
+Privilege Leave (PL)
+Reason
+Rejected
+Reports to
+Revoke
+SL frequency flag
+Sandwich-leave incidents
+Sick Leave
+Sick Leave (SL)
+Status
+Team leave
+Total leaves taken
+Type
+Viral fever (no MC required)

@@ -1,0 +1,41 @@
+SCREEN: cfg-bgv-checklist
+
+TABLE COLUMNS (<th>):
+Action
+Applicable to
+Check
+Mandatory
+Required documents
+Status
+
+INPUT PLACEHOLDERS:
+comma-separated
+
+LABELS/FIELD TEXT:
+Aadhaar / PAN / Passport
+Action
+Active
+Add / edit BGV check
+Address
+All
+Applicable to
+BGV checks
+BGV document checklist
+BGV document checklist master
+Check
+Check name
+Court record check (vendor)
+Criminal record
+Education
+Experienced hires
+Freshers
+Identity
+Inactive
+Mandatory
+Org Admin
+Prior employment
+Required documents
+Save check
+Specific UAG
+Status
+Utility bill / rental agreement

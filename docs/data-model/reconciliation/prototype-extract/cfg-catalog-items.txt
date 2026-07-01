@@ -1,0 +1,42 @@
+SCREEN: cfg-catalog-items
+
+TABLE COLUMNS (<th>):
+Action
+Approval chain
+Category
+Item
+SLA
+Status
+
+INPUT PLACEHOLDERS:
+L1 Manager → IT Admin
+Role / department (blank = all)
+
+LABELS/FIELD TEXT:
+Access Queue
+Account / Access
+Action
+Active
+Add / edit catalog item
+Approval chain
+Auto-fulfil
+Catalog Queue
+Catalog items
+Category
+Default audience
+Default priority
+Draft
+Fulfilment SLA
+Fulfilment queue
+Inactive
+Item
+Item name
+New Asset
+New laptop
+SLA
+Service catalog items
+Service desk admin
+Software Access
+Status
+VPN access
+Yes (no approval chain)

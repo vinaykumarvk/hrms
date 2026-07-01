@@ -1,0 +1,29 @@
+SCREEN: cfg-tenant
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+April
+Asia/Kolkata (IST)
+DD MMM YYYY
+Date format
+Default currency
+Default language
+Default timezone
+English
+Fiscal year start
+INR
+India
+January
+MM/DD/YYYY
+Org Admin
+Primary country
+Tenant profile
+Tenant settings
+Thai
+USA
+USD

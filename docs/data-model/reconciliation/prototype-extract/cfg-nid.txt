@@ -1,0 +1,43 @@
+SCREEN: cfg-nid
+
+TABLE COLUMNS (<th>):
+Action
+Alias
+Applicable for
+Code
+ID type
+Mandatory
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Aadhaar
+Action
+Activation
+Active
+Add / edit national id configuration
+Addition
+Alias
+All
+Applicable for
+Code
+Enabled
+ID type
+ID type name
+Inactive
+India
+Is unique
+Mandatory
+Mandatory for activation
+Mandatory for addition
+Masking
+NID-AADHAAR
+NID-PAN
+NID-PP
+National ID configuration
+Org Admin
+PAN
+Passport
+Status

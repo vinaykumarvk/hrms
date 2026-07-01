@@ -1,0 +1,37 @@
+SCREEN: add-goal
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+What is the outcome? Why does it matter?
+e.g. Ship payments-v2 to GA by Q3
+
+LABELS/FIELD TEXT:
+Add goal
+Add new goal
+Behavioural
+Category
+Customer
+Dashboard
+Description
+Development
+Edit-and-Approve
+FR-M09-002
+FR-M09-013
+FR-M09-015
+FR-M09-019
+FR-M09-021
+Financial
+Goal details
+Goal name
+Measurement criteria
+Operational excellence
+Parent goal (for sub-goals / KRs)
+People
+Performance
+Save draft
+Scorecard pillar
+Ship payments-v2 to GA
+Stretch
+Submit for approval

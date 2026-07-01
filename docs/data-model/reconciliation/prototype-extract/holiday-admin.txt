@@ -1,0 +1,13 @@
+SCREEN: holiday-admin
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+HR Ops
+Holiday calendar
+Import from previous year
+Publish to employees

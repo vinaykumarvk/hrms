@@ -1,0 +1,40 @@
+SCREEN: ra-schedule-interview
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Bar raiser (45 min)
+Behavioural with HM (45 min)
+Calendar integration (FR-M08-007).
+Candidate
+Candidate timezone
+Coding round (90 min)
+Date
+Duration
+End time
+FR-M08-007
+Interview format
+Interviewer panel
+Interviews
+None
+Notes for interviewers
+Phone
+Primary interviewer
+Recruiter screen (30 min)
+Recruitment Admin
+Round
+Sahil M. (training)
+Schedule
+Schedule interview
+Secondary interviewer
+Send interviewer panel calendar invites
+Shadow / observer
+Start time (IST)
+System design (60 min)
+Technical R1 (60 min)
+Technical R2 (60 min)
+Video (Zoom)

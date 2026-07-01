@@ -1,0 +1,63 @@
+SCREEN: pa-assign-plan
+
+TABLE COLUMNS (<th>):
+Action
+Cohort
+Employee
+Opens (DRAFT)
+Period (default)
+Source
+
+INPUT PLACEHOLDERS:
+No limit
+Search by name or ID
+
+LABELS/FIELD TEXT:
+APR
+AUG
+Accelerated (promotion track)
+Action
+Approve
+Approve all as-is
+Assign goal plan
+Assign plan
+Assignment reason
+Bulk assign / re-slot cohort
+CRON
+Cohort
+Correction
+Create in state
+Cron defaults
+DEC
+DRAFT (employee can author now)
+Employee
+Enable editing
+FEB
+FR-M09-028
+Goal plans
+How plans reach employees.
+JAN
+JUL
+JUN
+Load more
+MAR
+MAY
+Manually assign a plan to one employee
+Max goals
+Min goals
+Monthly cohort
+NOV
+New hire
+OCT
+Off-cycle
+Opens (DRAFT)
+Other
+Override
+PIP-linked
+Performance Admin
+Period (default)
+Period end
+Period start
+SEP
+Select employees by
+Source

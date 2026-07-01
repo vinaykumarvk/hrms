@@ -1,0 +1,36 @@
+SCREEN: cfg-skip
+
+TABLE COLUMNS (<th>):
+Action
+Code
+Module transaction
+Name
+Skip for
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit skip settings
+Auto-approve below 1 day
+Code
+Inactive
+Leave
+Module transaction
+Name
+No approver
+Org Admin
+SKIP-LV1
+SKIP-NOL1
+Skip L1 if no approver
+Skip for
+Skip output
+Skip setting name
+Skip settings
+Skip settings for
+Status
+System
+Tagged flows

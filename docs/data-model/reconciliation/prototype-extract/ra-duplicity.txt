@@ -1,0 +1,51 @@
+SCREEN: ra-duplicity
+
+TABLE COLUMNS (<th>):
+Action
+Match basis
+Matched against
+New candidate
+Previous outcome
+
+INPUT PLACEHOLDERS:
+Why is this override justified? Reference past records.
+
+LABELS/FIELD TEXT:
+Action
+Aman Surname4
+Auto-merge if all 3 match
+Confirm override
+Cooldown after rejection
+Detailed reason
+Duplicity check overrides
+Duplicity overrides
+Eligible for rehire (ex-employee)
+Email
+FR-M08-003
+LinkedIn URL
+Match basis
+Match fields (any of)
+Matched against
+Merge
+National ID (PAN)
+New candidate
+No cooldown
+Not eligible
+Other (specify)
+Override
+Override configuration
+Override decision
+Override reason capture
+Pending duplicity overrides
+Phone
+Previous outcome
+Re-applying after cooldown
+Reason category
+Recruitment Admin
+Rehire window
+Reject
+Reject duplicate
+Required for audit log (FR-M08-003)
+Reviewer Three Joshi
+Riya Joshi
+Sneha Bose

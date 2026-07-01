@@ -1,0 +1,61 @@
+SCREEN: holiday-calendar-config
+
+TABLE COLUMNS (<th>):
+Action
+Applies to
+Date
+Day
+Holiday
+Type
+
+INPUT PLACEHOLDERS:
+Optional description visible in employee calendar
+e.g. Onam
+
+LABELS/FIELD TEXT:
+Action
+Add holiday
+Add new holiday
+All
+All locations
+Applies to
+Applies to locations
+Bangalore HQ
+Category
+Christmas
+Company-specific
+Date
+Day
+Diwali (Lakshmi Puja)
+Eid al-Fitr
+FR-M04-004
+FY25
+FY26 (current)
+FY27 (draft)
+Filters
+Fixed holiday
+Friday
+Gandhi Jayanti
+Ganesh Chaturthi
+Good Friday
+Holi
+Holiday
+Holiday calendar
+Holiday name
+Hyderabad
+Independence Day
+Leave Admin
+Location
+Monday
+Mumbai
+National
+Notes / description
+Optional / floater
+Pune
+Regional
+Religious
+Republic Day
+Saturday
+Thursday
+Type
+Year

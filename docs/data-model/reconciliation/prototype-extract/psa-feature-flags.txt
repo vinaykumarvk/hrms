@@ -1,0 +1,33 @@
+SCREEN: psa-feature-flags
+
+TABLE COLUMNS (<th>):
+Actions
+Flag
+Rollout
+Status
+Tenants enabled
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Actions
+Active feature flags
+All
+All Enterprise
+Beta
+Configure
+DocuSign integration for offer letters
+FR-P04
+Feature flags
+Flag
+Group Company 2 (PSL entity only)
+Internal
+M10 Payroll module (Phase 2 dev)
+Person Fce-based biometric punch
+Platform Admin
+PrimeSoft internal sandbox only
+Rollout
+Status
+Sub-day leave application (PSL only)
+Tenants enabled

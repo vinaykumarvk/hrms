@@ -1,0 +1,19 @@
+SCREEN: directory-mini-profile
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Department
+Designation
+Directory
+Employee profile
+Office location
+Official email
+Official phone
+Person A Surname
+Profile
+Reporting manager

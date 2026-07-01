@@ -1,0 +1,31 @@
+SCREEN: national-id
+
+TABLE COLUMNS (<th>):
+Action
+Document
+Employee
+ID type
+New (masked)
+Old (masked)
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Aadhaar
+Action
+Document
+Employee
+Employee Four (PSI000156)
+ID type
+National ID
+National ID updates
+New (masked)
+Office Admin
+Old (masked)
+PAN
+Pooja Joshi (PSI000412)
+XXXX-XXXX-3421
+XXXX-XXXX-9087
+XXXXX5689F
+XXXXX9012H

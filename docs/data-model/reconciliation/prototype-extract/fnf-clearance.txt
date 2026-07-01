@@ -1,0 +1,17 @@
+SCREEN: fnf-clearance
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Comments
+Dashboard
+FR-M03-003
+FnF clearance
+Handover document received and reviewed
+Pending tasks reassigned
+Sign off
+Your sign-off pending

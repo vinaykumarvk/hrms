@@ -1,0 +1,83 @@
+SCREEN: my-profile
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Attendance (90d)
+Blood group
+Business unit
+Contact
+Country of birth
+Current address
+Current employment
+DOJ 14 Mar 2022 (4y 2m)
+Dashboard
+Date of birth
+Date of joining (entity)
+Department
+Dependent One
+Dependent Three
+Designation
+Display name
+Documents
+Dotted-line manager
+Download PDF
+Edit personal details
+Email
+Emergency contact
+Employee ID
+Employment
+Employment type
+Engineering
+Entity
+Father's name
+Full name
+Gender
+Group date of joining
+Hybrid (3 days office)
+India
+Indian
+Kavita Surname1
+Last review (FY25)
+Leave balance
+Lifecycle state
+Location
+Male
+Manager One
+Manager One (PSI000200)
+Marital status
+Marriage anniversary
+Married
+Mother's name
+My profile
+Name
+Nationality
+Not declared (optional)
+Notice period
+Official email
+Official mobile
+PII Tier 3
+PSI000789
+Permanent address
+Person A Surname1
+Person A Surname13 Surname1
+Personal
+Personal details
+Personal email
+Personal mobile
+Phone
+Probation
+Profile complete
+Relation
+Reporting manager
+Reports to
+Salutation
+Senior Software Engineer
+Spouse
+Sub-community
+Work type

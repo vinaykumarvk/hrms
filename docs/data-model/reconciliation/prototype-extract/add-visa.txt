@@ -1,0 +1,30 @@
+SCREEN: add-visa
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+As printed
+Search country…
+e.g. 180
+e.g. U.S. Consulate, Chennai
+
+LABELS/FIELD TEXT:
+Add visa
+Country
+Dependent visa
+Employment Pass
+External sponsor
+FR-M01-018
+Issue date
+Issuing authority
+Maximum stay (days per entry)
+My profile
+Other
+Schengen Short-stay
+Self-sponsored
+Sponsored by
+Valid till
+Visa number
+Visa scan / soft copy
+Visa type

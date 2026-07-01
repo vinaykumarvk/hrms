@@ -9,6 +9,16 @@
 -- infrastructure, and a closed-loop downstream retro reconciliation.
 --
 -- =====================================================================================
+-- RECON (prototype) — 2026-07-01. Reconciled against PrimeSoft prototype change-request /
+--   self-service screens (sensitive-changes FR-M01-003, edit-profile FR-M01-008, approvals,
+--   notifications, tasks). All change-request DATA (field changed, old/new value, proof doc,
+--   approval status, SLA) already mapped to existing tables. ONE genuine gap added:
+--   field_sensitivity_catalog.pii_tier_id -> platform pii_tiers, because the sensitive-changes
+--   review screen renders and groups requests by "PII Tier 1 / PII Tier 2" — a DPDPA PII-tier
+--   axis distinct from G02's approval-routing `sensitivity`. Directory visibility toggles on
+--   edit-profile ("Mobile visibility", "Share birthday with my team") are G01-owned
+--   (g01_field_visibility / employee_contacts.visibility) and intentionally NOT added here.
+-- =====================================================================================
 -- BUILD NOTES (read before running)
 -- =====================================================================================
 -- LOAD ORDER. Run AFTER 00-platform-core.sql (and, in a full build, after 01-G01.sql).
@@ -130,7 +140,8 @@ CREATE TABLE field_sensitivity_catalog (
     is_composite    boolean NOT NULL DEFAULT false,                         -- true for `name`
     display_label   varchar(120) NOT NULL,
     field_group     g02_field_group NOT NULL,                              -- taxonomy only (excludes STATUTORY)
-    sensitivity     g02_sensitivity NOT NULL,
+    sensitivity     g02_sensitivity NOT NULL,                              -- G02 approval-routing axis
+    pii_tier_id     uuid REFERENCES pii_tiers(id) ON DELETE RESTRICT,      -- RECON: DPDPA PII tier (TIER_1/2/3/NON_PII); sensitive-changes screen groups by this
     rbac_field_access g02_rbac_field_access,                               -- V/M/H/E/AR (RBAC §7)
     is_auth_bearing boolean NOT NULL DEFAULT false,                         -- phone/email -> >=MEDIUM (R1)
     notify_old_value boolean NOT NULL DEFAULT false,                        -- anti-takeover (R1)
@@ -163,6 +174,7 @@ CREATE INDEX ix_fsc_tenant       ON field_sensitivity_catalog(tenant_id);
 CREATE INDEX ix_fsc_entity       ON field_sensitivity_catalog(entity_id);
 CREATE INDEX ix_fsc_field_key    ON field_sensitivity_catalog(tenant_id, field_key);
 CREATE INDEX ix_fsc_sensitivity  ON field_sensitivity_catalog(sensitivity);
+CREATE INDEX ix_fsc_pii_tier     ON field_sensitivity_catalog(pii_tier_id);
 COMMENT ON TABLE field_sensitivity_catalog IS 'G02 E5. Versioned per-field sensitivity/route config. Tenant-scoped; entity_id null = tenant default. Drives P01 route + E·AR rendering.';
 
 -- E6 — approval_matrix_config (versioned; bound to a W.1 P01 flow) ----------------------
@@ -701,6 +713,17 @@ SET app.is_platform_admin = 'true';
 SET app.current_tenant_id = '11111111-1111-1111-1111-111111111111';
 
 -- --- core prerequisites (core tables; demo identities for G02 samples) ----------------
+-- RECON: pii_tiers is a platform-global reference (core does not seed it); seed the tiers
+--   here so the fsc.pii_tier_id samples are FK-valid. ON CONFLICT keeps this idempotent if a
+--   future core seed adds them first.
+INSERT INTO pii_tiers (id, tier_code, name, description, is_ceiling, sort_order)
+VALUES
+ ('f1000000-0000-0000-0000-000000000001','TIER_1','PII Tier 1','Highest-sensitivity PII (Aadhaar, biometrics, caste)',true,1),
+ ('f1000000-0000-0000-0000-000000000002','TIER_2','PII Tier 2','Sensitive PII (DOB, bank, contact)',false,2),
+ ('f1000000-0000-0000-0000-000000000003','TIER_3','PII Tier 3','Basic PII (name, salutation)',false,3),
+ ('f1000000-0000-0000-0000-000000000004','NON_PII','Non-PII','Non-personal data',false,4)
+ON CONFLICT (tier_code) DO NOTHING;
+
 INSERT INTO users (id, tenant_id, entity_id, username, official_email, auth_method, status, mfa_enabled)
 VALUES
  ('a0000000-0000-0000-0000-0000000000a1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','anjali.rao','anjali.rao@gov.example','PASSWORD','ACTIVE',true),
@@ -733,13 +756,13 @@ VALUES
 
 -- --- E5 field_sensitivity_catalog -----------------------------------------------------
 INSERT INTO field_sensitivity_catalog
- (id, tenant_id, field_key, m01_field_key, display_label, field_group, sensitivity, rbac_field_access,
+ (id, tenant_id, field_key, m01_field_key, display_label, field_group, sensitivity, pii_tier_id, rbac_field_access,
   is_auth_bearing, notify_old_value, requires_document, requires_authority_portal_verification,
   self_service_editable, hard_block_rule_ref, post_to_sr, validation_ref, version, effective_from)
 VALUES
- ('e5000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','dob','employees.dob','Date of Birth','DEMOGRAPHIC','STATUTORY','H',false,false,true,false,true,'DOB_PRE_RETIREMENT_BAR',true,'VAL-DOB',1,'2026-06-01'),
- ('e5000000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','email','employee_contacts.email','Email Address','CONTACT','MEDIUM','E',true,true,false,false,true,NULL,false,'VAL-EMAIL',1,'2026-06-01'),
- ('e5000000-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111','national_id','employees.national_id','Aadhaar Number','IDENTITY','STATUTORY','AR',false,false,true,true,false,NULL,true,'VAL-AADHAAR',1,'2026-06-01');
+ ('e5000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','dob','employees.dob','Date of Birth','DEMOGRAPHIC','STATUTORY','f1000000-0000-0000-0000-000000000002','H',false,false,true,false,true,'DOB_PRE_RETIREMENT_BAR',true,'VAL-DOB',1,'2026-06-01'),
+ ('e5000000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','email','employee_contacts.email','Email Address','CONTACT','MEDIUM','f1000000-0000-0000-0000-000000000002','E',true,true,false,false,true,NULL,false,'VAL-EMAIL',1,'2026-06-01'),
+ ('e5000000-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111','national_id','employees.national_id','Aadhaar Number','IDENTITY','STATUTORY','f1000000-0000-0000-0000-000000000001','AR',false,false,true,true,false,NULL,true,'VAL-AADHAAR',1,'2026-06-01');
 
 -- --- E6 approval_matrix_config --------------------------------------------------------
 INSERT INTO approval_matrix_config (id, tenant_id, entity_id, name, workflow_code, status, version, effective_from)

@@ -1,0 +1,66 @@
+SCREEN: ra-pipeline
+
+TABLE COLUMNS (<th>):
+Count
+Median time
+P90 time
+Reason
+Stage
+Trend
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Accepted
+All departments
+All recruiters
+All sources
+Applied
+BGV
+BGV discrepancy
+Candidate withdrew (counter offer)
+Career site
+Compensation mismatch
+Count
+Custom range
+Customer Success
+Department
+Design
+Drop-off reasons
+Engineering
+External agency
+FR-M08
+FY26 to date
+Failed interview
+Filters
+Hired (joined)
+Interview
+Joining
+Karthik R.
+Last 30 days
+Last 60 days
+Last 90 days
+LinkedIn
+Median time
+Naukri
+No-show on joining
+Offer
+P90 time
+Person C J.
+Person E M.
+Pipeline analytics
+Product
+Reason
+Recruiter
+Recruitment Admin
+Recruitment funnel
+Referral
+Sales
+Screening
+Skill not matching
+Source
+Stage
+Time in stage (median)
+Time window
+Trend

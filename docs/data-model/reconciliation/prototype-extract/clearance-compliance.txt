@@ -1,0 +1,23 @@
+SCREEN: clearance-compliance
+
+TABLE COLUMNS (<th>):
+Action
+Checklist
+Employee
+LWD
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Checklist
+Compliance / NDA / IP exit clearance
+Compliance clearance
+Employee
+Hold
+LWD
+Manish Surname13
+Pending compliance sign-off
+Sign off
+Tasks

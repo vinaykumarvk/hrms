@@ -1,0 +1,43 @@
+SCREEN: job-openings
+
+TABLE COLUMNS (<th>):
+Department
+Job status
+Job title & job code
+Location
+Mapped designation
+Remote job
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+All openings
+Archived
+Department
+Design (PSI.DG)
+Drafts
+Executive Inside Sales
+Executive Inside Sales (PSI.BD.IS.ISS)
+FR-M08-011
+Graphic Designer
+Graphic Designer (PSI.DG.GD.SC)
+Inside Sales
+Job
+Job openings
+Job status
+Location
+Mapped designation
+Marketing
+Marketing Manager
+Marketing Manager (PSI.BD.MKT.Ma)
+My positions only
+On hold
+Open
+Positions
+Quality Assurance
+Recruitment Admin
+Remote job
+Requisitions
+Senior Data QA Engineer
+Senior Data QA Engineer (PSI.QA.D)

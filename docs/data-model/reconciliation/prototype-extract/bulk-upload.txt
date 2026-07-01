@@ -1,0 +1,29 @@
+SCREEN: bulk-upload
+
+TABLE COLUMNS (<th>):
+Date
+Entity
+Errors
+Rows
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+All committed
+Bulk upload
+CSV file
+Date
+Download template (CSV)
+Entity
+Errors
+FR-M01-006
+HR Ops
+Mode
+Partial commit (skip errors)
+Recent uploads
+Rows
+Start upload
+Status
+Validate only (dry run)

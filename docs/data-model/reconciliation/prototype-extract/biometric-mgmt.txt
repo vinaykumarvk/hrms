@@ -1,0 +1,26 @@
+SCREEN: biometric-mgmt
+
+TABLE COLUMNS (<th>):
+Last sync
+Location
+Person Fce
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+BIO-BNG-01
+BIO-BNG-02
+Biometric devices
+FR-M05-006
+Finger
+Last sync
+Location
+Office Admin
+Online
+Person Fce
+Registered biometric devices
+Status
+Type

@@ -1,0 +1,57 @@
+SCREEN: da-vault
+
+TABLE COLUMNS (<th>):
+Action
+Cluster
+Document type
+Employee
+Replace
+Role
+Scope
+Status
+Upload
+Uploaded
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Aadhaar Card
+Action
+Assigned subordinates only
+Auditor
+Awaiting verification
+Bank account proof
+Cluster
+Document Admin
+Document type
+Document vault
+Employee
+Employee document vault
+FR-M11-002
+HR Admin
+HRBP
+Highest education cert
+Manager (L1)
+Marriage certificate (dependent add)
+No vault access (PII boundary)
+Org Admin
+Own only
+PAN Card
+Previous relieving letter
+Replace
+Role
+Scope
+Status
+Storage architecture (DM13).
+Tenant-wide (cross-entity)
+Tenant-wide (entity)
+Updated address proof
+Upload
+Uploaded
+Vault access matrix (DM19)
+Verify
+Yes (audit-logged)
+Yes (read-only)
+Yes (until verified)
+Yesterday

@@ -1,0 +1,44 @@
+SCREEN: admin-add-goal
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+What outcome is expected? Why is this set centrally?
+e.g. Complete annual security & compliance training
+
+LABELS/FIELD TEXT:
+Add goal on behalf
+All employees in band
+All employees in department
+Approval flow
+Auto-approved (admin self-approval)
+Band B2 (118 employees)
+Behavioural
+Category
+Compliance
+Customer
+Dashboard
+Department
+Description
+Development
+FR-M09-015
+FR-M09-019
+Financial
+Goal name
+Goal plan cycle
+Measurement criteria
+Operational excellence
+Organisation
+Organisation-wide
+People
+Performance
+Reason for admin-set goal
+Route to L1 Manager for approval
+Save draft
+Scope
+Scorecard pillar
+Single employee
+Target
+Team
+Visibility

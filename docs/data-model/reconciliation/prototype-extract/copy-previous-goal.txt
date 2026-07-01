@@ -1,0 +1,27 @@
+SCREEN: copy-previous-goal
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Search goal name...
+
+LABELS/FIELD TEXT:
+ACHIEVED
+Add goal
+All cycles
+All pillars
+Copy from previous goal
+Customer
+FR-M09-015
+FY24 Annual
+FY25 Annual
+FY25 Mid-cycle
+Financial
+Lead 2 internal tech talks
+Mentor 2 junior engineers to Lead level
+Operational excellence
+People
+Performance
+Showing 4 of 4
+Your prior goals

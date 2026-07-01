@@ -1,0 +1,36 @@
+SCREEN: cfg-goal-templates
+
+TABLE COLUMNS (<th>):
+Applies to
+Cycle
+Default weightages
+Methodology
+Status
+Template name
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Active templates
+Applies to
+Custom fields
+Cycle
+Default weightages
+FR-M09-006
+FY26 Annual
+Goal fields
+Goal plan templates
+Goal templates
+KPI
+KRA
+Methodology
+OKR
+Org Admin
+Scoring formula
+Status
+Sub-goal config
+Template configuration parameters
+Template name
+Validation

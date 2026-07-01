@@ -1,0 +1,61 @@
+SCREEN: pa-review-status
+
+TABLE COLUMNS (<th>):
+Action
+BU
+Days in stage
+Employee
+L1 Manager
+SLA breach
+Stage
+
+INPUT PLACEHOLDERS:
+Context for the recipient...
+
+LABELS/FIELD TEXT:
+Acknowledgement
+Action
+All
+All stages
+Breached
+Bulk escalation action
+Calibration
+Customer Success
+Cycle
+Days in stage
+Design
+Email only
+Employee
+Engineering
+Escalate
+Escalate selected to
+FR-M09-021
+FY26 Annual
+FY26 Mid (active)
+Filters
+HR Admin
+HRBP (default)
+In-app only
+L1 Manager
+L1 evaluation
+L1's manager (L2 / HOD)
+Manager One
+Marketing
+Mira P.
+Naina M.
+Note to escalation recipient
+Notification method
+Performance Admin
+Person J K.
+Product
+Q1 Probation
+Rajiv S.
+Rohit T.
+SLA breach
+SLA status
+Sales
+Self review
+Send escalations
+Stage
+Sunil B.
+Within SLA

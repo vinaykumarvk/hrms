@@ -1,0 +1,17 @@
+SCREEN: add-certification
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+e.g. AWS Solutions Architect
+
+LABELS/FIELD TEXT:
+Add certification
+Certificate file
+Certification name
+Credential ID
+Expiry date
+Issue date
+Issuing organisation
+My profile

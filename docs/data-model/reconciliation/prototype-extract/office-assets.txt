@@ -1,0 +1,28 @@
+SCREEN: office-assets
+
+TABLE COLUMNS (<th>):
+Asset
+Location
+Status
+Tag
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+AST-LAP-22
+AST-PRJ-04
+Asset
+Available
+Boardroom
+Conference projector
+FR-M17-002
+IT desk
+Issued
+Loaner laptop
+Location
+Office Admin
+Office asset register
+Office assets
+Status
+Tag

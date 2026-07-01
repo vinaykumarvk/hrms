@@ -1,0 +1,26 @@
+SCREEN: my-referrals
+
+TABLE COLUMNS (<th>):
+Candidate
+Job
+Referred on
+Stage
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Candidate
+FR-M08-016
+In progress
+Interview L2
+Job
+My referrals
+Offer
+Offer extended
+Ramesh K.
+Referred on
+Sneha P.
+Stage
+Status

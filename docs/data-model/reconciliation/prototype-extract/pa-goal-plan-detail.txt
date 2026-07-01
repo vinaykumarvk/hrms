@@ -1,0 +1,41 @@
+SCREEN: pa-goal-plan-detail
+
+TABLE COLUMNS (<th>):
+Enabled
+Field
+Mandatory
+Visible to peer
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Achievement cap
+Achievement entry
+Admin goal editing (FR-M09-029)
+Aligned-to (org goal)
+Authorship (FR-M09-015)
+Description
+Disabled
+Employee only
+Enabled
+FR-M09-002
+FY26 Annual Goal Plan v1
+Field
+Goal field configuration
+Goal plans
+L1 Manager only
+L1 edit-and-approve workflow
+Mandatory
+Manual (FR-M09-002)
+Metric / KPI
+No cap
+Optional
+Performance Admin
+Required before goal becomes active
+Scorecard pillar
+System-tracked (Phase 2)
+Target
+Title
+Total weightage must equal
+Visible to peer

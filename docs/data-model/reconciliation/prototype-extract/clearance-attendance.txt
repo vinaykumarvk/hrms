@@ -1,0 +1,26 @@
+SCREEN: clearance-attendance
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+LOP (cycle)
+LWD
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Clear
+Employee
+Exit clearance
+LOP (cycle)
+LWD
+Locked
+Manish Surname13
+Open
+Pending reconciliation
+Person C Roy
+Status
+Tasks

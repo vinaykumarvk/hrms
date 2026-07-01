@@ -1,0 +1,15 @@
+SCREEN: pl-encashment
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Approve
+Awaiting HR Admin authorisation
+FR-M04-004
+HR Ops
+PL encashment
+Reject

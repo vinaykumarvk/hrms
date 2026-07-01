@@ -1,0 +1,22 @@
+SCREEN: self-review
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Development areas
+Due 30 Sep
+Evidence
+Evidence / examples
+FR-M09-003
+FY26 Mid-year self review
+Overall comments
+Performance
+Save draft
+Self rating
+Self review
+Self-rate your goals
+Submit to manager

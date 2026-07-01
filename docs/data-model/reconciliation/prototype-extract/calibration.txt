@@ -1,0 +1,48 @@
+SCREEN: calibration
+
+TABLE COLUMNS (<th>):
+Action
+Below
+Employee
+Employee acknowledgement
+Exceeds
+Final rating
+High potential
+Low potential
+Medium potential
+Meets
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acknowledged
+Acknowledged with comments
+Action
+Awaiting acknowledgement
+Below
+Calibration
+Closed
+Disagreed
+Employee
+Employee One
+Employee acknowledgement
+Exceeds
+Export distribution
+FR-M09-009
+Final rating
+HR Ops
+High potential
+Low potential
+Medium potential
+Meets
+Notes / employee comments
+Open calibration board
+Peer Reviewer
+Pending
+Performance calibration
+Release
+Skip-level Reviewer
+Status
+Update post-calibration record

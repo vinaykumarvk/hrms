@@ -1,0 +1,55 @@
+SCREEN: candidates
+
+TABLE COLUMNS (<th>):
+Candidate
+Duplicity
+JR
+Last activity
+Recruiter
+Source
+Stage
+
+INPUT PLACEHOLDERS:
+Search by name, email, JR…
+
+LABELS/FIELD TEXT:
+Aakash Bansal
+All
+Already in DB
+Applied
+Arun Surname6
+BGV
+Candidate
+Candidate One
+Candidate pool
+Candidates
+Direct
+Duplicity
+FR-M08-002
+FR-M08-008
+Hired
+Hirist
+Interview
+Interview L2
+Interview L3
+JR-2026-0105
+JR-2026-0124
+JR-2026-0135
+JR-2026-0142
+K. Joshi
+Last activity
+LinkedIn
+Maya Krishnan
+Naukri
+Offer
+R. Surname6
+Re-applicant
+Recruiter
+Referral
+Rejected
+Screening
+Sneha Surname7
+Source
+Stage
+Unique
+Vikas Surname3

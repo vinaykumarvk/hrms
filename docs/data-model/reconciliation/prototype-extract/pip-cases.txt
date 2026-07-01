@@ -1,0 +1,23 @@
+SCREEN: pip-cases
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+Review date
+Started
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Akash Surname9
+Employee
+FR-M09-023
+HRBP
+In progress
+PIP cases
+Review date
+Started
+Status

@@ -1,0 +1,40 @@
+SCREEN: cfg-doc-templates
+
+TABLE COLUMNS (<th>):
+Action
+Code
+Default
+Folder
+Format
+Format name
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit document templates
+Code
+DOCX
+Default
+Document template folder
+Document template format
+Document templates
+Experience Letter
+FMT-EXP
+FMT-OFFER
+FMT-REL
+Folder
+Format
+Format code
+Format name
+Inactive
+Letters
+Offer Letter
+Org Admin
+PDF
+Prefix
+Relieving Letter
+Status
+Suffix

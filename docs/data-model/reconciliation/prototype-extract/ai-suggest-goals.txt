@@ -1,0 +1,20 @@
+SCREEN: ai-suggest-goals
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+AI suggestions
+Accept
+Add custom goal instead
+Add goal
+Behavioural
+Development
+FR-M09-013
+Modify
+Performance
+Regenerate
+Reject

@@ -1,0 +1,16 @@
+SCREEN: kb-article
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Connect to corporate VPN
+Dashboard
+FR-M17-011
+KB-000201
+Knowledge base
+Steps
+Summary

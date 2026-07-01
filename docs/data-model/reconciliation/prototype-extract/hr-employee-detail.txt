@@ -1,0 +1,68 @@
+SCREEN: hr-employee-detail
+
+TABLE COLUMNS (<th>):
+DOB
+Insurance covered
+Name
+Phone
+Relation
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+ABCPX1234F
+Aadhaar
+Address
+Attendance
+Audit
+Blood group
+Child One
+Cleared
+Compensation
+Current
+DOB
+DOJ 14 Mar 2022 (4y 2m)
+Date of birth
+Directory
+Documents
+Edit profile
+Emergency contacts
+Employee ID
+Employee One
+Employee details
+Employment
+FR-M01-005
+Father
+Full
+Full name
+Gender
+Generated letters
+HR Ops
+Indian
+Insurance covered
+Leave
+Male
+Marital status
+Married
+Name
+Nationality
+Org chart
+PAN
+PSI000456
+PSI000789
+Parent One
+Performance
+Permanent
+Person A Surname1
+Personal
+Personal email
+Personal mobile
+Phone
+Relation
+Reports to Manager One (PSI000200)
+Request sensitive change
+Son
+Spouse
+Spouse One
+View audit trail

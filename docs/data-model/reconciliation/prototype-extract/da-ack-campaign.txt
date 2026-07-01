@@ -1,0 +1,38 @@
+SCREEN: da-ack-campaign
+
+TABLE COLUMNS (<th>):
+Acknowledged
+Audience
+Document
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acknowledged
+Acknowledgement campaign
+Active campaigns
+All employees
+Audience
+Audience (UAG / population)
+Code of Conduct 2026
+Complete
+Daily (final week)
+Document
+Document / policy
+Documents
+Engineering UAG
+Escalate after SLA to
+Every 3 days
+HR Admin
+HRBP only
+India entity
+InfoSec Policy v4
+Launch campaign
+New campaign
+Reminder cadence
+Save draft
+Status
+Updated Leave Policy
+Weekly

@@ -1,0 +1,68 @@
+SCREEN: generate-offer
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Search users
+
+LABELS/FIELD TEXT:
+Admin
+Approval
+Approver-specific attachments
+Body
+CC roles
+CC users
+Choose salary structure
+Company
+Completed
+Contribution level
+Currency
+Date of joining
+Department
+Designation
+Designation alias
+Differently abled
+Dotted line manager
+Employee movement approved
+Employee movement initiated
+Employee type
+Executive Inside Sales
+FR-M08-004
+FR-M08-015
+First name
+Fixed CTC
+Full Time
+Generate offer letter
+HRBP
+Hiring Lead
+In pending list
+Inside Sales
+Jennifer Kochhar
+Last name
+Location
+Metro
+Myself
+New
+Offer expiry date
+Offer letter email for approvers
+Offer letters
+Offer lifecycle
+Offer preview
+Old
+Pay scale group
+Pending for approval
+Pending with candidate
+Percentage fixed CTC increment
+Preview
+Previous total CTC
+PrimeSoft
+Probation period
+Recruitment Admin
+Reporting manager
+Salary structure
+Select
+Show Total CTC in salary breakup
+Subject
+Template
+Trigger custom exception flow

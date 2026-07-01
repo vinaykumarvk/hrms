@@ -1,0 +1,75 @@
+SCREEN: cfg-form-builder
+
+TABLE COLUMNS (<th>):
+Editable
+Label
+Options / Default
+Required
+Type
+Validation
+Visible to
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Bind to module / entity
+Checkbox
+Confirmation
+Custom HR flow
+CustomFieldsExport.csv
+Date
+Date range
+Disabled
+Display in
+Draft
+Dropdown
+Edit form
+Editable
+Fields
+File upload
+Form builder
+Form code
+Form definition
+Form name
+HR Documents
+Label
+Lookup (entity)
+M01 Employee Master
+M02 Onboarding
+M03 Exits & Offboarding
+M04 Leave
+M05 Attendance
+M08 Recruitment
+M09 Performance
+M11 Documents
+M17 Assets & IT
+Multi-select
+Number
+Onboarding form
+Options / Default
+Org Admin
+Performance
+Platform W.2
+Preview
+Radio group
+Recruitment requisition
+Required
+Rich text
+Save form
+Section header
+Separation
+Status
+Text
+Text area
+Type
+VAL-DATE-PAST
+VAL-EMAIL
+VAL-FILE-5MB
+VAL-NUMERIC
+VAL-PHONE
+Validation
+Version
+Visible to
+Workflow stage

@@ -1,0 +1,38 @@
+SCREEN: employee-master
+
+TABLE COLUMNS (<th>):
+DOJ
+Department
+Designation
+ID
+Manager
+Name
+Status
+
+INPUT PLACEHOLDERS:
+Search by name, ID, email, department…
+
+LABELS/FIELD TEXT:
+Active
+All
+Bulk upload
+DOJ
+Department
+Designation
+Dev Khanna
+Employee master
+Employee master (M01)
+Engineering Manager
+HR Admin
+Manager
+Manager One
+Name
+Notice
+PSI000200
+PSI000789
+Person A Surname
+Platform Engineering
+Pre-joining
+Senior Engineer
+Separated
+Status

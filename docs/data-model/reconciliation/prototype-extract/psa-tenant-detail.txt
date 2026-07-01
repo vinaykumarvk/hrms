@@ -1,0 +1,56 @@
+SCREEN: psa-tenant-detail
+
+TABLE COLUMNS (<th>):
+Code
+Country
+HC
+Legal name
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+API (24h)
+API rate limit
+Active sessions
+Code
+Contract end
+Country
+Custom
+DPDPA compliance
+Danger zone
+Data region
+Deployment model
+Enterprise (current)
+Entities in this tenant
+FR-P04-001
+GROUP COMPANY 2
+Group Company 2 Group Holdings
+Growth
+IT Services
+Industry segment
+Legal name
+Only PSA can change these
+PSE
+PSI
+PSL
+PSS
+Plan
+Plan tier
+Platform Admin
+Platform-level configuration
+Primary geography
+Primesoft Solutions Europe Ltd
+Primesoft Solutions India Pvt Ltd
+Primesoft Solutions LLC
+Primesoft Solutions Singapore Pte Ltd
+Provisioned on
+Seat license
+Starter
+Storage
+Storage limit
+Tenant ID
+Tenant identity
+Tenants
+Usage
+Users

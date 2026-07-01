@@ -1,0 +1,23 @@
+SCREEN: offer-letter
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Accept offer
+Bangalore HQ
+Candidate
+Date of joining
+Decline offer
+Designation
+Download PDF
+Entity
+FR-M08-004
+Location
+Offer letter
+PrimeSoft IP Solutions Pvt Ltd
+Software Engineer
+Your offer letter

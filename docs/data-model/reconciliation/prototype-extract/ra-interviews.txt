@@ -1,0 +1,79 @@
+SCREEN: ra-interviews
+
+TABLE COLUMNS (<th>):
+Avg duration
+Candidate
+Date · Time
+Interviewer
+Interviewer(s)
+Position
+Round
+Status
+This month
+This week
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+All
+All rounds
+Aman Surname4
+Aman Surname4 (Data Lead)
+Aman Surname8
+Avg duration
+Bar raiser
+Behavioural
+Cancelled
+Candidate
+Candidate One
+Coding
+Completed
+Confirmed
+Dev Khanna
+Dev Khanna (HOD Eng)
+FR-M08-007
+Filters
+In-person
+Interview oversight
+Interview panel utilisation
+Interviewer
+Interviewer(s)
+Manager One
+Manager One (L1 Mgr Eng)
+Manish K.
+Manish Surname13
+Manish Surname13 (Platform Lead)
+Next 2 weeks
+Past 7 days
+Pending confirm
+Person J P.
+Phone
+Position
+Pradeep Surname2
+Recruitment Admin
+Reschedule requested
+Reviewer Three Joshi
+Riya Joshi
+Round
+Sahil M.
+Sahil M. (Recruiter)
+Scheduled
+Screening
+Status
+System Design
+Technical R1
+Technical R1/R2
+Technical R2
+This month
+This week
+Thu 3 PM
+Time window
+Today
+Tomorrow
+Tomorrow 10 AM
+Tomorrow 2 PM
+Type
+Video
+Wed 11 AM

@@ -1,0 +1,31 @@
+SCREEN: cfg-blackout
+
+TABLE COLUMNS (<th>):
+Action
+Applies to
+Blackout name
+From
+Status
+To
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit blackout windows
+All employees
+Applies to
+Blackout name
+Blackout windows
+Engineering
+From
+From date
+Inactive
+Leave types blocked
+Org Admin
+Release window
+Status
+To date
+Year-end freeze

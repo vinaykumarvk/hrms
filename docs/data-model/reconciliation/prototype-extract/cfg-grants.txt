@@ -1,0 +1,41 @@
+SCREEN: cfg-grants
+
+TABLE COLUMNS (<th>):
+Action
+Capability
+Expires
+Granted by
+Grantee
+Reason
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active grants
+BGV report download
+Capability
+Configurable defaults for all grants
+Daily summary email
+Disabled
+Entitlement grants
+Expires
+FR-P04
+FY26 statutory audit support
+Grant policy
+Granted by
+Grantee
+HR Admin on maternity leave
+India-US position swap programme
+Individual entitlement grants
+Internal audit project
+Mandatory expiry date
+Maximum grant duration
+Org Admin
+Org Admin only
+Reason
+Reason mandatory
+Renewal limit
+Revoke
+Time-bound exceptions to standard RBAC.

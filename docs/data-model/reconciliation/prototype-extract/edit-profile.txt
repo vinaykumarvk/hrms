@@ -1,0 +1,44 @@
+SCREEN: edit-profile
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Blood group
+Current address
+Date of birth
+Display name
+Edit profile
+Email
+Emergency contact
+Everyone
+FR-M01-008
+Female
+Full name
+Gender
+HR approval
+HR approval required
+HR only
+Male
+Marital status
+Married
+Mobile visibility
+Mrs
+My profile
+Name
+No (default)
+Parent
+Permanent address
+Personal details
+Personal email
+Personal mobile
+Phone
+Relation
+Salutation
+Save changes
+Share birthday with my team
+Single
+Spouse

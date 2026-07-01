@@ -1,0 +1,46 @@
+SCREEN: add-dependent
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
++91 98XXXX XXXX
+Same as employee address?
+Search country…
+XXXX XXXX XXXX
+e.g. 50
+e.g. Person C
+e.g. Surname1
+
+LABELS/FIELD TEXT:
+Aadhaar number
+Add as nominee
+Add dependent
+Add to group medical insurance
+Address
+Brother
+Date of birth
+Daughter
+FR-M01-017
+Father
+Father-in-law
+Female
+First name
+Gender
+Gratuity
+Identity
+Last name
+Male
+Middle name
+Mother
+Mother-in-law
+My profile
+Nationality
+Nominee for
+Other
+Phone
+Prefer not to disclose
+Relation
+Sister
+Son
+Spouse

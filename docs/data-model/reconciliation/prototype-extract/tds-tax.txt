@@ -1,0 +1,25 @@
+SCREEN: tds-tax
+
+TABLE COLUMNS (<th>):
+Deducted (₹L)
+Deposited
+Quarter
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Declarations open
+Deposited
+Export 26Q
+FR-M10-006
+Filed
+Finance Admin
+Form 16 pending
+Q1 FY26
+Q2 FY26
+Quarter
+Quarterly TDS summary
+Status
+TDS & tax

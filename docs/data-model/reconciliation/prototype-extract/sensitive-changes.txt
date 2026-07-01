@@ -1,0 +1,17 @@
+SCREEN: sensitive-changes
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Approve
+FR-M01-003
+HR Ops
+PII Tier 1
+PII Tier 2
+Reject
+Sensitive changes
+Sensitive field change requests

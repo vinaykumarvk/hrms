@@ -1,0 +1,31 @@
+SCREEN: cfg-letterheads
+
+TABLE COLUMNS (<th>):
+Action
+Company
+Letterhead
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit letterheads
+Company
+Inactive
+Letterhead
+Letterhead DOCX
+Letterhead HTML
+Letterhead name
+Letterheads
+Org Admin
+PSG Default
+PSI Default
+PrimeSoft Global Inc
+PrimeSoft IP Solutions
+Select company
+Status
+Type

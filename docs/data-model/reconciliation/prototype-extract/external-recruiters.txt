@@ -1,0 +1,29 @@
+SCREEN: external-recruiters
+
+TABLE COLUMNS (<th>):
+Active JRs
+Active candidates
+Agency
+Contract
+Performance
+Placements MTD
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active JRs
+Active candidates
+Agency
+Contract
+Empanelled agencies
+Expiring
+External recruiter portal
+External recruiters
+FR-M08-006
+Hireflo Consulting
+Performance
+Placements MTD
+Recruiter
+Talent Bridge
+TechRecruit Solutions

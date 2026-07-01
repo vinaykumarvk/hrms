@@ -1,0 +1,42 @@
+SCREEN: cfg-depts
+
+TABLE COLUMNS (<th>):
+Action
+Code
+Company
+Department
+HOD
+Parent dept
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit departments
+Business unit
+Code
+Company
+DEPT-ENG
+DEPT-PLAT
+DEPT-PROD
+Department
+Department code
+Department name
+Departments
+Dev Khanna
+Engineering
+HOD
+Head HR
+Inactive
+Manager One
+Org Admin
+Parent department
+Parent dept
+Person B Surname9
+Platform
+PrimeSoft IP Solutions
+Product
+Status

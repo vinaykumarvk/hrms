@@ -1,0 +1,51 @@
+SCREEN: bgv-reports
+
+TABLE COLUMNS (<th>):
+Action
+Check
+Document
+Particulars
+Status
+Verified on
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Address
+Aditi S.
+All TAT
+All statuses
+Background Verification
+Background Verification (BGV)
+Candidate
+Candidate One
+Check
+Clear
+Click a card to open the full case
+Court record check
+Criminal record
+Discrepancy
+Document
+Education
+FR-M02-004
+Govt ID match
+Identity (Aadhaar / PAN)
+In progress
+Initiated
+Onboarding
+Particulars
+Permanent address verification
+Pradeep Surname2
+Prior employment
+Prior records on file
+Reviewer Three Joshi
+SLA breach
+Sneha Bose
+Status
+Tanvi Mishra
+Verified
+Verified on
+Waived
+Waived (rehire)

@@ -1,0 +1,32 @@
+SCREEN: cfg-hiring-leads
+
+TABLE COLUMNS (<th>):
+Action
+Applies to
+Configuration
+Hiring lead
+Recruiter
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Add / edit hiring leads
+Applicable to
+Applies to
+Assignment type
+Configuration
+Engineering Hiring
+Hiring lead
+Hiring lead configuration name
+Hiring leads
+M. Surname10
+Manager One
+Org Admin
+Person B Surname9
+R. Surname3
+Recruiter
+Sales Hiring
+Select hiring lead
+Select recruiter

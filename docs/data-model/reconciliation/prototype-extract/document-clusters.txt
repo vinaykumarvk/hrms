@@ -1,0 +1,75 @@
+SCREEN: document-clusters
+
+TABLE COLUMNS (<th>):
+Action
+Candidate
+Cluster
+Documents
+Joining date
+Mandatory
+Overall
+Sign-off cluster
+Sign-off required
+Type
+Undertaking cluster
+
+INPUT PLACEHOLDERS:
+e.g. Senior IC undertaking cluster
+
+LABELS/FIELD TEXT:
+Aadhaar Card
+Aadhaar e-sign (NeSL)
+Action
+Anti-bribery undertaking
+Auto-escalation on miss
+Background verification consent
+Bank account proof
+Candidate
+Candidate One
+Cluster
+Cluster name
+Cluster status by candidate
+Cluster templates
+Cluster type
+Code of Conduct acknowledgement
+Completion gate
+Confidentiality undertaking
+Create / edit cluster template
+DocuSign envelope (default)
+Document clusters
+Documents
+Documents to include (M11 DM17)
+Escalate
+FR-M02-002
+Form 16 (last FY)
+Highest education certificate
+IP assignment
+In-app draw signature
+InfoSec policy acknowledgement
+Joining date
+Karan Bhatia
+Last 3 months salary slip
+Mandatory
+Never mandatory
+No (collect)
+Not mandatory by default (DO02)
+Onboarding Admin
+Onboarding Admin only
+Overall
+PAN Card
+POSH policy acknowledgement
+Passport-size photograph
+Person A Surname1
+Pradeep Surname2
+Previous relieving letter
+Reference cluster
+Remind
+SLA for completion (days)
+Sign-Off cluster
+Sign-off cluster
+Sign-off required
+Signature method
+Tanvi Mishra
+Type
+Undertaking cluster
+Yes (e-sign via DocuSign)

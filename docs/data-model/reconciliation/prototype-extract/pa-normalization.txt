@@ -1,0 +1,81 @@
+SCREEN: pa-normalization
+
+TABLE COLUMNS (<th>):
+Action
+Curve name
+Label
+Rating
+Shape
+Target %
+Tolerance ±
+Top / Mid / Bottom
+Use case
+
+INPUT PLACEHOLDERS:
+Search…
+e.g. FY26 5-point bell curve
+
+LABELS/FIELD TEXT:
+Action
+All annual cycles (default)
+Applicable to cycle
+Attendance Admin
+Below expectations
+CEO
+Candidate
+Curve name
+Curve type
+Curves register
+Custom (define below)
+Dashboard
+Define normalization curve
+Document Admin
+Exceeds expectations
+FR-M09-023
+FY26 Annual
+FY26 Mid-year
+Far exceeds expectations
+Finance Admin
+Free distribution (no forcing)
+HR Admin
+HRBP
+IT Admin
+Label
+Leave Admin
+Me (Employee)
+Meets expectations
+Minimum cohort size
+My Team (HOD)
+My Team (Manager L1)
+Normalization
+Normalization curves
+Office Admin
+Onboarding Admin
+Org Admin
+Organisation-wide
+Per band / grade
+Per business unit (BU-level forcing)
+Per department
+Performance Admin
+Platform Super Admin
+PrimeSoft
+Rating
+Rating scale
+Recruiter
+Recruitment Admin
+Right-skewed
+Save draft
+Scope of application
+Separation Admin
+Service Desk Admin
+Service Desk Agent
+Settings
+Shape
+Significantly below
+Skew toward top
+Strict
+Symmetric bell
+Tighter distribution
+Top / Mid / Bottom
+Total
+Use case

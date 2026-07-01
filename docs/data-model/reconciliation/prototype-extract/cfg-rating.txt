@@ -1,0 +1,34 @@
+SCREEN: cfg-rating
+
+TABLE COLUMNS (<th>):
+Action
+Band
+Label
+Range
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit rating bands
+Band
+Below
+Exceeds
+Exceeds expectations
+Inactive
+Label
+Max marks
+Meets
+Meets expectations
+Min marks
+Needs improvement
+Org Admin
+Outstanding
+Range
+Rating band name
+Rating bands
+Status
+Strong

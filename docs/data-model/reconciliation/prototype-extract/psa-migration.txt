@@ -1,0 +1,39 @@
+SCREEN: psa-migration
+
+TABLE COLUMNS (<th>):
+Action
+Failure %
+Last run
+Records
+Status
+Tenant · Source
+Wave
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acme Mfg
+Action
+Active migrations
+Dry run 1/3
+Dry run 2/3
+Extract
+FR-P06
+Group Company 2 Group
+Last run
+Live
+Load
+Open
+P06 Migration Toolkit
+Platform Admin
+Production cutover
+Records
+Status
+Synergy Logistics
+Three-wave migration plan
+Transform
+Validate
+Verify
+Wave
+Zero numeric discrepancy

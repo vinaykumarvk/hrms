@@ -1,0 +1,41 @@
+SCREEN: cfg-geo
+
+TABLE COLUMNS (<th>):
+Action
+City
+Country
+Location
+Region
+State
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit regions & locations
+Bangalore
+Bangalore HQ
+City
+Country
+Inactive
+India
+Karnataka
+Location
+Location head
+Maharashtra
+Mumbai
+Office address
+Office area / location name
+Org Admin
+Pincode
+Region
+Regions & locations
+Remote
+South
+State
+Status
+West
+Work area code

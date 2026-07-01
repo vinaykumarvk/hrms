@@ -1,0 +1,85 @@
+SCREEN: create-job
+
+TABLE COLUMNS (<th>):
+Action
+Display from
+Display to
+Job status
+Position ID
+Position no
+Post to
+Recruiter
+Requisition ID
+Specific requirements
+Status
+
+INPUT PLACEHOLDERS:
+From
+If left blank, same as designation title
+Select job tags
+To
+
+LABELS/FIELD TEXT:
+Action
+Activate
+Careers Page
+Consultant
+Contract
+Create job
+Create manually
+Custom Sources / Links
+Design
+Display from
+Display to
+Employee type
+Engineering
+Evaluation
+Experience range
+External Recruiter
+FR-M08-011
+FR-M08-013
+FR-M08-014
+Full Time
+Graphic Designer
+Inactive
+Inside Sales
+Intern
+Job Boards
+Job application
+Job description summary
+Job location
+Job name on Careers / Refer pages
+Job openings
+Job posting options
+Job status
+Job tags
+K. Joshi
+Motion design a plus
+On hold
+Open
+Position ID
+Position no
+Post
+Post to
+Pre-screening settings
+PrimeSoft
+PrimeSoft IP Solutions Pvt Ltd
+R. Surname6
+Recruiter
+Recruitment Admin
+Refer
+Requisition ID
+Save as draft
+Screener fields
+Select company
+Select department
+Select designation
+Selected / filled
+Senior Software Engineer
+Social Networks
+Sources
+Specific requirements
+Status
+Tag as remote job
+Target time to fill (days)
+Total

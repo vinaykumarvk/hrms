@@ -1,0 +1,44 @@
+SCREEN: cfg-cross-entity
+
+TABLE COLUMNS (<th>):
+Attrition %
+Date
+Employee
+Entity
+Exits LTM
+From entity
+Headcount
+Joiners LTM
+On notice
+To entity
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Cross-entity HR reports
+Cross-entity reports
+Date
+Employee
+Entity
+Exits LTM
+FR-P04
+From entity
+Group attrition (LTM)
+Group headcount
+Group hiring
+Group org chart
+Headcount
+Headcount by entity
+Internal mobility
+Joiners LTM
+Karen J.
+Manish K.
+On notice
+Org Admin
+Pradeep N.
+Reports available
+This view is Org Admin exclusive.
+To entity
+Type

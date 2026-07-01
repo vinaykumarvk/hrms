@@ -1,0 +1,35 @@
+SCREEN: my-tickets
+
+TABLE COLUMNS (<th>):
+Action
+Category
+Priority
+Ref
+State
+Subject
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Additional monitor request
+Category
+Dashboard
+FR-M17-008
+In progress
+My tickets
+Network / Connectivity
+New Asset
+Pending approval
+Priority
+REQ-2026-04702
+REQ-2026-04790
+REQ-2026-04821
+Ref
+Reopen
+Resolved
+Software / System
+State
+Subject
+VPN keeps dropping

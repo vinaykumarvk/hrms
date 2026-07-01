@@ -1,0 +1,33 @@
+SCREEN: tasks
+
+TABLE COLUMNS (<th>):
+Action
+Due
+Source
+Task
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Attendance
+Dashboard
+Document
+Due
+FR-P01
+Filter
+Goals
+M01 Profile
+M05
+M09
+M11 Documents
+My open tasks
+Open
+Performance
+Policy ack
+Source
+Task
+Tasks
+Type

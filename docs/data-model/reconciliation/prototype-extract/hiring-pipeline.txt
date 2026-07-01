@@ -1,0 +1,25 @@
+SCREEN: hiring-pipeline
+
+TABLE COLUMNS (<th>):
+Aging (avg)
+Candidates
+Stage
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active candidates
+Aging (avg)
+Applied
+Assigned reqs
+Candidates
+FR-M08-002
+Hiring pipeline
+Interview
+Interviews this week
+Offer
+Offers out
+Recruiter
+Screening
+Stage

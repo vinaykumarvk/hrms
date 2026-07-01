@@ -1,0 +1,22 @@
+SCREEN: goal-approvals
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Approve
+Approved
+Dashboard
+FR-M09-002
+FR-M09-014
+Goal approvals
+Goal plan approvals
+Pending
+Return for redraft
+Returned
+Review
+SLA 2d
+Weight gap

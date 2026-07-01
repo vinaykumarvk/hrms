@@ -1,0 +1,361 @@
+SCREEN: dashboard
+
+TABLE COLUMNS (<th>):
+Action
+Department
+Deployment
+FY26 plan
+Health
+Hired YTD
+In offer
+Open
+Plan
+Progress
+Storage
+Tenant
+Users
+
+INPUT PLACEHOLDERS:
+Enter reason (required)
+
+LABELS/FIELD TEXT:
+A reason is required.
+API requests (24h)
+Absconding
+Absconding cases
+Absent / unaccounted
+Access revocations pending
+Acknowledge IT AUP 2026
+Acknowledgements captured
+Acme Manufacturing
+Action
+Active candidates
+Active cycles
+Active entities
+Active grants
+Active integrations
+Active leave types
+Active queues
+Active shift patterns
+Active tenants
+After penny drop verification
+All checks cleared
+All checks cleared on 22 May
+Analyse
+Applied
+Approve
+Asset requests
+Assets to recover
+Assign
+Assignment rules
+Attendance
+Attendance lock day
+Attendance lock pending
+Attendance regularisations
+Attendance trends
+Attrition (90d)
+Attrition trending up in Platform pod
+Aug
+Awaiting HR final
+BGV discrepancies
+BGV in progress
+BGV pending
+BGV reports
+BGV status
+Backfill requests
+Background verification
+Balance adjustments LTM
+Balance adjustments pending
+Bank account changes
+Bank account entries
+Bench
+Biometric punch device mapping
+Bulk letter jobs in progress
+Business units
+CSAT (mo)
+Calibration scheduled
+Calibration session
+Calibration sessions
+Calibration sessions to schedule
+Candidate name
+Candidate pool
+Casual Leave
+Catalog items
+Clearance holds
+Cluster completion rate
+Company feed
+Complete onboarding form
+Completed
+Configure
+Continue
+Coverage
+Cross-entity HR reports
+Custom fields
+Customer Success
+DOB corrections
+DOB view (PII Tier 2)
+Day 5
+Days to joining
+Degraded
+Department
+Department attendance
+Department headcount
+Department lens
+Department org chart
+Departments
+Deployment
+Design
+Document cluster pending
+Document review SLA
+Document review pending
+Document verification pending
+Documents in vault
+Documents pending
+Done
+Due 3d
+Duplicity overrides
+Earned Leave
+Email
+Employees excluded from FY26 cycle
+Engineering
+Enterprise
+Escalated to skip
+Exit clearances due
+Exit interview form
+Exit interviews
+Exit interviews due
+External agencies
+External recruiter contracts ending
+FY26 hiring plan vs actuals
+FY26 mid-year
+FY26 mid-year reviews
+FY26 plan
+FY26 progress at a glance
+Feature flags
+FnF Finance clearance
+FnF clearance board
+FnF pending (Finance)
+Forecast
+Ganesh Chaturthi
+Generate
+Generate offer
+Geofence exception requests
+Geofence sites
+Geofencing
+Goal completion
+Goal plans active
+Goal plans awaiting L1 approval
+Goal-setting
+Gratuity nominee verifications
+Group Company 2 Group Holdings
+Group headcount
+Growth
+HR Admin (CEO optional)
+HR queues pending
+HR review
+Hard deadline 26 May
+Headcount plan
+Health
+Healthy
+Helix BioTech
+Hired YTD
+Holiday group
+Holiday groups
+IP whitelist
+IT Admin
+In clearance window
+In offer
+In pre-joining
+Independence Day
+Individual entitlement grants
+Initiate termination
+Integration credentials
+Interview
+Interviews
+Interviews requiring rescheduling
+Interviews scheduled
+Job requisitions
+Joining 1 Jun 2026
+Joining pipeline this month
+Joining this week
+Karnataka
+Knowledge base
+L1 evaluations
+LWF this month
+Leadership AI Chat Agent
+Leadership signals
+Leave
+Leave Stage-2 pending
+Leave revocations
+Leave usage trends
+Legal entities
+Letter generation queue
+Letters generated
+Letters pending sign
+License & seat management
+Lock
+MTD
+Manage
+Manager L1 stage
+Managers
+Marketing
+Maternity / Paternity
+Mid-PIP review due 28 May
+Migrations in progress
+My cases
+My profile
+My queues
+My tasks
+My tickets
+NEW
+National ID configuration
+National ID updates pending
+NeoBank Capital
+Net headcount gap by skill
+New joiner batch
+New joiners
+New leave policy effective 1 Aug
+Normal
+Offer
+Offer approvals pending
+Offer approvals queue
+Offer letter signed
+Offer letters
+Offers extended (MTD)
+On leave
+On leave this week
+On leave today
+On notice
+On separation
+On track
+Onboarding completion
+Open
+Open asset requests
+Open cases
+Open exit clearance
+Open in Leadership AI
+Open my queue
+Open requisitions
+Open ticket queue
+Open tickets
+Optional Holiday is a
+Org headcount
+Organisation Administration
+Organisation structure
+Overdue 2d
+P06 Migration Toolkit
+P1 post-mortems
+P1 post-mortems due
+P95 latency 142ms
+PF transfer in
+PF transfers pending
+PIPs
+PIPs active
+PT updates
+Panel unavailable or candidate conflict
+Pending
+Pending approvals
+Performance
+Permissions scope
+Phone
+Photo updates
+Pipeline at a glance
+Plan
+Planned
+Platform master data
+Platform monitoring
+Platform operations
+Policy sign-off overdue
+Policy version
+Pre-offers extended
+Pre-offers pending action
+Present
+Present today
+Privilege Leave
+Probation confirmation due
+Probation ending in 30d
+Probation reviews
+Product
+Profile completeness
+Progress
+Provision
+Provisioning
+Published 18 May 2026
+Q2 town-hall recording is live
+Quick actions
+Quill Education
+RESTRICTED
+Ready-to-join candidates
+Reason
+Reason for declining
+Reason for withdrawal
+Regularisation requests
+Reject
+Resolve
+Resolved today
+Resume
+Review
+Reviews SLA-breached
+Role
+Role / requisition
+Run
+SLA breached
+SLA breaches (wk)
+SLA risk
+STANDALONE
+Sales
+Schedule
+Scope
+Scoped tasks
+Screening
+Self-reviews submitted
+Sensitive field change requests
+Sep
+Separation Admin
+Separation Stage-2 (HR final)
+Separation checklist config
+Separation policy
+Separation requests
+Separation workflow
+Service Desk Admin
+Service Desk Agent
+Sick Leave
+State change
+Storage
+Synergy Logistics
+Team attendance
+Team availability today
+Team headcount
+Templates active
+Tenant
+Tenant management
+Tenant provisioning
+Tenant settings
+Tenant snapshot
+This week at a glance
+Time to hire (avg)
+Title
+Today
+Today's pipeline
+Total
+Total active users
+UAG/Group company/Custom assignment
+Unassigned in queue
+Upcoming time off
+Update National IDs
+Updated 1 min ago
+Updated 2 min ago
+Updated 3 min ago
+Upload
+Upload educational documents
+Users
+Vault uploads
+Verde Energy
+Verifications completed
+WFH today
+Week 1 (1-7 Jun)
+Week 2 (8-14 Jun)
+Week 3 (15-21 Jun)
+Week 4 (22-28 Jun)
+Your comment
+Your onboarding checklist

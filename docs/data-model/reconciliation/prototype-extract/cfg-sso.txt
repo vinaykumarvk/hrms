@@ -1,0 +1,36 @@
+SCREEN: cfg-sso
+
+TABLE COLUMNS (<th>):
+Action
+Domain
+Protocol
+Provider
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Authentication policy
+Azure AD
+Domain
+Enabled
+Enforce SSO
+Google Workspace
+Identity providers
+Inactive
+MFA requirement
+OIDC
+Optional
+Org Admin
+Password policy
+Protocol
+Provider
+Required for admins
+Required for all
+SAML 2.0
+Session timeout (min)
+Standard
+Status

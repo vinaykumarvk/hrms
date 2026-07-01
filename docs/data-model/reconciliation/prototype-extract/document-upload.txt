@@ -1,0 +1,30 @@
+SCREEN: document-upload
+
+TABLE COLUMNS (<th>):
+Action
+Category
+Document
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Aadhaar
+Action
+Candidate
+Category
+Document
+Document upload
+Education certificates
+Employment Documents
+FR-M02-003
+PAN card
+Pending
+Personal Identification
+Relieving letter
+Replace
+Required documents
+Status
+Upload
+Uploaded

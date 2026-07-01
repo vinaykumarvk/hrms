@@ -66,6 +66,27 @@
 --   All four exports are CONFIG (tenant/company setup), not transactional DATA. The vault
 --   tables (documents/document_versions/document_types/...) above are UNCHANGED.
 -- =====================================================================================
+-- RECON (prototype) (2026-07 PrimeSoft prototype document-management screen reconciliation)
+--   Prototype field extracts reconciled into this schema (see
+--   docs/data-model/reconciliation/prototype-g13-documents.md). The vault, retention,
+--   sign-off (signature_requests/signatures) and CSV-config masters above already cover
+--   document master / vault / versioning / templates-by-ref / storage. SECTION G (added,
+--   self-contained) introduces the genuinely-MISSING transactional DATA the prototype's
+--   letter-generation and policy-acknowledgement screens surface:
+--     merge_field_catalog          (da-merge-fields — merge-field catalogue {{token}}->source)
+--     letter_generation_requests   (da-letter-queue — per-letter gen queue: merge-field
+--                                    resolution, requested-by, signer state, validation error)
+--     bulk_letter_jobs             (da-bulk-letters — batch letter/sign-off job progress)
+--     acknowledgement_campaigns    (da-ack-campaign / da-signoff-tracker — sign-off & policy
+--                                    ack campaigns: audience, cadence, SLA, deadline, counts)
+--     document_acknowledgements    (policy-ack / documents-oversight / da-signoff-tracker
+--                                    DM25 — per-employee non-repudiation ack record: version
+--                                    active, consent-text snapshot, app version)
+--   NOT added (reported PARTIAL/config in the gap report, not DATA): the letter-template
+--   register (da-templates/letters) stays an M11-owned config master referenced by
+--   document_types.letter_template_ref (logical ref); the policy library / policy categories
+--   (da-policies/da-categories) are documents + derived counts, not a new entity.
+-- =====================================================================================
 
 
 -- =====================================================================================
@@ -1033,6 +1054,234 @@ RESET app.current_tenant_id;
 
 
 -- =====================================================================================
+-- SECTION G — RECON-ADDED LETTER-GEN & ACKNOWLEDGEMENT DATA (PrimeSoft prototype recon)
+-- =====================================================================================
+-- Transactional DATA the prototype letter-generation & policy-acknowledgement screens
+-- surface and that the vault/sign-off tables above do NOT cover. Self-contained: own
+-- enums, tables, RLS DO-block and seeds. Follows CONVENTIONS (uuid PK, tenant_id/entity_id,
+-- standard audit set, tenant-scoped RLS, FK + query indexes, tenant-scoped business keys).
+-- Letter-template / letter-head / signing-authority / UAG-population references are stored
+-- as LOGICAL refs (masters owned outside G13 DATA scope) — no cross-module FK.
+-- =====================================================================================
+
+-- G-enums (g13_-prefixed; UPPER_SNAKE_CASE) ---------------------------------------------
+CREATE TYPE g13_letter_request_status AS ENUM ('DRAFT','PENDING_RESOLUTION','VALIDATION_ERROR','AWAITING_SIGNATURE','SCHEDULED','GENERATED','ISSUED','FAILED','CANCELLED');
+CREATE TYPE g13_bulk_job_status       AS ENUM ('QUEUED','IN_PROGRESS','HELD','AWAITING_EMPLOYEE_ACTION','AWAITING_ACK','COMPLETE','FAILED');
+CREATE TYPE g13_ack_campaign_status   AS ENUM ('DRAFT','ACTIVE','CLOSING','COMPLETE');
+CREATE TYPE g13_ack_status            AS ENUM ('PENDING','ACKNOWLEDGED','OVERDUE');
+
+-- G1 merge_field_catalog (da-merge-fields — {{token}} -> source catalogue) --------------
+-- Reference catalogue of merge fields available to letter templates. Source is the
+-- originating module/system (open set -> varchar, not enum).
+CREATE TABLE merge_field_catalog (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    field_key       varchar(80) NOT NULL,                    -- token inside {{ }} e.g. LETTER_SERIAL_NO
+    label           varchar(200) NOT NULL,                   -- "Auto-generated letter serial number"
+    source          varchar(60) NOT NULL,                    -- M01_EMPLOYEE_MASTER / M03_SEPARATION / M06_PAYROLL / P04_TENANT / SYSTEM
+    resolution_note varchar(255),                            -- "Resolved at sign time" / "Populated only for confirmed employees"
+    status          g13_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    created_by      uuid,
+    updated_by      uuid,
+    is_deleted      boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_merge_field_catalog_key UNIQUE (tenant_id, field_key)
+);
+CREATE INDEX ix_merge_field_catalog_tenant ON merge_field_catalog(tenant_id);
+CREATE INDEX ix_merge_field_catalog_source ON merge_field_catalog(source);
+
+-- G2 letter_generation_requests (da-letter-queue — per-letter generation queue) ---------
+-- One row per requested letter. template_ref is a logical ref to the M11 letter-template
+-- register (document_types.letter_template_ref); the produced file lands as a documents row.
+CREATE TABLE letter_generation_requests (
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id             uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id             uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    request_no            varchar(40) NOT NULL,
+    letter_type           varchar(120) NOT NULL,             -- "Appointment Letter" / "Relieving Letter"
+    template_ref          uuid,                              -- logical ref to M11 letter template
+    document_type_id      uuid REFERENCES document_types(id) ON DELETE SET NULL,
+    employee_id           uuid REFERENCES employees(id) ON DELETE RESTRICT,   -- null for candidate letters
+    subject_name          varchar(200),                      -- "Candidate One" when no employee_id yet
+    requested_by          uuid,                              -- logical user ref
+    request_context       varchar(120),                      -- "HR Admin (M09 cycle)" / "M03 Separation flow" / "Employee self-service"
+    merge_fields_total    integer NOT NULL DEFAULT 0,        -- "All 10 resolved" -> 10
+    merge_fields_resolved integer NOT NULL DEFAULT 0,
+    signer_summary        varchar(160),                      -- "Awaiting HR sig" / "Awaiting CEO sig"
+    signature_request_id  uuid REFERENCES signature_requests(id) ON DELETE SET NULL,
+    generated_document_id uuid REFERENCES documents(id) ON DELETE SET NULL,   -- produced letter
+    scheduled_at          timestamptz,                       -- "Scheduled"
+    validation_error      text,                              -- populated when status = VALIDATION_ERROR
+    status                g13_letter_request_status NOT NULL DEFAULT 'DRAFT',
+    created_at            timestamptz NOT NULL DEFAULT now(),
+    updated_at            timestamptz NOT NULL DEFAULT now(),
+    created_by            uuid,
+    updated_by            uuid,
+    is_deleted            boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_letter_generation_requests_no UNIQUE (tenant_id, request_no)
+);
+CREATE INDEX ix_letter_gen_requests_tenant   ON letter_generation_requests(tenant_id);
+CREATE INDEX ix_letter_gen_requests_employee ON letter_generation_requests(employee_id);
+CREATE INDEX ix_letter_gen_requests_status   ON letter_generation_requests(status);
+CREATE INDEX ix_letter_gen_requests_signreq  ON letter_generation_requests(signature_request_id);
+CREATE INDEX ix_letter_gen_requests_doc      ON letter_generation_requests(generated_document_id);
+
+-- G3 bulk_letter_jobs (da-bulk-letters — batch letter/sign-off job progress) ------------
+-- job_ref is a logical ref to the core jobs row driving the batch (no FK).
+CREATE TABLE bulk_letter_jobs (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    job_no          varchar(40) NOT NULL,
+    job_name        varchar(200) NOT NULL,                   -- "Q1 Confirmation batch"
+    template_ref    uuid,                                    -- logical ref to M11 letter template
+    job_ref         uuid,                                    -- logical ref to core jobs(id)
+    record_count    integer NOT NULL DEFAULT 0,
+    processed_count integer NOT NULL DEFAULT 0,
+    failed_count    integer NOT NULL DEFAULT 0,
+    progress_pct    numeric(5,2) NOT NULL DEFAULT 0,
+    eta             timestamptz,
+    status          g13_bulk_job_status NOT NULL DEFAULT 'QUEUED',
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    created_by      uuid,
+    updated_by      uuid,
+    is_deleted      boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_bulk_letter_jobs_no UNIQUE (tenant_id, job_no)
+);
+CREATE INDEX ix_bulk_letter_jobs_tenant ON bulk_letter_jobs(tenant_id);
+CREATE INDEX ix_bulk_letter_jobs_status ON bulk_letter_jobs(status);
+
+-- G4 acknowledgement_campaigns (da-ack-campaign / da-signoff-tracker campaign level) -----
+-- A sign-off / policy-acknowledgement drive over an audience. document_id is nullable
+-- (the policy/letter is a documents row when vaulted; document_title carries the display
+-- name when it is not). audience_uag_ref / escalate_after_sla_to are logical refs.
+CREATE TABLE acknowledgement_campaigns (
+    id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id            uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id            uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    campaign_no          varchar(40) NOT NULL,
+    name                 varchar(200) NOT NULL,              -- "Code of Conduct 2026" / "Q1 POSH refresh acknowledgement"
+    document_id          uuid REFERENCES documents(id) ON DELETE SET NULL,   -- the acknowledged policy/letter
+    document_title       varchar(255),                       -- display name when not (yet) a documents row
+    document_version_no  integer,                            -- which version is active for the drive (DM25)
+    purpose              varchar(160),                       -- "annual refresh" / "Non-repudiation"
+    audience_description varchar(200),                       -- "All employees" / "Engineering UAG" / "India entity"
+    audience_uag_ref     varchar(80),                        -- logical ref to UAG/population
+    reminder_cadence     varchar(80),                        -- "Weekly" / "Every 3 days" / "Daily (final week)"
+    escalate_after_sla_to varchar(80),                       -- logical role ref
+    started_at           timestamptz,
+    deadline             date,
+    assigned_count       integer NOT NULL DEFAULT 0,
+    acknowledged_count   integer NOT NULL DEFAULT 0,
+    pending_count        integer NOT NULL DEFAULT 0,
+    overdue_count        integer NOT NULL DEFAULT 0,
+    status               g13_ack_campaign_status NOT NULL DEFAULT 'DRAFT',
+    created_at           timestamptz NOT NULL DEFAULT now(),
+    updated_at           timestamptz NOT NULL DEFAULT now(),
+    created_by           uuid,
+    updated_by           uuid,
+    is_deleted           boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_acknowledgement_campaigns_no UNIQUE (tenant_id, campaign_no)
+);
+CREATE INDEX ix_ack_campaigns_tenant   ON acknowledgement_campaigns(tenant_id);
+CREATE INDEX ix_ack_campaigns_document ON acknowledgement_campaigns(document_id);
+CREATE INDEX ix_ack_campaigns_status   ON acknowledgement_campaigns(status);
+
+-- G5 document_acknowledgements (policy-ack / documents-oversight / DM25 record) ----------
+-- Per-employee non-repudiation acknowledgement record. Captures which version was active,
+-- the consent-text snapshot shown, and the app/browser version (DM25). May link to the
+-- platform consent_records row. Row transitions PENDING -> ACKNOWLEDGED/OVERDUE (standard
+-- audit set); the acknowledged snapshot fields are write-once by application contract.
+CREATE TABLE document_acknowledgements (
+    id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id            uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id            uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    campaign_id          uuid REFERENCES acknowledgement_campaigns(id) ON DELETE SET NULL,
+    document_id          uuid REFERENCES documents(id) ON DELETE SET NULL,   -- what was acknowledged
+    document_title       varchar(255),                       -- display name when not a documents row
+    document_version_no  integer,                            -- which version was active at the time (DM25)
+    employee_id          uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,  -- who acknowledged
+    consent_text_snapshot text,                              -- snapshot of the consent text shown (DM25)
+    app_version          varchar(120),                       -- browser / app version (DM25)
+    ip_address           inet,
+    assigned_at          timestamptz NOT NULL DEFAULT now(),
+    due_date             date,
+    acknowledged_at      timestamptz,
+    consent_record_id    uuid REFERENCES consent_records(id) ON DELETE SET NULL,  -- platform consent linkage
+    status               g13_ack_status NOT NULL DEFAULT 'PENDING',
+    created_at           timestamptz NOT NULL DEFAULT now(),
+    updated_at           timestamptz NOT NULL DEFAULT now(),
+    created_by           uuid,
+    updated_by           uuid,
+    is_deleted           boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_document_acknowledgements UNIQUE (campaign_id, employee_id)
+);
+CREATE INDEX ix_document_acks_tenant   ON document_acknowledgements(tenant_id);
+CREATE INDEX ix_document_acks_campaign ON document_acknowledgements(campaign_id);
+CREATE INDEX ix_document_acks_document ON document_acknowledgements(document_id);
+CREATE INDEX ix_document_acks_employee ON document_acknowledgements(employee_id);
+CREATE INDEX ix_document_acks_status   ON document_acknowledgements(status);
+
+-- G-RLS: tenant-isolation for the RECON-added letter-gen & ack DATA (CONVENTIONS §6) -----
+DO $rlsg$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'merge_field_catalog','letter_generation_requests','bulk_letter_jobs',
+    'acknowledgement_campaigns','document_acknowledgements'
+  ] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY;', t);
+    EXECUTE format($p$
+      CREATE POLICY tenant_isolation ON %I
+        USING (
+          tenant_id = current_setting('app.current_tenant_id', true)::uuid
+          OR current_setting('app.is_platform_admin', true) = 'true'
+        )
+        WITH CHECK (
+          tenant_id = current_setting('app.current_tenant_id', true)::uuid
+          OR current_setting('app.is_platform_admin', true) = 'true'
+        );$p$, t);
+  END LOOP;
+END
+$rlsg$;
+
+-- G-seeds (illustrative; tenant GOV-STATE, entity/employees from Sections 12 / E) --------
+SET app.current_tenant_id = '11111111-1111-1111-1111-111111111111';
+SET app.is_platform_admin = 'true';
+
+INSERT INTO merge_field_catalog (id, tenant_id, entity_id, field_key, label, source, resolution_note, status) VALUES
+ ('a5f10000-0000-0000-0000-0000000000a1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','LETTER_SERIAL_NO','Auto-generated letter serial number','SYSTEM','Resolved at sign time','ACTIVE'),
+ ('a5f10000-0000-0000-0000-0000000000a2','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','CURRENT_ANNUAL_CTC','Current annual CTC','M06_PAYROLL','Populated only for confirmed employees','ACTIVE'),
+ ('a5f10000-0000-0000-0000-0000000000a3','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','L1_MANAGER_NAME','L1 manager full name','M01_EMPLOYEE_MASTER','Resolved at render time','ACTIVE');
+
+INSERT INTO letter_generation_requests (id, tenant_id, entity_id, request_no, letter_type, employee_id, subject_name, request_context, merge_fields_total, merge_fields_resolved, signer_summary, signature_request_id, status) VALUES
+ ('1e770000-0000-0000-0000-0000000000a1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','LTR/2026/0001','Relieving Letter','99999999-9999-9999-9999-999999999901',NULL,'M03 Separation flow',12,12,'Awaiting HR sig','51610000-0000-0000-0000-000000000901','AWAITING_SIGNATURE'),
+ ('1e770000-0000-0000-0000-0000000000a2','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','LTR/2026/0002','Appointment Letter',NULL,'Candidate One','HR Admin (M08 recruitment)',10,8,NULL,NULL,'VALIDATION_ERROR'),
+ ('1e770000-0000-0000-0000-0000000000a3','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','LTR/2026/0003','Increment / Salary Revision Letter','99999999-9999-9999-9999-999999999902',NULL,'HR Admin (M09 cycle)',14,14,'Awaiting CEO sig',NULL,'SCHEDULED');
+UPDATE letter_generation_requests SET validation_error='Merge field CURRENT_ANNUAL_CTC unresolved (candidate has no payroll record)' WHERE id='1e770000-0000-0000-0000-0000000000a2';
+
+INSERT INTO bulk_letter_jobs (id, tenant_id, entity_id, job_no, job_name, record_count, processed_count, failed_count, progress_pct, status) VALUES
+ ('b41c0000-0000-0000-0000-0000000000a1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','BLK/2026/001','Q1 Confirmation batch',120,120,0,100.00,'COMPLETE'),
+ ('b41c0000-0000-0000-0000-0000000000a2','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','BLK/2026/002','Q1 POSH refresh acknowledgement',450,300,2,66.67,'IN_PROGRESS');
+
+INSERT INTO acknowledgement_campaigns (id, tenant_id, entity_id, campaign_no, name, document_title, document_version_no, purpose, audience_description, audience_uag_ref, reminder_cadence, escalate_after_sla_to, started_at, deadline, assigned_count, acknowledged_count, pending_count, overdue_count, status) VALUES
+ ('ac9c0000-0000-0000-0000-0000000000a1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','ACK/2026/001','Code of Conduct v4.2 (annual refresh)','Code of Conduct 2026',42,'annual refresh','All employees',NULL,'Weekly','hr_admin',now(),'2026-08-31',450,300,140,10,'ACTIVE'),
+ ('ac9c0000-0000-0000-0000-0000000000a2','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','ACK/2026/002','POSH Policy v3.1 (annual refresh)','POSH Policy',31,'annual refresh','India entity','ENGINEERING_UAG','Every 3 days','hrbp',now(),'2026-07-31',120,118,0,2,'CLOSING');
+
+INSERT INTO document_acknowledgements (id, tenant_id, entity_id, campaign_id, document_title, document_version_no, employee_id, consent_text_snapshot, app_version, status, due_date, acknowledged_at) VALUES
+ ('d0ac0000-0000-0000-0000-0000000000a1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','ac9c0000-0000-0000-0000-0000000000a1','Code of Conduct 2026',42,'99999999-9999-9999-9999-999999999901','I confirm that I have read and understood this document completely and would like to sign off on the document','Chrome/126.0 (macOS)','ACKNOWLEDGED','2026-08-31',now()),
+ ('d0ac0000-0000-0000-0000-0000000000a2','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','ac9c0000-0000-0000-0000-0000000000a1','Code of Conduct 2026',42,'99999999-9999-9999-9999-999999999902',NULL,NULL,'PENDING','2026-08-31',NULL);
+
+RESET app.is_platform_admin;
+RESET app.current_tenant_id;
+
+
+-- =====================================================================================
 -- END 13-G13-document-management.sql — 24 vault module tables (E3–E26) + 5 RECON config
--- masters (SECTION F); documents/document_versions are core (00-platform-core.sql).
+-- masters (SECTION F) + 5 RECON letter-gen/ack DATA tables (SECTION G);
+-- documents/document_versions are core (00-platform-core.sql).
 -- =====================================================================================

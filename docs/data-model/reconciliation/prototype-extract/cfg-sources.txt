@@ -1,0 +1,30 @@
+SCREEN: cfg-sources
+
+TABLE COLUMNS (<th>):
+Action
+Source name
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit custom candidate sources
+Add description
+Campus Drive
+Custom candidate sources
+Custom source name
+Custom source type
+Employee Referral
+Event
+Inactive
+Internal
+Job portal
+LinkedIn
+Org Admin
+Source name
+Status
+Type

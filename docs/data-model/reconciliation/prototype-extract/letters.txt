@@ -1,0 +1,34 @@
+SCREEN: letters
+
+TABLE COLUMNS (<th>):
+Last updated
+Status
+Template
+Type
+Variables
+Version
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Bond Agreement
+Confirmation Letter
+Experience Letter
+FR-M11-003
+HR Lifecycle
+HR Ops
+Last updated
+Letter templates
+Letters
+Promotion Letter
+Recruitment
+Relieving Letter
+Separation
+Status
+Template
+Templates
+Type
+Variables
+Version

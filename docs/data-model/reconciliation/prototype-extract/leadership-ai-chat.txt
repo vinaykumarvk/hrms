@@ -1,0 +1,31 @@
+SCREEN: leadership-ai-chat
+
+TABLE COLUMNS (<th>):
+Engineer
+LWD
+Project · Client
+Risk
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Anjali R.
+Conversation
+Dashboard
+Draft note to Delivery Head
+Engineer
+FR-P03-005
+HIGH
+LWD
+Leadership AI
+Leadership use cases
+MED
+Manish Surname13
+Open replacement plan
+Ranjit M.
+Reviewer Three S.
+Risk
+Sneha K.
+Text-to-query over M16 aggregates
+Weekly/monthly prose summary

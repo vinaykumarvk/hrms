@@ -1,0 +1,35 @@
+SCREEN: it-cmdb
+
+TABLE COLUMNS (<th>):
+Action
+CI
+Key relationships
+Status
+Type
+
+INPUT PLACEHOLDERS:
+CI / AST reference
+
+LABELS/FIELD TEXT:
+AST-PSI-000123
+Action
+Active
+Add / edit CI
+Asset
+Business Service
+CI name
+CI type
+CI-00004821
+CI-00004822
+CMDB
+Configuration Items
+Key relationships
+Location
+Related CI
+Relationship type
+Retired
+SaaS
+Software
+Status
+Type
+Vendor

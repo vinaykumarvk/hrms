@@ -1,0 +1,55 @@
+SCREEN: cfg-rbac-role
+
+TABLE COLUMNS (<th>):
+Access
+Action
+Scope
+
+INPUT PLACEHOLDERS:
+What this role is for and who holds it
+
+LABELS/FIELD TEXT:
+Access
+Action
+Active
+Add record
+All tenants
+Approve
+Assignee context / scope
+Complete onboarding
+Custom role
+Delete record
+Department
+Description
+Direct reportees
+Disabled
+Edit core record
+Edit form
+Edit role
+Enable all
+Entity
+Export
+Initiate
+Initiate separation
+Org Admin
+Permissions by module
+RBAC
+Role definition
+Role name
+Save role
+Scope
+Scoped population
+Self
+Service desk
+Single entity
+Standard permission type
+Standard role
+StandardPermissionsExport.csv
+Status
+Team
+View BGV reports
+View audit log
+View compensation
+View onboarding
+View profile
+View separation

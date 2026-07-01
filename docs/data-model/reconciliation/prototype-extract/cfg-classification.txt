@@ -1,0 +1,64 @@
+SCREEN: cfg-classification
+
+TABLE COLUMNS (<th>):
+Action
+Applies to
+Appraisal period
+Code
+Cycle
+Days
+Employee group
+Level
+Notice period
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+AP-ANN
+AP-HY
+AP-Q
+Action
+Active
+Annual
+Applies to
+Appraisal period
+Appraisal periods
+CL-MGR
+CL-OPS
+CL-PRO
+CL-STR
+Code
+Confirmed
+Consultant
+Contract
+Contract staff
+Contribution levels (Neev)
+Cycle
+Days
+Deactivate
+EG-CONS
+EG-CONT
+EG-INT
+EG-PERM
+Employee group
+Employee groups
+H1/H2
+Half-yearly
+Intern
+Level
+Managerial
+Masters used as UAG / policy dimensions
+Notice period
+Notice periods
+On probation
+Operational
+Org Admin
+Permanent
+Post-confirmation
+Probation
+Professional
+Quarterly
+Status
+Strategic

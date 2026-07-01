@@ -1,0 +1,55 @@
+SCREEN: onboarding-workflow-forms
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Access card
+Access to customer tools provided
+Admin Form
+Allocated
+Any comments
+Appendix J
+Bank account opened
+Client laptop
+Coding / QA guidelines shared
+Comments
+Completed
+Cubicle assigned
+Department
+Designation
+Email ID
+Employee ID
+First name
+HR Induction Form
+HR induction completed
+ID card
+ID card given
+IT Assets Form
+IT Form
+IT asset allocation (M17-integrated).
+IT induction status
+In progress
+Issued
+Last name
+Manager Induction Checklist
+Manager Induction Form
+Mobile
+Office tour done
+Onboarding form
+Other assets
+POSH policy explained
+Parking sticker & allocation done
+Pending
+PrimeSoft laptop
+Project document & study material shared
+Software repository access provided
+Stakeholder workflow forms
+Stand-up & team meetings schedule shared
+Training plan shared & explained
+Welcome kit given
+Workflow form
+Workflow forms

@@ -1,0 +1,27 @@
+SCREEN: cfg-weeklyoff
+
+TABLE COLUMNS (<th>):
+Action
+Non-working days
+Pattern
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit weekly off patterns
+Alternate Sat
+Description
+Inactive
+Non-working days
+Org Admin
+Pattern
+Sat-Sun Off
+Status
+Sun Off
+Sunday
+Weekly off name
+Weekly off patterns

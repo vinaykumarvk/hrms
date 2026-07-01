@@ -1,0 +1,59 @@
+SCREEN: ra-req-detail
+
+TABLE COLUMNS (<th>):
+Candidate
+Last action
+Source
+Stage
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active candidates
+Approved on
+Awaiting acceptance
+Bangalore HQ
+Bar raiser
+Bar raiser scheduled 28 May
+Candidate
+Candidate pipeline
+Career site
+Clone
+Coding
+Coding round passed
+Comp band
+Days open
+Employment type
+Expected joining
+FR-M08-001
+Grade
+Healthy
+Hiring lead
+In progress
+JR ID
+Last action
+LinkedIn
+Location
+Naukri
+Offer extended
+Offer released 14 min ago
+Openings
+Person E M.
+Pipeline health
+Position
+Profile screened
+Quick actions
+Raised on
+Recruiter
+Recruiter screen
+Recruiter screen passed
+Recruitment Admin
+Requisition details
+Requisitions
+Scheduled tomorrow
+Source
+Stage
+Status
+System design

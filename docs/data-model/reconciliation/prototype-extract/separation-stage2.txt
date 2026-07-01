@@ -1,0 +1,38 @@
+SCREEN: separation-stage2
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+Finance clearance
+IT clearance
+LWD
+Manager sign-off
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Done
+Employee
+Employee Two (PSI00198)
+Finalise
+Finance clearance
+HR Ops
+IT clearance
+LWD
+Manager sign-off
+Manish Surname13 (PSI00321)
+Open
+Pending
+Pending Finance
+Pending IT
+Person C Roy (PSI00256)
+Ready for HR final
+Separation Stage-2
+Status
+Termination (cause)
+Type
+Voluntary

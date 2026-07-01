@@ -1,0 +1,58 @@
+SCREEN: my-leave
+
+TABLE COLUMNS (<th>):
+Applied
+Approver
+Balance
+Cancelled by
+Component
+Contribution to pool
+Days
+From – To
+From–To
+Reason
+Sandwich
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Applied
+Approved
+Approver
+Awaiting L1
+Balance
+Cancelled
+Cancelled by
+Cap per cycle
+Casual Leave
+Combined balance
+Comp-off
+Component
+Component breakdown
+Contribution to pool
+Dashboard
+Days
+FR-M04-013
+History
+Holiday calendar
+Lapses 30 Jun
+Leave
+Manager One
+My leave
+Pending
+Plan changed
+Pooled balance
+Privilege Leave
+Reason
+Replaced with comp-off
+Resets 1 Jan
+Revoke
+Sandwich
+Self
+Sick Leave
+Status
+Type
+Usable now

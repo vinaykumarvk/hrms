@@ -1,0 +1,27 @@
+SCREEN: psa-releases
+
+TABLE COLUMNS (<th>):
+Highlights
+Released
+Status
+Target date
+Tenants on this version
+Version
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Deprecated
+FR-P04
+Highlights
+Platform Admin
+Q4 2026
+Release history
+Release management
+Released
+Status
+Target date
+Tenants on this version
+Upcoming releases
+Version

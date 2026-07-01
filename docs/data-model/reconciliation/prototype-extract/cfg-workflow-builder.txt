@@ -1,0 +1,116 @@
+SCREEN: cfg-workflow-builder
+
+TABLE COLUMNS (<th>):
+Action type
+Assignee
+Form
+SLA
+Skip
+Stage
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Action type
+Active
+After
+Approval
+Asset request form
+Assignee
+Assignee context
+Assignment basis
+Attach form
+Attendance update
+Before
+Before / after
+Both
+Calendar invite
+Category
+Code of conduct
+Collect joining details
+Conditional
+Confidential
+Confirmation
+Cost-centre head
+Custom HR flow
+Data collection
+Department
+Disabled
+Document sign-off
+Draft
+Dynamic (per instance)
+Edit workflow
+Engagement survey
+Entity
+Execution type
+Exit interview form
+Extra payment / deduction
+Form
+Form visibility
+HOD
+HRBP
+Help desk
+IT Admin
+IT asset allocation
+Initiator
+L1 Manager
+M01 Employee Master
+M02 Onboarding
+M03 Exits & Offboarding
+M04 Leave
+M05 Attendance
+M08 Recruitment
+M09 Performance
+M11 Documents
+M17 Assets & IT
+Manager approval
+Module transaction
+Named individual
+New joiner
+None
+Notification
+Number of days
+On condition
+On date field
+On flow start
+On previous stage complete
+Onboarding
+Onboarding details form
+Org Admin
+Parallel
+Policy sign-off
+Reporting-chain position
+Review
+Reviewers
+Role
+SLA
+SLA for evaluation task
+SLA for reviewer task
+Save workflow
+Schedule assessment
+Send recognition
+Separation
+Series
+Skip
+Skip if no approver
+Skip if uploaded
+Stage
+Stage category
+Stage name
+Stages
+Static
+Status
+Subject employee
+Task
+Trigger condition
+Trigger point
+Trigger verification
+Verification
+Workflow builder
+Workflow code
+Workflow definition
+Workflow name
+Workflows
+Workflows.csv

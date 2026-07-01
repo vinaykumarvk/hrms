@@ -1,0 +1,62 @@
+SCREEN: cfg-rbac
+
+TABLE COLUMNS (<th>):
+Action
+Emp
+Fn Admin
+HOD
+HR Admin
+HRBP
+L1 Mgr
+Org Admin
+Permission
+Permissions
+Plat Super
+Role
+Scope
+Users assigned
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+All tenants
+Attendance Admin
+Department
+Direct reportees
+Document Admin
+Edit permissions
+Emp
+FR-P02-001
+Finance Admin
+Fn Admin
+HOD
+HR Admin
+HR Administrator
+HRBP
+IT Admin
+L1 Manager
+L1 Mgr
+Leave Admin
+Office Admin
+Onboarding Admin
+Org Admin
+Performance Admin
+Permission
+Permissions
+Plat Super
+Platform Super Admin
+Recruitment Admin
+Role
+Scope
+Scoped population
+Separation Admin
+Service Desk Admin
+Service Desk Agent
+Service desk
+Single entity
+Standard roles
+StandardPermissionsExport.csv
+Users assigned
+View profile

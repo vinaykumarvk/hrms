@@ -1,0 +1,27 @@
+SCREEN: refer
+
+TABLE COLUMNS (<th>):
+Action
+Company name
+Department & business unit
+Employee type
+Job title & job code
+Location
+Remote job
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Company name
+Design
+Employee type
+FR-M08-016
+Full Stack
+Full Time
+Location
+PrimeSoft IP Solutions
+Refer
+Refer a candidate
+Remote job

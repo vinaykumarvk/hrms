@@ -23,7 +23,7 @@ Holistic, normalized PostgreSQL schema generated from the platform-grounded **v3
 | 13 | `13-G13-document-management.sql` | Vault: types/folders/ACLs/retention/legal-hold/signatures/clearance/DLP (documents core) | 24 | ✅ PG14 (full-load) |
 | 14 | `14-G14-dashboard-analytics.sql` | Dashboards/KPIs/reports/marts/scope-policy/prediction/embed (RLS = P02) | 26 (24 owned) | ✅ PG14 (full-load) |
 
-**Total: 431 tables · 1,836 FK constraints · 427 RLS-enabled tables.** (403→431 after CSV field reconciliation — see `reconciliation/`.)
+**Total: 447 tables · 1,907 FK constraints · 443 RLS-enabled tables · 700 enum types.** (403→431 CSV recon →447 prototype recon — see `reconciliation/`.)
 ✅ **All 15 files load clean end-to-end** (validated by loading 00→14 in order into a throwaway
 PostgreSQL 14 cluster with `ON_ERROR_STOP=1`, all seed data inserting). Conventions in `CONVENTIONS.md`.
 

@@ -1,0 +1,32 @@
+SCREEN: dept-view
+
+TABLE COLUMNS (<th>):
+Avg rating
+Headcount
+Manager
+Open
+Team
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Attrition (LTM)
+Avg rating
+Department overview
+Engineering function
+FR-M01-005
+HOD
+Headcount
+Identity
+Manager
+Manager One
+On notice
+Open
+Open positions
+Payments
+Person B Surname9
+Platform
+Sneha Surname6
+Team
+Teams in this function

@@ -74,6 +74,20 @@
 --   (metric_id, metric_criteria, target_prefix, timeline_start/end_date, scorecard_pillar_id,
 --   aligned_to_goal_id/ref, achievement_mapping, block_edit_achievement, assigned_to_roles,
 --   goal_plan_master_id) and the g08_config_status enum. Existing E1..E23 content is unchanged.
+--
+-- -- RECON (prototype) (2026-07-01): Section 4 (below) is a further ADD-only amendment
+--   reconciling the PrimeSoft *prototype* performance screens (my-goals, add-goal[-for-reportee],
+--   admin-add-goal, self-review, start-review, calibration, pa-pip / pip-cases, pa-exclusions,
+--   probation-confirmation/-decision/-approval/-management) against G08. Adds only the genuinely
+--   MISSING *DATA* fields the CSV pass did not cover: goals authorship/category/set_reason/visibility;
+--   self_appraisals overall_comments + development_areas; calibration_recommendations potential +
+--   employee acknowledgement; PIP case fields (pip_type, trigger_reason, checkin_cadence,
+--   support_plan, hrbp_id, next_review_date); and two new DATA tables — appraisal_cycle_exclusions
+--   (cycle-scoped, reason+reversibility, vs the review-scoped review_excluded_employees) and
+--   probation_confirmations (the probation decision lifecycle the form's terminal probation_outcome
+--   could not hold). Gap report: docs/data-model/reconciliation/prototype-g08-performance.md.
+--   Screen review/appraisal fields were already PRESENT/PARTIAL (jsonb-covered). Existing
+--   E1..E23 + Section 3 content is unchanged.
 -- =====================================================================================
 
 
@@ -1093,6 +1107,136 @@ CREATE INDEX ix_goals_plan_master     ON goals(goal_plan_master_id);
 
 
 -- =====================================================================================
+-- SECTION 4 — RECON (prototype): additional DATA fields & entities (ADD-only)
+-- =====================================================================================
+-- Only the genuinely-MISSING *DATA* fields from the PrimeSoft prototype screens the CSV
+-- pass (Section 3) did not add. Config/masters were handled in Section 3; review/appraisal
+-- screen fields are already PRESENT/PARTIAL (jsonb-covered). Follows CONVENTIONS (uuid PK,
+-- tenant_id + RLS, standard audit cols, indexed FKs).
+
+-- 4.1 new enums -----------------------------------------------------------------------
+CREATE TYPE g08_goal_source              AS ENUM ('SELF','MANAGER','ADMIN','CASCADED');
+CREATE TYPE g08_calib_ack_status         AS ENUM ('AWAITING','ACKNOWLEDGED','ACKNOWLEDGED_WITH_COMMENTS','DISAGREED');
+CREATE TYPE g08_exclusion_source         AS ENUM ('AUTO','MANUAL');
+CREATE TYPE g08_exclusion_reversibility  AS ENUM ('REVERSIBLE','PERMANENT');
+CREATE TYPE g08_exclusion_status         AS ENUM ('EXCLUDED','RE_INCLUDED');
+CREATE TYPE g08_probation_recommendation AS ENUM ('RECOMMEND_CONFIRMATION','RECOMMEND_EXTENSION','RECOMMEND_TERMINATION');
+CREATE TYPE g08_probation_conf_status    AS ENUM ('IN_PROBATION','PENDING_MANAGER','PENDING_HR_APPROVAL','CONFIRMED','EXTENDED','TERMINATED');
+
+-- 4.2 goals — prototype authorship / classification fields ----------------------------
+--   review-goal-plan "Source" (Self-set/Manager-set) + FR-M09-015 authorship;
+--   my-goals/add-goal "Category" (distinct axis from Scorecard pillar);
+--   admin-add-goal "Reason for admin-set goal" + add-goal-for-reportee "Edit reason";
+--   admin-add-goal "Visibility".
+ALTER TABLE goals
+    ADD COLUMN goal_source     g08_goal_source,          -- Source / authorship (FR-M09-015)
+    ADD COLUMN category        varchar(60),              -- Category (Behavioural/Customer/Stretch/...)
+    ADD COLUMN set_reason      text,                     -- Reason for admin-set / manager edit
+    ADD COLUMN goal_visibility varchar(40);              -- Visibility (admin-set scope)
+CREATE INDEX ix_goals_source ON goals(goal_source);
+
+-- 4.3 self_appraisals — prototype self-review free-text fields -------------------------
+--   self-review "Overall comments" + "Development areas" (distinct from achievements text).
+ALTER TABLE self_appraisals
+    ADD COLUMN overall_comments  text,                   -- Overall comments
+    ADD COLUMN development_areas text;                   -- Development areas
+
+-- 4.4 calibration_recommendations — potential + employee acknowledgement ---------------
+--   calibration screen: High/Medium/Low potential (9-box); employee acknowledgement + notes.
+ALTER TABLE calibration_recommendations
+    ADD COLUMN potential_rating      varchar(20),        -- High/Medium/Low potential
+    ADD COLUMN employee_ack_status   g08_calib_ack_status NOT NULL DEFAULT 'AWAITING',
+    ADD COLUMN employee_ack_comments text,               -- Notes / employee comments
+    ADD COLUMN employee_ack_at       timestamptz;
+
+-- 4.5 performance_improvement_plans — prototype PIP case fields ------------------------
+--   pa-pip: PIP type, Trigger reason, Check-in cadence, Support plan, HRBP, next review.
+ALTER TABLE performance_improvement_plans
+    ADD COLUMN pip_type         varchar(40),             -- Standard 90-day/Accelerated 60-day/Extended 120-day/...
+    ADD COLUMN trigger_reason   varchar(60),             -- categorised trigger (Below-expectations rating/...)
+    ADD COLUMN checkin_cadence  varchar(30),             -- Weekly/Bi-weekly/Daily/Monthly
+    ADD COLUMN support_plan     text,                    -- Support plan (employer commitment)
+    ADD COLUMN hrbp_id          uuid REFERENCES employees(id) ON DELETE SET NULL,  -- HRBP assigned
+    ADD COLUMN next_review_date date;                    -- pip-cases "Review date"
+CREATE INDEX ix_pip_hrbp ON performance_improvement_plans(hrbp_id);
+
+-- 4.6 appraisal_cycle_exclusions [NEW DATA] — pa-exclusions ---------------------------
+--   Cycle-scoped inclusion/exclusion of an employee (auto or manual), with reason,
+--   justification, reversibility and re-inclusion. Distinct from Section 3
+--   review_excluded_employees (review-definition-scoped, snapshot-only).
+CREATE TABLE appraisal_cycle_exclusions (
+    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id        uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id        uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    cycle_id         uuid NOT NULL REFERENCES appraisal_cycles(id) ON DELETE RESTRICT,
+    appraisee_id     uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    exclusion_source g08_exclusion_source NOT NULL DEFAULT 'MANUAL',    -- Auto-exclusion vs Manual exclusion
+    exclusion_reason varchar(60) NOT NULL,                              -- On probation/On notice/New joiner/...
+    detail           text,                                             -- Detail (e.g. "Probation ends 11 Sep 2026")
+    justification    text,                                             -- Justification (manual)
+    reversibility    g08_exclusion_reversibility NOT NULL DEFAULT 'REVERSIBLE',
+    status           g08_exclusion_status NOT NULL DEFAULT 'EXCLUDED',
+    re_included_at   timestamptz,
+    re_included_by   uuid REFERENCES employees(id) ON DELETE SET NULL,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+    created_by       uuid,
+    updated_by       uuid,
+    is_deleted       boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_cycle_exclusions UNIQUE (tenant_id, cycle_id, appraisee_id)
+);
+CREATE INDEX ix_cycle_exclusions_tenant    ON appraisal_cycle_exclusions(tenant_id);
+CREATE INDEX ix_cycle_exclusions_entity    ON appraisal_cycle_exclusions(entity_id);
+CREATE INDEX ix_cycle_exclusions_cycle     ON appraisal_cycle_exclusions(cycle_id);
+CREATE INDEX ix_cycle_exclusions_appraisee ON appraisal_cycle_exclusions(appraisee_id);
+CREATE INDEX ix_cycle_exclusions_status    ON appraisal_cycle_exclusions(status);
+
+-- 4.7 probation_confirmations [NEW DATA] — probation-confirmation/-decision/-approval/-management
+--   The probation confirmation *decision lifecycle*: manager recommendation + comments, HR
+--   approval, effective date, extension term, mentor, new designation, confirmation letter.
+--   The APAR form only carried a terminal probation_outcome enum; this holds the decision
+--   DATA the prototype captures (FR-M09-005 / FR-M02-008).
+CREATE TABLE probation_confirmations (
+    id                          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                   uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                   uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    confirmation_no             varchar(40) NOT NULL,
+    appraisee_id                uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    form_id                     uuid REFERENCES appraisal_forms(id) ON DELETE SET NULL,     -- originating probation APAR
+    cycle_id                    uuid REFERENCES appraisal_cycles(id) ON DELETE SET NULL,
+    date_of_joining             date,                                                       -- Joined / DOJ
+    probation_end_date          date,                                                       -- Probation ends
+    probation_period_months     integer,                                                    -- Probation period
+    mentor_id                   uuid REFERENCES employees(id) ON DELETE SET NULL,           -- Mentor
+    manager_id                  uuid REFERENCES employees(id) ON DELETE SET NULL,           -- recommending Manager L1
+    manager_recommendation      g08_probation_recommendation,                              -- Recommend confirmation/extension/termination
+    manager_comments            text,                                                      -- Comments to HRBP
+    hr_approver_id              uuid REFERENCES employees(id) ON DELETE SET NULL,          -- HR approval
+    hr_approved_at              timestamptz,
+    extension_months            integer,                                                   -- Extend (3/6 months)
+    confirmation_effective_date date,                                                      -- Confirmation effective date
+    new_designation_id          uuid REFERENCES designations(id) ON DELETE SET NULL,       -- New designation (if changing)
+    confirmation_bonus          boolean NOT NULL DEFAULT false,                            -- Confirmation bonus
+    compensation_revision       boolean NOT NULL DEFAULT false,                            -- Compensation revision
+    letter_template_ref         varchar(120),                                              -- Letter template
+    letter_doc_id               uuid REFERENCES documents(id) ON DELETE SET NULL,          -- issued confirmation letter (G13)
+    outcome                     g08_probation_outcome,                                     -- terminal outcome (reuses E-enum)
+    status                      g08_probation_conf_status NOT NULL DEFAULT 'IN_PROBATION',
+    created_at                  timestamptz NOT NULL DEFAULT now(),
+    updated_at                  timestamptz NOT NULL DEFAULT now(),
+    created_by                  uuid,
+    updated_by                  uuid,
+    is_deleted                  boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_probation_confirmations_no UNIQUE (tenant_id, confirmation_no)
+);
+CREATE INDEX ix_probation_conf_tenant    ON probation_confirmations(tenant_id);
+CREATE INDEX ix_probation_conf_entity    ON probation_confirmations(entity_id);
+CREATE INDEX ix_probation_conf_appraisee ON probation_confirmations(appraisee_id);
+CREATE INDEX ix_probation_conf_form      ON probation_confirmations(form_id);
+CREATE INDEX ix_probation_conf_status    ON probation_confirmations(status);
+
+
+-- =====================================================================================
 -- SECTION F — DEFERRED CROSS-TABLE FOREIGN KEYS (forward references)
 -- =====================================================================================
 -- Resolved here to avoid circular create-order coupling. E1/E4 reference E2/E3; many
@@ -1153,7 +1297,9 @@ DECLARE
         -- RECON Section 3 config/masters (tenant-scoped; same tenant-isolation policy):
         'scorecard_pillars','metrics','normalization_settings','custom_formula_settings',
         'goal_plans','review_definitions','review_excluded_employees','calibration_settings',
-        'performance_translations'
+        'performance_translations',
+        -- RECON Section 4 prototype DATA entities (tenant-scoped; same tenant-isolation policy):
+        'appraisal_cycle_exclusions','probation_confirmations'
     ];
 BEGIN
     FOREACH t IN ARRAY g08_tables LOOP
@@ -1339,6 +1485,18 @@ UPDATE goals SET
     scorecard_pillar_id = '08a30001-0000-0000-0000-000000000001',
     aligned_to_goal_id  = '08e50001-0000-0000-0000-000000000001'
 WHERE id = '08e50001-0000-0000-0000-000000000002';
+
+-- ==== RECON Section 4 seed rows (prototype DATA entities) =============================
+
+-- appraisal_cycle_exclusions (4.6) ----------------------------------------------------
+INSERT INTO appraisal_cycle_exclusions (id, tenant_id, entity_id, cycle_id, appraisee_id, exclusion_source, exclusion_reason, detail, justification, reversibility, status) VALUES
+ ('08a40001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','08c10001-0000-0000-0000-000000000001','99999999-9999-9999-9999-999999999902','AUTO','On probation','Probation ends 11 Sep 2026', NULL,'REVERSIBLE','EXCLUDED'),
+ ('08a40001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','08c10001-0000-0000-0000-000000000001','99999999-9999-9999-9999-999999999901','MANUAL','Extended leave','Long-term medical leave','HRBP discretion — re-evaluate at confirmation','PERMANENT','EXCLUDED');
+
+-- probation_confirmations (4.7) -------------------------------------------------------
+INSERT INTO probation_confirmations (id, tenant_id, entity_id, confirmation_no, appraisee_id, form_id, cycle_id, date_of_joining, probation_end_date, probation_period_months, mentor_id, manager_id, manager_recommendation, manager_comments, extension_months, confirmation_effective_date, new_designation_id, confirmation_bonus, outcome, status) VALUES
+ ('08a40002-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','PC-2025-Q2-0001','99999999-9999-9999-9999-999999999902','08f40001-0000-0000-0000-000000000003','08c10001-0000-0000-0000-000000000003','2025-01-01','2025-06-30', 6,'99999999-9999-9999-9999-999999999901','99999999-9999-9999-9999-999999999901','RECOMMEND_CONFIRMATION','Consistently met probation objectives.', NULL,'2025-07-01','77777777-7777-7777-7777-777777777701', true,'CONFIRMED','CONFIRMED'),
+ ('08a40002-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','PC-2025-Q2-0002','99999999-9999-9999-9999-999999999901', NULL,'08c10001-0000-0000-0000-000000000003','2025-02-15','2025-08-14', 6,'99999999-9999-9999-9999-999999999902','99999999-9999-9999-9999-999999999902','RECOMMEND_EXTENSION','Needs 3 more months to demonstrate consistency.', 3, NULL, NULL, false,'EXTENDED','PENDING_HR_APPROVAL');
 
 -- Reset session GUCs after seeding.
 RESET app.current_tenant_id;

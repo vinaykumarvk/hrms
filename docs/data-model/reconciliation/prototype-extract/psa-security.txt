@@ -1,0 +1,55 @@
+SCREEN: psa-security
+
+TABLE COLUMNS (<th>):
+Applicability
+Finding
+Module
+Next audit
+Regime
+SLA
+Severity
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Applicability
+Certified
+Closed
+Compliance status
+Compliant
+DPDPA 2023 (India)
+DPDPA compliance
+FR-P04
+Finding
+GDPR (EU)
+HIGH
+HIPAA
+ISO 27001
+In progress
+Jan 2027
+LOW
+M08 Recruitment
+Mar 2027
+Missing HSTS preload on 2 sub-domains
+Mobile API
+Module
+Next audit
+Not applicable
+Oct 2026
+Open critical findings
+Open high findings
+Platform
+Platform Admin
+Platform security
+Platform-wide
+Posture grade
+Regime
+SLA
+SOC 2 Type II
+Security posture overview
+Sep 2026
+Severity
+Status
+UK GDPR

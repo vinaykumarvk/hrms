@@ -1,0 +1,69 @@
+SCREEN: ra-requisitions
+
+TABLE COLUMNS (<th>):
+Candidates
+Hiring Lead
+Open since
+Position · Dept
+Recruiter
+Req ID
+Stage
+Status
+
+INPUT PLACEHOLDERS:
+By ID, position title, hiring lead, recruiter...
+
+LABELS/FIELD TEXT:
+Active
+Active requisitions
+Age
+All ages
+All departments
+All hiring leads
+All recruiters
+All requisitions
+All statuses
+Apply filters
+Approved
+Candidates
+Customer Success
+Department
+Design
+Dev K.
+Draft
+Engineering
+FR-M08-001
+Finance
+Hiring Lead
+Hiring lead
+Interview
+Karthik R.
+Manish K.
+Marketing
+Mira P.
+Mixed
+Offer
+On hold
+Open since
+Pending approval
+Person B S.
+Person C J.
+Person E M.
+Person E N.
+Person L S.
+Product
+Recruiter
+Recruitment Admin
+Req ID
+Requisition oversight
+Reset
+Rohit T.
+Sahil M.
+Sales
+Screening
+Search
+Stage
+Status
+Sunil B.
+Unassigned
+Vipul S.

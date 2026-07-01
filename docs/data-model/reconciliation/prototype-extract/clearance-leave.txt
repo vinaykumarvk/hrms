@@ -1,0 +1,25 @@
+SCREEN: clearance-leave
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+Encashable
+LWD
+PL balance
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Done
+Employee
+Encashable
+Exit clearance
+LWD
+Leave encashment exit clearance
+Manish Surname13
+PL balance
+Pending encashment computation
+Person C Roy
+Tasks

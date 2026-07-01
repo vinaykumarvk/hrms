@@ -1,0 +1,49 @@
+SCREEN: cfg-notif
+
+TABLE COLUMNS (<th>):
+Action
+Channel
+Status
+Template
+Trigger
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit notification templates
+Body
+Channel
+Cycle start
+Email
+Employee response (FR-M09-027)
+Feedback response
+Feedback shared
+In-app
+Inactive
+Leave approval
+Leave approved
+Manager feedback (FR-M09-026)
+Notification templates
+Offer extended
+Offer issued
+Org Admin
+PIP cadence (FR-M09-PIP)
+PIP closed
+PIP created
+PIP created (FR-M09-PIP)
+PIP outcome (FR-M09-PIP)
+PIP review due
+Review held (FR-M09-030)
+Review opened
+Review paused
+Review resumed
+Review resumed (FR-M09-030)
+Status
+Subject
+Template
+Template name
+Trigger
+Trigger event

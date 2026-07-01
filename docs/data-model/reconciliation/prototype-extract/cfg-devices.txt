@@ -1,0 +1,33 @@
+SCREEN: cfg-devices
+
+TABLE COLUMNS (<th>):
+Action
+Last sync
+Location
+Person Fce
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit devices & locations
+BIO-BNG-01
+BIO-BNG-02
+Biometric devices & locations
+Finger
+IP address
+Inactive
+Last sync
+Location
+Online
+Org Admin
+Person Fce
+Person Fce code
+Person Fce name
+Person Fce type
+Status
+Type

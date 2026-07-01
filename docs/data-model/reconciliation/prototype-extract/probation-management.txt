@@ -1,0 +1,75 @@
+SCREEN: probation-management
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+Joined
+Manager L1
+Probation end
+Recommendation
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Akash Surname9
+All
+Aman Surname4
+Awaiting issuance
+Compensation revision
+Confirm employment (standard)
+Confirmation bonus
+Confirmation due
+Confirmation effective date
+Confirmation submitted
+Confirmed
+Department
+Dev Khanna
+Employee
+Engineering
+Extend probation (3 months)
+Extend probation (6 months)
+Extension (3 months)
+Extension requested
+Extension review
+FR-M02-008
+Filters
+In probation
+Issue confirmation
+Joined
+Karan S.
+Letter pending
+Letter template
+Manager L1
+Manager One
+Manager recommendation
+Mona V.
+New designation (if changing)
+Next 2 weeks
+Next 30 days
+Nudge manager
+Onboarding Admin
+Overdue
+Pending submission
+Person H P.
+Preview letter
+Probation
+Probation end
+Probation end window
+Probation management
+Probation outcome
+Probation pipeline
+Product
+Recommend confirmation
+Recommend extension
+Recommend termination
+Recommendation
+Reminder sent
+Review
+Sahil Bose
+Sales
+Status
+Terminate at probation end
+This week

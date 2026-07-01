@@ -1,0 +1,73 @@
+SCREEN: pa-cycle-create
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Internal description · visible to admins only
+Type employee IDs separated by commas or upload CSV
+e.g. FY27 Annual Performance Review
+e.g. FY27_ANN
+
+LABELS/FIELD TEXT:
+Acknowledgement
+All confirmed employees
+Annual
+Auto-exclusions
+BU-wise sessions
+Bell (default)
+By business unit
+By contribution level
+By department (multi-select)
+By grade / band
+Calibration
+Calibration framework
+Contractors / interns
+Custom employee list (upload CSV)
+Custom per BU
+Cycle code
+Cycle name
+Cycle owner
+Cycle structure is locked once started.
+Cycle type
+Department-wise sessions
+Description
+Employed on or before custom date
+Employed on or before cycle start date
+Employee scope
+Employees marked absconding
+Employees on notice period
+Employees on probation
+End date
+FR-M09-003
+FY26 Goal Plan v2 (carry over)
+FY27 Goal Plan v1 (must be created first)
+Goal plan to attach
+HR Admin (default)
+HRBP per BU
+L1 Manager evaluation
+L2 (HOD) endorsement
+Level-wise sessions (cross-BU)
+Manual exclusions
+Mid-year
+Minimum 180 days tenure
+Minimum 90 days tenure
+New cycle
+New review cycle
+No normalization
+Normalization curve
+Performance Admin
+Performance Improvement Plan (PIP)
+Probation confirmation
+Project-based
+Quarterly
+Rating scale
+Review cycles
+Review stages (FR-M09-003)
+Right-skewed (high performers)
+Self review
+Self review SLA (working days)
+Start date
+Step 1 of 5
+Tenure cutoff
+Will be applied automatically

@@ -1,0 +1,38 @@
+SCREEN: nominees
+
+TABLE COLUMNS (<th>):
+Action
+Class
+Nominee
+Relation
+Share %
+Type
+
+INPUT PLACEHOLDERS:
+e.g. 50
+
+LABELS/FIELD TEXT:
+Action
+Add / edit nominee allocation
+Allocation by class
+Class
+Dependent One
+Dependent One (Spouse)
+Dependent Three (Father)
+Dependent Two
+Dependent Two (Son)
+Direct save
+ESIC
+FR-M01-008
+Gratuity
+My profile
+Nominee
+Nominee (from dependents)
+Nominees
+Per-class totals
+Relation
+Remove
+Save allocation
+Son
+Spouse
+Type

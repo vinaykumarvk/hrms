@@ -1,0 +1,50 @@
+SCREEN: raise-ticket
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Describe the issue or justify the request
+PSI-LAP-7821 (required for HW/SW/Network)
+Short summary
+
+LABELS/FIELD TEXT:
+Access request
+Account / Access
+Additional monitor
+Asset Management
+Asset reference
+Attachments
+Category
+Dashboard
+Department
+Description / business justification
+Docking station
+Hardware Fault
+IT grievance
+Incident
+Laptop refresh
+Manager / approver
+Network / Connectivity
+New laptop
+New mobile / SIM
+New ticket
+Peripheral (kbd/mouse/headset)
+Priority
+Query / How-to
+Raise a ticket
+Request type
+Requester
+Required by
+SaaS access (restricted)
+SaaS access (standard)
+Security
+Service request
+Software / System
+Software install (non-standard)
+Software install (standard)
+Sub-category
+Subject
+Submit ticket
+Ticket type
+VPN access

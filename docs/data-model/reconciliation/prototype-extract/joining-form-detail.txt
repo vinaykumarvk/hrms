@@ -1,0 +1,43 @@
+SCREEN: joining-form-detail
+
+TABLE COLUMNS (<th>):
+Action
+Document
+Status
+
+INPUT PLACEHOLDERS:
+Required when rejecting; optional when approving
+
+LABELS/FIELD TEXT:
+Aadhaar (masked)
+Action
+Approve
+Awaiting approval
+Bank account
+Cancelled cheque
+Candidate One
+Date of birth
+Decision
+Document
+Emergency contact
+FR-M02
+Full name
+Gratuity nominee
+Joining forms
+Missing
+Mobile
+PAN
+PAN card
+PF nominee
+Permanent address
+Personal email
+Previous relieving letter
+Received
+Reject
+Request
+Reviewer comments
+Save edits
+Status
+Tasks
+UAN / PF
+Uploaded documents

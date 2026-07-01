@@ -1,0 +1,46 @@
+SCREEN: ra-pre-offer-issue
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Aadhaar Card
+Appears in the pre-offer letter
+Applied for
+Approved CTC band (req)
+Buy-out negotiable
+Buy-out support (if needed)
+Candidate
+Comp structure
+Declared current CTC
+Dev Khanna (HOD Eng)
+Document checklist
+Email
+Expiry triggers re-engagement workflow
+FR-M08-009
+Highest education certificate
+Hiring lead
+Indicative compensation band
+Interview rounds
+Joint authority.
+None
+Note to candidate on band
+Notice period (candidate current)
+Other education certificates
+PAN Card
+Passport
+Phone
+Photograph
+Pre-offer letter
+Pre-offer queue
+Pre-offer validity
+Previous employment relieving letter
+Previous salary slip (last 3 months)
+Recruitment Admin
+Source
+Target date of joining
+Template
+Total experience

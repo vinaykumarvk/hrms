@@ -1,0 +1,71 @@
+SCREEN: ra-candidates
+
+TABLE COLUMNS (<th>):
+Action
+Applied for
+Candidate ID
+Last activity
+Name
+Recruiter
+Source
+Stage
+
+INPUT PLACEHOLDERS:
+By name, email, candidate ID, skills...
+
+LABELS/FIELD TEXT:
+Action
+All recruiters
+All requisitions
+All sources
+All stages
+Aman Surname8
+Anytime
+Applied
+Applied for
+Apply filters
+Archived
+Auto-numbered IDs use
+BGV
+Campus hire
+Candidate ID
+Candidate One
+Candidate pool
+Candidates
+Career site
+Career site (direct)
+FR-M08-002
+Hired (joined)
+Internal Job Posting
+Interview
+Karthik R.
+Last 30 days
+Last activity
+LinkedIn
+Name
+Naukri
+Offer
+Open
+Person A Surname1
+Person C J.
+Person E M.
+Person L S.
+Pradeep Surname2
+Recruiter
+Recruitment Admin
+Referral
+Requisition
+Reset
+Reviewer Three Joshi
+Riya Joshi
+Sahil M.
+Screening
+Search
+Showing 7 of 387
+Sneha Bose
+Source
+Stage
+This week
+Today
+Vipul S.
+Yesterday

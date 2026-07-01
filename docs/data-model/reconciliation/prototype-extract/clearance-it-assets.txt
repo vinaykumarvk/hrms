@@ -1,0 +1,28 @@
+SCREEN: clearance-it-assets
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+Item
+LWD
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Clear
+Employee
+Extend
+Hold
+Item
+LWD
+Laptop not returned
+Manish Surname13
+Open
+Pending exit clearances
+Person C Roy
+Status
+Tasks
+Write-off

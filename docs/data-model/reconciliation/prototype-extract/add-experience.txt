@@ -1,0 +1,22 @@
+SCREEN: add-experience
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Previous employer
+
+LABELS/FIELD TEXT:
+Add experience
+Add prior work experience
+Company
+Contract
+Description
+Designation
+Employment type
+From
+Full-time
+Internship
+My profile
+Part-time
+Relieving letter

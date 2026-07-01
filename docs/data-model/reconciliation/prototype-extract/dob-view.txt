@@ -1,0 +1,24 @@
+SCREEN: dob-view
+
+TABLE COLUMNS (<th>):
+Compliance flag
+DOB
+Employee ID
+Name
+
+INPUT PLACEHOLDERS:
+Search by name or ID…
+
+LABELS/FIELD TEXT:
+Akash Surname9
+Compliance flag
+DOB
+DOB view
+Employee Four
+Employee ID
+Name
+Office Admin
+PSI000156
+PSI000789
+PSI000847
+Person A Surname1

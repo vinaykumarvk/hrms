@@ -1,0 +1,32 @@
+SCREEN: bgv
+
+TABLE COLUMNS (<th>):
+Checks
+DOJ
+Decision
+Employee
+Result
+Vendor
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acknowledge
+All clear
+Arun Surname6
+BGV
+Background Verification reports
+Candidate One
+Checks
+DOJ
+Decision
+Employee
+FR-M02-004
+HR Ops
+OnGrid
+Result
+Review
+Sneha Surname7
+Vendor
+Vikas Surname3

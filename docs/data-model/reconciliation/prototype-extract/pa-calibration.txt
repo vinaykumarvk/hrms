@@ -1,0 +1,43 @@
+SCREEN: pa-calibration
+
+TABLE COLUMNS (<th>):
+Action
+Cycle
+Date
+Moderator
+Scope
+Session
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Calibration
+Calibration sessions
+Custom
+Cycle
+Date
+Dev Khanna (HOD)
+Developing band (Below)
+Distribution curve
+FR-M09-022
+Ideal distribution norm (FR-M09-023)
+Mira Surname7 (HOD)
+Moderator
+Naina M. (HOD CS)
+Open
+Performance Admin
+Right-skewed (50/35/15)
+Rohit Tandon (HOD)
+Scheduled
+Scope
+Session
+Sessions
+Solid performer band (Meets)
+Status
+Strict (60/30/10)
+Sunil Bose (HOD)
+Top performer band (Exceeds)
+Underperformer band (Far below)

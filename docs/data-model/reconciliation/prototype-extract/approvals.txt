@@ -1,0 +1,31 @@
+SCREEN: approvals
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Search by name, request type…
+
+LABELS/FIELD TEXT:
+All
+All types
+Approvals
+Approve
+Approve all
+Clear
+Comp-off
+Dashboard
+Export
+Leave
+Leave approvals
+Maternity
+Newest
+Oldest
+Raise on behalf
+Reject
+Reject all
+SLA breached
+Sorted by urgency
+Standard flow
+Updated 4 min ago
+Urgency first

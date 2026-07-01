@@ -1,0 +1,51 @@
+SCREEN: attendance
+
+TABLE COLUMNS (<th>):
+Date
+Late
+Punch in
+Punch out
+Shift
+Status
+Work duration
+Work location
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Attendance
+Avg hours/day
+Below threshold (7d warning)
+CLOCK IN
+CLOCK OUT
+Clock-In modality
+Clocked in at
+Continuous WD
+Dashboard
+Date
+FR-M05
+FR-M05-018
+Home
+Late
+Missed punch out
+My requests
+OT 2h 34m
+Office
+Others
+Pending L1
+Present
+Present (Late)
+Punch in
+Punch out
+Register
+Request comp-off
+Request regularisation
+Shift
+Status
+WFH
+WFH MTD
+Weekly off
+Within weekly cap
+Work duration
+Work location

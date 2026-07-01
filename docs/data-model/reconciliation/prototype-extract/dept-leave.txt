@@ -1,0 +1,29 @@
+SCREEN: dept-leave
+
+TABLE COLUMNS (<th>):
+Dates
+Employee
+Status
+Team
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Approved
+Dates
+Department leave
+Employee
+FR-M04-008
+HOD
+Kavya Surname5
+Manish Surname13
+Maternity
+Payments
+Pending L1
+Platform
+Privilege
+Status
+Team
+Type

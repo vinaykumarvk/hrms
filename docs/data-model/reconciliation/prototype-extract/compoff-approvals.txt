@@ -1,0 +1,34 @@
+SCREEN: compoff-approvals
+
+TABLE COLUMNS (<th>):
+Action
+Credit
+Employee
+Type
+Worked on
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Apply 2 Jun
+Approve
+Approve all
+Clear
+Comp-off
+Comp-off leave
+Comp-off tasks
+Credit
+Credit request
+Employee
+Employee One
+FR-M04
+Pending comp-off
+Person A Surname1
+Reject
+Reject all
+Sat 24 May (release)
+Tasks
+Type
+Worked on

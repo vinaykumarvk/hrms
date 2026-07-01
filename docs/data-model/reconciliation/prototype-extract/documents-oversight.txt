@@ -1,0 +1,22 @@
+SCREEN: documents-oversight
+
+TABLE COLUMNS (<th>):
+Acknowledged
+Assigned
+Pending
+Policy
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Acknowledged
+Assigned
+Code of Conduct FY26
+Documents (view)
+FR-M11-001
+HRBP
+POSH Policy
+Pending
+Policy
+Policy acknowledgement status

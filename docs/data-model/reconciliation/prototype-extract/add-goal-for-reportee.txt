@@ -1,0 +1,32 @@
+SCREEN: add-goal-for-reportee
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+e.g. Mentor 2 junior engineers to Lead level
+
+LABELS/FIELD TEXT:
+Add goal for reportee
+Behavioural
+Category
+Customer
+Dashboard
+Description
+Development
+Edit reason (optional)
+FR-M09-015
+FR-M09-019
+Financial
+Goal name
+Measurement criteria
+My team
+Operational excellence
+Parent goal (optional)
+People
+Performance
+Reportee
+Reportee will update during execution
+Save draft
+Scorecard pillar
+Stretch

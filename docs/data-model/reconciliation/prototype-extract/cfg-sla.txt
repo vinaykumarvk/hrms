@@ -1,0 +1,53 @@
+SCREEN: cfg-sla
+
+TABLE COLUMNS (<th>):
+Action
+Escalation
+L1 SLA
+L2 SLA
+L3 SLA
+Workflow
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Attendance regularisation
+Auto-approve if not actioned in 5 days
+Auto-escalate to HOD on breach
+Business days only (recommended)
+Calendar basis
+Calendar days
+Cross-entity transfer
+Email only
+Escalation
+Escalation cadence
+Exclude entity-specific holidays
+FR-P01-002
+HR Admin escalation
+HR Admin on breach
+Hours of business
+In-app only
+Include holidays
+L1 SLA
+L2 SLA
+L3 SLA
+Leave application
+None
+Offer approval
+Org Admin
+Org Admin on stage breach
+Performance review
+Requisition approval
+SLA breach notification
+SLA calculation rules
+SLA configured per workflow stage
+SLA defaults by category
+SLA timers
+Sensitive PII edit
+Separation request
+Single escalation
+Weekend
+Workflow
+Working hours

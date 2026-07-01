@@ -1,0 +1,46 @@
+SCREEN: ra-recruiter-assignment
+
+TABLE COLUMNS (<th>):
+Action
+Active candidates
+Active reqs
+Avg time-to-fill
+Capacity
+Recruiter
+Specialisation
+
+INPUT PLACEHOLDERS:
+Context, special requirements, sourcing direction...
+
+LABELS/FIELD TEXT:
+Action
+Active candidates
+Active reqs
+Assign or reassign for a requisition
+Assignment form
+Assignment mode
+Auto-suggest
+Avg time-to-fill
+Capacity
+Capacity-based
+Capacity-based assignment.
+FR-M08
+Karthik R.
+Manual
+Normal
+Notes for recruiter
+Override
+Person C J.
+Person E M.
+Person L S.
+Priority
+Recruiter
+Recruiter assignment
+Recruiter workload
+Recruitment Admin
+Requisition
+Sahil M.
+Specialisation
+Target close date
+View reqs
+Vipul S.

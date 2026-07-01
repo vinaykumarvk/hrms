@@ -1,0 +1,15 @@
+SCREEN: absconding
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Absconding
+Absconding queue
+Ajay Surname5 (PSI00412)
+HR Ops
+Initiate absconding
+Send notice

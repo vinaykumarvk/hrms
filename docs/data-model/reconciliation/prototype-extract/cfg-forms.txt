@@ -1,0 +1,42 @@
+SCREEN: cfg-forms
+
+TABLE COLUMNS (<th>):
+Action
+Code
+Context
+Fields
+Form
+Status
+Version
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Builder
+Code
+Context
+Exit interview
+FORM-EXIT
+FORM-LV
+FORM-OB
+FORM-REQ
+FORM-REVIEW
+Field assembly
+Fields
+Form
+Form builder
+Leave application
+Leave request
+Onboarding cluster
+Onboarding form
+Org Admin
+Performance
+Recruitment requisition
+Requisition form
+Review form
+Separation
+Status
+Version

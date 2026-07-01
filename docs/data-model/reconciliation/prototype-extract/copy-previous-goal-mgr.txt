@@ -1,0 +1,32 @@
+SCREEN: copy-previous-goal-mgr
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Search goal name...
+
+LABELS/FIELD TEXT:
+ACHIEVED
+Add goal for reportee
+Akash Surname9
+All cycles
+All pillars
+All team members
+Copy from previous goal
+Customer
+Employee Four
+Employee One
+FR-M09-015
+FY24 Annual
+FY25 Annual
+FY25 Mid-cycle
+Kavya Surname5
+Mentor 2 junior engineers to Lead level
+My team
+Operational excellence
+People
+Person A Surname1
+Pooja Joshi
+Prior goals from your current team
+Showing 6 of 50 max

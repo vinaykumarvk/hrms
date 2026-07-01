@@ -1,0 +1,73 @@
+SCREEN: calendar
+
+TABLE COLUMNS (<th>):
+Action
+Approver
+Date
+Date(s)
+Days
+Employee
+Holiday
+Leave type
+Locations
+Quick action
+Status
+Team
+Type
+
+INPUT PLACEHOLDERS:
+All employees in scope (within Show-only filters below)
+
+LABELS/FIELD TEXT:
+Action
+All India
+Anniversaries
+Apply
+Approved
+Approver
+Birthdays
+Buddha Purnima (observed)
+Calendar
+Clear
+Dashboard
+Date
+Date(s)
+Days
+Employee
+Employee One
+Engineering
+Events
+FR-CAL-001
+Filter by employee
+Fri 29 May
+From
+Holiday
+Holidays
+Interviews
+Kavya Surname5
+Leave type
+Leaves
+Locations
+Mon 25 May
+Month
+Optional
+Pending
+Person E N.
+Person K Subramanian
+Platform pod
+Pooja Joshi
+Privilege Leave (PL)
+Quarter
+Quick action
+Sat 30 May
+Show only
+Sick Leave (SL)
+Skip-level
+Status
+Team
+This week
+Thu 28 May
+Tue 26 May
+Type
+Week
+Work anniversaries

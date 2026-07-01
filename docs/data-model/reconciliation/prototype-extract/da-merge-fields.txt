@@ -1,0 +1,40 @@
+SCREEN: da-merge-fields
+
+TABLE COLUMNS (<th>):
+Merge field
+Notes
+Source
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Auto-generated letter serial number
+Current annual CTC
+Current basic salary
+Current designation at render time
+Current gross salary
+Document Admin
+FR-M11-003
+Group Company display name
+L1 manager full name
+Legal entity name
+M01 Employee Master
+M03 Separation
+M06 Payroll
+M08 Recruitment
+Merge field
+Merge field catalogue
+Merge fields
+Merge fields use the syntax
+Notes
+P04 Tenant master
+Populated only for confirmed employees
+Resolved at sign time
+Resolves to office location name
+Source
+System
+Tenant-unique identifier
+Used in FnF statement
+Used in offer letter only
+Used in separation cluster

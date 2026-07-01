@@ -1,0 +1,39 @@
+SCREEN: reviews
+
+TABLE COLUMNS (<th>):
+Calibration
+Employee
+Final
+L1 review
+Self review
+Skip
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Akash Surname9
+Calibration
+Dashboard
+Done 12 Sep
+Done 13 Sep
+Done 14 Sep
+Due 30 Sep
+Employee
+Employee Four
+Employee One
+FR-M09-003
+FY26 mid-year reviews
+Final
+Goals and review
+L1 review
+L1 stage opens 1 Sep 2026
+Pending
+Person A Surname1
+Pooja Joshi
+Self review
+Skip
+Stage 1
+Stage 2
+Status

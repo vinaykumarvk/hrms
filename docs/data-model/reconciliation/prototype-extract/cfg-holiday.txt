@@ -1,0 +1,54 @@
+SCREEN: cfg-holiday
+
+TABLE COLUMNS (<th>):
+Action
+Also in groups
+Code
+Date
+Holiday
+Repeat
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Add / edit holiday
+All groups
+Also in groups
+Assign to calendars
+Assignment Framework
+Calendar
+Code
+Date
+Diwali
+HOL-DW
+HOL-HL
+HOL-RD
+Half day
+Holi
+Holiday
+Holiday code
+Holiday date
+Holiday entries
+Holiday groups
+Holiday name
+Holiday type
+Holidays in this group
+Mandatory
+National
+National holidays (auto)
+Optional
+Org Admin
+Project A
+Project A (11)
+Project B (12)
+Project C
+Project E-Mumbai
+Repeat
+Repeat next year
+Republic Day
+Save holiday
+Type
+Viewing group

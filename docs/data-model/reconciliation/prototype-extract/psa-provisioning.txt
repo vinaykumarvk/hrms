@@ -1,0 +1,64 @@
+SCREEN: psa-provisioning
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
++91-XXX-XXX-XXXX
+1500
+ACME
+Full name
+admin@acme.com
+e.g. Acme Corporation Pvt Ltd
+
+LABELS/FIELD TEXT:
+API rate limit
+Africa
+All 5 steps required.
+BFSI
+Compliance regime
+Configure now
+Contract length
+Contract start
+Custom
+Data residency region
+Drives data residency region selection
+Education
+Energy
+Europe
+FR-P04-001
+Healthcare
+IT Services
+India
+Industry segment
+Initial seat license
+Latin America
+Logistics
+Manufacturing
+Media
+Middle East
+Org Admin email
+Org Admin name
+Other
+Other / Multi-jurisdiction
+Plan tier
+Platform Admin
+Primary contact email
+Primary contact phone
+Primary geography
+Provision new tenant
+Provision tenant
+Provisioning timeline.
+Retail
+SE Asia
+SSO setup
+STANDALONE
+Save draft
+Select
+Selected
+Storage limit
+Tenant code
+Tenant legal name
+Tenants
+Trigger welcome email
+USA

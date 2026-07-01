@@ -1,0 +1,39 @@
+SCREEN: leave-revocation
+
+TABLE COLUMNS (<th>):
+Action
+Balance restore
+Employee
+Initiated by
+Original leave
+Reason
+
+INPUT PLACEHOLDERS:
+Why is this revocation justified? Logged in audit trail.
+
+LABELS/FIELD TEXT:
+Action
+Admin correction (data entry error)
+Approve
+Approve revocation
+Balance restore
+Days to revoke
+Deny request
+Detailed reason
+Employee
+Employee returned early
+FR-M04-005
+Full revocation (Phase-1)
+Initiated by
+Leave Admin
+Leave cancelled before start
+Leave revocations
+Manager (Manager One)
+Original leave
+Pending revocations
+Plans changed
+Process revocation request
+Reason
+Reason for revocation
+Refund to balance
+Revocation type

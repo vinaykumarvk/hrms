@@ -1,0 +1,42 @@
+SCREEN: fnf-clearance-hub
+
+TABLE COLUMNS (<th>):
+Asset/IT (E2‑3)
+Attend (E6)
+Compliance (E8)
+Employee
+Exit intvw (E9)
+Facilities (E5)
+Finance (E4)
+LWD
+Leave (E7)
+Mgr (E1)
+Timesheet
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Attend (E6)
+Clear
+Compliance (E8)
+Done
+Employee
+Exit intvw (E9)
+Facilities (E5)
+Finance (E4)
+FnF clearance board
+HR Operations
+Hold
+LWD
+Leave (E7)
+Manish Surname13
+Mark ready for settlement
+Mgr (E1)
+N/A
+Nudge open stages
+Open clearances
+Pending
+Person C Roy
+Scheduled
+Timesheet

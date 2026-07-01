@@ -1,0 +1,47 @@
+SCREEN: cfg-sd-config
+
+TABLE COLUMNS (<th>):
+Action
+Agents
+Assignment
+Category
+Default queue
+Lead
+Priority
+Queue
+Resolution SLA
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Agents
+Assignment
+Auto-close after Resolved
+Category
+Default queue
+Hardware
+Hardware Fault
+Hardware Team Lead
+Lead
+Network
+Network / Connectivity
+Network Team Lead
+P1 (site) / P2 (user)
+P1 response / resolution
+P2 / P3
+P2 response / resolution
+P3 response / resolution
+P4 response / resolution
+Pre-breach alert threshold
+Priority
+Queue
+Queues
+Resolution SLA
+Round-robin
+SLA defaults
+Save SLAs
+Security
+Security (CISO)
+Service desk admin

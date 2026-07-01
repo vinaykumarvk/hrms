@@ -1,0 +1,72 @@
+SCREEN: pa-review-cycles
+
+TABLE COLUMNS (<th>):
+Action
+Cycle name
+Period
+Scope
+Stage progress
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+APR cohort (12)
+Action
+Active
+Active (in progress)
+Admin-only.
+Akash Surname9
+All
+All employees
+All years
+Annual
+Archived
+By BU
+By contribution level
+By department
+Closed
+Complete
+Cycle name
+Cycle type
+Cycles
+Draft
+Employee / cohort
+FR-M09-003
+FR-M09-030
+FY23
+FY24
+FY25
+FY25 Annual Performance Review
+FY25 Mid-year Check-in
+FY26
+FY26 Annual Performance Review
+FY26 Mid-year Check-in
+Filter / cohort
+Filters
+Manage
+Mid-year
+Open review now
+Pause review
+Performance Admin
+Performance Admin / HR Admin
+Period
+Pooja Joshi
+Probation
+Project
+Q1 FY26 Probation confirmation
+Quarterly
+Resume review
+Review cycles
+Scheduled
+Scope
+Selected set
+Single employee
+Stage progress
+Status
+Type
+View archive
+Whole monthly cohort
+Year

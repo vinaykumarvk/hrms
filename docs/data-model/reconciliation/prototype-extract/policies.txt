@@ -1,0 +1,22 @@
+SCREEN: policies
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+Search policies…
+
+LABELS/FIELD TEXT:
+Acknowledge in queue
+Acknowledge required
+Acknowledged 12 Apr
+Acknowledged 5 Jan
+All
+Code of Conduct 2026
+Compliance
+Dashboard
+FR-M11-001
+IT Acceptable Use Policy 2026
+Policies
+Policy library
+Prevention of Sexual Harassment (POSH)

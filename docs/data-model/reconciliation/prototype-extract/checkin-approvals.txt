@@ -1,0 +1,29 @@
+SCREEN: checkin-approvals
+
+TABLE COLUMNS (<th>):
+Action
+Date · time
+Employee
+Location
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Akash Surname9
+Approve
+Approve all
+Check-in
+Check-in tasks
+Clear
+Employee
+Employee Four
+FR-M05
+Location
+Pending check-ins
+Pooja Joshi
+Reject
+Reject all
+Tasks
+WFH

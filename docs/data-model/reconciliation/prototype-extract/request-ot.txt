@@ -1,0 +1,18 @@
+SCREEN: request-ot
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Attendance
+Comments
+FR-M05-008
+Reason
+Request comp-off
+Worked date
+Worked hours
+Worked on holiday
+Worked on weekly off

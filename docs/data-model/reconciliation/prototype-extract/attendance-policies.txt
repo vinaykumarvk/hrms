@@ -1,0 +1,73 @@
+SCREEN: attendance-policies
+
+TABLE COLUMNS (<th>):
+Applies to
+Locations
+Policy
+Status
+WFH cap
+Working hours
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Active
+Active policies
+All offices
+All on probation (first 90 days)
+Applies to
+Approved remote workers
+Assignment framework
+Attendance Admin
+Attendance policies
+Attendance regularization
+Back-dated attendance edit window (days)
+Bangalore HQ
+Break time
+By total work duration
+CEO / Leadership
+Casual Leave
+Clock-in / Check-in requests
+Daily hours required
+Deduct from
+Deduct leave (full day)
+Deduct leave (half day)
+Disabled
+Display suppression (attendance page)
+Enabled
+FR-M05-002
+Fixed (10 AM)
+Fixed (9 AM)
+Flexi (8-11 AM)
+Fully remote
+HR Admin only
+Leave deduction on absence
+Locations
+Loss of Pay
+Manager pre-approval (default)
+No deduction (mark LOP)
+None hidden
+Notes (visible to employees)
+On Probation
+Optional-holiday limit (days/yr)
+Out-Duty requests
+Overtime eligible
+Policies
+Policy
+Policy name
+Privilege Leave
+Request configuration
+Save changes
+Self-declare
+Shift-change requests
+Start time flexibility
+Status
+Trigger absconding flow after (days)
+Variable
+WFH approval needed
+WFH cap
+WFH cap per month
+When marked absent
+Working days/week
+Working hours

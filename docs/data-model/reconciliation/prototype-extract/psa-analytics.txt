@@ -1,0 +1,37 @@
+SCREEN: psa-analytics
+
+TABLE COLUMNS (<th>):
+Avg sessions/user/week
+Enterprise tenants
+Growth tenants
+Module
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+AI Policy Chat
+Avg sessions/user/week
+Cross-tenant analytics
+Enterprise tenants
+FR-P04
+Feature usage trends (90d)
+Goal cascade usage
+Growth tenants
+Least-used module
+Leave revocation requests
+M01 Employee Master
+M04 Leave
+M05 Attendance
+M08 Recruitment
+M09 Performance
+M11 Documents
+M16 Reports
+Mobile attendance check-in
+Mobile vs web split
+Module
+Module adoption by tenant size
+Most-used module
+P03 AI Chat
+Platform Admin
+Total users

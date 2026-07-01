@@ -1,0 +1,31 @@
+SCREEN: ra-offer-queue
+
+TABLE COLUMNS (<th>):
+Action
+Candidate
+Drafted by
+Position · Req
+Proposed CTC
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Below threshold
+Candidate
+Drafted by
+Escalate
+FR-M08-004
+Filter
+HR Admin
+Joint generation with HR Admin.
+Karthik R. (Recruiter)
+Offer approvals queue
+Pending offers
+Person E M. (Recruiter)
+Proposed CTC
+Recruitment Admin
+Status
+Vipul S. (Recruiter)

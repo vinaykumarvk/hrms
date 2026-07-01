@@ -1,0 +1,29 @@
+SCREEN: reimbursements
+
+TABLE COLUMNS (<th>):
+Action
+Amount
+Employee
+Status
+Type
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Amount
+Approved (MTD)
+Avg TAT
+Employee
+FR-M10-010
+Finance Admin
+Pending
+Pending claims
+Person A Surname1
+Reimbursement queue
+Reimbursements
+Review
+Status
+Travel
+Type

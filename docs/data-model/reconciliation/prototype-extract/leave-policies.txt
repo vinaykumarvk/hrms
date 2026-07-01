@@ -1,0 +1,81 @@
+SCREEN: leave-policies
+
+TABLE COLUMNS (<th>):
+Accrual
+Action
+Carry-fwd
+Code
+Entitlement
+Leave type
+Sick / Paid
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Accrual
+Accrual amount per cycle
+Accrual frequency
+Action
+Active leave types
+After 5 years tenure
+Any
+As accrued
+As approved
+Bereavement
+COMP
+Carry-forward cap
+Carry-fwd
+Casual Leave
+Code
+Compensatory Off
+Display name
+Earned Leave
+Edit leave type
+Encashable on exit
+Entitlement
+Entitlement (days/year)
+FR-M04-002
+Female
+First half only
+Full day
+Half day
+Half-day sessions
+Hour
+Indian
+LWP
+Leave Admin
+Leave Without Pay
+Leave policies
+Leave type
+Leave-type definitions. Define
+Male
+Married
+Maternity Leave
+Min application unit
+Monthly
+N/A
+No (lapse at year end)
+Non-resident
+Not allowed
+OH / OL
+Optional Holiday
+Paid
+Paid (holiday)
+Paternity Leave
+Per event
+Per weekend/holiday worked
+Per-event
+Quarterly
+RBAC-configurable
+SAB
+Sabbatical
+Second half only
+Sick / Paid
+Sick Leave
+Single
+Up to 12 months
+Upfront (annual quota)
+Yearly (front-loaded)
+Yes (cap 15)
+Youngest-child gating

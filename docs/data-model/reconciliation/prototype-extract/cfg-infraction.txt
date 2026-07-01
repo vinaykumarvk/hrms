@@ -1,0 +1,31 @@
+SCREEN: cfg-infraction
+
+TABLE COLUMNS (<th>):
+Action
+Code
+Points system
+Policy
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit infraction policies
+Code
+Consider holiday for absconding
+Consider weekly off for absconding
+INF-STD
+INF-STR
+Inactive
+Infraction policies
+Infraction policy name
+Org Admin
+Points system
+Policy
+Standard Infraction
+Status
+Strict Infraction
+Use points system

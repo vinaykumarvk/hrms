@@ -1,0 +1,31 @@
+SCREEN: cfg-calibration
+
+TABLE COLUMNS (<th>):
+Action
+Calibration name
+N-grid
+Parameters
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Active
+Add / edit calibration configurations
+Calibration configurations
+Calibration name
+Competency rating
+Define ideal distribution
+Enable N-grid framework
+Enabled
+FY26 Calibration
+Goal rating
+Inactive
+Leadership Calibration
+N-grid
+Org Admin
+Overall rating
+Parameters
+Status

@@ -1,0 +1,49 @@
+SCREEN: cfg-holiday-calendars
+
+TABLE COLUMNS (<th>):
+Action
+Assignment Framework
+Group
+Group type
+Holidays
+Location
+Status
+
+INPUT PLACEHOLDERS:
+HG-PROJA-26
+e.g. Project A, Group Company 1 + Mumbai
+
+LABELS/FIELD TEXT:
+A holiday group is assigned via the
+Action
+Active
+Add / edit holiday group
+All
+Assignment Framework
+Assignment Framework rule
+Bengaluru (BLR-PNY)
+Calendar year
+Cohort
+Group
+Group Company (optional)
+Group Company 1
+Group Company 2
+Group Company 3
+Group code
+Group name
+Group type
+Holiday groups
+Holidays
+Hyderabad (HYD-QC)
+Inactive
+Location
+Location default
+Mumbai (MUM-EUR)
+Org Admin
+Project / client
+Project A
+Project B
+Save group
+Status
+View / configure
+Work location

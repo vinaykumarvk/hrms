@@ -1,0 +1,32 @@
+SCREEN: joining-forms-approval
+
+TABLE COLUMNS (<th>):
+Action
+Candidate / new hire
+Form
+Status
+Submitted
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Approve
+Awaiting approval
+Candidate / new hire
+Candidate One
+FR-M02
+Form
+Imran Qureshi
+Joining form (resubmitted)
+Joining forms
+Joining forms to approve
+Leah Fernandes
+Pending joining forms
+Re-review
+Reject
+Status
+Submitted
+Tasks
+View / review

@@ -1,0 +1,29 @@
+SCREEN: dept-attendance
+
+TABLE COLUMNS (<th>):
+Absent
+Leave
+Present
+Team
+WFH
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Absent
+Avg work hrs
+Department attendance
+FR-M05-018
+HOD
+Identity
+Leave
+On leave
+Payments
+Pending regularisations
+Platform
+Present
+Present today
+Team
+Team-wise attendance today
+WFH

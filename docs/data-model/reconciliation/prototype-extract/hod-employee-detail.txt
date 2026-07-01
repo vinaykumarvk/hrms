@@ -1,0 +1,100 @@
+SCREEN: hod-employee-detail
+
+TABLE COLUMNS (<th>):
+Allocation
+Client / BU
+DOB
+Department
+Designation
+Employer
+Event
+From
+Insurance covered
+Manager
+Name
+Phone
+Project
+Relation
+Role
+Role on project
+To
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Aadhaar
+Address
+Allocation
+Apr 2024
+Attendance
+Billing reconciliation service
+Blood group
+Child One
+Client / BU
+Compensation
+Current
+DOB
+Date of birth
+Dec 2024
+Department
+Designation
+Documents
+Emergency contacts
+Employee ID
+Employee One
+Employer
+Employment
+Engineer
+Event
+Father
+Finance Systems
+Flipkart
+From
+Full name
+Gender
+Indian
+Insurance covered
+Internal employment history
+Jan 2025
+Joined
+Jul 2023
+Leave
+Male
+Manager
+Manager One
+Manager change
+Mar 2024
+Marital status
+Married
+Masked
+Name
+Nationality
+Org chart
+PAN
+PSI000456
+Parent One
+Payments BU
+Payments Platform v2
+Performance
+Permanent
+Person D Surname10
+Personal
+Personal email
+Personal mobile
+Phone
+Platform BU
+Prior employment (declared at joining)
+Project
+Project history
+Promotion
+Relation
+Role
+Role on project
+SWE II
+Senior engineer
+Son
+Spouse
+Spouse One
+Sr Software Engineer
+XXXX XXXX 4321

@@ -1,0 +1,25 @@
+SCREEN: bank-entry
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+11-character IFSC
+Search…
+
+LABELS/FIELD TEXT:
+Account number
+Account type
+Bank account entries
+Bank entries
+Bank name
+Branch
+Current
+Employee
+Failed
+IFSC
+Office Admin
+Pending
+Penny drop status
+Savings
+Verified

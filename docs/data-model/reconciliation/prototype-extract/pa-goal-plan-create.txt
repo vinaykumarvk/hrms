@@ -1,0 +1,39 @@
+SCREEN: pa-goal-plan-create
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+e.g. FY27 Annual Goal Plan v1
+e.g. FY27_ANN_GP_v1
+
+LABELS/FIELD TEXT:
+Admin cascade
+Authoring model (FR-M09-015)
+Clone from
+Create plan
+Custom
+Description
+Employee only
+FR-M09-002
+FY25 Annual Goal Plan v1
+FY26 Annual Goal Plan v1
+FY26 Mid-year Goal Plan v2
+Goal plans
+KRA
+L1 Manager only
+L1 approval required
+Max goals per employee
+Methodology
+Min goals per employee
+New goal plan
+New plan
+Optional
+Performance Admin
+Period end
+Period start
+Plan basics
+Plan code
+Plan name
+SMART
+Save draft

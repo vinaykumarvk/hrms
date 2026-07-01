@@ -1,0 +1,28 @@
+SCREEN: exit-interview
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+LWD
+Slot
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Conduct
+Employee
+Exit interviews
+HRBP
+LWD
+Manish Surname13
+Mark E9 clearance complete
+Person K Menon
+Schedule
+Scheduled
+Scheduled / pending
+Slot
+Status
+To schedule

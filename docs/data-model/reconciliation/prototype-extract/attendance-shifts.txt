@@ -1,0 +1,68 @@
+SCREEN: attendance-shifts
+
+TABLE COLUMNS (<th>):
+Action
+Current shift
+Days
+Effective
+Employee
+Hours
+New shift
+Reason (ATRN_8)
+Roster size
+Rotation
+Shift
+
+INPUT PLACEHOLDERS:
+e.g. IN_DAY_9_6
+e.g. India Day Shift
+
+LABELS/FIELD TEXT:
+Action
+Active
+All employees (default)
+Allow shift change requests by employees
+Applicable for
+Apply
+Attendance Admin
+Break duration (minutes)
+Contractors only
+Create / edit shift
+Current shift
+Days
+Draft
+Early shift
+Effective
+Effective from
+Employee
+FR-M05-003
+Family wedding
+Fixed (clock-based)
+Flexible (any 8 hours within window)
+General shift (day)
+Half-day cut-off
+Hours
+Inactive
+Medical procedure
+Mon-Fri
+Mon-Sat
+New shift
+Night shift differential
+No rotation
+Personal emergency
+Roster size
+Rotation
+Rotational (auto-cycle pattern)
+Shift
+Shift code
+Shift end time
+Shift management
+Shift name
+Shift patterns
+Shift start time
+Shift type
+Shifts
+Status
+Timezone
+Total working hours
+Weekly

@@ -1,0 +1,92 @@
+SCREEN: employee-detail
+
+TABLE COLUMNS (<th>):
+Allocation
+Client / BU
+DOB
+Department
+Designation
+Event
+From
+Insurance covered
+Manager
+Name
+Phone
+Project
+Relation
+Role on project
+To
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Aadhaar
+Active
+Address
+Allocation
+Attendance
+Blood group
+Child One
+Client / BU
+Current
+DOB
+DOJ 15 Jul 2021 (4y 10m)
+Date of birth
+Department
+Designation
+Documents
+Emergency contacts
+Employee ID
+Employee One
+Employee details
+Employment
+Event
+Exit to My team
+Father
+From
+Full name
+Gender
+Indian
+Insurance covered
+Internal employment history
+Joined
+Leave
+Male
+Manager
+Manager One
+Manager One (you)
+Manager change
+Marital status
+Married
+Masked
+Message
+My team
+Name
+Nationality
+Org chart
+PAN
+PSI000456
+Parent One
+Payments Platform v2
+Performance
+Permanent
+Person D Surname10
+Personal
+Personal email
+Personal mobile
+Phone
+Project
+Project history
+Promotion
+Relation
+Reports to
+Role on project
+SWE II
+Son
+Spouse
+Spouse One
+Sr Software Engineer
+This mirrors the employee's own view.
+XXXX XXXX 4321
+You're acting in Employee One's space

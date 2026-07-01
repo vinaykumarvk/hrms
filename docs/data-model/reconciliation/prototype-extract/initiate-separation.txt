@@ -1,0 +1,43 @@
+SCREEN: initiate-separation
+
+TABLE COLUMNS (<th>):
+Clearance
+Owner
+Status
+
+INPUT PLACEHOLDERS:
+Optional
+
+LABELS/FIELD TEXT:
+Better Compensation
+Career Break
+Clearance
+Contract Ended
+Current separation status
+Dashboard
+Date of resignation
+Done
+Employee Resignation
+Finance
+HR / documents
+Health Issues
+IT assets
+In notice period
+Initiate separation
+Job Dissatisfaction
+Manager
+Manager handover
+No active bond
+Owner
+Pending
+Personal commitments
+Pursuing Higher Studies
+Reason category
+Reason details
+Relocation
+Requested last working day
+Resigned - Company Requested
+Retirement
+Status
+Submit resignation
+Withdraw resignation

@@ -1,0 +1,36 @@
+SCREEN: onboarding-config
+
+TABLE COLUMNS (<th>):
+
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Auto-completion
+Auto-initiate before DOJ (days)
+Buddy
+Candidate reminder every (days)
+Disabled
+Document clusters
+E-Verify
+Enabled
+Form builder
+ID verification
+Initiation clusters
+Mandatory
+Off
+Onboarding Admin
+Onboarding configuration
+Onboarding configuration (M02)
+Onboarding form
+Optional
+Process name
+Process settings
+Reference documents
+SPOC auto-assignment
+Sign-off documents
+Sync data from employee profile
+Undertaking documents
+User assignment
+Verification package

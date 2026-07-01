@@ -1,0 +1,28 @@
+SCREEN: cfg-leave-platform
+
+TABLE COLUMNS (<th>):
+Action
+Scope
+Setting
+Value
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Add / edit leave platform settings
+Allow previous-year applications
+Apply sandwich rule
+Enable encashment window
+Enable leave rounding
+Enabled
+Leave platform settings
+Message mandatory
+Org Admin
+Reason mandatory
+Sandwich-leave rule
+Scope
+Setting
+Tenant
+Value

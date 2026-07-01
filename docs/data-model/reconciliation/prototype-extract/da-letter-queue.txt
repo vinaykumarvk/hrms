@@ -1,0 +1,54 @@
+SCREEN: da-letter-queue
+
+TABLE COLUMNS (<th>):
+Action
+Employee
+Letter type
+Merge fields
+Requested by
+Signer(s)
+Status
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+Action
+Akash Surname9
+All 10 resolved
+All 12 resolved
+All 14 resolved
+All 16 resolved
+All 18 resolved
+All 8 resolved
+Ankit Patil
+Awaiting CEO sig
+Awaiting HR sig
+Candidate One
+Document Admin
+Employee
+Employee One
+Employee self-service
+FR-M11-005
+HOD Eng (Dev Khanna)
+HR Admin
+HR Admin (M09 cycle)
+HR Admin (involuntary)
+Karthik R. (Recruiter)
+Letter generation queue
+Letter type
+M03 Separation flow
+Manish Surname13
+Merge fields
+Naina S.
+Pending letters
+Person A Surname1
+Person E M. (Recruiter)
+Requested by
+Resolve
+Reviewer Three K.
+Scheduled
+Signature configuration (DM22).
+Signer(s)
+Status
+Validation error

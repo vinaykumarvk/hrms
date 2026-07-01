@@ -1,0 +1,26 @@
+SCREEN: visitor-mgmt
+
+TABLE COLUMNS (<th>):
+Host
+Purpose
+Status
+Visitor
+
+INPUT PLACEHOLDERS:
+
+
+LABELS/FIELD TEXT:
+A. Surname3 (Vendor)
+Checked in
+Demo
+FR-M17-006
+Host
+Manager One
+Office Admin
+Pending NDA
+Pre-registered
+Purpose
+Status
+Visitor
+Visitor log
+Visitor management
