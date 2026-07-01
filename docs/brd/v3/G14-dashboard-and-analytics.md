@@ -4,7 +4,7 @@
 **Program:** Government / Public-Sector HRMS, delivered as a **configuration and extension of the existing PrimeSoft HRMS platform** (not a greenfield build — `PLATFORM_FOUNDATION.md` §1).
 **Platform relationship:** **EXTEND / REUSE of PrimeSoft M16 Reports & Analytics** (`MODULE_RECONCILIATION.md` §A row G14). G14 reuses the existing role-scoped dashboards + pre-built reports surface and the `analytics.*` menu entitlement (Foundation §6; RBAC §2.1 Org-Admin cross-entity); it **adds** public-sector KPIs and statutory dashboards (reservation-roster compliance, SR verification status, pension forecasting, disciplinary aging) as extensions — it does **not** fork a parallel reporting module.
 **Source of truth:** `PLATFORM_FOUNDATION.md` (platform build contract) + `MODULE_RECONCILIATION.md` (G14 row, §C overrides, §D net-new). These **supersede** the invented `SHARED_FOUNDATION.md` conventions referenced by v2.
-**Document version:** v3.0 (platform re-grounded). Preserves all v2.0 content and rigor (23 FRs, 24 owned analytics artefacts, all council amendments R1–R16 + world-class additions), re-anchored onto PrimeSoft P01–P06 / X.1–X.3 / W.1–W.3 and RBAC v1.7.
+**Document version:** v3.2 (field-reconciliation update — additive). v3.0 preserved all v2.0 content and rigor (23 FRs, 24 owned analytics artefacts, all council amendments R1–R16 + world-class additions), re-anchored onto PrimeSoft P01–P06 / X.1–X.3 / W.1–W.3 and RBAC v1.7. **v3.1 → v3.2** reconciles the concrete PrimeSoft prototype dashboard/dept-view tiles to **seeded** `kpi_definitions`/marts and adds the `HOURS` `kpi_unit` value — **no new tables, no artefact-count change** (see §1B and §5.5a).
 **Status:** Draft for Gate A review.
 **Authoritative platform artefacts consumed by id:** Master BRD v2.1 · Product Vision v2.6 · Platform Specification v1.6 (P01–P06, X.1–X.3, W.1–W.3) · RBAC Design v1.7 · Foundation FS v1.6 (API conventions, VAL-*, JOB-* index, MSG-*/ERR-* catalogue, menu entitlement).
 
@@ -85,6 +85,23 @@ G14 is "successful" when: it runs on the **existing M16 surface + `analytics.*` 
 
 **FR count:** v1 = 16 → v2/v3 = **23 FRs** (FR-G14-01…16 retained/amended; 17…23 new).
 **Owned analytics-artefact count:** v1 = 16 → v2/v3 = **24** (E01–E16 retained/amended; E17–E24 new). All now carry `tenant_id`/`entity_id`.
+
+---
+
+## 1B. Amendments (v3.1 → v3.2: field reconciliation)
+
+*(Additive-only. Reconciles the concrete PrimeSoft prototype dashboard/dept-view tiles against the G14 data model — `docs/data-model/14-G14-dashboard-analytics.sql` and `docs/data-model/reconciliation/prototype-g14-dashboards.md`. **Core finding:** every concrete dashboard/dept-view/leadership tile is **DATA-DERIVED** — it resolves to a governed `kpi_definition` (+ `analytics_datamart`) rendered by a `dashboard_widget`, or to a `saved_report`/drill-through/`nl_query_log`/`prediction_result`. **No new tables or columns were required**; the existing E01–E24 model already represents every tile. This amendment records the concrete seed set that maps the prototype tiles onto that model.)*
+
+| # | Reconciliation change (additive) | Where incorporated |
+|---|---|---|
+| 1 | `kpi.unit` enum gains **`HOURS`** — for the dept-attendance "Avg work hrs" tile (`avg(worked_minutes)/60.0`) | §5.5 Enum Catalog (`kpi.unit` row); schema `g14_kpi_unit += 'HOURS'` |
+| 2 | Seed **6 concrete `kpi_definitions`**: `LEAVE_ON_TODAY`, `ATT_PRESENT_PCT`, `ATT_WFH_TODAY`, `ATT_AVG_WORK_HRS`, `PERF_AVG_RATING`, `ATTRITION_LTM_PCT` — bound to prototype dept tiles | §5.5a Reference KPI Catalog; schema Section S |
+| 3 | Seed **3 read-model marts**: `MART_LEAVE` (G03), `MART_ATTENDANCE` (G03), `MART_APPRAISAL` (G08) — contracted read-only views, not forks | §5.5a; schema Section S |
+| 4 | Seed **3 `dashboard_widgets`** binding the dept KPIs onto the `MGR_TEAM` dashboard (Present Today %, On Leave Today, Team Avg Rating) | §5.5a note; schema Section S |
+| 5 | **dept-headcount** grade-band tile is a KPI **dimension** (`grade_band` added to `HEADCOUNT_ACTIVE.dimensions_allowed`) — data config, not a new column | §5.5a note |
+| 6 | **dept-view / leadership** tiles confirmed **data-derived KPIs, not new tables**: aggregate tables → `saved_reports`; leadership text-to-query → existing `nl_query_log` (E20); per-engineer attrition risk → existing `prediction_result` (E15) | §5.5a note |
+
+> **No change to:** the 23 FRs, the 24 owned analytics artefacts (E01–E24), the entity/relationship model, or any FR acceptance criterion. This is a **seed/enum reconciliation only** — additive, backward-compatible, and does not alter the artefact count.
 
 ---
 
@@ -769,7 +786,7 @@ marts READ FROM (via source_data_contract): employees(G01), leave/attendance(G03
 | widget.widget_type | KPI_TILE, LINE, BAR, PIE, DONUT, TABLE, HEATMAP, GAUGE, FUNNEL, MAP, TEXT |
 | widget.refresh_hint | LIVE, MART, CACHED |
 | kpi.domain / report.domain | WORKFORCE, LEAVE, ATTENDANCE, PAYROLL, TRAINING, APPRAISAL, DISCIPLINARY, TRANSFER, PROMOTION, PENSION, COMPLIANCE, SR |
-| kpi.unit | COUNT, PERCENT, RATIO, CURRENCY, DAYS, SCORE |
+| kpi.unit | COUNT, PERCENT, RATIO, CURRENCY, DAYS, SCORE, **HOURS** (`HOURS` added v3.2 — dept-attendance "Avg work hrs" tile) |
 | kpi.grain | EMPLOYEE, ORG_UNIT, CADRE, PERIOD, ENTERPRISE |
 | kpi.direction | HIGHER_BETTER, LOWER_BETTER, ON_TARGET |
 | sensitivity | PUBLIC, INTERNAL, RESTRICTED |
@@ -805,6 +822,26 @@ marts READ FROM (via source_data_contract): employees(G01), leave/attendance(G03
 | data_subject_change.change_type / .status | RECTIFICATION, ERASURE, RESTRICTION / RECEIVED, PROPAGATING, COMPLETED, BLOCKED_RETENTION, FAILED |
 | access_anomaly.anomaly_type / .status | OFF_HOURS_BULK_EXPORT, SCOPE_EDGE_PROBING, UNUSUAL_DRILLTHROUGH_VOLUME, REPEATED_DENIED, MASS_NL_QUERY / OPEN, INVESTIGATING, DISMISSED, CONFIRMED |
 | suppression_policy.applies_to | TILE, CHART, DRILLTHROUGH, EXPORT, ALL |
+
+### 5.5a Reference KPI Catalog — prototype tile → `kpi_definition` → mart (v3.2 field reconciliation)
+
+Reconciles the concrete PrimeSoft prototype dashboard/dept-view tiles against the seeded G14 model (`docs/data-model/14-G14-dashboard-analytics.sql` Section S; `docs/data-model/reconciliation/prototype-g14-dashboards.md`). Each tile is **DATA-DERIVED** — it resolves to a governed `kpi_definition` (E03) reading an `analytics_datamart` (E09), rendered by a `dashboard_widget` (E02). **These are seed rows, not new tables/columns.** This is a reference/example catalog; the authoritative registry is the `kpi_definitions` / `analytics_datamarts` tables.
+
+| Prototype tile (screen) | `kpi_definition.kpi_code` | domain | unit | grain | mart (`mart_code`) | source module |
+|---|---|---|---|---|---|---|
+| Present today (dept-attendance) | `ATT_PRESENT_PCT` | ATTENDANCE | PERCENT | ORG_UNIT | `MART_ATTENDANCE` | G03 |
+| WFH today (dept-attendance) | `ATT_WFH_TODAY` | ATTENDANCE | COUNT | ORG_UNIT | `MART_ATTENDANCE` | G03 |
+| Avg work hrs (dept-attendance) | `ATT_AVG_WORK_HRS` | ATTENDANCE | **HOURS** | ORG_UNIT | `MART_ATTENDANCE` | G03 |
+| On leave today (dept-attendance / dept-leave) | `LEAVE_ON_TODAY` | LEAVE | COUNT | ORG_UNIT | `MART_LEAVE` | G03 |
+| Avg rating (dept-performance; band via `rating_band` dim) | `PERF_AVG_RATING` | APPRAISAL | SCORE | ORG_UNIT | `MART_APPRAISAL` | G08 |
+| Attrition (LTM) (dept-view) | `ATTRITION_LTM_PCT` | WORKFORCE | PERCENT | ORG_UNIT | `MART_HEADCOUNT` | G01/G03 |
+| Headcount by grade band B2–B5+ (dept-headcount) | `HEADCOUNT_ACTIVE` (existing) + `grade_band` dimension | WORKFORCE | COUNT | ORG_UNIT | `MART_HEADCOUNT` | G01 |
+
+> **HOURS unit.** `ATT_AVG_WORK_HRS` introduces the `HOURS` value in the `kpi.unit` enum (§5.5) / `g14_kpi_unit` type — the only enum change this reconciliation required.
+>
+> **dept-view / leadership tiles are data-derived KPIs, not new tables.** Composite dept-view tables (Team · Manager · Headcount · Avg rating · On notice · Open positions) are `saved_reports` (E06) over one or more marts, not columns. Leadership tiles likewise reuse existing artefacts: text-to-query → `nl_query_log` (E20); per-engineer attrition-risk table → `prediction_result` (E15, friction-gated) + `prediction_model` (E14). The dept-headcount grade-band split is a KPI **dimension** (config on `dimensions_allowed`), not a schema change. Screens owned elsewhere (audit-log → P05, notifications → X.2, tasks → P01, calendar → cross-module, ai-policy-chat → P03) are referenced, not seeded in G14.
+>
+> **Seed widgets.** Three `dashboard_widgets` bind `ATT_PRESENT_PCT`, `LEAVE_ON_TODAY`, and `PERF_AVG_RATING` onto the `MGR_TEAM` dashboard (schema Section S).
 
 ### 5.6 Data Integrity Rules
 

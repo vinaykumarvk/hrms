@@ -3,7 +3,7 @@
 **Module code:** `G01-EPM` (alias `GOV-M01`; re-keyed from the legacy `M01-EPM` per `MODULE_RECONCILIATION.md` §B)
 **Module name:** Employee Profile Management — the Canonical Government Employee Master
 **Program:** Enterprise HRMS ("PeopleGov / HRMS Suite") — government/public-sector, CGG Data Centre, **running on the PrimeSoft HRMS platform**
-**Document version:** v3.0 (platform-re-grounded; supersedes v2.0 which superseded v1.0)
+**Document version:** v3.2 (data-model field-reconciliation sync; supersedes v3.1 → v3.0 → v2.0 → v1.0). v3.2 is an **additive** sync of §5 to the reconciled schema (`docs/data-model/01-G01-employee-profile.sql` SECTION 6/7) against ground-truth CSV exports and the PrimeSoft prototype screens; no prior content was removed or restructured — see the **Amendments (v3.1 → v3.2)** table below.
 **Reconciliation relationship:** **EXTEND of PrimeSoft `M01` Employee Master** (`MODULE_RECONCILIATION.md` §A) — reuses the canonical `employees` master, lifecycle state machine, org position and document vault; ADDS public-sector fields (`service_no`, `cadre`, `pay_scale_id`, posting history) and the statutory governance satellites as EXTENSIONS — it does **not** fork a parallel employee table.
 **Status:** Issued for build (parallel-agent ready) — Phase 1 (spine) and Phase 2 (configurability) explicitly demarcated
 **Authoring standard:** World-class HCM (Workday / SAP SuccessFactors / Oracle HCM class) layered on a public-sector statutory context, with **engineered** (not asserted) DPDP Act 2023 + Aadhaar Act 2016 compliance, **consuming the PrimeSoft platform engines (P01–P06, X.1–X.3, W.1–W.3) by id**
@@ -233,6 +233,34 @@ Surgical reconciliation against the frozen G12 SR-ingestion contract and shared-
 
 ---
 
+## Amendments (v3.1 → v3.2: field reconciliation)
+
+Purely **additive** sync of §5 (Holistic Data Model) to the reconciled schema. Every row below is a new
+entity, new column, or new enum value delivered by SECTION 6/7 of `docs/data-model/01-G01-employee-profile.sql`
+and evidenced by a ground-truth export (Darwinbox CSV) or a PrimeSoft prototype screen. Nothing in v3.0/v3.1
+was deleted or moved. Authority: `docs/data-model/reconciliation/g01-profile-fields.md` (CSV recon) and
+`docs/data-model/reconciliation/prototype-g01-profile.md` (prototype recon).
+
+| # | Added entity / field | Kind | Source | §5 location |
+|---|---|---|---|---|
+| F1 | `national_id_types` (config master; 21 config columns) | new entity (E35) | CSV `National_ID-Export_1_.csv` | §5.1, §5.2, §5.4, §5.7 |
+| F2 | `employee_personal_details` (1:1 biographical satellite) | new entity (E36) | CSV `Profile.docx` field dictionary | §5.1, §5.2, §5.4, §5.7 |
+| F3 | `employee_profile_skills` (skill / proficiency / years / last-used) | new entity (E37) | prototype `add-skill` | §5.1, §5.2, §5.4, §5.7 |
+| F4 | `employee_visas` (country / type / number / validity / sponsor) | new entity (E38) | prototype `add-visa` | §5.1, §5.2, §5.4, §5.7 |
+| F5 | `employee_professional_certifications` (name / issuer / credential / validity) | new entity (E39) | prototype `add-certification` | §5.1, §5.2, §5.4, §5.7 |
+| F6 | `employee_dependent_details` (1:1 satellite: nationality / phone / address / insurance-covered) | new entity (E40) | prototype `add-dependent` | §5.1, §5.2, §5.4, §5.7 |
+| F7 | `employee_identity_documents` → `national_id_type_id` (FK), `is_temporary_id`, `temporary_id_value` | +columns (E9) | CSV `National_ID-Export_1_.csv` | §5.4 E9 |
+| F8 | `custom_field_definitions` → `external_field_id`, `display_target`, `for_object`, `is_editable`, `allow_decimals`, `number_separator`; `section_id` now nullable | +columns (E15) | CSV `CustomFields-Export.csv` | §5.4 E15 |
+| F9 | `employee_education` → `start_year`, `grade_type` | +columns (E7) | prototype `add-education` | §5.4 E7 |
+| F10 | `employee_experience` → `job_description` | +column (E8) | prototype `add-experience` | §5.4 E8 |
+| F11 | `employee_bank_accounts` → `penny_drop_status` | +column (E10) | prototype `bank-entry` | §5.4 E10 |
+| F12 | `CUSTOM_FIELD_TYPE` += `DROPDOWN`, `MULTI_SELECT_DROPDOWN`, `TEXT_AREA` | +enum values | CSV `CustomFields-Export.csv` | §5.5 |
+| F13 | `BENEFIT_TYPE` += `ESIC` | +enum value | prototype `nominees` "Type" | §5.5 |
+| F14 | `SKILL_PROFICIENCY`, `VISA_SPONSOR_TYPE`, `PENNY_DROP_STATUS` | new enums | prototype `add-skill` / `add-visa` / `bank-entry` | §5.5 |
+| F15 | Consumed core masters — `bands`, `regions`, `locations`, `weekly_off_patterns`, `grades.band_id`, `org_units` HOD hierarchy | referenced (owned by platform-core) | CSV Organisation exports | §4.2, §5.2 |
+
+---
+
 ## 2. Scope & Boundaries
 
 ### 2.1 Feature Module Map
@@ -396,6 +424,7 @@ is superseded where they conflict. The following is the G01-specific binding of 
 ### 4.2 Platform entities & services CONSUMED (never redefined here)
 
 - **Master data (referenced):** `users`, `org_units`, `designations`, `cadres`, `pay_scales`, `roles`, `permissions`, `geo_master`.
+- **Reconciliation org masters (referenced; owned by `00-platform-core.sql`, added by the CSV Organisation reconciliation):** `bands` (grade band; `grades.band_id`/`band_code` link), `regions`, `locations` (physical work-location master; office address/heads), `weekly_off_patterns`, `notice_period_policies`, `probation_policies`, `separation_reasons`, `contribution_levels`, and the extended `org_units` department hierarchy (`performance_hod_employee_id`, `functional_head_employee_id`, `head_hr_employee_id`, `group_hr_head_employee_id`). G01 reads these for placement/directory display; it does not own or redefine them (v3.2).
 - **PrimeSoft `M01` master (EXTENDED):** the canonical **`employees`** row (`employee_id`, `user_id`, `official_email`, `lifecycle_state`, `date_of_joining`, `previous_employee_id`, …) and `statutory_identities`, `employee_contacts`, `emergency_contacts` — G01 adds public-sector columns and owns the `employee_*` governance satellites + E21–E34 as **EXTENSIONS** (not a fork).
 - **Platform-provided services (consumed by id):** **P01** WorkflowEngine (`workflows`/`workflow_instances`/`workflow_actions`), **P02** `Authorization.check`, **P05** dual audit (`audit_log` + `security_audit_log`, DB-trigger), **P06** Migration Toolkit (`migration_runs`), **P04** (`integration_credentials`), **X.2** `notifications`, **G13** `documents`, **platform `consent_records`** (DPDPA).
 - **Net-new gov ledger (referenced, written-to):** **`service_register_events`** is the **G12-SR** ledger (net-new on the P05 substrate) — G01 emits to it via the outbox; it is **not** a platform primitive (`MODULE_RECONCILIATION.md` §C/§D).
@@ -520,10 +549,24 @@ entities are 1 table each. v1 owned 20 entities (E1–E20); v2 adds **14** (E21�
 | **E32** | `governed_field_change_requests` | Governed DOB/category/name change workflow | **new** | 1:N |
 | **E33** | `outbox_events` | Transactional change-feed backbone | **new** | event log |
 | **E34** | `break_glass_reveals` | Break-glass reveal ledger (rate-limit/anomaly) | **new** | 1:N |
+| **E35** | `national_id_types` | Tenant-configurable statutory-ID type master (alias/mandatory/temporary-ID/issued-from-till/document config) | **v3.2** | config |
+| **E36** | `employee_personal_details` | Biographical satellite (country/place of birth, marital-status-since, marriage anniversary, father/mother/spouse name, languages, LinkedIn) | **v3.2** | 1:1 |
+| **E37** | `employee_profile_skills` | Declared skills (name, proficiency, years, last-used) | **v3.2** | 1:N |
+| **E38** | `employee_visas` | Visas / work-permits (country, type, number, validity, sponsor, scan) | **v3.2** | 1:N |
+| **E39** | `employee_professional_certifications` | Professional certifications (name, issuer, credential-id, validity) — distinct from statutory E25 | **v3.2** | 1:N |
+| **E40** | `employee_dependent_details` | Dependent extras satellite (nationality, phone, address, group-insurance-covered) for core `employee_dependents` | **v3.2** | 1:1 per dependent |
+
+**v3.2 field reconciliation (additive).** The reconciled schema adds **6 new G01-owned entities (E35–E40,
+6 physical tables)** on top of the E1–E34 baseline — see the Amendments (v3.1 → v3.2) table. These are
+satellites/config masters keyed on `employee_id`/`dependent_id`/`tenant_id`; no baseline entity was
+redefined. Enum and per-column deltas on existing entities (E7/E8/E9/E10/E15) are documented inline in
+§5.4/§5.5.
 
 **Referenced (owned elsewhere):** `users`, `org_units`, `designations`, `cadres`, `pay_scales`,
 `roles`, `audit_log`, `documents`, `notifications`, `service_register_events`,
-`workflow_instances`/`workflow_actions`.
+`workflow_instances`/`workflow_actions`; **and (v3.2, platform-core reconciliation masters)** `bands`,
+`regions`, `locations`, `weekly_off_patterns`, `notice_period_policies`, `probation_policies`,
+`separation_reasons`, `contribution_levels`, `grades` (with `band_id`), `geo_master`.
 
 ### 5.2 Ownership & Reuse Matrix
 
@@ -543,8 +586,14 @@ entities are 1 table each. v1 owned 20 entities (E1–E20); v2 adds **14** (E21�
 | `break_glass_reveals` (E34) | **G01** | own | DPO, Auditor |
 | `profile_sections`/`custom_field_definitions`/`field_access_policies` (E14,E15,E17) | **G01** | own (config) | all UIs |
 | `dedup_candidates`, import tables (E19,E20) | **G01** | own | migration tooling, G14 |
+| `national_id_types` (E35) | **G01** | own (config master; v3.2) | all UIs, G13 (scan requirement) |
+| `employee_personal_details` (E36) | **G01** | own (biographical satellite; v3.2) | G14, directory |
+| `employee_profile_skills` (E37), `employee_professional_certifications` (E39) | **G01** | own (v3.2) | G06/G08 (talent, read), G14 |
+| `employee_visas` (E38) | **G01** | own (v3.2) | G14, deputation/travel (read) |
+| `employee_dependent_details` (E40) | **G01** | own (dependent satellite; v3.2) | G03 (read), G11 (family benefits) |
 | `users` | Platform | reference | all |
 | `org_units`, `designations`, `cadres`, `pay_scales` | Master data | reference | all |
+| `bands`, `regions`, `locations`, `weekly_off_patterns`, `notice_period_policies`, `probation_policies`, `separation_reasons`, `contribution_levels`, `grades` (v3.2 recon masters) | platform-core (`00-platform-core.sql`) | reference (placement/directory) | all |
 | `documents` | **G13** | reference (`document_id`) | all |
 | `service_register_events` | **G12** | post via canonical write-port `POST /api/v1/sr/ingest` (outbox façade relays; never direct INSERT) — see §8.6 | G12, G14 |
 | `audit_log`, `notifications`, `workflow_*` | Platform / G02 | write/reference | all |
@@ -758,8 +807,10 @@ PROVISIONAL`); the CHECK and NOT NULL constraints are enforced as the row is rem
 | `specialization` | VARCHAR(120) | NULL | |
 | `institution` | VARCHAR(200) | NOT NULL | |
 | `board_university` | VARCHAR(200) | NULL | |
-| `year_of_passing` | SMALLINT | 1950..current | |
-| `grade_or_percentage` | VARCHAR(20) | NULL | |
+| `year_of_passing` | SMALLINT | 1950..current | **End year** (prototype `add-education`) |
+| `start_year` | SMALLINT | 1950..2100, NULL | **v3.2** — start year of study (prototype `add-education`) |
+| `grade_or_percentage` | VARCHAR(20) | NULL | numeric/grade value |
+| `grade_type` | VARCHAR(20) | NULL | **v3.2** — qualifier for the value: CGPA / GPA / PERCENTAGE / GRADE (prototype `add-education`) |
 | `is_highest` | BOOLEAN | default false | one highest |
 | `is_verified` | BOOLEAN | default false | credential verification |
 | `certificate_document_id` | UUID | FK→documents(G13), NULL | |
@@ -777,6 +828,7 @@ PROVISIONAL`); the CHECK and NOT NULL constraints are enforced as the row is rem
 | `to_date` | DATE | NULL | null = current external |
 | `is_government_service` | BOOLEAN | default false | counts toward pensionable service |
 | `reason_for_leaving` | VARCHAR(200) | NULL | |
+| `job_description` | VARCHAR(500) | NULL | **v3.2** — free-text description of the prior role (prototype `add-experience`) |
 | `last_drawn_pay` | NUMERIC(12,2) | NULL | PII |
 | `proof_document_id` | UUID | FK→documents(G13), NULL | relieving/experience letter |
 
@@ -790,7 +842,10 @@ PROVISIONAL`); the CHECK and NOT NULL constraints are enforced as the row is rem
 |---|---|---|---|
 | `identity_doc_id` | UUID | PK | |
 | `employee_id` | UUID | FK, NOT NULL | |
-| `doc_type` | VARCHAR(24) | enum (`IDENTITY_DOC_TYPE`) | AADHAAR/PAN/PASSPORT/VOTER_ID/DRIVING_LICENSE/PRAN |
+| `doc_type` | VARCHAR(24) | enum (`IDENTITY_DOC_TYPE`) | AADHAAR/PAN/PASSPORT/VOTER_ID/DRIVING_LICENSE/PRAN (legacy closed enum; retained for back-compat) |
+| `national_id_type_id` | UUID | FK→`national_id_types` (E35), NULL | **v3.2** — links the value to the tenant-configurable statutory-ID type (alias/mandatory/masking driven by E35) |
+| `is_temporary_id` | BOOLEAN | default false | **v3.2** — the CSV "Temporary ID" flow (interim/provisional number) |
+| `temporary_id_value` | VARCHAR(60) | NULL | **v3.2** — temporary-ID value when `is_temporary_id=true` |
 | `doc_number_masked` | VARCHAR(40) | NOT NULL | display masked |
 | `doc_number_token` | VARCHAR(128) | NULL (NULL for AADHAAR) | encrypted; non-Aadhaar only |
 | `aadhaar_ref_key` | VARCHAR(64) | NULL, FK→`aadhaar_vault` | **set only for AADHAAR rows** |
@@ -815,7 +870,8 @@ PROVISIONAL`); the CHECK and NOT NULL constraints are enforced as the row is rem
 | `account_number_token` | VARCHAR(128) | encrypted | never returned raw |
 | `account_type` | VARCHAR(16) | enum (`BANK_ACCOUNT_TYPE`) | SAVINGS/CURRENT/SALARY |
 | `is_primary_salary` | BOOLEAN | default false | exactly one active primary |
-| `is_verified` | BOOLEAN | default false | penny-drop/manual; **G10 disbursement precondition** |
+| `is_verified` | BOOLEAN | default false | penny-drop/manual; **G10 disbursement precondition** (retained for back-compat) |
+| `penny_drop_status` | VARCHAR(16) | enum (`PENNY_DROP_STATUS`), default PENDING | **v3.2** — tri-state PENDING/VERIFIED/FAILED (prototype `bank-entry`; `is_verified` alone could not express FAILED) |
 | `effective_from` | DATE | NOT NULL | |
 | `cancelled_cheque_document_id` | UUID | FK→documents(G13), NULL | |
 
@@ -888,14 +944,20 @@ PROVISIONAL`); the CHECK and NOT NULL constraints are enforced as the row is rem
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `field_def_id` | UUID | PK | |
-| `section_id` | UUID | FK→profile_sections | |
+| `section_id` | UUID | FK→profile_sections, **NULL (v3.2)** | **v3.2:** `NOT NULL` dropped — CSV "Display in" fields target arbitrary HR objects, not only profile sections |
 | `field_key` | VARCHAR(60) | UNIQUE within section | |
-| `label` | VARCHAR(120) | NOT NULL | |
-| `data_type` | VARCHAR(16) | enum (`CUSTOM_FIELD_TYPE`) | TEXT/NUMBER/DATE/BOOLEAN/ENUM/DOCUMENT |
-| `enum_options` | TEXT[] | conditional | for ENUM |
+| `label` | VARCHAR(120) | NOT NULL | CSV "Field Name" |
+| `data_type` | VARCHAR(16) | enum (`CUSTOM_FIELD_TYPE`) | TEXT/NUMBER/DATE/BOOLEAN/ENUM/DOCUMENT + **v3.2** DROPDOWN/MULTI_SELECT_DROPDOWN/TEXT_AREA |
+| `enum_options` | TEXT[] | conditional | for ENUM/DROPDOWN/MULTI_SELECT |
 | `is_required` | BOOLEAN | default false | |
 | `is_pii` | BOOLEAN | default false | governs access policy |
 | `validation_regex` | VARCHAR(200) | NULL | |
+| `external_field_id` | VARCHAR(40) | NULL, UNIQUE(tenant) | **v3.2** — CSV "Field Id" (e.g. `a64902e57de4a6`) |
+| `display_target` | VARCHAR(80) | NULL | **v3.2** — CSV "Display in" (HR Documents, Recruitment Requisition, Separation Manager, …) |
+| `for_object` | VARCHAR(40) | NULL | **v3.2** — CSV "FOR" object class (e.g. Others) |
+| `is_editable` | BOOLEAN | default true | **v3.2** — CSV "Is Editable" |
+| `allow_decimals` | BOOLEAN | default false | **v3.2** — CSV "Allow Decimals" (NUMBER fields) |
+| `number_separator` | VARCHAR(8) | NULL | **v3.2** — CSV "Number Separator" (e.g. thousands) |
 | `display_order` | SMALLINT | NOT NULL | |
 | `is_active` | BOOLEAN | default true | |
 
@@ -1204,6 +1266,108 @@ PROVISIONAL`); the CHECK and NOT NULL constraints are enforced as the row is rem
 | `alerted` | BOOLEAN | default false | real-time DPO alert fired |
 | `audit_id` | UUID | NULL | link to async audit_log row |
 
+#### E35 — `national_id_types` *(v3.2 new — configurable statutory-ID master; source `National_ID-Export_1_.csv`)*
+
+> Replaces reliance on the closed `IDENTITY_DOC_TYPE` enum for tenant configurability (CONVENTIONS §4).
+> Per-type alias, mandatory flags, temporary-ID, issued-from/till and document config; per-employee values
+> stay in `employee_identity_documents` (E9). `UNIQUE(tenant_id, id_code)`.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `national_id_type_id` | UUID | PK | |
+| `id_code` | VARCHAR(60) | NOT NULL, UNIQUE(tenant) | CSV "Code" (e.g. `adhar_card_number`, `bank_pan_num`) |
+| `label` | VARCHAR(160) | NOT NULL | CSV "Option" (display name) |
+| `applicable_for` | VARCHAR(40) | default 'All Employees' | CSV "Applicable For" (India / All Employees) |
+| `is_enabled` | BOOLEAN | default true | CSV "Enable/Disable" |
+| `alias` | VARCHAR(160) | NULL | CSV "Alias" |
+| `temporary_id_enabled` / `temporary_id_alias` | BOOLEAN / VARCHAR(120) | default false / NULL | CSV "Temporary ID" enable + alias |
+| `issued_from_enabled` / `issued_from_alias` / `issued_from_mandatory` | BOOLEAN / VARCHAR(120) / BOOLEAN | defaults false | CSV "Issued From" config |
+| `issued_till_enabled` / `issued_till_alias` / `issued_till_mandatory` | BOOLEAN / VARCHAR(120) / BOOLEAN | defaults false | CSV "Issued Till" config |
+| `id_document_enabled` / `id_document_alias` / `id_document_mandatory` | BOOLEAN / VARCHAR(120) / BOOLEAN | defaults false | CSV "ID Document" — drives whether a scan is required |
+| `mandatory_for_activation` | BOOLEAN | default false | CSV "Mandatory for Activation" |
+| `mandatory_for_addition` | BOOLEAN | default false | CSV "Mandatory for Addition" |
+| `is_unique` | BOOLEAN | default false | CSV "Is Unique" |
+| `masking` | VARCHAR(40) | NULL | CSV "Masking" (mask pattern) |
+| `maps_to_doc_type` | VARCHAR(24) | enum (`IDENTITY_DOC_TYPE`), NULL | optional bridge to the legacy closed enum |
+| `display_order` | SMALLINT | default 0 | |
+
+#### E36 — `employee_personal_details` *(v3.2 new — 1:1 biographical satellite; source `Profile.docx`)*
+
+> Carries Profile.docx biographical fields absent from the core `employees` golden record (core is **not**
+> redefined). `UNIQUE(employee_id)`.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `personal_details_id` | UUID | PK | |
+| `employee_id` | UUID | FK, NOT NULL, UNIQUE | 1:1 with employee |
+| `country_of_birth` | VARCHAR(80) | NULL | |
+| `place_of_birth` | VARCHAR(120) | NULL | |
+| `marital_status_since` | DATE | NULL | |
+| `marriage_anniversary_date` | DATE | NULL | |
+| `father_name` | VARCHAR(160) | NULL | |
+| `mother_name` | VARCHAR(160) | NULL | |
+| `spouse_name` | VARCHAR(160) | NULL | |
+| `languages_spoken` | TEXT[] | NULL | e.g. {Telugu,English,Hindi} |
+| `linkedin_id` | VARCHAR(200) | NULL | Contact "LinkedIn ID" |
+
+#### E37 — `employee_profile_skills` *(v3.2 new — prototype `add-skill`)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `skill_id` | UUID | PK | |
+| `employee_id` | UUID | FK, NOT NULL | UNIQUE(employee_id, lower(skill_name)) |
+| `skill_name` | VARCHAR(120) | NOT NULL | "Skill name" |
+| `proficiency` | VARCHAR(16) | enum (`SKILL_PROFICIENCY`), NULL | BEGINNER/INTERMEDIATE/ADVANCED/EXPERT |
+| `years_of_experience` | NUMERIC(4,1) | ≥ 0, NULL | "Years of experience" |
+| `last_used_date` | DATE | NULL | "Last used" |
+| `is_verified` | BOOLEAN | default false | |
+
+#### E38 — `employee_visas` *(v3.2 new — prototype `add-visa`; distinct from statutory IDs)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `visa_id` | UUID | PK | |
+| `employee_id` | UUID | FK, NOT NULL | |
+| `country` | VARCHAR(80) | NOT NULL | "Country" |
+| `visa_type` | VARCHAR(80) | NOT NULL | "Visa type" (Employment Pass, Dependent visa, Schengen Short-stay, Other) |
+| `visa_number` | VARCHAR(60) | NULL | "Visa number" |
+| `issue_date` / `valid_till` | DATE | valid_till ≥ issue_date | "Issue date" / "Valid till" |
+| `issuing_authority` | VARCHAR(160) | NULL | "Issuing authority" |
+| `max_stay_days` | SMALLINT | ≥ 0, NULL | "Maximum stay (days per entry)" |
+| `sponsor_type` | VARCHAR(20) | enum (`VISA_SPONSOR_TYPE`), NULL | SELF_SPONSORED / EXTERNAL_SPONSOR |
+| `sponsored_by` | VARCHAR(200) | NULL | external sponsor name |
+| `is_dependent_visa` | BOOLEAN | default false | "Dependent visa" |
+| `scan_document_id` | UUID | FK→documents(G13), NULL | "Visa scan / soft copy" |
+
+#### E39 — `employee_professional_certifications` *(v3.2 new — prototype `add-certification`; distinct from statutory E25)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `certification_id` | UUID | PK | |
+| `employee_id` | UUID | FK, NOT NULL | |
+| `certification_name` | VARCHAR(200) | NOT NULL | "Certification name" (e.g. AWS Solutions Architect) |
+| `issuing_organisation` | VARCHAR(200) | NULL | "Issuing organisation" |
+| `credential_id` | VARCHAR(120) | NULL | "Credential ID" |
+| `issue_date` / `expiry_date` | DATE | expiry ≥ issue | "Issue date" / "Expiry date" |
+| `is_verified` | BOOLEAN | default false | |
+| `certificate_document_id` | UUID | FK→documents(G13), NULL | "Certificate file" |
+
+#### E40 — `employee_dependent_details` *(v3.2 new — 1:1 satellite of core `employee_dependents`; prototype `add-dependent`)*
+
+> Carries add-dependent extras + the detail-grid "Insurance covered" flag; core `employee_dependents` is
+> **not** redefined. `UNIQUE(dependent_id)`.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `dependent_details_id` | UUID | PK | |
+| `dependent_id` | UUID | FK→`employee_dependents`, NOT NULL, UNIQUE | 1:1 with the core dependent |
+| `nationality` | VARCHAR(40) | NULL | "Nationality" |
+| `phone` | VARCHAR(20) | NULL | "Phone" |
+| `country_code` | VARCHAR(5) | default '+91' | |
+| `address_line` | VARCHAR(320) | NULL | "Address" |
+| `same_as_employee_address` | BOOLEAN | default false | "Same as employee address?" |
+| `is_covered_group_insurance` | BOOLEAN | default false | "Add to group medical insurance" / grid "Insurance covered" |
+
 ### 5.5 Enum & Reference Catalog
 
 | Enum | Allowed values |
@@ -1252,6 +1416,16 @@ PROVISIONAL`); the CHECK and NOT NULL constraints are enforced as the row is rem
 | `HOLD_TYPE` *(v2)* | DISCIPLINARY, LITIGATION, PENSION, AUDIT, RTI |
 | `HOLD_STATUS` *(v2)* | ACTIVE, RELEASED |
 | `GOVERNED_CHANGE_STATUS` *(v2)* | DRAFT, SUBMITTED, UNDER_REVIEW, APPROVED, REJECTED, APPLIED |
+| `CUSTOM_FIELD_TYPE` *(v3.2 extension)* | *baseline* TEXT, NUMBER, DATE, BOOLEAN, ENUM, DOCUMENT **+ v3.2:** DROPDOWN, MULTI_SELECT_DROPDOWN, TEXT_AREA |
+| `BENEFIT_TYPE` *(v3.2 extension)* | *baseline* PF, GRATUITY, PENSION, INSURANCE, NPS, LEAVE_ENCASHMENT **+ v3.2:** ESIC |
+| `SKILL_PROFICIENCY` *(v3.2)* | BEGINNER, INTERMEDIATE, ADVANCED, EXPERT |
+| `VISA_SPONSOR_TYPE` *(v3.2)* | SELF_SPONSORED, EXTERNAL_SPONSOR |
+| `PENNY_DROP_STATUS` *(v3.2)* | PENDING, VERIFIED, FAILED |
+
+> **v3.2 reference master (not a Postgres enum).** `national_id_types` (E35) is the tenant-configurable
+> statutory-ID **master table** that supersedes reliance on the closed `IDENTITY_DOC_TYPE` enum for
+> extensibility (adds EPF/ESIC/UAN etc. without a DDL migration); the enum is retained for back-compat and
+> bridged via `national_id_types.maps_to_doc_type`.
 
 ### 5.6 Data Integrity Rules
 
@@ -1588,6 +1762,50 @@ PROVISIONAL`); the CHECK and NOT NULL constraints are enforced as the row is rem
 | bg-0002 | usr-hradmin-2 | 11111111-...-0033 | employees.category | Roster audit AUD-22 | true | 18 | 2.10 | true |
 | bg-0003 | usr-hradmin-1 | 11111111-...-0002 | employee_bank_accounts.account_number | Salary exception | false | 5 | 0.90 | false |
 
+#### `national_id_types` *(v3.2 new — configurable statutory-ID master)*
+
+| national_id_type_id | id_code | label | applicable_for | is_enabled | temporary_id_enabled | is_unique | maps_to_doc_type |
+|---|---|---|---|---|---|---|---|
+| a1d7-...-0001 | adhar_card_number | Aadhaar | India | true | true | true | AADHAAR |
+| a1d7-...-0002 | bank_pan_num | PAN | India | true | false | true | PAN |
+| a1d7-...-0003 | passport_number | Passport | All Employees | true | false | false | PASSPORT |
+
+#### `employee_personal_details` *(v3.2 new — biographical satellite)*
+
+| personal_details_id | employee_id | country_of_birth | place_of_birth | marital_status_since | father_name | languages_spoken | linkedin_id |
+|---|---|---|---|---|---|---|---|
+| 9e70-...-0001 | 11111111-...-0001 | India | Hyderabad | 2012-12-01 | Ramesh Verma | {Telugu,English,Hindi} | in.linkedin.com/in/anjali-rao |
+| 9e70-...-0002 | 11111111-...-0002 | India | Vijayawada | (null) | Kotaiah Kumar | {Telugu,English} | (null) |
+
+#### `employee_profile_skills` *(v3.2 new)*
+
+| skill_id | employee_id | skill_name | proficiency | years_of_experience | last_used_date | is_verified |
+|---|---|---|---|---|---|---|
+| 5c11-...-0001 | 11111111-...-0001 | Python | ADVANCED | 8.0 | 2026-06-01 | true |
+| 5c11-...-0002 | 11111111-...-0001 | PostgreSQL | INTERMEDIATE | 5.5 | 2026-05-15 | false |
+| 5c11-...-0003 | 11111111-...-0002 | Project Management | EXPERT | 15.0 | 2026-06-20 | false |
+
+#### `employee_visas` *(v3.2 new)*
+
+| visa_id | employee_id | country | visa_type | visa_number | issue_date | valid_till | sponsor_type |
+|---|---|---|---|---|---|---|---|
+| 7154-...-0001 | 11111111-...-0001 | Singapore | Employment Pass | EP-4471228 | 2025-02-10 | 2027-02-09 | EXTERNAL_SPONSOR |
+| 7154-...-0002 | 11111111-...-0002 | Germany | Schengen Short-stay | C-90887711 | 2026-01-05 | 2026-07-04 | SELF_SPONSORED |
+
+#### `employee_professional_certifications` *(v3.2 new)*
+
+| certification_id | employee_id | certification_name | issuing_organisation | credential_id | issue_date | expiry_date | is_verified |
+|---|---|---|---|---|---|---|---|
+| ce27-...-0001 | 11111111-...-0001 | AWS Solutions Architect – Associate | Amazon Web Services | AWS-ASA-88213 | 2024-09-01 | 2027-09-01 | true |
+| ce27-...-0002 | 11111111-...-0002 | PMP | Project Management Institute | PMP-552310 | 2019-03-15 | 2025-03-15 | false |
+
+#### `employee_dependent_details` *(v3.2 new — 1:1 satellite of `employee_dependents`)*
+
+| dependent_details_id | dependent_id | nationality | phone | same_as_employee_address | is_covered_group_insurance |
+|---|---|---|---|---|---|
+| dd90-...-0001 | de90-...-0001 | Indian | +91 98XXXX4455 | true | true |
+| dd90-...-0002 | de90-...-0002 | Indian | (null) | true | true |
+
 ---
 
 ## 6. Functional Requirements
@@ -1858,6 +2076,7 @@ pension/gratuity nominees** (improvement #20).
 **Business Rules:**
 - Spouse relationship limited to one active per employee (configurable).
 - Nominee changes for PENSION/GRATUITY are statutory — require proof document, 4-eyes, and an SR event.
+- **(v3.2)** Dependent extras — nationality, phone, address, "same as employee address?" and the group-medical-insurance "Insurance covered" flag — are stored in the 1:1 `employee_dependent_details` (E40) satellite; the core `employee_dependents` row is unchanged. `ESIC` is available as a nominee `BENEFIT_TYPE`.
 
 **Data Model References:**
 
@@ -1975,6 +2194,7 @@ linkage to G13.
 **Business Rules:**
 - Overlapping prior-experience date ranges produce a warning (concurrent roles possible).
 - Education below the post's minimum qualification raises an advisory data-quality REVIEW flag.
+- **(v3.2)** Education captures both `start_year` and `year_of_passing` (end year) with a `grade_type` qualifier (CGPA/GPA/PERCENTAGE/GRADE) alongside `grade_or_percentage`; prior experience captures a free-text `job_description`. Declared **skills** (`employee_profile_skills`, E37) and **professional certifications** (`employee_professional_certifications`, E39 — distinct from statutory certificates E25) are managed here with optional G13 certificate linkage; **visas/work-permits** (`employee_visas`, E38) drive expiry alerts like other dated documents.
 
 **Data Model References:**
 
@@ -2047,6 +2267,7 @@ vault row. Verification, expiry alerts, scan linkage to G13. **PAN and Aadhaar w
   rejected.
 - PAN unique across employees (duplicate PAN → dedup candidate).
 - No facial/biometric authentication against Aadhaar is performed in G01.
+- **(v3.2)** Each identity row links to a tenant-configurable statutory-ID type (`national_id_types`, E35) via `national_id_type_id`; the type's config drives which fields apply — alias, mandatory-for-addition/activation, uniqueness, masking, whether a scan document is required, and whether a **temporary ID** is allowed (`is_temporary_id` + `temporary_id_value`). This extends coverage to EPF/ESIC/UAN etc. without altering the legacy `IDENTITY_DOC_TYPE` enum.
 
 **Data Model References:**
 
@@ -2118,6 +2339,7 @@ disbursement; G01 simply exposes the verified primary (improvement #6).
 **Business Rules:**
 - A bank change within N days of a payroll cut-off is flagged for extra scrutiny.
 - Separated employees' bank edits restricted to pension disbursement context (HR Admin + reason).
+- **(v3.2)** Verification records the tri-state `penny_drop_status` (PENDING / VERIFIED / FAILED); a FAILED penny-drop keeps the account unverified and must be re-attempted or manually cleared before it can become the effective primary (`is_verified` retained for back-compat).
 
 **Data Model References:**
 
@@ -2403,6 +2625,7 @@ view and forms render dynamically from this config.
 **Business Rules:**
 - A field's data type cannot change once values exist (must create a new field).
 - Conditional sections only render for matching `applicable_employment_types`.
+- **(v3.2)** The custom-field framework carries the CSV `CustomFields-Export.csv` attributes: an external `external_field_id`, a `display_target` ("Display in": HR Documents, Recruitment Requisition, Separation Manager, …) with `for_object`, plus `is_editable`, `allow_decimals` and `number_separator`; `data_type` supports DROPDOWN/MULTI_SELECT_DROPDOWN/TEXT_AREA. Because a field may target arbitrary HR objects (not only profile sections), `section_id` is now nullable — a field with a `display_target` and no `section_id` is valid.
 
 **Data Model References:**
 

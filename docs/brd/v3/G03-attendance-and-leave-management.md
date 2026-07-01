@@ -5,8 +5,49 @@
 **Runs on platform engines:** approvals on **P01 WorkflowEngine**; authorization + field masking on **P02**; audit on **P05** dual logs (DB-trigger); migration on **P06**; background jobs on **X.1**; notifications on **X.2**; configured flows/forms on **W.1/W.2/W.3**.
 **Grounding artefacts (authoritative):** `docs/brd/PLATFORM_FOUNDATION.md` and `docs/brd/MODULE_RECONCILIATION.md`. These **supersede** the invented `SHARED_FOUNDATION.md` conventions referenced by v2.
 **Source of truth for shared elements:** Master BRD v2.1 · Product Vision v2.6 · Platform Spec v1.6 · RBAC Design v1.7 · Foundation FS v1.6 — referenced by id, never re-authored.
-**Document version:** v3.0 — 2026-07-01 (platform re-grounding of v2.0; preserves all v2 functional content and rigor).
-**Revision basis:** v2.0 council-hardened BRD (risks R1–R19, improvements 1–25) re-anchored onto PrimeSoft per the platform authoring rules (`PLATFORM_FOUNDATION.md` §9; `MODULE_RECONCILIATION.md` §E). See `## Amendments (v2 → v3: platform re-grounding)`.
+**Document version:** v3.2 — 2026-07-01 (field reconciliation of v3.1; ADD-ONLY sync of §5 to the reconciled G03 data model). Supersedes v3.0/v3.1 headers below, which are retained for lineage.
+**Prior version:** v3.0 — 2026-07-01 (platform re-grounding of v2.0; preserves all v2 functional content and rigor).
+**Revision basis:** v2.0 council-hardened BRD (risks R1–R19, improvements 1–25) re-anchored onto PrimeSoft per the platform authoring rules (`PLATFORM_FOUNDATION.md` §9; `MODULE_RECONCILIATION.md` §E). See `## Amendments (v2 → v3: platform re-grounding)`. The v3.1→v3.2 data-model field reconciliation is captured in `## Amendments (v3.1 → v3.2: field reconciliation)`.
+
+---
+
+## Amendments (v3.1 → v3.2: field reconciliation)
+
+This revision is an **ADD-ONLY** synchronisation of §5 to the reconciled G03 data model (`docs/data-model/03-G03-attendance-leave.sql`, SECTIONS 13b + 13c). All v3.0/v3.1 content is preserved verbatim; only new entities, columns, enums, and inventory/ownership rows are added. Two reconciliation passes drove it: the **CSV pass** (PrimeSoft vendor config exports, `docs/data-model/reconciliation/g03-leave-attendance.md`) and the **prototype pass** (PrimeSoft M04/M05 UI screens, `docs/data-model/reconciliation/prototype-g03-leave-attendance.md`).
+
+**Config-vs-data framing (governs this whole amendment).** The vendor exports carry **~700 raw policy toggles** (Leaves_Policy ~230 cols, Attendance_Policy ~260, Tenant_Leaves_Compoff ~280) and the prototype adds screen-level request-window / display / auto-route switches. The **vast majority are POLICY CONFIGURATION, not data attributes**: they live in the existing `module_config` (E27, effective-dated) or in new per-policy **`*_config jsonb`** columns (`policy_config`, `leave_type_config`, `accrual_config`, `shift_config`, `recurrence_config`). A CSV/screen field was promoted to a **first-class schema column** only when it is a genuine, queryable DATA attribute. Everything else is explicitly W-config. Manager/team roll-up screens (`team-leave`, `team-attendance`, `office-attendance`) are **derived reads**, not storage.
+
+### New entities added (§5.1 inventory + §5.2 field tables)
+| New entity | Inv. # | Ownership | Source |
+|---|---|---|---|
+| `attendance_policies` | E32 | **EXTEND M05** | CSV export `Attendance_Policy_Export.csv` (+`Attendance_Settings`) |
+| `overtime_policies` | E33 | **EXTEND M04/M05** | CSV exports `Tenant_Leaves_Compoff_Export.csv` + `Overtime_Slabs/Threshold/Indexing` |
+| `attendance_networks` | E34 | **G03 new** | CSV export `Attendance_Ip_Export.csv` (IP-restriction ranges) |
+| `geofences` | E35 | **G03 new** | CSV export `Geofencing-Export.csv` (+`CheckIn_Settings_Export`) |
+| `leave_reasons` | E36 | **EXTEND M04** | Prototype screen `leave-reasons` (FR-M04-003) |
+| `attendance_reasons` | E37 | **EXTEND M05** | Prototype screen `attendance-reasons` (FR-M05-005) |
+| `leave_balance_adjustments` | E38 | **G03 new** | Prototype screen `leave-balance-adjust` (FR-M04-021) |
+| `leave_revocations` | E39 | **G03 new** | Prototype screen `leave-revocation` (FR-M04-005) |
+| `attendance_lock_periods` | E40 | **G03 new** | Prototype screen `attendance-lock` (FR-M05-007) |
+
+### New/changed columns on existing entities (§5.2 field tables)
+| Entity | Columns added | Source |
+|---|---|---|
+| `leave_types` (E12) | is_hourly_leave, hours_per_day, hourly_min_minutes, hourly_multiple_minutes, allow_hourly_across_midnight, max_days_per_year, max_availed_per_year, max_days_per_month, min_advance_notice_days, max_future_apply_days, allow_half_day, attachment_mandatory_beyond_days, is_special_leave, has_unlimited_balance, **leave_type_config** (jsonb) | CSV `Leaves_Policy_Export.csv` / `Unpaid_Leave_Export.csv` |
+| `leave_accrual_policies` (E13) | **accrual_config** (jsonb) | CSV `Leaves_Policy_Export.csv` (working-days/hours & custom-accrual patterns = config) |
+| `shifts` (E1) | is_wfh_shift, leave_deduction_factor, standard_working_minutes, attendance_policy_id (FK), overtime_policy_id (FK), **shift_config** (jsonb) [CSV `Attendance_Shift_Export.csv`]; shift_type (enum) [prototype `attendance-shifts`, FR-M05-003] | CSV + prototype |
+| `holidays` (E4) | day_name, repeat_next_year, is_national, recurrence_type, **recurrence_config** (jsonb) [CSV `all-Holiday-Export.csv`]; holiday_category, description [prototype `holiday-calendar-config`] | CSV + prototype |
+| `overtime_records` (E9) | overtime_policy_id (FK) [CSV]; reason, worked_on_holiday, worked_on_weekly_off [prototype `request-ot`, FR-M05-008] | CSV + prototype |
+| `comp_off_ledger` (E11) | overtime_policy_id (FK) | CSV `Tenant_Leaves_Compoff_Export.csv` |
+| `leave_applications` (E16) | approver_note, hourly_minutes | Prototype `apply-leave` (FR-M04-017) |
+| `geofences` (E35, new) | address, max_employees | Prototype `geofencing` (FR-M05-004) |
+| `attendance_devices` (E5) | biometric_modality (enum) | Prototype `biometric-mgmt` (FR-M05-006) |
+| `attendance_policies` (E32, new) | wfh_cap_per_month, working_days_per_week, daily_required_minutes | Prototype `attendance-policies` (FR-M05-002) |
+
+### New enums added (§5.5 catalog)
+`g03_ot_calc_frequency`, `g03_holiday_recurrence` (CSV pass); `g03_shift_type`, `g03_leave_adjustment_type`, `g03_adjustment_status`, `g03_revocation_type`, `g03_lock_resolution_mode`, `g03_lock_status`, `g03_biometric_modality`, `g03_holiday_category` (prototype pass).
+
+> **Note — POLICY toggles are configuration, not columns.** Most attendance/leave policy switches (pro-rata, clubbing, prefix/suffix, block-leave, future-cycle, request windows, hide/display flags, per-frequency OT approval routing, regularisation/geofence enablement) are **W-config**: they ride in `module_config` or the new `*_config jsonb` columns, **not** as first-class schema columns. Only genuine DATA attributes were promoted to columns above.
 
 ---
 
@@ -238,6 +279,15 @@ Per Recon §A (G03 = EXTEND of M04 Leave + M05 Attendance) and §C/§E (no paral
 | **E29a** | `dependent_leave_eligibility` | Transactional satellite | **G03 new** (1:1 FK → G01 `employee_dependents`) | Leave-specific `is_surviving` predicate only; no shared columns. *(R14; D5)* |
 | **E30** | `biometric_consents` | Governance | **G03 new** (links **P05 `consent_records`**) | DPDP consent + lawful basis + fallback election. *(R9)* |
 | **E31** | `punch_anomaly_reviews` | Transactional | **G03 new** (P01 review flow) | Review lifecycle for flagged punches. *(R10)* |
+| **E32** | `attendance_policies` | Master | **EXTEND M05** | Grace/buffer/absconding/edit-window/NSD/WFH-cap DATA; ~230 request & display toggles ride in `policy_config` jsonb. *(v3.2 CSV)* |
+| **E33** | `overtime_policies` | Master | **EXTEND M04/M05** | OT calc-frequency, caps, multipliers, comp-off credit rules; slabs/thresholds/indexing as jsonb sets; routing in `policy_config`. *(v3.2 CSV)* |
+| **E34** | `attendance_networks` | Master | **G03 new** | IP-restriction ranges (`ip_from`/`ip_to` inet) for network-bound punch capture. *(v3.2 CSV)* |
+| **E35** | `geofences` | Master | **G03 new** | Named, reusable, location-assignable geofences (lat/long/radius/address/capacity). Distinct from `attendance_devices.geofence` inline point. *(v3.2 CSV+proto)* |
+| **E36** | `leave_reasons` | Master (tenant-configurable value set) | **EXTEND M04** | Leave-dropdown reason master (code/category/doc/route/threshold) per CONVENTIONS §4. *(v3.2 proto; FR-M04-003)* |
+| **E37** | `attendance_reasons` | Master (tenant-configurable value set) | **EXTEND M05** | Regularisation reason master (code/category/doc/auto-approve/frequency-cap). *(v3.2 proto; FR-M05-005)* |
+| **E38** | `leave_balance_adjustments` | Transactional | **G03 new** (P01 flow) | Approvable balance-adjustment request → posts `ADJUSTMENT` to `leave_balance_ledger`. *(v3.2 proto; FR-M04-021)* |
+| **E39** | `leave_revocations` | Transactional | **G03 new** (P01 flow) | Post-approval revocation of approved leave → posts `AVAIL_REVERSAL` refund. *(v3.2 proto; FR-M04-005)* |
+| **E40** | `attendance_lock_periods` | Transactional | **G03 new** (X.1/M06 handoff) | Monthly attendance lock cycle at org scope (distinct from per-employee feed `is_locked`). *(v3.2 proto; FR-M05-007)* |
 
 Reused platform entities (not redefined): `tenants`, `employees`, `users`, `org_units`, `designations`, `grades`/`cadres`, `documents`, `notifications`, `audit_log`/`security_audit_log`, `workflows`/`workflow_instances`/`workflow_actions`, `consent_records`, `integration_credentials`, `migration_runs`; the SR ledger `service_register_events` is **G12-SR** (net-new gov), written via **G04**.
 
@@ -270,6 +320,13 @@ Reused platform entities (not redefined): `tenants`, `employees`, `users`, `org_
 | display_timezone | VARCHAR(40) | NOT NULL, DEFAULT `Asia/Kolkata` | Local zone for date bucketing. |
 | org_unit_scope_id | UUID | FK → org_units | Applicability scope. |
 | status | ENUM | NOT NULL | `ACTIVE`/`INACTIVE`. |
+| is_wfh_shift | BOOLEAN | NOT NULL, DEFAULT false | **`v3.2 CSV`** — Is WFH Shift? |
+| shift_type | ENUM (`g03_shift_type`) | NOT NULL, DEFAULT `FIXED` | **`v3.2 proto`** (FR-M05-003) — `FIXED`/`FLEXIBLE`/`ROTATIONAL`; flex window rides in `shift_config`. |
+| leave_deduction_factor | NUMERIC(4,2) | NULL | **`v3.2 CSV`** — leave-deduction factor for the shift. |
+| standard_working_minutes | INT | NULL | **`v3.2 CSV`** — standard working hours (stored as minutes). |
+| attendance_policy_id | UUID | FK → attendance_policies (E32), NULL | **`v3.2 CSV`** — governing attendance policy. |
+| overtime_policy_id | UUID | FK → overtime_policies (E33), NULL | **`v3.2 CSV`** — OT policy enabled in the shift. |
+| shift_config | JSONB | NULL | **`v3.2 CSV`** — null-shift, alt-work-schedule, no-OT-on-day toggles (**config, not data**). |
 
 #### E2 `rosters` (EXTEND M05)
 | Field | Type | Constraints | Description |
@@ -305,6 +362,13 @@ Constraint: no overlapping `PUBLISHED` roster for the same `employee_id`/date ra
 | name | VARCHAR(120) | NOT NULL | e.g. "Republic Day". |
 | holiday_type | ENUM | NOT NULL | `GAZETTED`/`RESTRICTED`/`SECTIONAL`/`OPTIONAL`. |
 | is_restricted_optional | BOOLEAN | NOT NULL, DEFAULT false | Employee-elective (RH). |
+| day_name | VARCHAR(12) | NULL | **`v3.2 CSV`** — day-of-week label (Sunday…). |
+| repeat_next_year | BOOLEAN | NOT NULL, DEFAULT false | **`v3.2 CSV`** — Repeat Next Year (import-forward). |
+| is_national | BOOLEAN | NOT NULL, DEFAULT false | **`v3.2 CSV`** — Holiday Type National(2). |
+| recurrence_type | ENUM (`g03_holiday_recurrence`) | NOT NULL, DEFAULT `STATIC_DATE` | **`v3.2 CSV`** — `STATIC_DATE`/`DAY_OF_MONTH`. |
+| recurrence_config | JSONB | NULL | **`v3.2 CSV`** — `{occurrence, month, day}` for `DAY_OF_MONTH`. |
+| holiday_category | ENUM (`g03_holiday_category`) | NULL | **`v3.2 proto`** — `NATIONAL`/`REGIONAL`/`RELIGIOUS`/`COMPANY_SPECIFIC`. |
+| description | TEXT | NULL | **`v3.2 proto`** — notes / description. |
 
 Constraint: UNIQUE(`calendar_id`,`holiday_date`) (`VAL-G03-HOLIDAY-DUP`).
 
@@ -322,6 +386,7 @@ Constraint: UNIQUE(`calendar_id`,`holiday_date`) (`VAL-G03-HOLIDAY-DUP`).
 | template_storage | ENUM | NOT NULL, DEFAULT `ON_DEVICE` | `ON_DEVICE`/`SERVER_ENCRYPTED`/`NONE` (DPDPA). |
 | status | ENUM | NOT NULL | `ACTIVE`/`INACTIVE`/`DECOMMISSIONED`. |
 | last_seen_at | TIMESTAMPTZ | NULL | Heartbeat. |
+| biometric_modality | ENUM (`g03_biometric_modality`) | NULL | **`v3.2 proto`** (FR-M05-006) — `FINGERPRINT`/`FACE`/`IRIS`/`CARD`/`NONE`. |
 
 #### E6 `attendance_punches` (EXTEND M05; append-only; +P05 trigger)
 | Field | Type | Constraints | Description |
@@ -385,6 +450,10 @@ Constraint: UNIQUE(`employee_id`,`attendance_date`). **FR-04 is the sole writer 
 | rate_multiplier | NUMERIC(4,2) | NULL | e.g. 1.5/2.0. |
 | workflow_instance_id | UUID | FK → workflow_instances (**P01**) | Approval. |
 | status | ENUM | NOT NULL | `SUBMITTED`/`APPROVED`/`REJECTED`/`PAID`/`CONVERTED_TO_COMPOFF`. |
+| overtime_policy_id | UUID | FK → overtime_policies (E33), NULL | **`v3.2 CSV`** — governing OT policy (lineage). |
+| reason | TEXT | NULL | **`v3.2 proto`** (FR-M05-008) — reason / comments (request-ot). |
+| worked_on_holiday | BOOLEAN | NOT NULL, DEFAULT false | **`v3.2 proto`** — worked on holiday. |
+| worked_on_weekly_off | BOOLEAN | NOT NULL, DEFAULT false | **`v3.2 proto`** — worked on weekly off. |
 
 #### E10 `attendance_exceptions` (EXTEND M05; WFH/On-Duty/Tour; P01 flow)
 | Field | Type | Constraints | Description |
@@ -412,6 +481,7 @@ Constraint: UNIQUE(`employee_id`,`attendance_date`). **FR-04 is the sole writer 
 | earned_on / expires_on | DATE | NULL | Earn date / expiry (`JOB-M04-SMART` reminder). |
 | balance_after | NUMERIC(6,2) | NOT NULL | Running balance. |
 | remarks | TEXT | NULL | Note. |
+| overtime_policy_id | UUID | FK → overtime_policies (E33), NULL | **`v3.2 CSV`** — governing OT policy (comp-off credit lineage). |
 
 #### E12 `leave_types` (EXTEND M04 + `G03 ext`)
 | Field | Type | Constraints | Description |
@@ -435,6 +505,21 @@ Constraint: UNIQUE(`employee_id`,`attendance_date`). **FR-04 is the sole writer 
 | max_continuous_days | INT | NULL | Statutory cap. |
 | applicable_cadre_ids | JSONB | NULL | Cadre restriction. |
 | status | ENUM | NOT NULL | `ACTIVE`/`INACTIVE`. |
+| is_hourly_leave | BOOLEAN | NOT NULL, DEFAULT false | **`v3.2 CSV`** — Is Hourly Leave? |
+| hours_per_day | NUMERIC(4,2) | NULL | **`v3.2 CSV`** — No of Hours in a Day (hourly-leave basis). |
+| hourly_min_minutes | INT | NULL | **`v3.2 CSV`** — min leave duration per application (minutes). |
+| hourly_multiple_minutes | INT | NULL | **`v3.2 CSV`** — allow hourly leave only in multiples of (minutes). |
+| allow_hourly_across_midnight | BOOLEAN | NOT NULL, DEFAULT false | **`v3.2 CSV`** — allow hourly leave across midnight. |
+| max_days_per_year | NUMERIC(6,2) | NULL | **`v3.2 CSV`** — Maximum Leave Allowed Per Year. |
+| max_availed_per_year | NUMERIC(6,2) | NULL | **`v3.2 CSV`** — Maximum Leave that can be availed per year. |
+| max_days_per_month | NUMERIC(6,2) | NULL | **`v3.2 CSV`** — Maximum Leave Allowed Per Month. |
+| min_advance_notice_days | INT | NULL | **`v3.2 CSV`** — minimum advance notice for application (days). |
+| max_future_apply_days | INT | NULL | **`v3.2 CSV`** — max number of future days leave is allowed for. |
+| allow_half_day | BOOLEAN | NOT NULL, DEFAULT true | **`v3.2 CSV`** — Allow half-day. |
+| attachment_mandatory_beyond_days | INT | NULL | **`v3.2 CSV`** — attachment mandatory if application > X days. |
+| is_special_leave | BOOLEAN | NOT NULL, DEFAULT false | **`v3.2 CSV`** — Is this a Special Leave. |
+| has_unlimited_balance | BOOLEAN | NOT NULL, DEFAULT false | **`v3.2 CSV`** — Leave With Unlimited Balance. |
+| leave_type_config | JSONB | NULL | **`v3.2 CSV`** — long-tail policy toggles (pro-rata, clubbing, prefix/suffix, block-leave, future-cycle, probation, display) (**config, not data**). |
 
 > **Note (R17):** `COMPOFF` is a **redemption vehicle only** — no `leave_balances` row, no accrual policy; its balance lives solely in `comp_off_ledger`.
 
@@ -459,6 +544,7 @@ Constraint: UNIQUE(`employee_id`,`attendance_date`). **FR-04 is the sole writer 
 | advance_allowed | BOOLEAN | NOT NULL, DEFAULT false | Negative balance permitted. |
 | effective_from / effective_to | DATE | NOT NULL / NULL | Version window (`VAL-EFFECTIVE`; config cascade). |
 | status | ENUM | NOT NULL | `ACTIVE`/`SUPERSEDED`/`DRAFT`. |
+| accrual_config | JSONB | NULL | **`v3.2 CSV`** — accrual-based-on working-days/hours, custom-accrual patterns, tenure/allotment brackets (**config, not data**). |
 
 #### E14 `leave_balances` (EXTEND M04; derived snapshot)
 | Field | Type | Constraints | Description |
@@ -511,6 +597,8 @@ Constraint: UNIQUE(`employee_id`,`leave_type_id`,`leave_year`).
 | leave_spell_lineage_id | UUID | NOT NULL | Stable correlation key for the leave spell, constant across approve→amend→cancel. Minted by G03 and exposed on the signed approved-leave event consumed by **G04** (G04 FR-01 correlation key); G04 dedupes by `leave_spell_lineage_id + event_sequence`. G03 emits the event to G04 and never calls `POST /api/v1/sr/ingest`. |
 | return_to_work_status | ENUM | NULL | `NOT_REQUIRED`/`PENDING`/`CLEARED`. |
 | applied_on_behalf_by | UUID | FK → users, NULL | HR proxy. |
+| approver_note | TEXT | NULL | **`v3.2 proto`** — message to approver ("optional context for your manager"); distinct from `reason`. |
+| hourly_minutes | INT | NULL | **`v3.2 proto`** (FR-M04-017) — hourly-leave duration; `total_days` remains the debit basis. |
 
 #### E17 `leave_application_days` (EXTEND M04)
 | Field | Type | Constraints | Description |
@@ -707,6 +795,168 @@ Constraint: `delegate_user_id` ≠ applicant; delegate holds approver role in sc
 | status | ENUM | NOT NULL | `OPEN`/`CONFIRMED_VALID`/`CONFIRMED_FRAUD`/`ESCALATED`. |
 | resolution_notes | TEXT | NULL | Outcome. |
 
+> **v3.2 field-reconciliation entities (E32–E40).** The following masters/transactionals were added by the CSV + prototype reconciliation passes (see `## Amendments (v3.1 → v3.2: field reconciliation)`). Every one carries the §5.1.1 tenancy + audit columns implicitly. Policy toggles remain in `*_config jsonb` / `module_config`, never as columns.
+
+#### E32 `attendance_policies` (EXTEND M05 — v3.2 CSV; `Attendance_Policy_Export.csv`)
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| attendance_policy_id | UUID | PK | Identity. |
+| policy_code | VARCHAR(30) | UNIQUE per tenant, NOT NULL | Human key e.g. `ATPY_1`. |
+| name | VARCHAR(120) | NOT NULL | Display name. |
+| description | TEXT | NULL | Notes. |
+| grace_in_minutes / grace_out_minutes | INT | NOT NULL, DEFAULT 0 | Grace for clock-in / last-punch. |
+| include_grace_in_late / include_grace_in_early_out | BOOLEAN | NOT NULL, DEFAULT false | Grace treatment in late/early computation. |
+| allow_wfh_checkin / allow_outduty_checkin | BOOLEAN | NOT NULL, DEFAULT false | Permit WFH / out-duty check-in. |
+| mark_attendance_basis | VARCHAR(40) | NULL | "Mark attendance based on" (e.g. First-Last). |
+| buffer_pre_minutes / buffer_post_minutes | INT | NOT NULL, DEFAULT 0 | Buffer before / after shift. |
+| backdated_edit_limit_days | INT | NULL | Restrict editing back-dated attendance to (days). |
+| roster_change_limit_days | INT | NULL | Restrict roster changes for past (days). |
+| absconding_trigger_days | INT | NULL | Trigger absconding flow after (days). |
+| optional_holiday_limit_days | INT | NULL | Limit availing optional holiday to (days). |
+| auto_approve_optional_holiday | BOOLEAN | NOT NULL, DEFAULT false | Auto-approve optional-holiday requests. |
+| night_shift_differential_enabled | BOOLEAN | NOT NULL, DEFAULT false | NSD enabled. |
+| nsd_multiplier | NUMERIC(4,2) | NULL | NSD multiplier. |
+| wfh_cap_per_month | INT | NULL | **`v3.2 proto`** (FR-M05-002) — WFH cap per month. |
+| working_days_per_week | NUMERIC(3,1) | NULL | **`v3.2 proto`** — working days per week. |
+| daily_required_minutes | INT | NULL | **`v3.2 proto`** — daily hours required (minutes). |
+| policy_config | JSONB | NULL | ~230 request-window, leave-deduction, hide/display toggles (**config, not data**). |
+| status | ENUM | NOT NULL, DEFAULT `ACTIVE` | `ACTIVE`/`INACTIVE`. |
+
+#### E33 `overtime_policies` (EXTEND M04/M05 — v3.2 CSV; `Tenant_Leaves_Compoff_Export.csv` + slabs/threshold/indexing)
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| overtime_policy_id | UUID | PK | Identity. |
+| policy_code | VARCHAR(30) | UNIQUE per tenant, NOT NULL | Human key e.g. `OVPY_7`. |
+| name | VARCHAR(120) | NOT NULL | Display name. |
+| description | TEXT | NULL | Notes. |
+| calculation_frequency | ENUM (`g03_ot_calc_frequency`) | NOT NULL, DEFAULT `DAILY` | `DAILY`/`WEEKLY`/`BIWEEKLY`/`SEMI_MONTHLY`/`MONTHLY`/`QUARTERLY`/`YEARLY`. |
+| compensation | ENUM (`g03_ot_treatment`) | NOT NULL, DEFAULT `COMP_OFF` | Compensate via `PAID`/`COMP_OFF`. |
+| min_ot_minutes | INT | NOT NULL, DEFAULT 0 | Minimum duration to consider for OT. |
+| daily/weekly/monthly/yearly_cap_minutes | INT | NULL | Max OT per day/week/month/year. |
+| weekday/weekly_off/holiday/nsd_multiplier | NUMERIC(4,2) | NULL | Rate multipliers by day type / NSD. |
+| compoff_min_minutes_full / compoff_min_minutes_half | INT | NULL | Min duration to credit one / half day comp-off. |
+| compoff_lapse_days | INT | NULL | Comp-off credit lapse (days). |
+| compoff_max_per_month | NUMERIC(4,2) | NULL | Max comp-off leave allowed in a month. |
+| slabs | JSONB | NULL | `[{slab_name, multiplication_factor}]` (Overtime_Slabs). |
+| thresholds | JSONB | NULL | `{weekly_pct, monthly_pct, quarterly_pct, yearly_pct}` (Overtime_Threshold). |
+| indexing_rules | JSONB | NULL | Standard/custom OT indexing (Overtime-Policy-Indexing-Rules). |
+| policy_config | JSONB | NULL | Per-frequency approval routing, rounding, deduction rules (**config, not data**). |
+| status | ENUM | NOT NULL, DEFAULT `ACTIVE` | `ACTIVE`/`INACTIVE`. |
+
+#### E34 `attendance_networks` (G03 new — v3.2 CSV; `Attendance_Ip_Export.csv`)
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| network_id | UUID | PK | Identity. |
+| network_code | VARCHAR(30) | UNIQUE per tenant, NOT NULL | Human key e.g. `IPRS_1`. |
+| name | VARCHAR(120) | NOT NULL | Network name. |
+| ip_from / ip_to | INET | NOT NULL | IP-restriction range bounds. |
+| tag | VARCHAR(60) | NULL | Tag (e.g. "Hyderabad Office"). |
+| status | ENUM | NOT NULL, DEFAULT `ACTIVE` | `ACTIVE`/`INACTIVE`. |
+
+#### E35 `geofences` (G03 new — v3.2 CSV+proto; `Geofencing-Export.csv`)
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| fence_id | UUID | PK | Identity. |
+| fence_code | VARCHAR(30) | UNIQUE per tenant, NOT NULL | Human key e.g. `GFRS_1`. |
+| name | VARCHAR(120) | NOT NULL | Fencing name. |
+| latitude / longitude | NUMERIC(9,6) | NOT NULL | Fence centre. |
+| radius_meters | INT | NOT NULL, CHECK > 0 | Distance (radius). |
+| tag | VARCHAR(60) | NULL | Tags. |
+| location_org_unit_id | UUID | FK → org_units, NULL | Assigned location / work-area. |
+| address | TEXT | NULL | **`v3.2 proto`** (FR-M05-004) — full street address. |
+| max_employees | INT | NULL | **`v3.2 proto`** — office capacity / max employees. |
+| status | ENUM | NOT NULL, DEFAULT `ACTIVE` | `ACTIVE`/`INACTIVE`. |
+
+> Distinct from `attendance_devices.geofence` (per-device inline point) — `geofences` is the **named, reusable, location-assignable** fence master.
+
+#### E36 `leave_reasons` (EXTEND M04 — v3.2 proto; `leave-reasons`, FR-M04-003)
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| leave_reason_id | UUID | PK | Identity (tenant-wide catalog → `entity_id` NULLABLE). |
+| reason_code | VARCHAR(30) | UNIQUE per tenant, NOT NULL | e.g. `MED_SELF`, `BEREAVEMENT`. |
+| name | VARCHAR(120) | NOT NULL | Reason name. |
+| category | VARCHAR(40) | NULL | Medical/Compassionate/Family/Statutory (tenant-configurable). |
+| description | TEXT | NULL | Shown in the leave dropdown. |
+| applicable_leave_type_ids | JSONB | NULL | Applicable leave types e.g. `["SL","HPL"]`. |
+| doc_required | BOOLEAN | NOT NULL, DEFAULT false | Documentation required. |
+| hrbp_auto_route | BOOLEAN | NOT NULL, DEFAULT false | HRBP auto-route. |
+| auto_approve_threshold_days | NUMERIC(5,2) | NULL | Auto-approve threshold (days). |
+| effective_from | DATE | NULL | Effective from. |
+| status | ENUM | NOT NULL, DEFAULT `ACTIVE` | `ACTIVE`/`INACTIVE`. |
+
+#### E37 `attendance_reasons` (EXTEND M05 — v3.2 proto; `attendance-reasons`, FR-M05-005)
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| attendance_reason_id | UUID | PK | Identity (tenant-wide catalog → `entity_id` NULLABLE). |
+| reason_code | VARCHAR(30) | UNIQUE per tenant, NOT NULL | e.g. `SWIPE_LOST_CARD`, `SYS`, `WFH`. |
+| name | VARCHAR(120) | NOT NULL | Reason name. |
+| category | VARCHAR(40) | NULL | MISS/MED/SYS/TRV/TRN/EMRG/WFH (tenant-configurable). |
+| description | TEXT | NULL | Visible to employees. |
+| applicable_scope | JSONB | NULL | Applicable to (regularisation kinds / leave types). |
+| doc_required | BOOLEAN | NOT NULL, DEFAULT false | Documentation required. |
+| auto_approve | BOOLEAN | NOT NULL, DEFAULT false | Always auto-approve (e.g. system downtime). |
+| auto_approve_threshold_days | NUMERIC(5,2) | NULL | Auto-approve threshold. |
+| frequency_cap | INT | NULL | Usage limit per period (null = unlimited). |
+| frequency_period | VARCHAR(20) | NULL | `MONTH`/`QUARTER`/`YEAR`. |
+| status | ENUM | NOT NULL, DEFAULT `ACTIVE` | `ACTIVE`/`INACTIVE`. |
+
+#### E38 `leave_balance_adjustments` (G03 new — v3.2 proto; `leave-balance-adjust`, FR-M04-021)
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| adjustment_id | UUID | PK | Identity. |
+| employee_id | UUID | FK → employees, NOT NULL | Subject. |
+| leave_type_id | UUID | FK → leave_types, NOT NULL | Adjusted type. |
+| adjustment_type | ENUM (`g03_leave_adjustment_type`) | NOT NULL | `CREDIT`/`DEBIT`/`RESET`. |
+| amount_days | NUMERIC(6,2) | NULL | For `CREDIT`/`DEBIT` (signed magnitude). |
+| reset_to_value | NUMERIC(6,2) | NULL | For `RESET` (target balance). |
+| reason_category | VARCHAR(60) | NULL | One-time award / prior-period correction / … |
+| detailed_reason | TEXT | NOT NULL | Justification (audit-logged). |
+| supporting_reference | VARCHAR(120) | NULL | Ticket ID, email, etc. |
+| effective_date | DATE | NOT NULL | Effective date. |
+| workflow_instance_id | UUID | FK → workflow_instances (**P01**), NULL | Approval chain. |
+| resulting_ledger_entry_id | UUID | FK → leave_balance_ledger, NULL | Posted `ADJUSTMENT` entry once applied. |
+| status | ENUM (`g03_adjustment_status`) | NOT NULL, DEFAULT `SUBMITTED` | `SUBMITTED`/`APPROVED`/`REJECTED`/`APPLIED`/`CANCELLED`. |
+
+> Mirrors the `leave_encashment_requests` pattern (approvable request → posts to the append-only `leave_balance_ledger`).
+
+#### E39 `leave_revocations` (G03 new — v3.2 proto; `leave-revocation`, FR-M04-005)
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| revocation_id | UUID | PK | Identity. |
+| application_id | UUID | FK → leave_applications, NOT NULL | Approved leave being revoked. |
+| employee_id | UUID | FK → employees, NOT NULL | Subject. |
+| revocation_type | ENUM (`g03_revocation_type`) | NOT NULL, DEFAULT `FULL` | `FULL` (Phase-1) / `PARTIAL`. |
+| days_to_revoke | NUMERIC(5,2) | NULL | Days revoked. |
+| reason_category | VARCHAR(60) | NULL | Admin correction / employee returned early / … |
+| detailed_reason | TEXT | NOT NULL | Justification (audit-logged). |
+| refund_to_balance | BOOLEAN | NOT NULL, DEFAULT true | Refund to balance (posts `AVAIL_REVERSAL`). |
+| initiated_by | UUID | FK → users, NULL | Initiator. |
+| workflow_instance_id | UUID | FK → workflow_instances (**P01**), NULL | Approval chain. |
+| resulting_ledger_entry_id | UUID | FK → leave_balance_ledger, NULL | Posted `AVAIL_REVERSAL` refund entry. |
+| status | ENUM (`g03_regularisation_status`) | NOT NULL, DEFAULT `SUBMITTED` | Reuses `DRAFT`/`SUBMITTED`/`APPROVED`/`REJECTED`/`CANCELLED`. |
+
+> Post-approval revocation of an already-approved leave — distinct from pre-start withdrawal captured by `leave_applications.status = WITHDRAWN`.
+
+#### E40 `attendance_lock_periods` (G03 new — v3.2 proto; `attendance-lock`, FR-M05-007)
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| lock_period_id | UUID | PK | Identity. |
+| lock_month | VARCHAR(7) | NOT NULL | `YYYY-MM`. |
+| scope_org_unit_id | UUID | FK → org_units, NULL | Org scope (null = entity-wide). |
+| lock_deadline | DATE | NULL | Cycle lock deadline. |
+| total_employee_days | INT | NULL | Employee-days in the cycle. |
+| pending_at_lock | INT | NULL | Pending regularisations at lock. |
+| resolution_mode | ENUM (`g03_lock_resolution_mode`) | NOT NULL, DEFAULT `MANUAL` | `AUTO_APPROVE`/`AUTO_DENY`/`MANUAL`. |
+| auto_trigger_payroll | BOOLEAN | NOT NULL, DEFAULT false | Auto-trigger M06 payroll on lock. |
+| lock_note | TEXT | NULL | Visible in the audit log. |
+| locked_by | UUID | FK → users, NULL | Locking actor. |
+| locked_at | TIMESTAMPTZ | NULL | Lock timestamp. |
+| payroll_status | VARCHAR(60) | NULL | e.g. "Payroll closed 12 Feb". |
+| payroll_closed_at | TIMESTAMPTZ | NULL | Payroll close timestamp. |
+| status | ENUM (`g03_lock_status`) | NOT NULL, DEFAULT `OPEN` | `OPEN`/`LOCKED`/`REOPENED`. |
+
+Constraint: UNIQUE(`tenant_id`,`lock_month`,`scope_org_unit_id`). Distinct from the per-employee `payroll_attendance_feed.is_locked` flag.
+
 ### 5.3 Relationship map (re-grounded)
 ```
 employees (G01/M01) 1───∞ rosters ∞───1 shifts                      [EXTEND M05]
@@ -750,9 +1000,33 @@ ALL mutations ──> P05 audit_log/security_audit_log (DB-trigger) ; ALL events
 | leave_* (types/policies/balances/ledger/applications/reservations/entitlements/encashment/close) | **EXTEND M04** (G03) | G14, G10, G11, G04 | G03 |
 | rh_elections, module_config, approval_delegations, biometric_consents, punch_anomaly_reviews | **G03 new** | DPO, Auditor | G03 |
 | payroll_attendance_feed, payroll_feed_adjustments | **G03** (X.3 outbound) | **G10** | G03 (export); G10 (ack) |
+| attendance_policies (E32) | **EXTEND M05** (v3.2 CSV) | G03, G14 | G03 |
+| overtime_policies (E33) | **EXTEND M04/M05** (v3.2 CSV) | G03, G10 | G03 |
+| attendance_networks (E34), geofences (E35) | **G03 new** (v3.2 CSV) | G03 (punch-capture guard) | G03 |
+| leave_reasons (E36) | **EXTEND M04** (v3.2 proto) | G03, G14 | G03 |
+| attendance_reasons (E37) | **EXTEND M05** (v3.2 proto) | G03, G14 | G03 |
+| leave_balance_adjustments (E38), leave_revocations (E39) | **G03 new** (v3.2 proto; P01 flow → `leave_balance_ledger`) | G14, G11, Auditor | G03 |
+| attendance_lock_periods (E40) | **G03 new** (v3.2 proto; X.1/M06 handoff) | **G10/M06** | G03 (lock); G10 (ack) |
 
 ### 5.5 Enum catalog
 All v2 enums are retained unchanged. Notable: `leave.year_basis` (CALENDAR/FINANCIAL/CAREER/EVENT), `leave.sandwich_rule` (EXCLUDE/INCLUDE_IF_SANDWICHED/ALWAYS_INCLUDE), `rounding_mode`, `ledger.entry_type` (incl. CLAWBACK), `reservation.status`, `entitlement.quota_basis`, `consent.lawful_basis`, `anomaly_type`, `feed_adjustment.type`, `attendance_daily.status` (derived rollup), `allocation.segment_status`, `processing_run.status`, `delegation.status`, `module_config.status`. (Full value lists per v2 §5.5; values are platform-`VAL-ENUM`-validated.)
+
+**v3.2 field-reconciliation enums added** (module-unique closed `g03_*` enumerations; UPPER_SNAKE values, platform-`VAL-ENUM`-validated):
+
+| Enum (`g03_*`) | Values | Used by | Source |
+|---|---|---|---|
+| `g03_ot_calc_frequency` | `DAILY`/`WEEKLY`/`BIWEEKLY`/`SEMI_MONTHLY`/`MONTHLY`/`QUARTERLY`/`YEARLY` | `overtime_policies.calculation_frequency` (E33) | v3.2 CSV |
+| `g03_holiday_recurrence` | `STATIC_DATE`/`DAY_OF_MONTH` | `holidays.recurrence_type` (E4) | v3.2 CSV |
+| `g03_shift_type` | `FIXED`/`FLEXIBLE`/`ROTATIONAL` | `shifts.shift_type` (E1) | v3.2 proto (FR-M05-003) |
+| `g03_leave_adjustment_type` | `CREDIT`/`DEBIT`/`RESET` | `leave_balance_adjustments.adjustment_type` (E38) | v3.2 proto (FR-M04-021) |
+| `g03_adjustment_status` | `SUBMITTED`/`APPROVED`/`REJECTED`/`APPLIED`/`CANCELLED` | `leave_balance_adjustments.status` (E38) | v3.2 proto |
+| `g03_revocation_type` | `FULL`/`PARTIAL` | `leave_revocations.revocation_type` (E39) | v3.2 proto (FR-M04-005) |
+| `g03_lock_resolution_mode` | `AUTO_APPROVE`/`AUTO_DENY`/`MANUAL` | `attendance_lock_periods.resolution_mode` (E40) | v3.2 proto (FR-M05-007) |
+| `g03_lock_status` | `OPEN`/`LOCKED`/`REOPENED` | `attendance_lock_periods.status` (E40) | v3.2 proto |
+| `g03_biometric_modality` | `FINGERPRINT`/`FACE`/`IRIS`/`CARD`/`NONE` | `attendance_devices.biometric_modality` (E5) | v3.2 proto (FR-M05-006) |
+| `g03_holiday_category` | `NATIONAL`/`REGIONAL`/`RELIGIOUS`/`COMPANY_SPECIFIC` | `holidays.holiday_category` (E4) | v3.2 proto |
+
+The reconciled `attendance_policies.status`, `overtime_policies.status`, `attendance_networks.status`, `geofences.status`, `leave_reasons.status`, `attendance_reasons.status` reuse the existing `g03_active_status` (`ACTIVE`/`INACTIVE`); `overtime_policies.compensation` reuses `g03_ot_treatment` (`PAID`/`COMP_OFF`); `leave_revocations.status` reuses `g03_regularisation_status`. Tenant-configurable value sets (`leave_reasons.category`, `attendance_reasons.category`/`frequency_period`) stay text business keys, not enums (CONVENTIONS §4).
 
 ### 5.6 Data integrity rules (retained, re-grounded)
 1. **Ledger-balance reconciliation:** `leave_balances.current_balance` = `balance_after` of latest `leave_balance_ledger` entry for (employee, leave_type, leave_year). Enforced by DB trigger + nightly reconciliation job (`JOB-G03-LEDGER-RECON`).

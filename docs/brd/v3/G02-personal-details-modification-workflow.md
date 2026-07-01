@@ -2,11 +2,21 @@
 
 **Module code:** G02-EPDM (was `M02-EPDM`; re-keyed per `MODULE_RECONCILIATION.md` §B)
 **Program:** Government HRMS — public-sector configuration & extension of the **PrimeSoft HRMS platform** (Master BRD v2.1 · Vision v2.6 · Platform Spec v1.6 · RBAC v1.7 · Foundation FS v1.6)
-**Document version:** v3.0 (platform-re-grounded — re-anchors v2.0 onto the PrimeSoft engines P01–P06 / X.1–X.3 / W.1–W.3)
+**Document version:** v3.2 (field reconciliation — adds the DPDPA `pii_tier_id` axis on `field_sensitivity_catalog` per prototype recon; see **Amendments (v3.1 → v3.2)** below. Baseline v3.0 platform-re-grounded — re-anchors v2.0 onto the PrimeSoft engines P01–P06 / X.1–X.3 / W.1–W.3)
 **Supersedes (content lineage):** v2.0 (`docs/brd/v2/M02-personal-details-modification-workflow.md`) — all v2 content, rigor, FR structure, entities and traceability are preserved; only the *substrate* is re-grounded.
 **Relationship to PrimeSoft:** **EXTEND of PrimeSoft M01 sensitive-field-change.** The maker-checker self-service edit already exists as the platform **"Request change → approval"** UI state (Foundation §3) routing **`E·AR` (Approval-Required)** fields (PAN/Aadhaar/passport/DL/bank — RBAC §7) to the sensitive-changes workflow on **P01 WorkflowEngine** (`MODULE_RECONCILIATION.md` §A row G02; Foundation §3; Platform §P01 — "Callers: M01 sensitive-field change"). G02 **configures** that flow (W.1) and adds the public-sector statutory controls; it **authors no new workflow, RBAC, audit, notification, job or form engine.**
 **Status:** Baseline for build (platform-consistent, parallel-agent ready).
 **Authoring standard:** Consumes `PLATFORM_FOUNDATION.md` and `MODULE_RECONCILIATION.md` by id. The invented `SHARED_FOUNDATION.md` conventions used by v2 are overridden per `MODULE_RECONCILIATION.md` §C and re-grounded here.
+
+---
+
+## Amendments (v3.1 → v3.2: field reconciliation)
+
+Add-only reconciliation of the Section 5 data model against the PrimeSoft prototype change-request / self-service screens. No requirement, FR, entity or routing behaviour changed; one genuine field gap was closed.
+
+| # | Change | Entity.field | Type | Source | Where |
+|---|---|---|---|---|---|
+| R3.2-1 | Added the DPDPA **PII-tier classification** axis to the field catalog — the tier label the prototype renders had no data home. Distinct from the approval-routing `sensitivity`; does not alter P01 route resolution. | `field_sensitivity_catalog.pii_tier_id` → platform `pii_tiers` (`ON DELETE RESTRICT`; index `ix_fsc_pii_tier`) | Add-only FK column | Prototype `sensitive-changes` screen (FR-M01-003) — groups requests by "PII Tier 1 / PII Tier 2"; recon `docs/data-model/reconciliation/prototype-g02.md` | §5.2 E5 field table + note |
 
 ---
 
@@ -438,7 +448,8 @@ This module **consumes** the PrimeSoft platform contracts by id (`PLATFORM_FOUND
 | `is_composite` | BOOLEAN | N | false | True for `name` |
 | `display_label` | VARCHAR(120) | N | | |
 | `field_group` | VARCHAR(60) | N | | Taxonomy ONLY: `DEMOGRAPHIC`,`CONTACT`,`FINANCIAL`,`IDENTITY`,`QUALIFICATION` |
-| `sensitivity` | ENUM | N | | `LOW`,`MEDIUM`,`HIGH`,`STATUTORY` |
+| `sensitivity` | ENUM | N | | G02 approval-routing axis: `LOW`,`MEDIUM`,`HIGH`,`STATUTORY` |
+| `pii_tier_id` | UUID (FK→`pii_tiers` platform) | Y | | ★ DPDPA PII-tier classification (`TIER_1`/`TIER_2`/`TIER_3`/`NON_PII`), **distinct** from the approval-routing `sensitivity`; the `sensitive-changes` review screen groups requests by PII tier. `ON DELETE RESTRICT`; indexed `ix_fsc_pii_tier` (recon, prototype) |
 | `rbac_field_access` | ENUM | Y | | ◆ `V/M/H/E/AR` (RBAC §7); `E·AR` fields render "Request change" (Foundation §3) |
 | `is_auth_bearing` | BOOLEAN | N | false | phone/email; forces ≥MEDIUM + notice, bars auto-apply (R1) |
 | `notify_old_value` | BOOLEAN | N | false | Notify OLD contact value on change (anti-takeover, R1) |
@@ -460,6 +471,8 @@ This module **consumes** the PrimeSoft platform contracts by id (`PLATFORM_FOUND
 | `effective_from` | DATE | N | | |
 | `created_at`/`updated_at`/`created_by`/`updated_by` | — | N | | |
 | `is_deleted` | BOOLEAN | N | false | |
+
+> **Note — PII tier vs routing sensitivity (recon):** `pii_tier_id` (→ platform `pii_tiers`) is a **DPDPA data-classification** axis and is **orthogonal to `sensitivity`**: it does **not** drive the P01 approval route (that stays derived from `sensitivity` / `field_group` / `field_key` per FR-G02-002 and the `approval_matrix_rules` precedence). It is a display/grouping and data-governance attribute — the `sensitive-changes` review screen renders and groups requests by PII Tier. Approval-matrix rule resolution is unchanged by this field.
 
 #### E6 — `approval_matrix_config`
 

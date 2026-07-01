@@ -4,7 +4,7 @@
 **Module:** G13 — Document Management and Secure Storage (G13-DMS) — `GOV-M13`, ex `M13-DMS`
 **Relationship:** **EXTEND / REUSE** of PrimeSoft **M11 Document Management** (Reconciliation §A row G13; §B code map; §C overrides; §D net-new)
 **Owner of the gov document surface:** This module — but it does **not** fork a parallel store; it **re-anchors onto the existing PrimeSoft M11 vault** (`letter_templates`, document vault, `signoff_transactions`, retention classes) and adds only the gov-statutory extensions (WORM, legal-hold, security-clearance, certified-true-copy, anchored access audit).
-**Status:** v3.0 (platform re-grounded — supersedes v2.0 for the government build; preserves all v2 content and rigor)
+**Status:** v3.2 (field-reconciled — v3.0 platform re-grounding + v3.1 error-code hygiene + v3.2 CSV/prototype field reconciliation; supersedes v2.0 for the government build; preserves all v2 content and rigor)
 **Reads with:** `docs/brd/PLATFORM_FOUNDATION.md`, `docs/brd/MODULE_RECONCILIATION.md`, Platform Spec v1.6 (P01–P06, X.1–X.3, W.1–W.3), Foundation FS v1.6 (VAL-*/JOB-*/MSG-*/ERR-* catalogues), RBAC Design v1.7.
 **Revision basis:** v2.0 BRD (all 21 Adopted Council Improvements + risks R1–R22) **re-grounded** onto PrimeSoft so the module consumes platform engines by id and never re-authors workflow, RBAC, audit, notification, job, or migration plumbing.
 
@@ -474,6 +474,47 @@ table, or NFR was changed; only error-code identifiers were namespaced and the c
 
 ---
 
+## Amendments (v3.1 → v3.2: field reconciliation)
+
+Reconciles the G13 data model to the ground-truth **DwnB "Additional Config" CSV exports** and the **PrimeSoft
+prototype document-management screens** (schema source of truth: `docs/data-model/13-G13-document-management.sql`
+SECTIONS F & G; reconciliation reports: `docs/data-model/reconciliation/g13-documents.md` and
+`docs/data-model/reconciliation/prototype-g13-documents.md`). **Surgical, add-only edits** — no existing entity,
+FR, rule, state table, enum, or NFR was changed; only new G13-owned config masters and letter-gen/acknowledgement
+DATA entities (that the schema now carries and the BRD lacked) were **added** to §5, with brief cross-references
+in the affected FRs.
+
+| # | Added entity (E-#) | Kind | Source | Where in §5 |
+|---|--------------------|------|--------|-------------|
+| A | `document_categories` (E27) | CONFIG master | CSV export `Document_Category_-Export.csv` (DarwinBox "Document Category", `DOCCAT_N`) | §5.1, §5.2, §5.4 |
+| B | `document_category_profile_fields` (E28) | CONFIG master (child) | CSV export `Document_Category_-Export.csv` ("Select Employee Profile Fields" comma-list) | §5.1, §5.2, §5.4 |
+| C | `document_template_name_formats` (E29) | CONFIG master | CSV export `Document_Template_Name_Formats_Export_1_.csv` (`DOCFORMAT_N`) | §5.1, §5.2, §5.4 |
+| D | `policy_letter_settings` (E30) | CONFIG master | CSV export `Policy_And_Letter_Settings_-Export.csv` (per-company) | §5.1, §5.2, §5.4 |
+| E | `self_generate_settings` (E31) | CONFIG master | CSV export `Self_Generate_Setings_-Export.csv` (`SELFGEN_N`) | §5.1, §5.2, §5.4 |
+| F | `merge_field_catalog` (E32) | Reference catalogue | Prototype screen `da-merge-fields` (`{{token}}` → source) | §5.1, §5.2, §5.4 |
+| G | `letter_generation_requests` (E33) | DATA | Prototype screen `da-letter-queue` / `my-letters` | §5.1, §5.2, §5.4 |
+| H | `bulk_letter_jobs` (E34) | DATA | Prototype screen `da-bulk-letters` | §5.1, §5.2, §5.4 |
+| I | `acknowledgement_campaigns` (E35) | DATA | Prototype screens `da-ack-campaign` / `da-signoff-tracker` | §5.1, §5.2, §5.4 |
+| J | `document_acknowledgements` (E36) | DATA | Prototype screens `policy-ack` / `documents-oversight` / `da-signoff-tracker` (DM25 non-repudiation) | §5.1, §5.2, §5.4 |
+
+**New enums added to §5.5:** `g13_config_status` (CSV "Status"), `g13_letter_request_status`,
+`g13_bulk_job_status`, `g13_ack_campaign_status`, `g13_ack_status`.
+
+**FR cross-references (brief, no FR rewritten):** FR-G13-002 (document categories / template name formats /
+self-generate settings), FR-G13-010 (letter-generation queue, bulk letters, merge-field catalogue), FR-G13-012
+(policy/letter acknowledgement campaigns + per-employee non-repudiation acknowledgement records).
+
+> **Not added (config / derived / other-module-owned, per the recon reports):** the M11 letter-template register
+> (`document_types.letter_template_ref` logical ref), the policy library / policy categories (documents + tags +
+> derived counts), document-cluster templates & onboarding progress (G02/M02 config), storage infra/DR telemetry,
+> and letter-head / signing-authority / UAG-population masters (stored as **logical refs**, no cross-module FK).
+
+> **Preservation guarantee (v3.2).** Every v2/v3/v3.1 entity, FR, acceptance criterion, business rule,
+> data-integrity rule, state transition, NFR, notification, and council mitigation (R1–R22) is retained verbatim.
+> This amendment is additive only — it homes ground-truth config/DATA fields the schema reconciliation surfaced.
+
+---
+
 ## 5. Holistic Data Model
 
 > **Tenancy (Platform §0.1, Reconciliation §C).** **Every G13 entity below carries `tenant_id` (non-nullable)
@@ -513,6 +554,16 @@ table, or NFR was changed; only error-code identifiers were namespaced and the c
 | **E24** | **`hold_notices`** | **GAP (gov-specific)** | P01 + X.2 | Custodian legal-hold notices + acknowledgements (R11) |
 | **E25** | **`lifecycle_event_inbox`** | **GAP (gov-specific)** | platform outbox/event bus | Inbound G01/G09/G11 lifecycle events for anchor recompute (R12) |
 | **E26** | **`signature_ltv_artifacts`** | **GAP (gov-specific)** | RFC-3161 TSA | Timestamp tokens + OCSP/CRL for PAdES-LTV (R4) |
+| **E27** | **`document_categories`** | **RECON CONFIG master (CSV, v3.2)** | tenant config (DarwinBox "Document Category") | Tenant-configurable category master (`DOCCAT_N`) grouping employee document/profile fields — distinct from the closed `g13_doc_category` enum |
+| **E28** | **`document_category_profile_fields`** | **RECON CONFIG master, child (CSV, v3.2)** | tenant config | Normalised category → employee-profile-field linkage (one row per field key; G01-owned field slugs, no FK) |
+| **E29** | **`document_template_name_formats`** | **RECON CONFIG master (CSV, v3.2)** | tenant config | Generated-document file-naming formats (`DOCFORMAT_N`) — pattern/prefix/suffix/default |
+| **E30** | **`policy_letter_settings`** | **RECON CONFIG master (CSV, v3.2)** | per-company config | Per-company HR policy sign-off / letter-acknowledgement text + letter-render (CTC font/padding) settings |
+| **E31** | **`self_generate_settings`** | **RECON CONFIG master (CSV, v3.2)** | tenant config | Self-service HR-letter-generation defaults (`SELFGEN_N`): companies in scope, letter heads, signing authorities/signatures (logical refs) |
+| **E32** | **`merge_field_catalog`** | **RECON reference catalogue (prototype, v3.2)** | letter-gen config | Merge-field dictionary (`{{token}}` → source module/system) letter generation resolves against |
+| **E33** | **`letter_generation_requests`** | **RECON DATA (prototype, v3.2)** | `DocumentGen` + letter queue | Per-letter generation queue: merge-field resolution, requested-by/context, signer state, validation error, produced document |
+| **E34** | **`bulk_letter_jobs`** | **RECON DATA (prototype, v3.2)** | X.1 (`JOB-M11-BULKLTR`) | Batch letter/sign-off job progress (record/processed/failed counts, %, ETA) — `job_ref` logical ref to core `jobs` |
+| **E35** | **`acknowledgement_campaigns`** | **RECON DATA (prototype, v3.2)** | P01 + X.2 | Policy/letter sign-off & acknowledgement drives: audience, cadence, SLA/escalation, deadline, rollup counts |
+| **E36** | **`document_acknowledgements`** | **RECON DATA (prototype, v3.2)** | non-repudiation (DM25) | Per-employee acknowledgement record: active version, consent-text snapshot, app version/IP; optional `consent_records` linkage |
 | — | `employees`, `users`, `org_units`, `roles`, `consent_records`, `notifications`, `audit_log`, `security_audit_log`, `workflows`/`workflow_instances`/`workflow_actions`, `service_register_events` (G12 ledger) | **Platform / other-module** | M01/G12/platform | Referenced, not redefined |
 
 ### 5.2 Full field tables
@@ -987,6 +1038,270 @@ table, or NFR was changed; only error-code identifiers were namespaced and the c
 | `ltv_level` | ENUM `ltv_status` | N | TIMESTAMPED / LTV_ENABLED |
 | `captured_at` | TIMESTAMPTZ | N | |
 
+#### RECON-added entities (v3.2 — CSV + prototype field reconciliation)
+
+> Config masters (E27–E31) carry a tenant-scoped `*_code` business key (CONVENTIONS §4 — master tables, not
+> Postgres enums); DATA entities (E33–E36) follow the standard audit set + tenant-scoped RLS. All carry
+> `tenant_id`/`entity_id` (omitted per §5 preamble). Letter-head / signing-authority / UAG / employee-profile-field
+> references are **logical text/uuid refs** to masters owned outside G13 — no cross-module FK.
+
+##### E27 — `document_categories` (RECON CONFIG master — CSV `DOCCAT_N`)
+
+| Field | Type | Null | Notes |
+|-------|------|:--:|-------|
+| `id` | UUID PK | N | |
+| `category_code` | VARCHAR(60) | N | Business key, `DOCCAT_1`…; `UNIQUE (tenant_id, category_code)` |
+| `name` | VARCHAR(200) | N | e.g. "Personal Identification" |
+| `status` | ENUM `g13_config_status` | N | ACTIVE / INACTIVE; default ACTIVE |
+| `created_at`/`updated_at` | TIMESTAMPTZ | N | |
+| `created_by`/`updated_by` | UUID | Y | |
+| `is_deleted` | BOOLEAN | N | Soft delete |
+
+Sample:
+
+| category_code | name | status |
+|---|---|---|
+| DOCCAT_1 | Personal Identification | ACTIVE |
+| DOCCAT_2 | Employment Documents | ACTIVE |
+| DOCCAT_3 | Education and Training Certificates | ACTIVE |
+
+##### E28 — `document_category_profile_fields` (RECON CONFIG child — category ↔ profile-field linkage)
+
+| Field | Type | Null | Notes |
+|-------|------|:--:|-------|
+| `id` | UUID PK | N | |
+| `document_category_id` | UUID FK→document_categories | N | ON DELETE CASCADE |
+| `profile_field_key` | VARCHAR(200) | N | G01-owned employee-profile field slug (text key, no FK); `UNIQUE (document_category_id, profile_field_key)` |
+| `display_order` | INT | N | Default 0 |
+| `created_at`/`updated_at` | TIMESTAMPTZ | N | |
+| `created_by`/`updated_by` | UUID | Y | |
+| `is_deleted` | BOOLEAN | N | |
+
+Sample:
+
+| document_category_id | profile_field_key | display_order |
+|---|---|---|
+| DOCCAT_1 | profile_pic | 0 |
+| DOCCAT_1 | bank_aadhar_img | 1 |
+| DOCCAT_3 | Certificate Attachment | 0 |
+
+##### E29 — `document_template_name_formats` (RECON CONFIG master — CSV `DOCFORMAT_N`)
+
+| Field | Type | Null | Notes |
+|-------|------|:--:|-------|
+| `id` | UUID PK | N | |
+| `format_code` | VARCHAR(60) | N | `DOCFORMAT_1`…; `UNIQUE (tenant_id, format_code)` |
+| `format_name` | VARCHAR(160) | N | e.g. "company custom" |
+| `template_folder` | VARCHAR(160) | Y | Text label (not the vault `folders` tree) |
+| `is_default` | BOOLEAN | N | CSV "Default" Yes/No; default false |
+| `name_format` | VARCHAR(500) | N | Pattern, e.g. "Employee Name_Employee ID_Company Letter_Generated On" |
+| `prefix` | VARCHAR(120) | Y | |
+| `suffix` | VARCHAR(120) | Y | |
+| `status` | ENUM `g13_config_status` | N | Default ACTIVE |
+| `created_at`/`updated_at` | TIMESTAMPTZ | N | |
+| `created_by`/`updated_by` | UUID | Y | |
+| `is_deleted` | BOOLEAN | N | |
+
+Sample:
+
+| format_code | format_name | is_default | name_format |
+|---|---|---|---|
+| DOCFORMAT_1 | company custom | true | Employee Name_Employee ID_Company Letter_Generated On |
+| DOCFORMAT_2 | Employee onboarding | true | Employee Name_Employee ID_Onboarding Document_Generated On |
+| DOCFORMAT_4 | Employee separation | true | Employee Name_Employee ID_Separation Document_Generated On |
+
+##### E30 — `policy_letter_settings` (RECON CONFIG master — per-company)
+
+| Field | Type | Null | Notes |
+|-------|------|:--:|-------|
+| `id` | UUID PK | N | |
+| `company_code` | VARCHAR(40) | N | CSV "Select Company"; one row/company, `UNIQUE (tenant_id, company_code)` |
+| `policy_signoff_text` | TEXT | N | "HR Policy Sign-Off Text" |
+| `letter_ack_text` | TEXT | N | "HR Letter Acknowledgment Text" |
+| `letter_ctc_font_size` | VARCHAR(20) | Y | e.g. "14px" |
+| `letter_ctc_font` | VARCHAR(160) | Y | e.g. "arial,latoregular, sans-serif" |
+| `letter_ctc_padding` | VARCHAR(20) | Y | e.g. "5px" |
+| `block_policy_on_mobile` | BOOLEAN | N | Default false |
+| `created_at`/`updated_at` | TIMESTAMPTZ | N | |
+| `created_by`/`updated_by` | UUID | Y | |
+| `is_deleted` | BOOLEAN | N | |
+
+Sample:
+
+| company_code | policy_signoff_text | letter_ack_text | block_policy_on_mobile |
+|---|---|---|---|
+| PSI | I confirm that I have read and understood this document… (sign off) | I confirm that I have read and understood this document… (acknowledge) | false |
+
+##### E31 — `self_generate_settings` (RECON CONFIG master — CSV `SELFGEN_N`)
+
+| Field | Type | Null | Notes |
+|-------|------|:--:|-------|
+| `id` | UUID PK | N | |
+| `setting_code` | VARCHAR(60) | N | `SELFGEN_1`…; `UNIQUE (tenant_id, setting_code)` |
+| `name` | VARCHAR(160) | N | "HR Letter Generation Setting Name" |
+| `companies` | TEXT[] | N | CSV "Select Company" (comma-list) |
+| `company_codes` | TEXT[] | N | CSV "Select Company Code" |
+| `user_assignment` | TEXT | Y | CSV "User Assignment" |
+| `letter_generation_access` | TEXT[] | N | Users with generation access |
+| `default_letter_head_html_ref` | VARCHAR(60) | Y | `LETHEAD_N` — logical ref (master out of G13 scope) |
+| `default_letter_head_docx_ref` | VARCHAR(60) | Y | Logical ref |
+| `default_signing_authority_1..4` | VARCHAR(60) | Y | `SIGNAUTH_N` — logical refs |
+| `default_signature_1..4` | VARCHAR(60) | Y | Logical refs |
+| `status` | ENUM `g13_config_status` | N | Default ACTIVE |
+| `created_at`/`updated_at` | TIMESTAMPTZ | N | |
+| `created_by`/`updated_by` | UUID | Y | |
+| `is_deleted` | BOOLEAN | N | |
+
+Sample:
+
+| setting_code | name | company_codes | default_letter_head_html_ref | status |
+|---|---|---|---|---|
+| SELFGEN_1 | PSI | {"",PSI,IWSPL} | LETHEAD_2 | ACTIVE |
+| SELFGEN_2 | Tejora | {TPL} | LETHEAD_3 | ACTIVE |
+
+##### E32 — `merge_field_catalog` (RECON reference catalogue — `da-merge-fields`)
+
+| Field | Type | Null | Notes |
+|-------|------|:--:|-------|
+| `id` | UUID PK | N | |
+| `field_key` | VARCHAR(80) | N | Token inside `{{ }}`, e.g. `LETTER_SERIAL_NO`; `UNIQUE (tenant_id, field_key)` |
+| `label` | VARCHAR(200) | N | "Auto-generated letter serial number" |
+| `source` | VARCHAR(60) | N | Originating module/system (open set), e.g. `M01_EMPLOYEE_MASTER` / `M06_PAYROLL` / `SYSTEM` |
+| `resolution_note` | VARCHAR(255) | Y | "Resolved at sign time" / "Populated only for confirmed employees" |
+| `status` | ENUM `g13_config_status` | N | Default ACTIVE |
+| `created_at`/`updated_at` | TIMESTAMPTZ | N | |
+| `created_by`/`updated_by` | UUID | Y | |
+| `is_deleted` | BOOLEAN | N | |
+
+Sample:
+
+| field_key | label | source | resolution_note |
+|---|---|---|---|
+| LETTER_SERIAL_NO | Auto-generated letter serial number | SYSTEM | Resolved at sign time |
+| CURRENT_ANNUAL_CTC | Current annual CTC | M06_PAYROLL | Populated only for confirmed employees |
+| L1_MANAGER_NAME | L1 manager full name | M01_EMPLOYEE_MASTER | Resolved at render time |
+
+##### E33 — `letter_generation_requests` (RECON DATA — `da-letter-queue`)
+
+| Field | Type | Null | Notes |
+|-------|------|:--:|-------|
+| `id` | UUID PK | N | |
+| `request_no` | VARCHAR(40) | N | `UNIQUE (tenant_id, request_no)` |
+| `letter_type` | VARCHAR(120) | N | "Appointment Letter" / "Relieving Letter" |
+| `template_ref` | UUID | Y | Logical ref to M11 letter template |
+| `document_type_id` | UUID FK→document_types | Y | ON DELETE SET NULL |
+| `employee_id` | UUID FK→employees | Y | Null for candidate letters |
+| `subject_name` | VARCHAR(200) | Y | Display name when no `employee_id` yet |
+| `requested_by` | UUID | Y | Logical user ref |
+| `request_context` | VARCHAR(120) | Y | "HR Admin (M09 cycle)" / "M03 Separation flow" / "self-service" |
+| `merge_fields_total` | INT | N | Default 0 ("All 10 resolved" → 10) |
+| `merge_fields_resolved` | INT | N | Default 0 |
+| `signer_summary` | VARCHAR(160) | Y | "Awaiting HR sig" / "Awaiting CEO sig" |
+| `signature_request_id` | UUID FK→signature_requests | Y | ON DELETE SET NULL |
+| `generated_document_id` | UUID FK→documents | Y | Produced letter |
+| `scheduled_at` | TIMESTAMPTZ | Y | |
+| `validation_error` | TEXT | Y | Populated when `status = VALIDATION_ERROR` |
+| `status` | ENUM `g13_letter_request_status` | N | DRAFT…ISSUED/FAILED/CANCELLED; default DRAFT |
+| `created_at`/`updated_at` | TIMESTAMPTZ | N | |
+| `created_by`/`updated_by` | UUID | Y | |
+| `is_deleted` | BOOLEAN | N | |
+
+Sample:
+
+| request_no | letter_type | request_context | merge_fields_resolved/total | status |
+|---|---|---|---|---|
+| LTR/2026/0001 | Relieving Letter | M03 Separation flow | 12/12 | AWAITING_SIGNATURE |
+| LTR/2026/0002 | Appointment Letter | HR Admin (M08 recruitment) | 8/10 | VALIDATION_ERROR |
+| LTR/2026/0003 | Increment / Salary Revision Letter | HR Admin (M09 cycle) | 14/14 | SCHEDULED |
+
+##### E34 — `bulk_letter_jobs` (RECON DATA — `da-bulk-letters`)
+
+| Field | Type | Null | Notes |
+|-------|------|:--:|-------|
+| `id` | UUID PK | N | |
+| `job_no` | VARCHAR(40) | N | `UNIQUE (tenant_id, job_no)` |
+| `job_name` | VARCHAR(200) | N | "Q1 Confirmation batch" |
+| `template_ref` | UUID | Y | Logical ref to M11 letter template |
+| `job_ref` | UUID | Y | Logical ref to core `jobs(id)` (no FK) |
+| `record_count` | INT | N | Default 0 |
+| `processed_count` | INT | N | Default 0 |
+| `failed_count` | INT | N | Default 0 |
+| `progress_pct` | NUMERIC(5,2) | N | Default 0 |
+| `eta` | TIMESTAMPTZ | Y | |
+| `status` | ENUM `g13_bulk_job_status` | N | QUEUED…COMPLETE/FAILED; default QUEUED |
+| `created_at`/`updated_at` | TIMESTAMPTZ | N | |
+| `created_by`/`updated_by` | UUID | Y | |
+| `is_deleted` | BOOLEAN | N | |
+
+Sample:
+
+| job_no | job_name | record/processed/failed | progress_pct | status |
+|---|---|---|---|---|
+| BLK/2026/001 | Q1 Confirmation batch | 120/120/0 | 100.00 | COMPLETE |
+| BLK/2026/002 | Q1 POSH refresh acknowledgement | 450/300/2 | 66.67 | IN_PROGRESS |
+
+##### E35 — `acknowledgement_campaigns` (RECON DATA — `da-ack-campaign` / `da-signoff-tracker`)
+
+| Field | Type | Null | Notes |
+|-------|------|:--:|-------|
+| `id` | UUID PK | N | |
+| `campaign_no` | VARCHAR(40) | N | `UNIQUE (tenant_id, campaign_no)` |
+| `name` | VARCHAR(200) | N | "Code of Conduct 2026" |
+| `document_id` | UUID FK→documents | Y | Acknowledged policy/letter; ON DELETE SET NULL |
+| `document_title` | VARCHAR(255) | Y | Display name when not (yet) a `documents` row |
+| `document_version_no` | INT | Y | Which version is active for the drive (DM25) |
+| `purpose` | VARCHAR(160) | Y | "annual refresh" / "Non-repudiation" |
+| `audience_description` | VARCHAR(200) | Y | "All employees" / "Engineering UAG" |
+| `audience_uag_ref` | VARCHAR(80) | Y | Logical ref to UAG/population |
+| `reminder_cadence` | VARCHAR(80) | Y | "Weekly" / "Every 3 days" / "Daily (final week)" |
+| `escalate_after_sla_to` | VARCHAR(80) | Y | Logical role ref |
+| `started_at` | TIMESTAMPTZ | Y | |
+| `deadline` | DATE | Y | |
+| `assigned_count` | INT | N | Rollup; default 0 |
+| `acknowledged_count` | INT | N | Rollup; default 0 |
+| `pending_count` | INT | N | Rollup; default 0 |
+| `overdue_count` | INT | N | Rollup; default 0 |
+| `status` | ENUM `g13_ack_campaign_status` | N | DRAFT/ACTIVE/CLOSING/COMPLETE; default DRAFT |
+| `created_at`/`updated_at` | TIMESTAMPTZ | N | |
+| `created_by`/`updated_by` | UUID | Y | |
+| `is_deleted` | BOOLEAN | N | |
+
+Sample:
+
+| campaign_no | name | audience_description | ack/assigned | status |
+|---|---|---|---|---|
+| ACK/2026/001 | Code of Conduct v4.2 (annual refresh) | All employees | 300/450 | ACTIVE |
+| ACK/2026/002 | POSH Policy v3.1 (annual refresh) | India entity | 118/120 | CLOSING |
+
+##### E36 — `document_acknowledgements` (RECON DATA — `policy-ack` / DM25 non-repudiation)
+
+| Field | Type | Null | Notes |
+|-------|------|:--:|-------|
+| `id` | UUID PK | N | |
+| `campaign_id` | UUID FK→acknowledgement_campaigns | Y | ON DELETE SET NULL; `UNIQUE (campaign_id, employee_id)` |
+| `document_id` | UUID FK→documents | Y | What was acknowledged; ON DELETE SET NULL |
+| `document_title` | VARCHAR(255) | Y | Display name when not a `documents` row |
+| `document_version_no` | INT | Y | Which version was active at the time (DM25) |
+| `employee_id` | UUID FK→employees | N | Who acknowledged |
+| `consent_text_snapshot` | TEXT | Y | Write-once snapshot of the consent text shown (DM25) |
+| `app_version` | VARCHAR(120) | Y | Browser / app version (DM25) |
+| `ip_address` | INET | Y | |
+| `assigned_at` | TIMESTAMPTZ | N | |
+| `due_date` | DATE | Y | |
+| `acknowledged_at` | TIMESTAMPTZ | Y | |
+| `consent_record_id` | UUID FK→consent_records | Y | Platform DPDP consent linkage; ON DELETE SET NULL |
+| `status` | ENUM `g13_ack_status` | N | PENDING/ACKNOWLEDGED/OVERDUE; default PENDING |
+| `created_at`/`updated_at` | TIMESTAMPTZ | N | |
+| `created_by`/`updated_by` | UUID | Y | |
+| `is_deleted` | BOOLEAN | N | |
+
+Sample:
+
+| campaign_id | document_title | version_no | employee_id | status | acknowledged_at |
+|---|---|---|---|---|---|
+| ACK/2026/001 | Code of Conduct 2026 | 42 | EMP-9901 | ACKNOWLEDGED | 2026-06-30 |
+| ACK/2026/001 | Code of Conduct 2026 | 42 | EMP-9902 | PENDING | null |
+
 ### 5.3 Relationship map
 
 - `documents` 1—N `document_versions`; `documents.current_version_id` → latest version.
@@ -1022,6 +1337,15 @@ table, or NFR was changed; only error-code identifiers were namespaced and the c
 | `data_subject_requests` | G13 (gov) | DPO | Auditor, G01 |
 | `audit_anchors` | G13 (gov) | `JOB-G13-ANCHOR` | Auditor |
 | `lifecycle_event_inbox` | G13 (gov) | G01/G09/G11 (outbox) | RetentionService |
+| `document_categories`/`document_category_profile_fields` | **G13 (RECON CONFIG, v3.2)** | Librarian (Document Admin) | G13 config, G01 (profile-field keys) |
+| `document_template_name_formats` | **G13 (RECON CONFIG, v3.2)** | Librarian (Document Admin) | `DocumentGen` (file naming) |
+| `policy_letter_settings` | **G13 (RECON CONFIG, v3.2)** | Librarian / HR Admin (per company) | Policy sign-off & letter render |
+| `self_generate_settings` | **G13 (RECON CONFIG, v3.2)** | Librarian / HR Admin | Self-service letter generation |
+| `merge_field_catalog` | **G13 (RECON reference, v3.2)** | Librarian (Document Admin) | `DocumentGen`, letter-gen requests |
+| `letter_generation_requests` | **G13 (RECON DATA, v3.2)** | HR Admin / self-service (on `DocumentGen`) | Signer(s), originating module, `my-letters` |
+| `bulk_letter_jobs` | **G13 (RECON DATA, v3.2)** | `JOB-M11-BULKLTR` (X.1) | HR Admin, G14 |
+| `acknowledgement_campaigns` | **G13 (RECON DATA, v3.2)** | HR Admin (P01/X.2) | Employees, Auditor, G14 |
+| `document_acknowledgements` | **G13 (RECON DATA, v3.2)** | Employee (self) on acknowledge | Auditor (non-repudiation), G14 |
 | `employees`/`users`/`org_units`/`roles`/`consent_records` | platform/other module | their owners | G13 (FK refs) |
 | `notifications` | platform (X.2) | G13 emits | recipients |
 | `audit_log`/`security_audit_log` | **platform P05** | DB-trigger on G13 tables | Auditor |
@@ -1076,6 +1400,11 @@ table, or NFR was changed; only error-code identifiers were namespaced and the c
 | `lifecycle_event_type` | EMPLOYEE_RETIRE, EMPLOYEE_MERGE, CASE_CLOSE, FISCAL_YEAR_END, ANCHOR_CORRECTION |
 | `event_status` | RECEIVED, PROCESSED, FAILED, DEAD_LETTER |
 | `fetch_intent` | VIEW, DOWNLOAD |
+| `g13_config_status` | ACTIVE, INACTIVE — *(RECON v3.2; status of `document_categories`/`document_template_name_formats`/`self_generate_settings`/`merge_field_catalog`)* |
+| `g13_letter_request_status` | DRAFT, PENDING_RESOLUTION, VALIDATION_ERROR, AWAITING_SIGNATURE, SCHEDULED, GENERATED, ISSUED, FAILED, CANCELLED — *(RECON v3.2; `letter_generation_requests`)* |
+| `g13_bulk_job_status` | QUEUED, IN_PROGRESS, HELD, AWAITING_EMPLOYEE_ACTION, AWAITING_ACK, COMPLETE, FAILED — *(RECON v3.2; `bulk_letter_jobs`)* |
+| `g13_ack_campaign_status` | DRAFT, ACTIVE, CLOSING, COMPLETE — *(RECON v3.2; `acknowledgement_campaigns`)* |
+| `g13_ack_status` | PENDING, ACKNOWLEDGED, OVERDUE — *(RECON v3.2; `document_acknowledgements`)* |
 
 ### 5.6 Data integrity rules
 
@@ -1281,6 +1610,12 @@ DLP PII tags auto-suggest CONFIDENTIAL minimum. BR-3 controlled vocab rejects un
 defaults OPTIONAL (R22).
 
 **Data Model:** `document_types`, `document_tags`, `documents`, `dlp_findings`, (`letter_templates` ref).
+
+> **RECON note (v3.2):** the tenant-configurable **`document_categories`** (+ `document_category_profile_fields`)
+> master groups employee document/profile fields under a named category (`DOCCAT_N`) — distinct from the closed
+> `g13_doc_category` enum; **`document_template_name_formats`** (`DOCFORMAT_N`) defines generated-document file
+> naming; **`self_generate_settings`** (`SELFGEN_N`) holds self-service letter-generation defaults. See §5.2
+> (E27–E31).
 
 **API:** `POST/PUT /api/v1/document-types`, `GET /api/v1/document-types`, `POST /api/v1/documents/{id}/tags`,
 `POST /api/v1/documents/{id}:reclassify` (P01 maker-checker).
@@ -1595,6 +1930,12 @@ LTV-enabled before COMPLETE (`ERR-G13-SIGNATURE_LTV_REQUIRED`). BR-5 method must
 **Data Model:** `signature_requests` (`signoff_transactions`), `signatures`, `signature_ltv_artifacts`,
 `document_versions`, `documents`.
 
+> **RECON note (v3.2):** the letter-generation surface is homed by **`letter_generation_requests`** (per-letter
+> queue: merge-field resolution, requested-by/context, signer state, validation error, produced document — links
+> to `signature_requests`), **`bulk_letter_jobs`** (batch progress on `JOB-M11-BULKLTR`), and the
+> **`merge_field_catalog`** dictionary (`{{token}}` → source) that generation resolves against. See §5.2
+> (E32–E34).
+
 **API:** `POST /api/v1/documents/{id}/signature-requests`, `POST /api/v1/signature-requests/{id}/sign`,
 `:cancel`, `GET /api/v1/signature-requests/{id}`, `GET /api/v1/signatures/{id}/verify`.
 
@@ -1666,6 +2007,12 @@ best-effort (Appendix D). BR-2 audit retention ≥ document retention and ≥ 7 
 trail is itself audited (P05).
 
 **Data Model:** `document_audit`, `audit_anchors`, `documents`, `document_shares`, platform `audit_log`/`security_audit_log`.
+
+> **RECON note (v3.2):** policy/letter **acknowledgement campaigns** (`acknowledgement_campaigns` — audience,
+> reminder cadence, SLA/escalation, deadline, rollup counts) and the per-employee **non-repudiation acknowledgement
+> record** (`document_acknowledgements` — active version, consent-text snapshot, app version/IP, optional
+> `consent_records` linkage; DM25) home the sign-off-tracker / policy-ack compliance surface. Per-company
+> acknowledgement/sign-off text comes from `policy_letter_settings`. See §5.2 (E30, E35–E36).
 
 **API:** `GET /api/v1/documents/{id}/audit`, `GET /api/v1/audit/documents?userId=&from=&to=&limit=&cursor=`,
 `GET /api/v1/reports/compliance/{reportCode}`, `POST /api/v1/audit:export` (via `Audit.export`).

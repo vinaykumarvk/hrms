@@ -4,9 +4,46 @@
 **Program:** Government HRMS — a public-sector configuration and extension of the **PrimeSoft HRMS** platform (Vision §1.1), hosted at the CGG Data Centre / government cloud (Standalone / Group-Company deployment model, Vision §1.4).
 **Document version:** v3.0 (platform re-grounded on PrimeSoft Master BRD v2.1 · Vision v2.6 · Platform Spec v1.6 · RBAC v1.7 · Foundation FS v1.6).
 **Status:** Approved for build, conditional on v3 amendments (platform-native, parallel-agent ready) — Phase-1 statutory core + Phase-2 flagged differentiators.
+**Reconciliation amendment:** **v3.2** (2026-07-01) — Section 5 extended **ADD-only** to sync the BRD with the reconciled G08 data model (`docs/data-model/08-G08-performance-appraisal.sql`, RECON Sections 3–4). Adds 11 new G08-owned config/data entities (E24–E34), new columns on `goals`/`self_appraisals`/`calibration_recommendations`/`performance_improvement_plans`, and new `g08_*` enums — reconciled against the DarwinBox PMS CSV exports (`reconciliation/g08-performance.md`) and the PrimeSoft prototype screens (`reconciliation/prototype-g08-performance.md`). No existing E1–E23 content changed. See **Amendments (v3.1 → v3.2: field reconciliation)** below.
 **Supersedes:** v2.0 (`/Users/n15318/hrms/docs/brd/v2/M08-performance-appraisal-management.md`) and v1.0.
 **Relationship to platform:** **EXTEND of PrimeSoft `M09` Performance Management** (`MODULE_RECONCILIATION.md` §A row G08; Master BRD §4.10/§5.8). PrimeSoft **already ships** the appraisal-period configuration, goal plans (OKR — one active plan per employee, auto-opened 30 days before the prior plan ends), 12 monthly goal cycles + 12 monthly review cycles, self & manager review, skip-level & HR calibration, rating & contribution-level assignment, probation confirmation, PIP tracking and Multi-Source Feedback — governed by **`VAL-WEIGHTAGE/WSUM/SUBWSUM/DISTRIB/ACHV/GOALNAME`**, the **`JOB-M09-*`** job family and the **`MSG-M09-*`** notification templates. G08 therefore **reuses the existing M09 goal/review/calibration/probation model** and **adds the public-sector statutory APAR layer on top**: the multi-tier **Reporting → Reviewing → Accepting** adjudication, **mandatory full disclosure**, **representation against adverse remarks**, the **Sealed Cover Procedure**, **multi-RO part-period reports + No-Report Certificate**, **digital-signature non-repudiation**, statutory **custody/retention**, and posting to the **G12 Service Register ledger**. Every one of those extensions runs on the platform engines — workflow on **P01**, authz/confidentiality on **P02**, audit on **P05**, notifications on **X.2**, jobs on **X.1**, migration on **P06**, configured forms/flows on **W.1/W.2/W.3**.
 **Grounding contract:** This BRD **consumes** the PrimeSoft platform contracts by id and **never re-authors** them (`PLATFORM_FOUNDATION.md` §1, §9). Platform/M09 entities (`workflows`/`workflow_instances`/`workflow_actions`, `audit_log`/`security_audit_log`, `notifications`, `documents`, `consent_records`, `integration_credentials`, `migration_runs`, `employees`/`org_units`/`roles`/`designations`/`contribution_levels`, **M09 `goal_plans`/`goals`/`review_cycles`/`review_templates`/`goal_plan_templates`/`calibration_sessions`/`performance_reviews`/PIP/MSF**) are **referenced/extended, not redefined**. Where the platform genuinely lacks a government capability it is marked **`GAP (gov-specific)`** and authored here, still running on the named engines.
+
+---
+
+## Amendments (v3.1 → v3.2: field reconciliation)
+
+*ADD-only sync of Section 5 to the reconciled G08 data model. Every row below is a G08-owned entity or column the schema now materialises that this BRD previously lacked. Source = ground-truth artefact (DarwinBox "DwnB Form Fields / Performance Management" CSV export, or PrimeSoft prototype screen). Schema ref = section in `08-G08-performance-appraisal.sql`. Large per-field enable/mandatory/editable/need-approval matrices are NOT modelled as columns — they are stored as **config `jsonb`** (`field_settings` / `stage_settings` / `moderation_fields` / `parameters`), i.e. form-engine config consumed at runtime, not queryable business facts.*
+
+**New entities (11):**
+
+| # | Entity | Kind | Source (CSV export / prototype screen) | Schema ref |
+|---|---|---|---|---|
+| E24 | `scorecard_pillars` | config master | `Scorecard Pillar.csv` | §3.1 |
+| E25 | `metrics` | config master | `Metric.csv` | §3.2 |
+| E26 | `normalization_settings` | config master | `Normalization.csv` | §3.3 |
+| E27 | `custom_formula_settings` | config master | `CustomFormulaSettings-Export.csv` | §3.4 |
+| E28 | `goal_plans` | config master | `GoalPlanKraSettings-Export.csv` | §3.5 |
+| E29 | `review_definitions` | config master | `ReviewKraSettings-Export.csv` | §3.6 |
+| E30 | `review_excluded_employees` | DATA | `Excluded-Employees-Export.csv` | §3.7 |
+| E31 | `calibration_settings` | config master (template) | `Calibration(1/2).csv` | §3.8 |
+| E32 | `performance_translations` | config i18n | `*Framework Translation` / `*Translation.csv` (5 exports) | §3.9 |
+| E33 | `appraisal_cycle_exclusions` | DATA | prototype `pa-exclusions`, `pa-cycle-create` auto-exclusions | §4.6 |
+| E34 | `probation_confirmations` | DATA | prototype `probation-confirmation` / `-decision` / `-approval` / `-management` | §4.7 |
+
+**New / changed columns on existing entities:**
+
+| Entity | Added columns | Source | Schema ref |
+|---|---|---|---|
+| `goals` (E5) | `metric_id`, `metric_criteria`, `target_prefix`, `timeline_start_date`, `timeline_end_date`, `scorecard_pillar_id`, `aligned_to_goal_id`, `aligned_to_ref`, `achievement_mapping`, `block_edit_achievement`, `assigned_to_roles`, `goal_plan_master_id` | `Goals-Export.csv` | §3.10 |
+| `goals` (E5) | `goal_source`, `category`, `set_reason`, `goal_visibility` | prototype `add-goal` / `admin-add-goal` / `add-goal-for-reportee` / `review-goal-plan` | §4.2 |
+| `self_appraisals` (E7) | `overall_comments`, `development_areas` | prototype `self-review` | §4.3 |
+| `calibration_recommendations` (E21) | `potential_rating`, `employee_ack_status`, `employee_ack_comments`, `employee_ack_at` | prototype `calibration` (9-box + employee acknowledgement) | §4.4 |
+| `performance_improvement_plans` (E16) | `pip_type`, `trigger_reason`, `checkin_cadence`, `support_plan`, `hrbp_id`, `next_review_date` | prototype `pa-pip` / `pip-cases` | §4.5 |
+
+**New enums (8):** `g08_config_status` (§3), plus `g08_goal_source`, `g08_calib_ack_status`, `g08_exclusion_source`, `g08_exclusion_reversibility`, `g08_exclusion_status`, `g08_probation_recommendation`, `g08_probation_conf_status` (§4.1).
+
+**Unchanged / note-as-config:** `appraisal_cycles` (E1) remains the Review-Cycle master; `rating_scales` (E3) the scale master; `calibration_sessions` (E14) the per-cycle calibration *run* (`calibration_settings` E31 is the reusable *template*); the review-scoped `review_excluded_employees` (E30) is distinct from the cycle-scoped `appraisal_cycle_exclusions` (E33); the terminal `appraisal_forms.probation_outcome` is retained, with `probation_confirmations` (E34) adding the decision lifecycle around it.
 
 ---
 
@@ -264,6 +301,17 @@ G08 inherits the PrimeSoft platform contracts (`PLATFORM_FOUNDATION.md` §4–§
 | E21 | `calibration_recommendations` | Committee recommendation awaiting authority ratification | **[NEW]** statutory |
 | E22 | `coi_recusals` | Declared conflict-of-interest recusals | **[NEW]** statutory |
 | E23 | `digital_signatures` | DSC/eSign non-repudiation artefacts | **[NEW]** `GAP`: runs on X.3 + P05 + G13 |
+| E24 | `scorecard_pillars` | Scorecard pillar / perspective master (goals classify to a pillar) | **[RECON]** M09 PMS config master (CSV `Scorecard Pillar.csv`) |
+| E25 | `metrics` | Measurement-metric master (Percentage/Number/…) referenced by goals | **[RECON]** M09 PMS config master (CSV `Metric.csv`) |
+| E26 | `normalization_settings` | Normalisation curve/band definition (scale marks, ideal/delta %) | **[RECON]** M09 PMS config master (CSV `Normalization.csv`) |
+| E27 | `custom_formula_settings` | Custom score-formula definitions (goal/overall computation) | **[RECON]** M09 PMS config master (CSV `CustomFormulaSettings-Export.csv`) |
+| E28 | `goal_plans` | Goal-plan definition + per-field flag matrix (jsonb) | **[RECON]** M09 `goal_plan_template` materialised (CSV `GoalPlanKraSettings-Export.csv`) |
+| E29 | `review_definitions` | Review definition inside a cycle (stage/visibility/rating matrix as jsonb) | **[RECON]** M09 `review_template` materialised (CSV `ReviewKraSettings-Export.csv`) |
+| E30 | `review_excluded_employees` | Review-definition-scoped employee exclusion (snapshot links) | **[RECON]** DATA (CSV `Excluded-Employees-Export.csv`) |
+| E31 | `calibration_settings` | Reusable calibration **template** (params, publish method, ideal norm, moderation matrix) | **[RECON]** config master, distinct from E14 per-cycle run (CSV `Calibration(1/2).csv`) |
+| E32 | `performance_translations` | i18n label localisation across all PMS config objects | **[RECON]** config i18n (5 `*Translation.csv` exports) |
+| E33 | `appraisal_cycle_exclusions` | Cycle-scoped employee exclusion (auto/manual, reason, reversibility, re-inclusion) | **[RECON]** DATA, prototype `pa-exclusions` |
+| E34 | `probation_confirmations` | Probation confirmation decision lifecycle (manager rec → HR approval → letter) | **[RECON]** DATA, prototype `probation-*` screens |
 
 ### 5.2 Full field tables
 > Every table also carries **`tenant_id`** (NOT NULL) and **`entity_id`** (NOT NULL where entity-scoped) plus audit fields, per §5.0. References to `workflow_instances`/`audit_log`/`service_register_events` are to the **platform/G12** entities. M09-reused columns are noted; only G08 additions are statutory.
@@ -396,6 +444,21 @@ G08 inherits the PrimeSoft platform contracts (`PLATFORM_FOUNDATION.md` §4–§
 | `snapshotted` | BOOLEAN | N | default false; true once copied to E20 |
 | `status` | ENUM | N | DRAFT, PROPOSED, APPROVED, REVISED, ACHIEVED, NOT_ACHIEVED, DROPPED |
 | `approved_by`,`approved_at` | UUID/TS | Y | RO |
+| `metric_id` | UUID FK→E25 | Y | **[v3.2]** measurement-metric master ref (CSV Metric) |
+| `metric_criteria` | TEXT | Y | **[v3.2]** measurement criteria free-text (CSV) |
+| `target_prefix` | VARCHAR(24) | Y | **[v3.2]** target prefix (CSV) |
+| `timeline_start_date`,`timeline_end_date` | DATE | Y | **[v3.2]** goal timeline window (CSV; distinct from `due_date`) |
+| `scorecard_pillar_id` | UUID FK→E24 | Y | **[v3.2]** scorecard pillar/perspective (CSV) |
+| `aligned_to_goal_id` | UUID FK→E5 | Y | **[v3.2]** "is aligned to" goal (distinct from cascade `parent_goal_id`) |
+| `aligned_to_ref` | VARCHAR(200) | Y | **[v3.2]** "is aligned to" free ref (CSV) |
+| `achievement_mapping` | JSONB | Y | **[v3.2]** achievement-mapping definition (CSV) |
+| `block_edit_achievement` | BOOLEAN | N | **[v3.2]** default false; lock achievement edit (CSV) |
+| `assigned_to_roles` | JSONB | Y | **[v3.2]** assigned-to-roles set (CSV) |
+| `goal_plan_master_id` | UUID FK→E28 | Y | **[v3.2]** owning goal-plan config master (CSV) |
+| `goal_source` | ENUM `g08_goal_source` | Y | **[v3.2]** SELF, MANAGER, ADMIN, CASCADED — authorship (prototype; FR-M09-015) |
+| `category` | VARCHAR(60) | Y | **[v3.2]** goal category axis (Behavioural/Customer/Stretch/…), distinct from pillar (prototype) |
+| `set_reason` | TEXT | Y | **[v3.2]** reason for admin-set / manager edit (prototype) |
+| `goal_visibility` | VARCHAR(40) | Y | **[v3.2]** admin-set visibility/scope label (prototype) |
 | audit fields | — | — | |
 
 #### E6 — `goal_checkins` [EXTEND M09 check-in]
@@ -419,6 +482,8 @@ G08 inherits the PrimeSoft platform contracts (`PLATFORM_FOUNDATION.md` §4–§
 | `achievements` | TEXT | N | `VAL-REQUIRED` |
 | `goal_summary`,`competency_self_rating` | JSONB | Y | |
 | `constraints_faced`,`training_needs` | TEXT | Y | feeds G07 |
+| `overall_comments` | TEXT | Y | **[v3.2]** self-review overall comments (prototype `self-review`) |
+| `development_areas` | TEXT | Y | **[v3.2]** self-identified development areas (prototype; distinct from `training_needs`) |
 | `submitted_at` | TIMESTAMP | Y | |
 | `status` | ENUM | N | DRAFT, SUBMITTED, RETURNED |
 | audit fields | — | — | |
@@ -569,6 +634,12 @@ G08 inherits the PrimeSoft platform contracts (`PLATFORM_FOUNDATION.md` §4–§
 | `initiated_by` | UUID FK→employees | N | RO |
 | `reason`,`success_criteria` | TEXT | N | |
 | `start_date`,`target_end_date` | DATE | N | |
+| `pip_type` | VARCHAR(40) | Y | **[v3.2]** Standard 90-day / Accelerated 60-day / Extended 120-day / Final 30-day (prototype `pa-pip`) |
+| `trigger_reason` | VARCHAR(60) | Y | **[v3.2]** categorised trigger (Below-expectations rating / Customer escalation / …); free text stays in `reason` |
+| `checkin_cadence` | VARCHAR(30) | Y | **[v3.2]** Weekly / Bi-weekly / Daily / Monthly (prototype) |
+| `support_plan` | TEXT | Y | **[v3.2]** employer-commitment support plan (prototype) |
+| `hrbp_id` | UUID FK→employees | Y | **[v3.2]** assigned HRBP (prototype `pa-pip` / `pip-cases`) |
+| `next_review_date` | DATE | Y | **[v3.2]** next review date (prototype `pip-cases`) |
 | `outcome` | ENUM | Y | SUCCESSFUL, EXTENDED, UNSUCCESSFUL, ABANDONED |
 | `status` | ENUM | N | DRAFT, ACTIVE, UNDER_REVIEW, CLOSED |
 | audit fields | — | — | |
@@ -649,6 +720,10 @@ G08 inherits the PrimeSoft platform contracts (`PLATFORM_FOUNDATION.md` §4–§
 | `ratified_at` | TIMESTAMP | Y | |
 | `ratification_signature_id` | UUID FK→E23 | Y | DSC (R1, R10) |
 | `recommendation_status` | ENUM | N | PROPOSED, ENDORSED, REJECTED, RATIFIED, DECLINED |
+| `potential_rating` | VARCHAR(20) | Y | **[v3.2]** High/Medium/Low potential (9-box) (prototype `calibration`) |
+| `employee_ack_status` | ENUM `g08_calib_ack_status` | N | **[v3.2]** default AWAITING; AWAITING, ACKNOWLEDGED, ACKNOWLEDGED_WITH_COMMENTS, DISAGREED |
+| `employee_ack_comments` | TEXT | Y | **[v3.2]** employee acknowledgement notes (prototype) |
+| `employee_ack_at` | TIMESTAMP | Y | **[v3.2]** calibration-specific acknowledgement timestamp (prototype) |
 | audit fields | — | — | |
 
 #### E22 — `coi_recusals` [NEW — conflict-of-interest recusal, R22]
@@ -682,6 +757,197 @@ G08 inherits the PrimeSoft platform contracts (`PLATFORM_FOUNDATION.md` §4–§
 | `verification_status` | ENUM | N | VALID, REVOKED, EXPIRED, INVALID |
 | `created_at`,`created_by` | — | N | append-only (P05 captures) |
 
+> **[v3.2] Reconciliation entities (E24–E34).** The tables below sync the BRD to the reconciled data model (`08-G08-performance-appraisal.sql` Sections 3–4). E24–E32 are the DarwinBox PMS config/master value sets (tenant-configurable master tables with tenant-scoped UNIQUE codes per CONVENTIONS §4 — **not** Postgres enums except `g08_config_status`); E30/E33/E34 are DATA. The large per-field enable/mandatory/editable/need-approval matrices (goal-plan ~210 cols, review ~160 cols, calibration-moderation ~80 cols) are **stored as config `jsonb`** — `field_settings` / `stage_settings` / `moderation_fields` / `parameters` — consumed by the form engine, not exploded into columns. `source_*` timestamps carry CSV-export provenance.
+
+#### E24 — `scorecard_pillars` [RECON — PMS config master; `Scorecard Pillar.csv`]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | |
+| `tenant_id` | UUID | N | |
+| `pillar_code` | VARCHAR(40) | N | `VAL-MASTER-UNIQUE` (tenant-scoped) |
+| `name` | VARCHAR(160) | N | |
+| `description` | TEXT | Y | |
+| `source_created_on`,`source_updated_on` | TIMESTAMP | Y | CSV provenance |
+| `status` | ENUM `g08_config_status` | N | DRAFT, ACTIVE, ARCHIVED |
+| audit fields | — | — | |
+
+#### E25 — `metrics` [RECON — PMS config master; `Metric.csv`]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | |
+| `tenant_id` | UUID | N | |
+| `metric_code` | VARCHAR(80) | N | `VAL-MASTER-UNIQUE` (e.g. `DB_Default_Metric_Percentage`) |
+| `name` | VARCHAR(120) | N | Percentage / Number / … |
+| `description` | TEXT | Y | |
+| `source_created_on`,`source_updated_on` | TIMESTAMP | Y | CSV provenance |
+| `status` | ENUM `g08_config_status` | N | DRAFT, ACTIVE, ARCHIVED |
+| audit fields | — | — | |
+
+#### E26 — `normalization_settings` [RECON — PMS config master; `Normalization.csv`]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | |
+| `tenant_id` | UUID | N | |
+| `name` | VARCHAR(160) | N | `VAL-MASTER-UNIQUE` |
+| `scale`,`scale_marker` | VARCHAR(120) | Y | |
+| `scale_marks` | JSONB | Y | band definitions |
+| `min_marks`,`max_marks` | NUMERIC(8,2) | Y | |
+| `ideal_pct`,`delta_pct` | NUMERIC(6,2) | Y | Ideal % / Delta % |
+| `source_created_on`,`source_updated_on` | TIMESTAMP | Y | CSV provenance |
+| `status` | ENUM `g08_config_status` | N | |
+| audit fields | — | — | |
+
+#### E27 — `custom_formula_settings` [RECON — PMS config master; `CustomFormulaSettings-Export.csv`]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | |
+| `tenant_id` | UUID | N | |
+| `name` | VARCHAR(160) | N | `VAL-MASTER-UNIQUE` |
+| `information` | TEXT | Y | |
+| `methodology`,`formula_for` | VARCHAR(120) | Y | Formula For = Goal Score / Overall / … |
+| `formula` | TEXT | Y | formula expression |
+| `source_created_on`,`source_updated_on` | TIMESTAMP | Y | CSV provenance |
+| `status` | ENUM `g08_config_status` | N | |
+| audit fields | — | — | |
+
+#### E28 — `goal_plans` [RECON — PMS config master; `GoalPlanKraSettings-Export.csv`]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | |
+| `tenant_id`,`entity_id` | UUID | N | |
+| `goal_plan_code` | VARCHAR(60) | N | Goal Plan ID (`VAL-MASTER-UNIQUE`) |
+| `name` | VARCHAR(200) | N | |
+| `description` | TEXT | Y | |
+| `methodology` | VARCHAR(40) | Y | OKR / KRA / … |
+| `enable_sub_goals` | BOOLEAN | N | default false |
+| `start_date`,`end_date` | DATE | Y | `end ≥ start` |
+| `user_assignment`,`exclusion_setting` | VARCHAR(200) | Y | |
+| `enable_goal_count_limits` | BOOLEAN | N | |
+| `min_goals`,`max_goals` | INT | Y | |
+| `enable_goal_weightage_limits` | BOOLEAN | N | |
+| `min_weightage`,`max_weightage` | NUMERIC(6,2) | Y | |
+| `achievement_mapping_scale`,`default_achievement_mapping` | VARCHAR(120) | Y | |
+| `goal_plan_approver`,`goal_plan_reviewer` | VARCHAR(120) | Y | |
+| `enable_cascade` | BOOLEAN | N | |
+| `scorecard_pillar_options`,`metric_options` | TEXT | Y | pipe-delimited option list (as exported) |
+| `field_settings` | JSONB | Y | **full per-field flag matrix (config, ~210 cols)** |
+| `source_created_on`,`source_updated_on`,`source_started_on`,`source_archived_on` | TIMESTAMP | Y | CSV provenance |
+| `status` | ENUM `g08_config_status` | N | |
+| audit fields | — | — | |
+
+#### E29 — `review_definitions` [RECON — PMS config master; `ReviewKraSettings-Export.csv`]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | |
+| `tenant_id`,`entity_id` | UUID | N | |
+| `review_code` | VARCHAR(60) | N | Review ID (`VAL-MASTER-UNIQUE`) |
+| `name` | VARCHAR(200) | N | |
+| `description` | TEXT | Y | |
+| `cycle_id` | UUID FK→E1 | Y | Align to Review Cycle |
+| `align_to_review_cycle` | VARCHAR(200) | Y | raw label as exported |
+| `is_final_review` | BOOLEAN | N | |
+| `enable_exclude_employees` | BOOLEAN | N | |
+| `exclusion_setting` | VARCHAR(200) | Y | |
+| `goal_rating_scale`,`overall_rating_scale` | VARCHAR(120) | Y | resolve to E3 by name at config time |
+| `goal_normalization_setting`,`overall_normalization_setting`,`competency_normalization_setting` | VARCHAR(160) | Y | resolve to E26 |
+| `calibration_enabled` | BOOLEAN | N | per-cycle *run* is E14 |
+| `calibration_process`,`promotion_framework` | VARCHAR(120) | Y | |
+| `stage_settings` | JSONB | Y | Self/Evaluator1/Evaluator2/Reviewer stage config (maps to E8 tiers at runtime) |
+| `field_settings` | JSONB | Y | **full per-field rating/visibility matrix (config, ~160 cols)** |
+| `source_updated_on`,`source_started_on`,`source_archived_on` | TIMESTAMP | Y | CSV provenance |
+| `status` | ENUM `g08_config_status` | N | |
+| audit fields | — | — | |
+
+#### E30 — `review_excluded_employees` [RECON — DATA; `Excluded-Employees-Export.csv`]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | |
+| `tenant_id` | UUID | N | |
+| `review_definition_id` | UUID FK→E29 | Y | resolved link (ON DELETE CASCADE) |
+| `review_code` | VARCHAR(60) | N | Review ID (raw) |
+| `review_name` | VARCHAR(200) | Y | snapshot |
+| `employee_id` | UUID FK→employees | Y | resolved |
+| `employee_external_id` | VARCHAR(40) | N | Employee ID (raw, e.g. `H002`) |
+| `employee_name` | VARCHAR(200) | Y | snapshot |
+| audit fields | — | — | UNIQUE `(tenant_id, review_code, employee_external_id)` |
+
+#### E31 — `calibration_settings` [RECON — config master (template); `Calibration(1/2).csv`]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | |
+| `tenant_id`,`entity_id` | UUID | N | |
+| `name` | VARCHAR(160) | N | Calibration Name (`VAL-MASTER-UNIQUE`) |
+| `overall_rating_enabled`,`goal_rating_enabled`,`competency_rating_enabled` | BOOLEAN | N | |
+| `overall_rating_scale`,`goal_rating_scale`,`competency_rating_scale` | VARCHAR(120) | Y | |
+| `promotion_enabled`,`potential_enabled` | BOOLEAN | N | |
+| `promotion_framework`,`potential_framework` | VARCHAR(120) | Y | |
+| `publish_method_overall`,`publish_method_goal`,`publish_method_competency` | VARCHAR(60) | Y | Decimal / Rounded / … |
+| `ideal_distribution` | JSONB | Y | Define Ideal Distribution Norm (per scale) ~ E14 `target_distribution` (template-level) |
+| `n_grid_enabled`,`lobby_group_enabled` | BOOLEAN | N | |
+| `moderation_fields` | JSONB | Y | **Standard/Custom field show/use/weightage matrix (~80 cols)** |
+| `parameters` | JSONB | Y | remaining calibration flags (config) |
+| `source_created_on`,`source_updated_on` | TIMESTAMP | Y | CSV provenance |
+| `status` | ENUM `g08_config_status` | N | |
+| audit fields | — | — | |
+
+#### E32 — `performance_translations` [RECON — config i18n; 5 `*Translation.csv` exports]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | single table covers Goal Plan / Review / Review Cycle / Scorecard Pillar / Calibration translations |
+| `tenant_id` | UUID | N | |
+| `translation_type` | VARCHAR(40) | N | Type (e.g. `attribute`) |
+| `object_type` | VARCHAR(120) | N | Object Type (e.g. `PMS_Category Name`) |
+| `default_value` | VARCHAR(300) | N | Default Value |
+| `language` | VARCHAR(40) | N | default `''` (blank = default locale) |
+| `translation` | VARCHAR(300) | Y | |
+| `status` | ENUM `g08_config_status` | N | UNIQUE `(tenant_id, object_type, default_value, language)` |
+| audit fields | — | — | |
+
+#### E33 — `appraisal_cycle_exclusions` [RECON — DATA; prototype `pa-exclusions`]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | |
+| `tenant_id`,`entity_id` | UUID | N | |
+| `cycle_id` | UUID FK→E1 | N | cycle-scoped (distinct from review-scoped E30) |
+| `appraisee_id` | UUID FK→employees | N | |
+| `exclusion_source` | ENUM `g08_exclusion_source` | N | AUTO, MANUAL (default MANUAL) |
+| `exclusion_reason` | VARCHAR(60) | N | On probation / On notice / New joiner / Extended leave / … |
+| `detail` | TEXT | Y | e.g. "Probation ends 11 Sep 2026" |
+| `justification` | TEXT | Y | manual justification |
+| `reversibility` | ENUM `g08_exclusion_reversibility` | N | REVERSIBLE, PERMANENT (default REVERSIBLE) |
+| `status` | ENUM `g08_exclusion_status` | N | EXCLUDED, RE_INCLUDED (default EXCLUDED) |
+| `re_included_at` | TIMESTAMP | Y | |
+| `re_included_by` | UUID FK→employees | Y | |
+| audit fields | — | — | UNIQUE `(tenant_id, cycle_id, appraisee_id)` |
+
+#### E34 — `probation_confirmations` [RECON — DATA; prototype `probation-*` (FR-M09-005 / FR-M02-008)]
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID PK | N | |
+| `tenant_id`,`entity_id` | UUID | N | |
+| `confirmation_no` | VARCHAR(40) | N | UNIQUE `(tenant_id, confirmation_no)` |
+| `appraisee_id` | UUID FK→employees | N | |
+| `form_id` | UUID FK→E4 | Y | originating probation APAR |
+| `cycle_id` | UUID FK→E1 | Y | |
+| `date_of_joining` | DATE | Y | Joined / DOJ |
+| `probation_end_date` | DATE | Y | |
+| `probation_period_months` | INT | Y | |
+| `mentor_id` | UUID FK→employees | Y | Mentor |
+| `manager_id` | UUID FK→employees | Y | recommending Manager (L1) |
+| `manager_recommendation` | ENUM `g08_probation_recommendation` | Y | RECOMMEND_CONFIRMATION / _EXTENSION / _TERMINATION |
+| `manager_comments` | TEXT | Y | comments to HRBP |
+| `hr_approver_id` | UUID FK→employees | Y | HR approval |
+| `hr_approved_at` | TIMESTAMP | Y | |
+| `extension_months` | INT | Y | Extend (3 / 6 months) |
+| `confirmation_effective_date` | DATE | Y | |
+| `new_designation_id` | UUID FK→designations | Y | new designation if changing |
+| `confirmation_bonus`,`compensation_revision` | BOOLEAN | N | default false |
+| `letter_template_ref` | VARCHAR(120) | Y | letter template |
+| `letter_doc_id` | UUID FK→documents (G13) | Y | issued confirmation letter |
+| `outcome` | ENUM `g08_probation_outcome` | Y | terminal outcome (reuses E-enum) |
+| `status` | ENUM `g08_probation_conf_status` | N | IN_PROBATION, PENDING_MANAGER, PENDING_HR_APPROVAL, CONFIRMED, EXTENDED, TERMINATED |
+| audit fields | — | — | |
+
 ### 5.3 Relationship map
 
 ```
@@ -713,6 +979,8 @@ appraisal_forms (E4) ──sealed by──> G09 charge status; ──probation o
 | `documents` | G13/M11 | G08 | G08 (evidence/PDF/signature artefacts) |
 | `notifications`,`audit_log`/`security_audit_log`,`workflow_*` | Platform (X.2/P05/P01) | G08 | G08 (via engines) |
 | E1–E23 (this module) | **G08** | G14 (analytics), G06 (eligibility) | G08 |
+| E24–E32 config/masters (`scorecard_pillars`, `metrics`, `normalization_settings`, `custom_formula_settings`, `goal_plans`, `review_definitions`, `calibration_settings`, `performance_translations`) + `review_excluded_employees` | **G08** (RECON of M09 PMS config) | G08, G14 | G08 (Org-Admin config; migrated from DarwinBox CSV via P06) |
+| E33–E34 DATA (`appraisal_cycle_exclusions`, `probation_confirmations`) | **G08** | G08, G06 (eligibility), G14 | G08 (HR/manager; probation feed to G01/M02) |
 | promotion eligibility (by reference) | G06 | G06 | G08 (write; suppressed under sealed cover) |
 | training nominations | G07 | G07 | G08 (write from skill gap) |
 | charge / sub-judice status | G09 | G08 | G09 (G08 subscribes) |
@@ -757,6 +1025,16 @@ appraisal_forms (E4) ──sealed by──> G09 charge status; ──probation o
 | pip.status / pip.outcome | DRAFT, ACTIVE, UNDER_REVIEW, CLOSED / SUCCESSFUL, EXTENDED, UNSUCCESSFUL, ABANDONED |
 | milestone.status | PENDING, ON_TRACK, AT_RISK, MET, MISSED |
 | disclosure.event_type | DISPATCHED, DISCLOSED, VIEWED, ACKNOWLEDGED, DOWNLOADED, ACCESS_DENIED, CUSTODY_TRANSFER, SEALED, UNSEALED, HEIR_ACCESS, EXPUNGED, ANCHOR |
+| **[v3.2]** `g08_config_status` (E24–E32 config/masters) | DRAFT, ACTIVE, ARCHIVED |
+| **[v3.2]** `g08_goal_source` (goals.goal_source) | SELF, MANAGER, ADMIN, CASCADED |
+| **[v3.2]** `g08_calib_ack_status` (calibration_recommendations.employee_ack_status) | AWAITING, ACKNOWLEDGED, ACKNOWLEDGED_WITH_COMMENTS, DISAGREED |
+| **[v3.2]** `g08_exclusion_source` (E33.exclusion_source) | AUTO, MANUAL |
+| **[v3.2]** `g08_exclusion_reversibility` (E33.reversibility) | REVERSIBLE, PERMANENT |
+| **[v3.2]** `g08_exclusion_status` (E33.status) | EXCLUDED, RE_INCLUDED |
+| **[v3.2]** `g08_probation_recommendation` (E34.manager_recommendation) | RECOMMEND_CONFIRMATION, RECOMMEND_EXTENSION, RECOMMEND_TERMINATION |
+| **[v3.2]** `g08_probation_conf_status` (E34.status) | IN_PROBATION, PENDING_MANAGER, PENDING_HR_APPROVAL, CONFIRMED, EXTENDED, TERMINATED |
+
+> **[v3.2] Config value sets (not enums).** Scale/pillar/metric/goal-plan/review/calibration-template codes are tenant-configurable **master rows** with tenant-scoped UNIQUE codes (CONVENTIONS §4 `VAL-MASTER-UNIQUE`), not Postgres enums. The giant per-field enable/mandatory/editable/need-approval matrices from the CSV exports are stored as **config `jsonb`** (`field_settings` / `stage_settings` / `moderation_fields` / `parameters`) consumed by the form engine — not enumerated here.
 
 **Feature flags (R16), as RBAC §4.3 capability flags (Org-Admin-granted, audited to P05):** `g08.calibration` (default off), `g08.continuous-feedback` (default off), `g08.msf-360` (default off), `g08.bell-curve` (default off). Phase-1 GA runs with all four off; the statutory core path requires none.
 
@@ -947,6 +1225,77 @@ appraisal_forms (E4) ──sealed by──> G09 charge status; ──probation o
 | sig…01 | ASSESSMENT | a…01 | emp…12 | DSC | VALID | 2026-04-15T05:00Z |
 | sig…03 | ASSESSMENT | a…03 | emp…45 | DSC | VALID | 2026-04-22T05:00Z |
 | sig…07 | DISCLOSURE_ACK | f…01 | emp…77 | AADHAAR_ESIGN | VALID | 2026-05-03T07:30Z |
+
+**E24 scorecard_pillars** *(v3.2)*
+| id | pillar_code | name | status |
+|---|---|---|---|
+| sp…01 | FIN | Financial | ACTIVE |
+| sp…02 | CUST | Customer / Citizen | ACTIVE |
+| sp…03 | LND | Learning & Development | ACTIVE |
+
+**E25 metrics** *(v3.2)*
+| id | metric_code | name | status |
+|---|---|---|---|
+| mt…01 | DB_Default_Metric_Percentage | Percentage | ACTIVE |
+| mt…02 | DB_Default_Metric_Number | Number | ACTIVE |
+| mt…03 | GOV_Metric_Days | Days | ACTIVE |
+
+**E26 normalization_settings** *(v3.2)*
+| id | name | scale | ideal_pct | delta_pct | status |
+|---|---|---|---|---|---|
+| nm…01 | Std 10-pt Curve | APAR-10PT | 15.00 | 5.00 | ACTIVE |
+| nm…02 | Exec Bell 5-pt | APAR-5PT | 10.00 | 3.00 | ACTIVE |
+
+**E27 custom_formula_settings** *(v3.2)*
+| id | name | formula_for | formula | status |
+|---|---|---|---|---|
+| cfs…01 | Weighted Goal Score | Goal Score | `Σ(achievement × weightage)/100` | ACTIVE |
+| cfs…02 | Overall Roll-up | Overall | `goal×0.7 + competency×0.3` | ACTIVE |
+
+**E28 goal_plans** *(v3.2)*
+| id | goal_plan_code | name | methodology | enable_cascade | status |
+|---|---|---|---|---|---|
+| gpm…01 | GP-2025-KRA | Annual KRA Plan 2025-26 | KRA | true | ACTIVE |
+| gpm…02 | GP-2025-OKR | Exec OKR Plan 2025-26 | OKR | true | ACTIVE |
+| gpm…03 | GP-2024-KRA | Annual KRA Plan 2024-25 | KRA | false | ARCHIVED |
+
+**E29 review_definitions** *(v3.2)*
+| id | review_code | name | cycle_id | is_final_review | status |
+|---|---|---|---|---|---|
+| rd…01 | RV-2025-ANN | Annual APAR Review | 5c1…01 | true | ACTIVE |
+| rd…02 | RV-2025-MID | Mid-Year Review | 5c1…02 | false | ACTIVE |
+
+**E30 review_excluded_employees** *(v3.2)*
+| id | review_code | employee_external_id | employee_name | review_name |
+|---|---|---|---|---|
+| rex…01 | RV-2025-ANN | H002 | A. Kumar | Annual APAR Review |
+| rex…02 | RV-2025-ANN | H014 | S. Rao | Annual APAR Review |
+
+**E31 calibration_settings** *(v3.2)*
+| id | name | overall_rating_enabled | n_grid_enabled | status |
+|---|---|---|---|---|
+| cls…01 | Standard Committee Calibration | true | true | ACTIVE |
+| cls…02 | Exec 9-Box Calibration | true | true | ACTIVE |
+
+**E32 performance_translations** *(v3.2)*
+| id | object_type | default_value | language | translation |
+|---|---|---|---|---|
+| pt…01 | PMS_Category Name | Behavioural | hi | व्यवहारिक |
+| pt…02 | Scorecard Pillar Name | Customer / Citizen | hi | ग्राहक / नागरिक |
+
+**E33 appraisal_cycle_exclusions** *(v3.2)*
+| id | cycle_id | appraisee_id | exclusion_source | exclusion_reason | reversibility | status |
+|---|---|---|---|---|---|---|
+| ce…01 | 5c1…01 | emp…21 | AUTO | On probation | REVERSIBLE | EXCLUDED |
+| ce…02 | 5c1…01 | emp…34 | MANUAL | Long-term medical | REVERSIBLE | EXCLUDED |
+| ce…03 | 5c1…01 | emp…55 | MANUAL | New joiner | REVERSIBLE | RE_INCLUDED |
+
+**E34 probation_confirmations** *(v3.2)*
+| id | confirmation_no | appraisee_id | manager_recommendation | status |
+|---|---|---|---|---|
+| pc…01 | PCF-2025-0007 | emp…21 | RECOMMEND_CONFIRMATION | CONFIRMED |
+| pc…02 | PCF-2025-0008 | emp…34 | RECOMMEND_EXTENSION | EXTENDED |
+| pc…03 | PCF-2025-0009 | emp…60 | NULL | PENDING_MANAGER |
 
 ---
 
