@@ -1,0 +1,2631 @@
+openapi: 3.1.0
+info:
+  title: Government HRMS — G01 Employee Profile Management API
+  version: 3.1.0
+  description: >-
+    OpenAPI contract for module G01 (Employee Profile Management), the employee
+    master / single-source-of-truth for the government HRMS. Grounded in
+    docs/brd/v3/G01-employee-profile-management.md §6 (FR API-reference tables)
+    and §8, PLATFORM_FOUNDATION.md §4 (API conventions), and the shared error
+    taxonomy (docs/contracts/error-taxonomy.yaml). 2xx returns the resource
+    payload; every 4xx/5xx returns the canonical Error envelope. The correlation
+    id is carried in the X-Correlation-Id response header (never a body field).
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - { name: employees, description: Employee profile CRUD (FR-EPM-001) }
+  - { name: profile-view, description: 360° consolidated view & break-glass (FR-EPM-002/013) }
+  - { name: contacts, description: Contacts (FR-EPM-003) }
+  - { name: addresses, description: Addresses (FR-EPM-003) }
+  - { name: dependents, description: Dependents / heirs (FR-EPM-004) }
+  - { name: nominees, description: Nominees (FR-EPM-004) }
+  - { name: emergency-contacts, description: Emergency contacts (FR-EPM-005) }
+  - { name: education, description: Education (FR-EPM-006) }
+  - { name: experience, description: Experience (FR-EPM-006) }
+  - { name: identity, description: Identity documents & Aadhaar vault (FR-EPM-007) }
+  - { name: bank, description: Bank accounts (FR-EPM-008) }
+  - { name: photos, description: Photos & biometric reference (FR-EPM-009) }
+  - { name: positions, description: Positions & vacancies (FR-EPM-010) }
+  - { name: assignments, description: Job assignments & org chart (FR-EPM-010) }
+  - { name: history, description: Point-in-time & attribute history (FR-EPM-011) }
+  - { name: custom-fields, description: Profile sections & custom fields (Phase 2) }
+  - { name: field-access, description: Field-access policies & break-glass (FR-EPM-013) }
+  - { name: completeness, description: Profile completeness (FR-EPM-014) }
+  - { name: dedup, description: Deduplication & alias merge (FR-EPM-015) }
+  - { name: self-service, description: Employee self-service (FR-EPM-016) }
+  - { name: imports, description: Bulk import / migration (FR-EPM-017) }
+  - { name: lifecycle, description: Separation / reactivation / archive (FR-EPM-018) }
+  - { name: consumption, description: Master consumption API & change feed (FR-EPM-019) }
+  - { name: privacy, description: Consent, DPDP rights, breaches (FR-EPM-020) }
+  - { name: retention, description: Retention, legal holds, erasure (FR-EPM-021) }
+  - { name: governed-changes, description: Governed-field change requests (FR-EPM-022) }
+  - { name: certificates, description: Statutory certificates (FR-EPM-023) }
+  - { name: succession, description: Death, heirs, family-pension handoff (FR-EPM-024) }
+  - { name: search, description: Phonetic / transliteration search (FR-EPM-025) }
+  - { name: sr-posting, description: SR-ledger posting façade (reference only, §8.6) }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Bearer JWT carrying the session's resolved roles and tenant/entity
+        scope (PLATFORM_FOUNDATION §3.1). Endpoints never re-implement
+        permission logic; they call P02 Authorization.check.
+
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (cursor pagination). Default 25, max 100.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor from a prior response's next_cursor.
+      schema: { type: string }
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: "Sort spec, e.g. field:asc | field:desc."
+      schema: { type: string }
+    EmployeeId:
+      name: id
+      in: path
+      required: true
+      description: Employee id (alias-resolved to survivor by the platform).
+      schema: { type: string, format: uuid }
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Idempotency key for state-changing / workflow-initiating POSTs; a repeat
+        within 24h returns the original result (PLATFORM_FOUNDATION §4).
+      schema: { type: string }
+
+  headers:
+    XCorrelationId:
+      description: >-
+        Correlation id echoed on every response and written to every audit and
+        log line for the request (PLATFORM_FOUNDATION §4).
+      schema: { type: string }
+
+  schemas:
+    Error:
+      type: object
+      description: Canonical error envelope (error-taxonomy.yaml §1). Correlation id is in the X-Correlation-Id response header, not the body.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: One of the 8 platform wire codes.
+              enum: [VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, PRECONDITION_FAILED, RATE_LIMITED, INTERNAL]
+            message: { type: string }
+            field:
+              type: [string, "null"]
+              description: Offending field for validation errors.
+            details:
+              type: [object, "null"]
+              description: Structured discriminators (e.g. { reason, rule }).
+              properties:
+                reason:
+                  type: string
+                  description: >-
+                    G01 semantic reason (§8.2.1), e.g. INVALID_ID, REASON_REQUIRED,
+                    BATCH_TOO_LARGE, OUT_OF_RANGE, SOD_VIOLATION, IMMUTABLE_VERIFIED,
+                    GOVERNED_FIELD_LOCKED, CONSENT_REQUIRED, DUPLICATE_CANDIDATE,
+                    PRIMARY_REQUIRED, SHARE_SUM_INVALID, OVER_STRENGTH,
+                    POSITION_INACTIVE, INVALID_STATE, MERGE_CONFLICT, UNDO_EXPIRED,
+                    STALE_VERSION, LEGAL_HOLD_ACTIVE, HEIR_REQUIRED,
+                    BLOCKING_OBLIGATIONS, BREAK_GLASS_CAP, KMS_UNAVAILABLE.
+                rule:
+                  type: string
+                  description: VAL-* rule id that failed, where applicable.
+              additionalProperties: true
+        requestId:
+          type: [string, "null"]
+          description: Deprecated; use the X-Correlation-Id response header.
+
+    Cursor:
+      type: object
+      properties:
+        next_cursor: { type: [string, "null"] }
+
+    Consent:
+      type: object
+      properties:
+        notice_key: { type: string }
+        version: { type: string }
+        action: { type: string, enum: [GRANTED, WITHDRAWN, RENEWED] }
+
+    EmployeeCreate:
+      type: object
+      required: [first_name, dob, gender, date_of_joining, employment_type, designation_id, org_unit_id]
+      properties:
+        salutation: { type: string }
+        first_name: { type: string }
+        last_name: { type: [string, "null"] }
+        has_single_legal_name: { type: boolean, default: false }
+        dob: { type: string, format: date }
+        gender: { type: string, enum: [MALE, FEMALE, TRANSGENDER, OTHER] }
+        date_of_joining: { type: string, format: date }
+        employment_type: { type: string, enum: [PERMANENT, TEMPORARY, CONTRACT, DEPUTATION] }
+        designation_id: { type: string }
+        org_unit_id: { type: string, format: uuid }
+        cadre: { type: string }
+        category: { type: string }
+        appointing_authority_ref: { type: [string, "null"] }
+        pan: { type: [string, "null"], description: Validated by VAL-PAN. }
+        aadhaar: { type: [string, "null"], description: Masked/tokenised into the Aadhaar Reference-Key vault; raw never stored inline. }
+        effective_from: { type: [string, "null"], format: date }
+        consent: { $ref: '#/components/schemas/Consent' }
+
+    Employee:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        service_no: { type: string }
+        display_name: { type: string }
+        first_name: { type: string }
+        last_name: { type: [string, "null"] }
+        dob: { type: [string, "null"], format: date }
+        gender: { type: [string, "null"] }
+        date_of_joining: { type: [string, "null"], format: date }
+        employment_type: { type: [string, "null"] }
+        designation: { type: [string, "null"] }
+        org_unit: { type: [string, "null"] }
+        category: { type: [string, "null"], description: "May be [HIDDEN] per PII ceiling." }
+        pan: { type: [string, "null"], description: Masked per caller field-mask. }
+        aadhaar_masked: { type: [string, "null"] }
+        aadhaar_ref_key: { type: [string, "null"] }
+        employment_status: { type: string, enum: [ACTIVE, SEPARATED, DECEASED, REACTIVATED] }
+        record_state: { type: string, enum: [PROVISIONAL, ACTIVE, ARCHIVED] }
+        current_assignment_id: { type: [string, "null"] }
+        profile_completeness_pct: { type: [number, "null"] }
+        data_quality_flag: { type: [string, "null"], enum: [OK, NEEDS_ATTENTION, null] }
+        sr_event_id: { type: [string, "null"] }
+        row_version: { type: integer }
+
+    EmployeeSummary:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        service_no: { type: string }
+        display_name: { type: string }
+        designation: { type: [string, "null"] }
+        org_unit: { type: [string, "null"] }
+        employment_status: { type: string }
+        record_state: { type: string }
+
+    EmployeeList:
+      allOf:
+        - $ref: '#/components/schemas/Cursor'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/EmployeeSummary' }
+
+    DedupPrecheckRequest:
+      type: object
+      properties:
+        first_name: { type: string }
+        last_name: { type: [string, "null"] }
+        dob: { type: [string, "null"], format: date }
+        pan: { type: [string, "null"] }
+        aadhaar: { type: [string, "null"] }
+
+    DedupCandidate:
+      type: object
+      properties:
+        candidate_id: { type: string, format: uuid }
+        left_employee_id: { type: [string, "null"], format: uuid }
+        right_employee_id: { type: [string, "null"], format: uuid }
+        score: { type: number }
+        matched_attributes: { type: array, items: { type: string } }
+        status: { type: string, enum: [OPEN, MERGED, DISMISSED] }
+
+    Profile360:
+      type: object
+      properties:
+        employee: { $ref: '#/components/schemas/Employee' }
+        sections:
+          type: object
+          additionalProperties: true
+        _meta:
+          type: object
+          properties:
+            masked_fields: { type: array, items: { type: string } }
+            hidden_fields: { type: array, items: { type: string } }
+            etag: { type: string }
+            projection_synced_at: { type: string, format: date-time }
+
+    BreakGlassRequest:
+      type: object
+      required: [field_path, reason]
+      properties:
+        field_path: { type: string }
+        reason: { type: string, description: Mandatory (VAL-COMMENT); absent → REASON_REQUIRED. }
+        four_eyes_approver_id: { type: [string, "null"] }
+
+    BreakGlassReveal:
+      type: object
+      properties:
+        field_path: { type: string }
+        value: { type: string }
+        reveal_id: { type: string }
+        window_remaining: { type: integer }
+        audit_enqueued: { type: boolean }
+
+    Contact:
+      type: object
+      properties:
+        contact_id: { type: string, format: uuid }
+        type: { type: string, enum: [OFFICIAL_EMAIL, PERSONAL_EMAIL, MOBILE, LANDLINE] }
+        value: { type: string }
+        is_primary: { type: boolean }
+        verification: { type: string, enum: [UNVERIFIED, PENDING, VERIFIED] }
+        row_version: { type: integer }
+
+    Address:
+      type: object
+      properties:
+        address_id: { type: string, format: uuid }
+        type: { type: string, enum: [PERMANENT, PRESENT, OTHER] }
+        line1: { type: string }
+        line2: { type: [string, "null"] }
+        city: { type: string }
+        state: { type: string }
+        pincode: { type: string, description: Validated by VAL-PINCODE. }
+        valid_from: { type: [string, "null"], format: date }
+        valid_to: { type: [string, "null"], format: date }
+        is_current: { type: boolean }
+        row_version: { type: integer }
+
+    Dependent:
+      type: object
+      properties:
+        dependent_id: { type: string, format: uuid }
+        name: { type: string }
+        relationship: { type: string }
+        dob: { type: [string, "null"], format: date }
+        is_heir: { type: boolean }
+        row_version: { type: integer }
+
+    Nominee:
+      type: object
+      properties:
+        nominee_id: { type: string, format: uuid }
+        name: { type: string }
+        benefit_type: { type: string }
+        share_pct: { type: number, description: Nominee shares must sum to 100 (VAL-NOMINEE). }
+        guardian: { type: [string, "null"] }
+        is_family_pension_recipient: { type: boolean }
+        row_version: { type: integer }
+
+    EmergencyContact:
+      type: object
+      properties:
+        emergency_contact_id: { type: string, format: uuid }
+        name: { type: string }
+        phone: { type: string }
+        priority: { type: integer }
+        row_version: { type: integer }
+
+    Education:
+      type: object
+      properties:
+        education_id: { type: string, format: uuid }
+        level: { type: string }
+        institution: { type: [string, "null"] }
+        is_highest: { type: boolean }
+        is_verified: { type: boolean }
+        document_id: { type: [string, "null"] }
+        row_version: { type: integer }
+
+    Experience:
+      type: object
+      properties:
+        experience_id: { type: string, format: uuid }
+        employer: { type: string }
+        from_date: { type: string, format: date }
+        to_date: { type: [string, "null"], format: date }
+        is_government_service: { type: boolean }
+        row_version: { type: integer }
+
+    IdentityDocument:
+      type: object
+      properties:
+        identity_doc_id: { type: string, format: uuid }
+        type: { type: string, enum: [PAN, AADHAAR, PASSPORT, VOTER_ID, DRIVING_LICENCE] }
+        number_masked: { type: string, description: Only masked values are ever returned; raw *_token columns never surface. }
+        is_verified: { type: boolean }
+        valid_to: { type: [string, "null"], format: date }
+        document_id: { type: [string, "null"] }
+        row_version: { type: integer }
+
+    BankAccount:
+      type: object
+      properties:
+        bank_account_id: { type: string, format: uuid }
+        bank_name: { type: string }
+        ifsc: { type: string, description: Validated by VAL-IFSC. }
+        account_number_masked: { type: string }
+        is_primary_salary: { type: boolean }
+        is_verified: { type: boolean }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        row_version: { type: integer }
+
+    Photo:
+      type: object
+      properties:
+        photo_id: { type: string, format: uuid }
+        document_id: { type: string }
+        processing_purpose: { type: string, enum: [PROFILE, BIOMETRIC_ATTENDANCE] }
+        status: { type: string, enum: [PENDING, APPROVED] }
+        is_primary: { type: boolean }
+
+    BiometricRefRequest:
+      type: object
+      required: [biometric_template_ref, consent_id]
+      properties:
+        biometric_template_ref: { type: string, description: Opaque reference only; consent-gated (CONSENT_REQUIRED if absent). }
+        consent_id: { type: string }
+
+    Position:
+      type: object
+      properties:
+        position_id: { type: string, format: uuid }
+        position_code: { type: string }
+        designation_id: { type: string }
+        org_unit_id: { type: string, format: uuid }
+        sanctioned_strength: { type: integer }
+        filled_count: { type: integer }
+        is_active: { type: boolean }
+        effective_from: { type: [string, "null"], format: date }
+        row_version: { type: integer }
+
+    Assignment:
+      type: object
+      required: [position_id, effective_from]
+      properties:
+        assignment_id: { type: string, format: uuid }
+        position_id: { type: string, format: uuid }
+        assignment_type: { type: string, enum: [SUBSTANTIVE, OFFICIATING, ADDITIONAL_CHARGE, DEPUTATION] }
+        effective_from: { type: string, format: date }
+        effective_to: { type: [string, "null"], format: date }
+        row_version: { type: integer }
+
+    Certificate:
+      type: object
+      properties:
+        certificate_id: { type: string, format: uuid }
+        type: { type: string }
+        status: { type: string, enum: [VALID, EXPIRED, PENDING] }
+        valid_from: { type: [string, "null"], format: date }
+        valid_to: { type: [string, "null"], format: date }
+        is_verified: { type: boolean }
+        row_version: { type: integer }
+
+    Completeness:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        score_pct: { type: number }
+        data_quality_flag: { type: string, enum: [OK, NEEDS_ATTENTION] }
+        checklist:
+          type: array
+          items:
+            type: object
+            properties:
+              item: { type: string }
+              complete: { type: boolean }
+
+    MergeRequest:
+      type: object
+      required: [survivor_id, loser_id, four_eyes_approver_id]
+      properties:
+        survivor_id: { type: string, format: uuid }
+        loser_id: { type: string, format: uuid }
+        field_picks:
+          type: object
+          additionalProperties: { type: string, enum: [survivor, loser] }
+        four_eyes_approver_id: { type: string }
+
+    MergeResult:
+      type: object
+      properties:
+        alias_id: { type: string }
+        survivor_id: { type: string, format: uuid }
+        loser_id: { type: string, format: uuid }
+        mergeable_back_until: { type: string, format: date-time }
+        sr_event_id: { type: string }
+        note: { type: string }
+
+    ChangeFeed:
+      type: object
+      properties:
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              event_id: { type: integer, format: int64 }
+              employee_id: { type: [string, "null"], format: uuid }
+              survivor_id: { type: [string, "null"], format: uuid }
+              loser_id: { type: [string, "null"], format: uuid }
+              type: { type: string, description: "e.g. PLACEMENT_CHANGED, RECORDS_MERGED, GOVERNED_FIELD_CHANGED" }
+              tombstone: { type: [boolean, "null"] }
+              at: { type: string, format: date-time }
+        next_cursor: { type: [integer, "null"], format: int64 }
+        replay_window_days: { type: integer }
+
+    ImportBatch:
+      type: object
+      properties:
+        batch_id: { type: string, format: uuid }
+        profile: { type: string, enum: [STRICT, MIGRATION] }
+        status: { type: string, enum: [UPLOADED, VALIDATING, VALIDATED, COMMITTING, COMMITTED, FAILED, ROLLED_BACK] }
+        total_rows: { type: integer }
+        valid_rows: { type: integer }
+        provisional_rows: { type: integer }
+        error_rows: { type: integer }
+
+    ImportReport:
+      type: object
+      properties:
+        batch_id: { type: string, format: uuid }
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              row_number: { type: integer }
+              validation_status: { type: string, enum: [VALID, PROVISIONAL, ERROR, COMMITTED, SKIPPED] }
+              reasons: { type: array, items: { type: string } }
+              resolved_employee_id: { type: [string, "null"], format: uuid }
+
+    ConsentRequest:
+      type: object
+      required: [notice_key, action]
+      properties:
+        notice_key: { type: string }
+        version: { type: string }
+        action: { type: string, enum: [GRANTED, WITHDRAWN, RENEWED] }
+
+    ConsentRecord:
+      type: object
+      properties:
+        consent_id: { type: string, format: uuid }
+        notice_key: { type: string }
+        version: { type: string }
+        action: { type: string }
+        captured_at: { type: string, format: date-time }
+
+    GovernedChangeRequest:
+      type: object
+      required: [field_path, new_value, reason]
+      properties:
+        field_path: { type: string, enum: [name, dob, gender, category] }
+        new_value: { type: string }
+        reason: { type: string }
+        supporting_document_id: { type: [string, "null"] }
+
+    GovernedChange:
+      type: object
+      properties:
+        change_id: { type: string, format: uuid }
+        field_path: { type: string }
+        old_value: { type: [string, "null"] }
+        new_value: { type: string }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED, APPLIED] }
+        sr_event_id: { type: [string, "null"] }
+
+    LegalHold:
+      type: object
+      properties:
+        hold_id: { type: string, format: uuid }
+        hold_type: { type: string }
+        reason: { type: string }
+        status: { type: string, enum: [ACTIVE, RELEASED] }
+        placed_at: { type: string, format: date-time }
+
+    ErasureDecision:
+      type: object
+      properties:
+        decision: { type: string, enum: [ALLOWED, REFUSED] }
+        precedence: { type: [string, "null"] }
+        reasons:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        request_id_ref: { type: [string, "null"] }
+
+    ReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+        four_eyes_approver_id: { type: [string, "null"] }
+
+    SeparationRequest:
+      type: object
+      required: [separation_type, effective_date, reason]
+      properties:
+        separation_type: { type: string, enum: [RESIGNATION, RETIREMENT, TERMINATION, DEATH] }
+        effective_date: { type: string, format: date }
+        reason: { type: string }
+
+    DeathRecordRequest:
+      type: object
+      required: [date_of_death]
+      properties:
+        date_of_death: { type: string, format: date }
+        heir_confirmation: { type: [boolean, "null"] }
+        source_document_id: { type: [string, "null"] }
+
+    HeirConfirmRequest:
+      type: object
+      required: [heirs]
+      properties:
+        heirs:
+          type: array
+          items:
+            type: object
+            properties:
+              dependent_id: { type: string, format: uuid }
+              succession_rank: { type: integer }
+
+    ChangeRequest:
+      type: object
+      required: [field_path, requested_value]
+      properties:
+        field_path: { type: string }
+        requested_value: { type: string }
+        reason: { type: [string, "null"] }
+
+    RightsRequest:
+      type: object
+      required: [right_type]
+      properties:
+        right_type: { type: string, enum: [ACCESS, CORRECTION, ERASURE, PORTABILITY, GRIEVANCE, WITHDRAW_CONSENT] }
+        details: { type: [string, "null"] }
+
+    Acknowledgement:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+        sr_event_id: { type: [string, "null"] }
+
+    SrPostFacadeRequest:
+      type: object
+      description: >-
+        Internal façade payload (§8.6). The drainer maps the outbox event to the
+        verbatim G12 event_type and RELAYS to POST /api/v1/sr/ingest — it never
+        calls /sr/events and never writes the ledger directly. Reference only.
+      required: [source_module, source_reference_id, source_event_version, event_type]
+      properties:
+        source_module: { type: string, enum: [G01] }
+        source_reference_id: { type: string }
+        source_event_version: { type: integer }
+        event_type:
+          type: string
+          enum: [APPOINTMENT, NAME_CHANGE, DOB_CHANGE, GENDER_CHANGE, CATEGORY_CHANGE, DECEASED, QUALIFICATION_ADDED, DEPARTMENTAL_EXAM_PASSED]
+        fact_key: { type: [string, "null"] }
+        payload: { type: object, additionalProperties: true }
+
+  responses:
+    Validation422:
+      description: VALIDATION_FAILED — input failed a VAL-* rule (e.g. ERR-G01-IDFMT / INVALID_ID, ERR-G01-RANGE / BATCH_TOO_LARGE, ERR-REASON-REQ).
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthenticated401:
+      description: UNAUTHENTICATED — no/invalid/expired session.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden403:
+      description: FORBIDDEN — authenticated but not permitted (ERR-FORBIDDEN / SOD_VIOLATION, ERR-G01-GOVLOCK / GOVERNED_FIELD_LOCKED, ERR-G01-CONSENT / CONSENT_REQUIRED). Never leaks existence of out-of-scope records.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound404:
+      description: NOT_FOUND — resource absent or out of the caller's scope.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict409:
+      description: CONFLICT — idempotency replay, invariant/state conflict (ERR-G01-STALE / STALE_VERSION, ERR-G01-INVARIANT / SHARE_SUM_INVALID, ERR-G01-STATE / OVER_STRENGTH, ERR-G01-MERGE / MERGE_CONFLICT, ERR-G01-HOLD / LEGAL_HOLD_ACTIVE).
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    PreconditionFailed412:
+      description: PRECONDITION_FAILED — a required precondition is unmet (ERR-PRECOND / HEIR_REQUIRED, BLOCKING_OBLIGATIONS; ERR-G01-HEIR).
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RateLimited429:
+      description: RATE_LIMITED — rate limit or break-glass volume cap reached (ERR-G01-CAP / BREAK_GLASS_CAP).
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Internal500:
+      description: INTERNAL — unexpected server error or non-retryable upstream failure (ERR-LOADFAIL / KMS_UNAVAILABLE; G12/G13/KMS map here, no 503).
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+paths:
+  /employees:
+    post:
+      tags: [employees]
+      summary: Create employee profile on hire (FR-EPM-001)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: draft
+          in: query
+          required: false
+          description: When true, persists a draft instead of an active profile.
+          schema: { type: boolean, default: false }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EmployeeCreate' } } }
+      responses:
+        '201':
+          description: Created (or draft). Emits APPOINTMENT SR event and computes advisory completeness.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Employee' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    get:
+      tags: [consumption]
+      summary: Search / list employees (cursor; masked; alias-resolved) (FR-EPM-019/025)
+      parameters:
+        - { name: org_unit, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: updated_since, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: q_phonetic, in: query, required: false, description: Phonetic/transliteration filter (FR-019/025)., schema: { type: string } }
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Masked, alias-resolved page of employees.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/EmployeeList' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/dedup-precheck:
+    post:
+      tags: [employees]
+      summary: Pre-submit duplicate check, phonetic-aware (FR-EPM-001)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DedupPrecheckRequest' } } }
+      responses:
+        '200':
+          description: Candidate matches (HIGH match may block create with DUPLICATE_CANDIDATE at commit).
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  candidates: { type: array, items: { $ref: '#/components/schemas/DedupCandidate' } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/service-no/preview:
+    get:
+      tags: [employees]
+      summary: Preview next service number (FR-EPM-001)
+      responses:
+        '200':
+          description: Next service_no preview.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { service_no: { type: string } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}:
+    get:
+      tags: [consumption]
+      summary: Get a single employee (masked; alias-resolved) (FR-EPM-019)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Masked, alias-resolved employee.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Employee' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}:commit:
+    patch:
+      tags: [employees]
+      summary: Commit an approved G02 edit (effective-dated write) (FR-EPM-001, §8.4)
+      description: Applies an approved G02 change; performs the effective-dated write and posts the resulting SR event. Requires If-Match / row_version.
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - { name: If-Match, in: header, required: false, description: etag derived from row_version (optimistic lock)., schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                changes: { type: object, additionalProperties: true }
+                effective_from: { type: [string, "null"], format: date }
+                row_version: { type: integer }
+      responses:
+        '200':
+          description: Committed employee.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Employee' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '412': { $ref: '#/components/responses/PreconditionFailed412' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees:batch:
+    post:
+      tags: [consumption]
+      summary: Batch-fetch employees by ids (alias-resolved) (FR-EPM-019)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: { type: array, items: { type: string, format: uuid }, maxItems: 100 }
+      responses:
+        '200':
+          description: Masked, alias-resolved employees.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Employee' } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/changes:
+    get:
+      tags: [consumption]
+      summary: Change feed (transactional outbox backbone) (FR-EPM-019, §8.5)
+      parameters:
+        - { name: since, in: query, required: false, description: Cursor event_id., schema: { type: integer, format: int64 } }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ordered change events; survivor-resolved; tombstones flagged.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ChangeFeed' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/profile-360:
+    get:
+      tags: [profile-view]
+      summary: 360° consolidated profile view (CQRS, masked) (FR-EPM-002)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Assembled masked profile from the read projection.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Profile360' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/sections/{sectionKey}:
+    get:
+      tags: [profile-view]
+      summary: Lazy-load a single profile section (FR-EPM-002)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - { name: sectionKey, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Section payload (masked).
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { type: object, additionalProperties: true } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/break-glass:
+    post:
+      tags: [profile-view]
+      summary: Record reason for a restricted read (break-glass) (FR-EPM-002)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReasonRequest' } } }
+      responses:
+        '200':
+          description: Reason recorded; restricted read permitted (audited to security_audit_log).
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '429': { $ref: '#/components/responses/RateLimited429' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/contacts:
+    get:
+      tags: [contacts]
+      summary: List contacts (FR-EPM-003)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Contacts.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Contact' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [contacts]
+      summary: Add a contact (FR-EPM-003)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } }
+      responses:
+        '201':
+          description: Created contact.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/contacts/{contactId}:
+    patch:
+      tags: [contacts]
+      summary: Update a contact (etag/row_version) (FR-EPM-003)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - { name: contactId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } }
+      responses:
+        '200':
+          description: Updated contact.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [contacts]
+      summary: Soft-delete a contact (FR-EPM-003)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - { name: contactId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Soft-deleted.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /contacts/{contactId}/verify:
+    post:
+      tags: [contacts]
+      summary: Verify a contact via OTP/email (FR-EPM-003)
+      parameters:
+        - { name: contactId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { otp: { type: string } }
+      responses:
+        '200':
+          description: Verification result.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/addresses:
+    get:
+      tags: [addresses]
+      summary: List addresses (FR-EPM-003)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200':
+          description: Addresses.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Address' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [addresses]
+      summary: Add an address (FR-EPM-003)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Address' } } }
+      responses:
+        '201':
+          description: Created address.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Address' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [addresses]
+      summary: Update an address (etag/row_version) (FR-EPM-003)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Address' } } }
+      responses:
+        '200':
+          description: Updated address.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Address' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/dependents:
+    get:
+      tags: [dependents]
+      summary: List dependents / heirs (FR-EPM-004)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Dependents., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Dependent' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [dependents]
+      summary: Add a dependent / heir (FR-EPM-004)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Dependent' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Dependent' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [dependents]
+      summary: Update a dependent (etag/row_version) (FR-EPM-004)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Dependent' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Dependent' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [dependents]
+      summary: Soft-delete a dependent (FR-EPM-004)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: dependentId, in: query, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/nominees:
+    get:
+      tags: [nominees]
+      summary: List nominees (FR-EPM-004)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Nominees., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Nominee' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [nominees]
+      summary: Add a nominee (FR-EPM-004)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Nominee' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Nominee' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [nominees]
+      summary: Update a nominee (etag/row_version) (FR-EPM-004)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Nominee' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Nominee' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [nominees]
+      summary: Soft-delete a nominee (sole-primary/share invariants apply) (FR-EPM-004)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: nomineeId, in: query, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/nominees:validate-shares:
+    post:
+      tags: [nominees]
+      summary: Validate nominee share-sum = 100 (FR-EPM-004)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Share-sum valid., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, properties: { valid: { type: boolean }, total_pct: { type: number } } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /nominees/{id}:approve:
+    post:
+      tags: [nominees]
+      summary: Four-eyes approve a statutory nominee (FR-EPM-004)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonRequest' } } } }
+      responses:
+        '200': { description: Approved (maker != checker enforced by P01)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Nominee' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/emergency-contacts:
+    get:
+      tags: [emergency-contacts]
+      summary: List emergency contacts (FR-EPM-005)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Emergency contacts., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/EmergencyContact' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [emergency-contacts]
+      summary: Add an emergency contact (FR-EPM-005)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EmergencyContact' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/EmergencyContact' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [emergency-contacts]
+      summary: Update an emergency contact (FR-EPM-005)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EmergencyContact' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/EmergencyContact' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [emergency-contacts]
+      summary: Soft-delete an emergency contact (FR-EPM-005)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: emergencyContactId, in: query, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/emergency-contacts:reorder:
+    patch:
+      tags: [emergency-contacts]
+      summary: Reorder emergency-contact priorities (FR-EPM-005)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order]
+              properties:
+                order:
+                  type: array
+                  items: { type: object, properties: { emergency_contact_id: { type: string, format: uuid }, priority: { type: integer } } }
+      responses:
+        '200': { description: Reordered., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/EmergencyContact' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/education:
+    get:
+      tags: [education]
+      summary: List education records (FR-EPM-006)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Education records., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Education' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [education]
+      summary: Add an education record (FR-EPM-006)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Education' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Education' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [education]
+      summary: Update an education record (FR-EPM-006)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Education' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Education' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [education]
+      summary: Soft-delete an education record (FR-EPM-006)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: educationId, in: query, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /education/{id}:verify:
+    post:
+      tags: [education]
+      summary: Mark an education record verified (FR-EPM-006)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Verified., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Education' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/experience:
+    get:
+      tags: [experience]
+      summary: List experience records (FR-EPM-006)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Experience records., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Experience' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [experience]
+      summary: Add an experience record (FR-EPM-006)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Experience' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Experience' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [experience]
+      summary: Update an experience record (FR-EPM-006)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Experience' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Experience' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [experience]
+      summary: Soft-delete an experience record (FR-EPM-006)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: experienceId, in: query, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/identity-docs:
+    get:
+      tags: [identity]
+      summary: List identity documents (masked only) (FR-EPM-007)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Masked identity documents., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/IdentityDocument' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [identity]
+      summary: Add an identity document (Aadhaar via vault; VAL-PAN/VAL-AADHAAR) (FR-EPM-007)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityDocument' } } } }
+      responses:
+        '201': { description: Created (masked)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityDocument' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [identity]
+      summary: Update an identity document (FR-EPM-007)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityDocument' } } } }
+      responses:
+        '200': { description: Updated (masked)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityDocument' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [identity]
+      summary: Soft-delete an identity document (FR-EPM-007)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: identityDocId, in: query, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /identity-docs/{id}:verify:
+    post:
+      tags: [identity]
+      summary: Verify an identity document (FR-EPM-007)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Verified., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityDocument' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/aadhaar:reveal:
+    post:
+      tags: [identity]
+      summary: Four-eyes + reason Aadhaar vault reveal (FR-EPM-007)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BreakGlassRequest' } } } }
+      responses:
+        '200': { description: Revealed (audited; KMS-backed)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/BreakGlassReveal' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '429': { $ref: '#/components/responses/RateLimited429' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /identity-docs/expiring:
+    get:
+      tags: [identity]
+      summary: Expiring identity-document report (FR-EPM-007)
+      parameters: [ { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Expiring documents (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/IdentityDocument' } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/bank-accounts:
+    get:
+      tags: [bank]
+      summary: List bank accounts (masked) (FR-EPM-008)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Bank accounts (masked)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/BankAccount' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [bank]
+      summary: Add a bank account (pending until approved; VAL-IFSC) (FR-EPM-008)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BankAccount' } } } }
+      responses:
+        '201': { description: Created (PENDING)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/BankAccount' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [bank]
+      summary: Update a bank account (re-enters pending) (FR-EPM-008)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BankAccount' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/BankAccount' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /bank-accounts/{id}:approve:
+    post:
+      tags: [bank]
+      summary: Second-approver action on a bank account (4-eyes) (FR-EPM-008)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonRequest' } } } }
+      responses:
+        '200': { description: Approved (maker != checker)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/BankAccount' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /bank-accounts/{id}:verify:
+    post:
+      tags: [bank]
+      summary: Penny-drop / manual verify a bank account (FR-EPM-008)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Verified., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/BankAccount' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/photos:
+    post:
+      tags: [photos]
+      summary: Upload a photo (returns pending) (FR-EPM-009)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                processing_purpose: { type: string, enum: [PROFILE, BIOMETRIC_ATTENDANCE] }
+      responses:
+        '201': { description: Uploaded (PENDING)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Photo' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /photos/{photoId}:approve:
+    post:
+      tags: [photos]
+      summary: Approve a photo (becomes primary) (FR-EPM-009)
+      parameters: [ { name: photoId, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Approved and set primary., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Photo' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/biometric-ref:
+    post:
+      tags: [photos]
+      summary: Set opaque biometric reference (consent-gated) (FR-EPM-009)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BiometricRefRequest' } } } }
+      responses:
+        '200': { description: Biometric ref set (BIOMETRIC_ATTENDANCE consent verified)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/photo:
+    get:
+      tags: [photos]
+      summary: Resolve current primary photo URL (FR-EPM-009)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Primary photo URL., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, properties: { url: { type: string, format: uri } } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /positions:
+    get:
+      tags: [positions]
+      summary: List positions (FR-EPM-010)
+      parameters: [ { name: org_unit, in: query, required: false, schema: { type: string } }, { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Positions (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/Position' } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [positions]
+      summary: Create a position (appends position_history) (FR-EPM-010)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Position' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Position' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [positions]
+      summary: Update a position (appends position_history) (FR-EPM-010)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Position' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Position' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /positions/{id}/history:
+    get:
+      tags: [positions]
+      summary: Position attribute history (FR-EPM-010)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '200': { description: Position history., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /positions/vacancies:
+    get:
+      tags: [positions]
+      summary: Vacancy report (FR-EPM-010)
+      parameters: [ { name: org_unit, in: query, required: false, schema: { type: string } }, { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Vacancies (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/Position' } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/assignments:
+    post:
+      tags: [assignments]
+      summary: Place / change job assignment (effective-dated) (FR-EPM-010)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Assignment' } } } }
+      responses:
+        '201': { description: Assignment created; emits PLACEMENT_CHANGED/POSITION_CHANGED., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Assignment' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /org-chart:
+    get:
+      tags: [assignments]
+      summary: Org-chart tree, as-of supported (FR-EPM-010)
+      parameters:
+        - { name: rootOrgUnit, in: query, required: false, schema: { type: string } }
+        - { name: asOf, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Org-chart tree., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/as-of:
+    get:
+      tags: [history]
+      summary: Point-in-time snapshot incl. attributes (FR-EPM-011)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: As-of snapshot., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Employee' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/history:
+    get:
+      tags: [history]
+      summary: Attribute change timeline (FR-EPM-011)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - { name: attribute, in: query, required: false, description: "e.g. last_name | category | assignment", schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { description: Change timeline (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { type: object, additionalProperties: true } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /config/profile-sections:
+    get:
+      tags: [custom-fields]
+      summary: List profile sections (Phase 2, FR-EPM-012)
+      responses:
+        '200': { description: Sections., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [custom-fields]
+      summary: Create a profile section (Phase 2, FR-EPM-012)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [custom-fields]
+      summary: Update a profile section (Phase 2, FR-EPM-012)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /config/custom-fields:
+    get:
+      tags: [custom-fields]
+      summary: List custom-field definitions (Phase 2, FR-EPM-012)
+      responses:
+        '200': { description: Field definitions., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [custom-fields]
+      summary: Create a custom-field definition (Phase 2, FR-EPM-012)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [custom-fields]
+      summary: Update a custom-field definition (Phase 2, FR-EPM-012)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/custom-fields:
+    put:
+      tags: [custom-fields]
+      summary: Set custom-field values (Phase 2, FR-EPM-012)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '200': { description: Values set., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/reveal-field:
+    post:
+      tags: [field-access]
+      summary: Hardened break-glass field reveal (reason, cap, anomaly) (FR-EPM-013)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BreakGlassRequest' } } } }
+      responses:
+        '200': { description: Field revealed (audited; window decremented)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/BreakGlassReveal' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '429': { $ref: '#/components/responses/RateLimited429' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /config/field-access-policies:
+    get:
+      tags: [field-access]
+      summary: List field-access policies (FR-EPM-013)
+      responses:
+        '200': { description: Policies., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [field-access]
+      summary: Create a field-access policy (DPO sign-off) (FR-EPM-013)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [field-access]
+      summary: Update a field-access policy (FR-EPM-013)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [field-access]
+      summary: Soft-delete a field-access policy (FR-EPM-013)
+      parameters: [ { name: policyId, in: query, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /config/field-access-policies/resolve:
+    get:
+      tags: [field-access]
+      summary: Preview field-access resolution for a role (FR-EPM-013)
+      parameters: [ { name: role, in: query, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: Resolved field access., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /privacy/break-glass-activity:
+    get:
+      tags: [field-access]
+      summary: DPO break-glass monitoring feed (FR-EPM-013)
+      parameters: [ { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Break-glass activity (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { type: object, additionalProperties: true } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/completeness:
+    get:
+      tags: [completeness]
+      summary: Profile completeness score + checklist (FR-EPM-014)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Completeness (advisory)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Completeness' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/completeness:recompute:
+    post:
+      tags: [completeness]
+      summary: Force recompute completeness (FR-EPM-014)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Recomputed., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Completeness' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /completeness/summary:
+    get:
+      tags: [completeness]
+      summary: Org-unit completeness rollup (FR-EPM-014)
+      parameters: [ { name: orgUnit, in: query, required: false, schema: { type: string } } ]
+      responses:
+        '200': { description: Completeness rollup., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /dedup/scan:
+    post:
+      tags: [dedup]
+      summary: Run batch duplicate detection, phonetic-aware (FR-EPM-015)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: false, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '202': { description: Scan enqueued., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /dedup/candidates:
+    get:
+      tags: [dedup]
+      summary: Duplicate review queue (FR-EPM-015)
+      parameters: [ { name: status, in: query, required: false, schema: { type: string } }, { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Candidates (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/DedupCandidate' } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /dedup/candidates/{id}:merge:
+    post:
+      tags: [dedup]
+      summary: Merge duplicates (4-eyes; writes alias, no cross-module FK repoint) (FR-EPM-015)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MergeRequest' } } } }
+      responses:
+        '200': { description: Merged; survivor returned; consumers resolve via alias., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/MergeResult' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /dedup/candidates/{id}:dismiss:
+    post:
+      tags: [dedup]
+      summary: Dismiss a candidate as not a duplicate (FR-EPM-015)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonRequest' } } } }
+      responses:
+        '200': { description: Dismissed., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/DedupCandidate' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /dedup/merges/{aliasId}:undo:
+    post:
+      tags: [dedup]
+      summary: Reverse a merge within the undo window (FR-EPM-015)
+      parameters: [ { name: aliasId, in: path, required: true, schema: { type: string } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Merge reversed., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/resolve:
+    get:
+      tags: [dedup]
+      summary: Resolve alias to survivor id (FR-EPM-015/019)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Survivor id., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, properties: { survivor_id: { type: string, format: uuid }, is_tombstone: { type: boolean } } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /me/profile:
+    get:
+      tags: [self-service]
+      summary: Own 360° profile (self-visible) (FR-EPM-016)
+      responses:
+        '200': { description: Own profile (self-visible fields)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Profile360' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /me/change-requests:
+    post:
+      tags: [self-service]
+      summary: Create a G02 edit request (FR-EPM-016)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeRequest' } } } }
+      responses:
+        '202': { description: Edit request created in G02 workflow., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /me/rights-requests:
+    post:
+      tags: [self-service]
+      summary: Create a data-principal rights request (FR-EPM-016/020)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RightsRequest' } } } }
+      responses:
+        '202': { description: Rights request created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /me/profile/export:
+    get:
+      tags: [self-service]
+      summary: DPDP self data export (FR-EPM-016/020)
+      responses:
+        '200': { description: Portable export of own data., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /me/requests:
+    get:
+      tags: [self-service]
+      summary: Track own edit + rights requests (FR-EPM-016)
+      parameters: [ { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Own requests (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { type: object, additionalProperties: true } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /imports:
+    post:
+      tags: [imports]
+      summary: Upload file to create an import batch (STRICT|MIGRATION) (FR-EPM-017)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - { name: profile, in: query, required: false, schema: { type: string, enum: [STRICT, MIGRATION], default: STRICT } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { file: { type: string, format: binary } }
+      responses:
+        '201': { description: Batch created (UPLOADED)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ImportBatch' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /imports/{batchId}:validate:
+    post:
+      tags: [imports]
+      summary: Run validation on an import batch (FR-EPM-017)
+      parameters: [ { name: batchId, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Validation run; counts updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ImportBatch' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /imports/{batchId}/report:
+    get:
+      tags: [imports]
+      summary: Valid / provisional / error report (FR-EPM-017)
+      parameters:
+        - { name: batchId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { description: Row-level report., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ImportReport' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /imports/{batchId}:commit:
+    post:
+      tags: [imports]
+      summary: Commit valid + provisional rows (idempotent, transactional per chunk) (FR-EPM-017)
+      parameters: [ { name: batchId, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Committed; provisional rows created as PROVISIONAL., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ImportBatch' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /imports/{batchId}:rollback:
+    post:
+      tags: [imports]
+      summary: Reverse a committed import within the window (FR-EPM-017)
+      parameters: [ { name: batchId, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Rolled back., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ImportBatch' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /remediation-queue:
+    get:
+      tags: [imports]
+      summary: PROVISIONAL remediation worklist (FR-EPM-017)
+      parameters:
+        - { name: state, in: query, required: false, schema: { type: string, default: QUEUED } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { description: Remediation worklist (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { type: object, additionalProperties: true } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}:promote-active:
+    post:
+      tags: [imports]
+      summary: Promote PROVISIONAL to ACTIVE after remediation (FR-EPM-017)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Promoted to ACTIVE., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Employee' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}:separate:
+    post:
+      tags: [lifecycle]
+      summary: Initiate separation (FR-EPM-018)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SeparationRequest' } } } }
+      responses:
+        '202': { description: Separation initiated (P01 flow)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '412': { $ref: '#/components/responses/PreconditionFailed412' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/separation:approve:
+    post:
+      tags: [lifecycle]
+      summary: Approve separation (maker != checker) (FR-EPM-018)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonRequest' } } } }
+      responses:
+        '200': { description: Separation approved., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Employee' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '412': { $ref: '#/components/responses/PreconditionFailed412' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}:reactivate:
+    post:
+      tags: [lifecycle]
+      summary: Rehire / reactivate an employee (FR-EPM-018)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonRequest' } } } }
+      responses:
+        '200': { description: Reactivated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Employee' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}:archive:
+    post:
+      tags: [lifecycle]
+      summary: Transition to ARCHIVED (retention) (FR-EPM-018)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonRequest' } } } }
+      responses:
+        '200': { description: Archived., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Employee' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '412': { $ref: '#/components/responses/PreconditionFailed412' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/consent:
+    post:
+      tags: [privacy]
+      summary: Grant / withdraw / renew consent (FR-EPM-020)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConsentRequest' } } } }
+      responses:
+        '201': { description: Consent ledger entry created (append-only)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ConsentRecord' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /privacy/dpo-dashboard:
+    get:
+      tags: [privacy]
+      summary: DPO oversight feed (FR-EPM-020)
+      responses:
+        '200': { description: DPO dashboard feed., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /config/privacy-notices:
+    get:
+      tags: [privacy]
+      summary: List privacy notices (DPO) (FR-EPM-020)
+      responses:
+        '200': { description: Privacy notices., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [privacy]
+      summary: Create a privacy notice (DPO) (FR-EPM-020)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [privacy]
+      summary: Update a privacy notice (DPO) (FR-EPM-020)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /privacy/requests:
+    get:
+      tags: [privacy]
+      summary: List data-principal rights & grievance requests (FR-EPM-020)
+      parameters: [ { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Requests (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { type: object, additionalProperties: true } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [privacy]
+      summary: Create a data-principal rights / grievance request (FR-EPM-020)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RightsRequest' } } } }
+      responses:
+        '202': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [privacy]
+      summary: Update / progress a rights request (FR-EPM-020)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /privacy/breaches:
+    get:
+      tags: [privacy]
+      summary: List breach incidents (FR-EPM-020)
+      parameters: [ { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Breach incidents (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { type: object, additionalProperties: true } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [privacy]
+      summary: Record a breach incident & notification (FR-EPM-020)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [privacy]
+      summary: Update a breach incident (FR-EPM-020)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /config/retention-policies:
+    get:
+      tags: [retention]
+      summary: List retention policies (FR-EPM-021)
+      responses:
+        '200': { description: Retention policies., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [retention]
+      summary: Create a retention policy (FR-EPM-021)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [retention]
+      summary: Update a retention policy (FR-EPM-021)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/legal-holds:
+    get:
+      tags: [retention]
+      summary: List legal holds on an employee (FR-EPM-021)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Legal holds., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/LegalHold' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [retention]
+      summary: Place a legal hold (G09-driven) (FR-EPM-021)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LegalHold' } } } }
+      responses:
+        '201': { description: Hold placed., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/LegalHold' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [retention]
+      summary: Release a legal hold (FR-EPM-021)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LegalHold' } } } }
+      responses:
+        '200': { description: Hold released., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/LegalHold' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}:evaluate-erasure:
+    post:
+      tags: [retention]
+      summary: Reconcile erasure vs retention / legal hold (FR-EPM-021)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: false, content: { application/json: { schema: { type: object, properties: { request_id_ref: { type: string } } } } } }
+      responses:
+        '200': { description: Erasure decision (REFUSED if retention/hold wins → LEGAL_HOLD_ACTIVE)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ErasureDecision' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /retention/run:
+    post:
+      tags: [retention]
+      summary: Trigger a scheduled retention sweep (FR-EPM-021)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '202': { description: Sweep enqueued., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/governed-changes:
+    get:
+      tags: [governed-changes]
+      summary: History of governed-field changes (FR-EPM-022)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Governed-change history., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/GovernedChange' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [governed-changes]
+      summary: Raise a governed-field change request (DOB/category/name/gender) (FR-EPM-022)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/GovernedChangeRequest' } } } }
+      responses:
+        '202': { description: Request raised (P01 4-eyes flow)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/GovernedChange' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /governed-changes/{id}:approve:
+    post:
+      tags: [governed-changes]
+      summary: Approving-authority 4-eyes approve → apply + post SR event (FR-EPM-022)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonRequest' } } } }
+      responses:
+        '200': { description: Approved and applied., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/GovernedChange' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /governed-changes/{id}:reject:
+    post:
+      tags: [governed-changes]
+      summary: Reject a governed-field change request (FR-EPM-022)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonRequest' } } } }
+      responses:
+        '200': { description: Rejected., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/GovernedChange' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/certificates:
+    get:
+      tags: [certificates]
+      summary: List statutory certificates (FR-EPM-023)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Certificates., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Certificate' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [certificates]
+      summary: Add a certificate (FR-EPM-023)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Certificate' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Certificate' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [certificates]
+      summary: Update a certificate (FR-EPM-023)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Certificate' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Certificate' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [certificates]
+      summary: Soft-delete a certificate (FR-EPM-023)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: certificateId, in: query, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /certificates/{id}:verify:
+    post:
+      tags: [certificates]
+      summary: Verify a certificate (FR-EPM-023)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      responses:
+        '200': { description: Verified., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Certificate' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /certificates/expiring:
+    get:
+      tags: [certificates]
+      summary: Expiring-certificate pipeline (FR-EPM-023)
+      parameters: [ { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Expiring certificates (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/Certificate' } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/death:record:
+    post:
+      tags: [succession]
+      summary: Record death + heir confirmation (FR-EPM-024)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DeathRecordRequest' } } } }
+      responses:
+        '200': { description: Death recorded; DECEASED SR event emitted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Employee' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '412': { $ref: '#/components/responses/PreconditionFailed412' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/heirs:confirm:
+    post:
+      tags: [succession]
+      summary: Confirm heirs + succession rank (FR-EPM-024)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/HeirConfirmRequest' } } } }
+      responses:
+        '200': { description: Heirs confirmed., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '412': { $ref: '#/components/responses/PreconditionFailed412' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/family-pension:handoff:
+    post:
+      tags: [succession]
+      summary: Publish family-pension recipient to G11 (FR-EPM-024)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: false, content: { application/json: { schema: { type: object, properties: { recipient_dependent_id: { type: string, format: uuid } } } } } }
+      responses:
+        '200': { description: Recipient handed off to G11., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '412': { $ref: '#/components/responses/PreconditionFailed412' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/heir-rights:
+    post:
+      tags: [succession]
+      summary: Heir exercises data-principal rights (FR-EPM-024)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RightsRequest' } } } }
+      responses:
+        '202': { description: Heir rights request created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Acknowledgement' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/search:
+    get:
+      tags: [search]
+      summary: Phonetic / transliteration search (FR-EPM-025)
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: phonetic, in: query, required: false, schema: { type: boolean, default: true } }
+        - { name: script, in: query, required: false, schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { description: Search results (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/EmployeeList' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/sr/post-to-sr:
+    post:
+      tags: [sr-posting]
+      summary: Internal SR-posting façade — relays to POST /api/v1/sr/ingest (reference only, §8.6)
+      description: >-
+        Internal façade exposed by G01's transactional outbox drainer. It maps
+        the outbox event to the verbatim G12 event_type and RELAYS to the
+        canonical write-port POST /api/v1/sr/ingest (reversals to
+        /api/v1/sr/ingest/reversal). It MUST NOT call /api/v1/sr/events and MUST
+        NOT INSERT into the G12 ledger directly. Documented here for reference;
+        /api/v1/sr/ingest itself is owned by module G12.
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SrPostFacadeRequest' } } } }
+      responses:
+        '200': { description: Relayed to /sr/ingest; G12 sr_event_id returned (idempotent replay returns the original)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: object, properties: { sr_event_id: { type: string }, relayed_to: { type: string, example: /api/v1/sr/ingest } } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '412': { $ref: '#/components/responses/PreconditionFailed412' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }

@@ -1,0 +1,327 @@
+# =============================================================================
+# Government-HRMS (PrimeSoft platform) — Machine-Readable Dependency Register
+# =============================================================================
+# Purpose : Per-module dependency contract driving the dependency-ordered build
+#           plan (docs/phased-plan.md). Ground truth is docs/brd/v3/*, the
+#           consolidated 403-table schema (docs/data-model/), MODULE_RECONCILIATION.md
+#           and PLATFORM_FOUNDATION.md. No dependency here is invented — each
+#           traces to a BRD "Alignment with PrimeSoft platform" / out-of-scope /
+#           cross-feature-dependency / traceability section or the schema build order.
+#
+# Legend:
+#   type                    : net-new | extend | phase-2
+#   platform_services_consumed : P01 Workflow · P02 RBAC/Authorization.check ·
+#                                P03 Chat · P04 Tenant/Org Admin · P05 Audit ·
+#                                P06 Migration · X (X.1 jobs / X.2 notify / X.3 integration) ·
+#                                W (W.1 flows / W.2 forms / W.3 notify-config)
+#   hard_dependencies       : MUST be built and integrable before this module
+#                             (real coupling: consumes owned data / write-port / gate)
+#   soft_dependencies       : can be mocked/stubbed at build time (event ref,
+#                             read-only lookup, downstream ack, optional enrichment)
+#   sr_role                 : writer (in G12 FR-01.B canonical statutory writer set) |
+#                             consumer (reads SR) | none | owner (the ledger itself)
+#   effort                  : S | M | L | XL  (schema size + statutory complexity + net-new)
+# =============================================================================
+
+meta:
+  program: Government-HRMS on PrimeSoft platform
+  module_count: 14
+  schema_tables_total: 403
+  authority_order:
+    - PLATFORM_FOUNDATION.md         # platform build contract (P01-P06/X/W, RBAC, VAL-*, API/error)
+    - MODULE_RECONCILIATION.md       # net-new vs extend map; SR ownership; convention overrides
+    - docs/data-model/README.md      # 15-file load order (00 core -> 14), collisions fixed
+    - docs/brd/v3/*                  # 14 authoritative platform-grounded BRDs
+  sr_canonical_writer_set:           # G12 FR-01.B (authoritative). Note: G03 is NOT a writer; G11 IS.
+    [G01, G04, G05, G06, G08, G09, G10, G11]
+  platform_services_ready_before_any_module: [P01, P02, P03, P04, P05, P06, X, W]
+
+# -----------------------------------------------------------------------------
+# Shared contracts — the seams cross-module integration review (R1-R5) fixed.
+# Owned by exactly one module; everyone else references by id, never forks.
+# -----------------------------------------------------------------------------
+shared_contracts:
+  sr_ingestion_contract:
+    name: Digital Service Register ingestion write-port
+    owner: G12
+    endpoint: POST /api/v1/sr/ingest
+    ledger_entity: service_register_events        # append-only, on P05 immutability substrate
+    properties: [idempotent, versioned, schema-validated, provenance-stamped, semantic-per-fact-dedup, source-driven-reversal]
+    substrate: P05 (DB-trigger, immutable, 7-yr, hash-chain OPEN-PLAT-03)
+    ledger_core_location: docs/data-model/00-platform-core.sql   # SR ledger core is Phase-0 core
+    supporting_tables_location: docs/data-model/12-G12-digital-service-register.sql
+    writers: [G01, G04, G05, G06, G08, G09, G10, G11]   # source_module stamp on each event
+    readers_consumers: [G11, G14, G02]                   # G11 verify/qualifying-service, G14 analytics, G02 status-track
+    grounding: G12 FR-01/FR-02 (FR-01.B canonical writer set); MODULE_RECONCILIATION.md §C/§D
+  employee_master:
+    name: Canonical employee master (extends PrimeSoft M01)
+    owner: G01
+    core_entity: employees                         # 00-platform-core.sql
+    gov_additions: [service_no, cadre, pay_scale_id, posting_history, aliases, aadhaar_vault, attribute/position_history]
+    referenced_by: [G02, G03, G04, G05, G06, G07, G08, G09, G10, G11, G13, G14]
+    grounding: MODULE_RECONCILIATION.md §A(G01)/§D
+  documents:
+    name: Document object store / vault (extends PrimeSoft M11)
+    owner: G13
+    core_entity: documents                         # 00-platform-core.sql (documents core)
+    gov_additions: [statutory document classes, retention schedules, legal-hold, DLP, clearance]
+    referenced_by: [G01, G05, G06, G08, G09, G11, G14]
+    grounding: MODULE_RECONCILIATION.md §A(G13); schema note (renamed to document_retention_policies/document_legal_holds to avoid G01 collision)
+  audit:
+    name: Dual audit/compliance log
+    owner: P05 (platform-provided — never redefined by any gov module)
+    entities: [audit_log, security_audit_log]
+    capture: DB-trigger, immutable, 7-yr, tamper-evidence tracks OPEN-PLAT-03
+    consumed_by: all_modules
+    grounding: PLATFORM_FOUNDATION.md §5(P05); MODULE_RECONCILIATION.md §C
+
+conflict_resolution:
+  arbiter: Lead Architect
+  rules:
+    - When a government BRD conflicts with a platform artefact on intent, the platform artefact governs; log the conflict as a convention override (MODULE_RECONCILIATION.md §C).
+    - A shared contract (SR ingestion=G12, employee master=G01, documents=G13, audit=P05) has exactly one owner; consumers reference by id and never fork the entity or re-author the engine.
+    - SR writer-set disputes resolve to G12 FR-01.B (the SR contract owner) as authoritative over any module's local claim (e.g. identity-change SR events belong to G01, not G02 — R3 F2 remediation).
+    - A single BLOCKED module is quarantined (mock its write-port/reads) and does not freeze unrelated parallel work; the arbiter records the quarantine.
+    - Schema-level cross-module collisions (duplicate table/index names) are resolved by the owning-module rename recorded in docs/data-model/README.md; the Lead Architect ratifies.
+
+# =============================================================================
+# Per-module registers
+# =============================================================================
+modules:
+
+  - code: G01
+    name: Employee Profile Management
+    type: extend                       # extends PrimeSoft M01 Employee Master
+    phase: 1
+    effort: L
+    platform_services_consumed: [P02, P04, P05, X, W]
+    owns_entities: [employee_aliases, aadhaar_vault, attribute_history, position_history, certificates, privacy_consent, governed_change, employee_outbox, break_glass, service_no, cadre, pay_scale_id, posting_history]  # 32 tables
+    consumes_entities:
+      - {entity: employees, owner: core/P00}
+    hard_dependencies: [P00-core]                    # employees master + P05 in platform core
+    soft_dependencies: [G13]                         # document vault for certificates (stub until G13)
+    sr_role: writer                                  # identity/personal-data SR events (source_module=G01)
+    grounding: MODULE_RECONCILIATION.md §A(G01)/§D; G02 SR-writer matrix (G01 owns identity SR postings)
+
+  - code: G02
+    name: Personal Details Modification Workflow
+    type: extend                       # maker-checker on P01 over G01 fields
+    phase: 2
+    effort: M
+    platform_services_consumed: [P01, P02, P05, X, W]
+    owns_entities: [change_requests, change_request_items, reversal_records, retro_reconcile_tracking]  # 18 tables
+    consumes_entities:
+      - {entity: employees + governed G01 fields, owner: G01}
+      - {entity: service_register_events, owner: G12}         # reads posting status only
+    hard_dependencies: [G01]                          # governed master fields it modifies
+    soft_dependencies: [G12]                          # reads SR status; G01 (not G02) posts the SR event
+    sr_role: none                                     # NOT an SR writer (R3 F2: G01 posts identity events)
+    grounding: G02 §2.2 out-of-scope + SR-writer matrix; MODULE_RECONCILIATION.md §A(G02)
+
+  - code: G03
+    name: Attendance & Leave Management
+    type: extend                       # extends PrimeSoft M04 Leave + M05 Attendance
+    phase: 2
+    effort: L
+    platform_services_consumed: [P01, P02, P04, P05, X, W]
+    owns_entities: [leave_types, leave_policies, leave_balances, leave_ledger, leave_applications, attendance, punches, shifts, rosters]  # 31 tables
+    consumes_entities:
+      - {entity: employees, owner: G01}
+    hard_dependencies: [G01]
+    soft_dependencies: []
+    sr_role: none                                     # G04 performs leave->SR posting, not G03
+    grounding: G03 out-of-scope (SR posting internals = G04->G12); MODULE_RECONCILIATION.md §A(G03)
+
+  - code: G04
+    name: Leave -> Digital SR Integration
+    type: net-new                      # statutory posting of approved leave into SR
+    phase: 3
+    effort: M
+    platform_services_consumed: [P01, P02, P05, X]
+    owns_entities: [sr_leave_posting, leave_sr_outbox, sr_relay, sr_reconciliation, leave_sr_dlq]  # 14 tables
+    consumes_entities:
+      - {entity: leave events (applications/ledger), owner: G03}
+      - {entity: sr_ingestion_contract (POST /api/v1/sr/ingest), owner: G12}
+    hard_dependencies: [G03, G12]                     # leave source + SR write-port
+    soft_dependencies: []
+    sr_role: writer                                   # source_module=G04
+    grounding: G04 §out-of-scope + Alignment; MODULE_RECONCILIATION.md §D(G04-LSR)
+
+  - code: G05
+    name: Transfer, Relieving & Joining Workflow
+    type: net-new
+    phase: 3
+    effort: L
+    platform_services_consumed: [P01, P02, P05, X, W]
+    owns_entities: [transfer_orders, relieving_records, joining_records, transfer_clearance, handover, sr_outbox]  # 21 tables
+    consumes_entities:
+      - {entity: employees + org placement, owner: G01}
+      - {entity: sr_ingestion_contract, owner: G12}
+      - {entity: seniority_list / sanctioned_strength, owner: G06}   # read
+      - {entity: LPC / pay-continuity / licence-fee-recovery signals, owner: G10}  # raises trigger
+    hard_dependencies: [G01, G12]
+    soft_dependencies: [G06, G10, G13]                # seniority read, pay signals, docs — mockable
+    sr_role: writer                                   # source_module=G05
+    grounding: G05 out-of-scope (owned elsewhere, integrated); MODULE_RECONCILIATION.md §D(G05-TRJ)
+
+  - code: G06
+    name: Promotion, Posting & Progression / Seniority
+    type: net-new                      # seniority / DPC / MACP
+    phase: 3
+    effort: XL
+    platform_services_consumed: [P01, P02, P05, X, W]
+    owns_entities: [seniority_list, promotion_case, dpc_proceedings, macp, sanctioned_posts, qualifying_service, posting_history]  # 32 tables
+    consumes_entities:
+      - {entity: employees, owner: G01}
+      - {entity: sr_ingestion_contract, owner: G12}
+      - {entity: APAR ratings, owner: G08}            # referenced
+      - {entity: disciplinary/vigilance status, owner: G09}   # referenced
+      - {entity: posting movement mechanics, owner: G05}       # reused
+      - {entity: competency master, owner: G07}       # referenced
+      - {entity: increment/pay-fixation execution, owner: G10} # hands off pay event
+    hard_dependencies: [G01, G12]
+    soft_dependencies: [G08, G09, G05, G07, G10, G03] # all consumable/mockable at build time
+    sr_role: writer                                   # source_module=G06
+    grounding: G06 out-of-scope; MODULE_RECONCILIATION.md §D(G06-PPP)
+
+  - code: G07
+    name: Training & Skill Development
+    type: net-new                      # platform-native L&D (PrimeSoft has none)
+    phase: 3
+    effort: L
+    platform_services_consumed: [P01, P02, P05, X, W]
+    owns_entities: [competency_framework, skills, training_calendar, training_nomination, lms, certifications]  # 37 tables
+    consumes_entities:
+      - {entity: employees, owner: G01}
+      - {entity: sr_ingestion_contract, owner: G12}   # optional training/certification events (schema sr_outbox)
+    hard_dependencies: [G01]
+    soft_dependencies: [G12]                           # SR posting optional
+    sr_role: writer                                    # NON-CANONICAL: schema carries sr_outbox, but OUTSIDE G12 FR-01.B statutory writer set
+    grounding: MODULE_RECONCILIATION.md §D(G07-TSD); data-model README (G07 SR writer, sr_outbox); G12 FR-01.B excludes G07 from statutory set
+
+  - code: G08
+    name: Performance Appraisal (APAR)
+    type: extend                       # extends PrimeSoft M09 Performance + APAR form (W.2)
+    phase: 3
+    effort: L
+    platform_services_consumed: [P01, P02, P05, X, W]
+    owns_entities: [appraisal_cycle, apar_form, goals, calibration, representation, pip]  # 23 tables
+    consumes_entities:
+      - {entity: employees, owner: G01}
+      - {entity: sr_ingestion_contract, owner: G12}
+    hard_dependencies: [G01, G12]
+    soft_dependencies: []
+    sr_role: writer                                    # source_module=G08 (APAR events)
+    grounding: G08 out-of-scope; MODULE_RECONCILIATION.md §A(G08)
+
+  - code: G09
+    name: Disciplinary Cases & Punishment
+    type: net-new                      # CCA-style due-process (reference SR-writer impl)
+    phase: 3
+    effort: XL
+    platform_services_consumed: [P01, P02, P05, X, W]
+    owns_entities: [disciplinary_case, charge_sheet, inquiry_proceedings, penalty_order, appeal]  # 30 tables
+    consumes_entities:
+      - {entity: employees, owner: G01}
+      - {entity: sr_ingestion_contract, owner: G12}
+    hard_dependencies: [G01, G12]
+    soft_dependencies: [G13, G06]                       # docs; downstream seniority recompute consumes its orders
+    sr_role: writer                                     # source_module=G09
+    grounding: G09 out-of-scope; MODULE_RECONCILIATION.md §D(G09-DCP)
+
+  - code: G10
+    name: Payroll & Benefits
+    type: phase-2                      # extends PrimeSoft M06 Payroll / M07 Statutory (roadmap)
+    phase: 4
+    effort: L
+    platform_services_consumed: [P01, P02, P04, P05, X, W]
+    owns_entities: [salary_structure, payroll_run, deductions, loans, benefits, fnf, cost_journal]  # 27 tables
+    consumes_entities:
+      - {entity: employees + pay scales, owner: G01}
+      - {entity: attendance/leave (LOP, encashable), owner: G03}
+      - {entity: sr_ingestion_contract, owner: G12}
+      - {entity: increment/pay-fixation events, owner: G06}     # consumes
+      - {entity: LPC / pay-continuity trigger, owner: G05}       # consumes
+    hard_dependencies: [G01, G03]
+    soft_dependencies: [G05, G06, G12]                 # pay signals + SR posting mockable
+    sr_role: writer                                    # source_module=G10
+    grounding: G10 out-of-scope; MODULE_RECONCILIATION.md §A(G10 roadmap)/§D — sequence after Phase-2 platform (M06/M07)
+
+  - code: G11
+    name: Retirement & Pension
+    type: net-new                      # statutory pension/terminal-benefits engine
+    phase: 4
+    effort: XL
+    platform_services_consumed: [P01, P02, P04, P05, P06, X, W]
+    owns_entities: [pen_separation_cases, pen_service_verifications, pen_qualifying_service_records, pen_non_qualifying_spells, pen_ppo_records, pen_terminal_settlements, pen_family_members, pen_disbursing_authorities, pension_rule_tables, pensioner_master, commutation, gratuity]  # 34-35 tables
+    consumes_entities:
+      - {entity: employees, owner: G01}
+      - {entity: service_register_events (qualifying-service verify), owner: G12}
+      - {entity: leave/LWP + encashable balance, owner: G03}
+      - {entity: leave->SR postings, owner: G04}
+      - {entity: compulsory-retirement/recovery orders + proceedings status, owner: G09}
+      - {entity: last-pay-drawn + contribution history, owner: G10}
+    hard_dependencies: [G01, G12, G03, G04, G09, G10]  # input-provenance gate needs all upstream facts
+    soft_dependencies: [G13]                            # PPO/document generation references vault
+    sr_role: writer                                     # source_module=G11 (separation/superannuation events)
+    grounding: G11 §Alignment + cross-feature-dependency table; MODULE_RECONCILIATION.md §D(G11-PEN)
+
+  - code: G12
+    name: Digital Employee Service Register (Digital SR)
+    type: net-new                      # statutory system-of-record ledger
+    phase: 1
+    effort: L
+    platform_services_consumed: [P02, P05, P06, X]
+    owns_entities: [service_register_events, sr_event_types, sr_status_subledger, sr_anchors, sr_gap_register, sr_attestations, sr_corrigenda, sr_ltv]  # ledger core in P00; 18 supporting tables in file 12
+    consumes_entities:
+      - {entity: employees (subject_ref), owner: G01}
+    hard_dependencies: [P00-core, G01]                  # P05 substrate + subject identity
+    soft_dependencies: []
+    sr_role: owner                                      # OWNS the ingestion contract + ledger; not itself a writer
+    grounding: G12 FR-01/FR-02; MODULE_RECONCILIATION.md §C/§D; data-model README (ledger core = 00-platform-core)
+
+  - code: G13
+    name: Document Management & Secure Storage
+    type: extend                       # extends PrimeSoft M11 Documents
+    phase: 1
+    effort: L
+    platform_services_consumed: [P02, P04, P05, X, W]
+    owns_entities: [document_types, folders, document_acls, document_retention_policies, document_legal_holds, signatures, clearance, dlp]  # 24 tables (documents core in P00)
+    consumes_entities:
+      - {entity: employees, owner: G01}
+      - {entity: documents (core), owner: core/P00}
+    hard_dependencies: [P00-core]                       # documents core
+    soft_dependencies: [G01]                            # subject linkage
+    sr_role: none
+    grounding: MODULE_RECONCILIATION.md §A(G13); schema collision fix (renamed retention/legal-hold tables)
+
+  - code: G14
+    name: Dashboard & Analytics
+    type: extend                       # extends PrimeSoft M16 Reports & Analytics
+    phase: 5
+    effort: L
+    platform_services_consumed: [P02, P05, X]
+    owns_entities: [dashboards, widgets, kpi_definitions, saved_views, saved_reports, report_schedules, alert_rules, marts, scope_policy, prediction, embed]  # 26 (24 owned)
+    consumes_entities:
+      - {entity: all owned data of G01..G13 (read-only marts), owner: G01-G13}
+      - {entity: service_register_events (read), owner: G12}
+    hard_dependencies: []                               # reads only; builds marts against whatever sources exist
+    soft_dependencies: [G01, G02, G03, G04, G05, G06, G07, G08, G09, G10, G11, G12, G13]  # every source stubbable per-mart
+    sr_role: consumer                                   # reads SR for compliance KPIs; never writes
+    grounding: G14 out-of-scope (reads only, never mutates source); MODULE_RECONCILIATION.md §A(G14)
+
+# =============================================================================
+# Phase 0 — platform core (not a module; the substrate every module builds on)
+# =============================================================================
+phase_0_platform_core:
+  schema_file: docs/data-model/00-platform-core.sql   # 35 tables
+  provides:
+    - tenancy (tenant_id/entity_id) + data-layer scoping (P02 substrate)
+    - RBAC v1.7 catalogue + Authorization.check enforcement
+    - employees master (extended by G01)
+    - P01 workflow core (workflows/workflow_instances/workflow_actions)
+    - P05 dual audit (audit_log/security_audit_log, DB-trigger, immutable)
+    - G12 SR ledger CORE (service_register_events append-only on P05)
+    - G13 documents CORE
+    - notifications / jobs / migration_runs
+  platform_services_ready: [P01, P02, P03, P04, P05, P06, X.1, X.2, X.3, W.1, W.2, W.3]

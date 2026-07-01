@@ -1,0 +1,586 @@
+# =============================================================================
+# Government HRMS — Consolidated Machine-Readable Error Taxonomy
+# =============================================================================
+# Status:  Authoritative contract. Single registry of every error code the
+#          14-module government HRMS may return on the wire.
+# Grounds: PLATFORM_FOUNDATION.md §4 (canonical envelope, 8 standard HTTP codes,
+#          shared ERR-* messages) + module error catalogs in docs/brd/v3/G01..G14.
+# Rule:    A new code MUST be registered here BEFORE it is emitted. Every code
+#          maps to exactly ONE of the 8 platform HTTP statuses. No non-platform
+#          codes (no 400 / VALIDATION_ERROR, no 503 — 503 collapses to 412 or
+#          500 per X.3 retry mapping).
+# =============================================================================
+
+version: "1.0"
+owner: "API Architecture / Platform Foundation"
+source_of_truth:
+  platform: "docs/brd/PLATFORM_FOUNDATION.md §4"
+  modules: "docs/brd/v3/G01..G14 (module error-code catalogs)"
+
+# -----------------------------------------------------------------------------
+# 1. CANONICAL ERROR ENVELOPE
+# -----------------------------------------------------------------------------
+envelope:
+  description: >
+    2xx responses return the resource payload. Every 4xx/5xx response returns
+    this envelope and nothing else. The correlation id is carried in the
+    X-Correlation-Id RESPONSE HEADER, never as a body field.
+  shape:
+    error:
+      code: "string  # one of standard_codes.code (wire status code) OR a module/domain code carried in this field"
+      message: "string  # human-readable; resolved from a MSG-*/ERR-* message id, never inlined ad-hoc"
+      field: "string|null  # offending field for validation errors"
+      details: "object|null  # structured discriminators, e.g. { reason: <REASON>, ... }"
+  example:
+    error:
+      code: "VALIDATION_FAILED"
+      message: "The selected date is outside the allowed window."
+      field: "effective_from"
+      details:
+        reason: "PAST_DATED"
+  headers:
+    request:
+      X-Correlation-Id: "optional inbound; assigned if absent"
+      Authorization: "Bearer <JWT> carrying resolved roles + tenant/entity scope"
+      Idempotency-Key: "required on unsafe/workflow-initiating POSTs; 24h replay window"
+    response:
+      X-Correlation-Id: "echoed on every response; written to every audit + log line for the request"
+  conventions:
+    correlation_id: "X-Correlation-Id echoed and audited (Foundation §1)"
+    scope_safety: "403/404 never leak existence of out-of-scope records (P02)"
+    pagination_bound: "list endpoints: ?limit= (default 25, max 100) + cursor; response next_cursor"
+
+# -----------------------------------------------------------------------------
+# 2. STANDARD CODES — the 8 platform HTTP status codes (Foundation §4.2)
+#    Every code in this taxonomy resolves to exactly one of these wire statuses.
+# -----------------------------------------------------------------------------
+standard_codes:
+  - code: VALIDATION_FAILED
+    http: 422
+    meaning: "Input failed a VAL-* rule or catalog validation."
+    user_message_template: "{field} is invalid: {reason}. Correct it and try again."
+    typical_triggers:
+      - "field format / checksum / range failure"
+      - "missing required field or reason"
+      - "schema / weightage / date-consistency violation"
+
+  - code: UNAUTHENTICATED
+    http: 401
+    meaning: "No, invalid, expired, or revoked session/token."
+    user_message_template: "Your session is not valid. Sign in again to continue."
+    typical_triggers:
+      - "absent/expired Bearer token"
+      - "revoked or out-of-scope embed token"
+
+  - code: FORBIDDEN
+    http: 403
+    meaning: "Authenticated but not permitted. Never leaks existence of out-of-scope records."
+    user_message_template: "You don't have permission to perform this action."
+    typical_triggers:
+      - "role/scope/field-mask denial (P02)"
+      - "separation-of-duties (maker == checker, self-approval)"
+      - "PII ceiling / clearance / classification block"
+
+  - code: NOT_FOUND
+    http: 404
+    meaning: "Resource absent or out of the caller's scope."
+    user_message_template: "We couldn't find what you were looking for."
+    typical_triggers:
+      - "unknown id"
+      - "record outside caller scope (indistinguishable from absent, by design)"
+      - "disposed/superseded resource"
+
+  - code: CONFLICT
+    http: 409
+    meaning: "Idempotency replay, duplicate workflow start, or state/uniqueness conflict."
+    user_message_template: "This can't be completed because it conflicts with the current state."
+    typical_triggers:
+      - "duplicate workflow start (ERR-DUP-INSTANCE)"
+      - "optimistic-lock / stale-version mismatch"
+      - "immutable-record edit, overlap, quota/cap breach"
+
+  - code: PRECONDITION_FAILED
+    http: 412
+    meaning: "A required precondition is not met (includes upstream-unavailable retryable path; replaces v2 503 UPSTREAM)."
+    user_message_template: "This can't be done because a required condition isn't met: {reason}."
+    typical_triggers:
+      - "required prior stage / attestation / signature not present"
+      - "upstream module (G08/G09/G10/G12) temporarily unavailable — retryable"
+      - "active stay/hold precondition"
+
+  - code: RATE_LIMITED
+    http: 429
+    meaning: "Rate limit or brute-force lockout exceeded."
+    user_message_template: "Too many attempts. Wait and try again."
+    typical_triggers:
+      - "break-glass / share-password lockout"
+      - "break-glass volume cap"
+
+  - code: INTERNAL
+    http: 500
+    meaning: "Unexpected server error, or non-retryable upstream/service failure (503 collapses here)."
+    user_message_template: "We couldn't load this right now. The correlation id is shown for support."
+    typical_triggers:
+      - "unhandled server error"
+      - "KMS/PKI/eSign/storage unavailable (non-retryable, X.3-mapped)"
+      - "ledger reconciliation / audit-chain internal failure"
+
+# -----------------------------------------------------------------------------
+# 3. SHARED CODES — platform ERR-*/MSG-SYS-* message ids (Foundation §4.3)
+#    These are user-facing message ids reused by every module. Each renders
+#    under one of the 8 wire statuses above.
+# -----------------------------------------------------------------------------
+shared_codes:
+  - id: ERR-FORBIDDEN
+    http: 403
+    severity: error
+    message: "You don't have permission to perform this action."
+    recovery: "Contact your admin if you believe this is wrong."
+  - id: ERR-LOADFAIL
+    http: 500
+    severity: error
+    message: "We couldn't load this right now."
+    recovery: "Retry; if it persists, the correlation id is shown for support."
+  - id: ERR-PRECOND
+    http: 412
+    severity: error
+    message: "This can't be done because a required condition isn't met: {reason}."
+    recovery: "Resolve {reason} and try again."
+  - id: ERR-DUP-INSTANCE
+    http: 409
+    severity: warning
+    message: "A request for this already exists and is in progress."
+    recovery: "Open the existing request instead of creating a new one."
+  - id: ERR-PAST-DATED
+    http: 422
+    severity: warning
+    message: "The selected date is outside the allowed window."
+    recovery: "Choose a date within the permitted range."
+  - id: ERR-REASON-REQ
+    http: 422
+    severity: warning
+    message: "A reason is required to continue."
+    recovery: "Enter a reason."
+  - id: ERR-REVOKE-FORBIDDEN
+    http: 403
+    severity: error
+    message: "This item can't be revoked."
+    recovery: "Per policy; contact your approver/admin."
+  - id: MSG-SYS-JOBFAIL
+    http: 500
+    severity: error
+    message: "Scheduled job {job_id} failed for tenant {tenant} at {time}."
+    recovery: "Auto-retried {n}x; manual re-run from the jobs console (JOB-FAIL / X.1)."
+
+# -----------------------------------------------------------------------------
+# 4. MODULE CODES (G01–G14)
+#    Each entry: code -> http (one of the 8) -> message_id (user-facing id, or
+#    the code itself when self-referencing, or '-' when the meaning is the copy)
+#    -> one-line meaning.
+# -----------------------------------------------------------------------------
+module_codes:
+
+  # --- G01 Employee Profile Management -------------------------------------
+  # ERR-G01-* are message ids surfaced under standard wire codes, keyed off a
+  # details.reason discriminator.
+  G01:
+    module_name: "Employee Profile Management"
+    codes:
+      - { code: ERR-G01-IDFMT,     http: VALIDATION_FAILED,   message_id: ERR-G01-IDFMT,     meaning: "Statutory-ID checksum/format failure (reason INVALID_ID)." }
+      - { code: ERR-G01-RANGE,     http: VALIDATION_FAILED,   message_id: ERR-G01-RANGE,     meaning: "Batch/as-of bounds violation (BATCH_TOO_LARGE/OUT_OF_RANGE)." }
+      - { code: ERR-G01-GOVLOCK,   http: FORBIDDEN,           message_id: ERR-G01-GOVLOCK,   meaning: "Raw update of a governed field (DOB/category/name) outside FR-022." }
+      - { code: ERR-G01-CONSENT,   http: FORBIDDEN,           message_id: ERR-G01-CONSENT,   meaning: "Biometric/processing without a valid consent_records entry." }
+      - { code: ERR-G01-INVARIANT, http: CONFLICT,            message_id: ERR-G01-INVARIANT, meaning: "Sole-primary removal / nominee shares != 100." }
+      - { code: ERR-G01-STATE,     http: CONFLICT,            message_id: ERR-G01-STATE,     meaning: "Sanctioned-strength/position/lifecycle state conflict." }
+      - { code: ERR-G01-MERGE,     http: CONFLICT,            message_id: ERR-G01-MERGE,     meaning: "Conflicting merge state / rollback past undo window." }
+      - { code: ERR-G01-STALE,     http: CONFLICT,            message_id: ERR-G01-STALE,     meaning: "Optimistic-lock row_version mismatch." }
+      - { code: ERR-G01-HOLD,      http: CONFLICT,            message_id: ERR-G01-HOLD,      meaning: "Purge/erasure blocked by an active legal hold (FR-021)." }
+      - { code: ERR-G01-HEIR,      http: PRECONDITION_FAILED, message_id: ERR-G01-HEIR,      meaning: "DECEASED handoff attempted without an heir." }
+      - { code: ERR-G01-CAP,       http: RATE_LIMITED,        message_id: ERR-G01-CAP,       meaning: "Break-glass volume cap reached (FR-013)." }
+
+  # --- G02 Personal Details Modification Workflow --------------------------
+  G02:
+    module_name: "Personal Details Modification Workflow"
+    codes:
+      - { code: ERR-G02-STALE,        http: CONFLICT,            message_id: ERR-G02-STALE,        meaning: "Stale value / optimistic-lock mismatch on a workflow request." }
+      - { code: ERR-G02-STEPUP,       http: PRECONDITION_FAILED, message_id: ERR-G02-STEPUP,       meaning: "HIGH/STATUTORY change without a valid unexpired step-up event." }
+      - { code: ERR-G02-STATUSGATE,   http: FORBIDDEN,           message_id: ERR-G02-STATUSGATE,   meaning: "Action blocked by an employee/request status gate (P02)." }
+      - { code: ERR-G02-HARDBLOCK,    http: PRECONDITION_FAILED, message_id: ERR-G02-HARDBLOCK,    meaning: "DOB alteration barred within 5 yrs of superannuation." }
+      - { code: ERR-G02-ESIGN,        http: PRECONDITION_FAILED, message_id: ERR-G02-ESIGN,        meaning: "Required e-signature not supplied." }
+      - { code: ERR-G02-ESIGN-METHOD, http: VALIDATION_FAILED,   message_id: ERR-G02-ESIGN-METHOD, meaning: "Weak/disallowed e-sign method (FINANCIAL/STATUTORY reject OTP)." }
+      - { code: ERR-G02-AUTHPORTAL,   http: PRECONDITION_FAILED, message_id: ERR-G02-AUTHPORTAL,   meaning: "Authority-portal verification not VERIFIED at approval." }
+      - { code: ERR-G02-RISKBLOCK,    http: PRECONDITION_FAILED, message_id: ERR-G02-RISKBLOCK,    meaning: "Risk/fraud hold (e.g. duplicate bank account) blocks submission." }
+      - { code: ERR-G02-DUALAUTH,     http: PRECONDITION_FAILED, message_id: ERR-G02-DUALAUTH,     meaning: "Dual-authorisation precondition unmet." }
+      - { code: ERR-G02-SOD,          http: FORBIDDEN,           message_id: ERR-G02-SOD,          meaning: "Separation-of-duties violation (maker == checker)." }
+
+  # --- G03 Attendance & Leave Management -----------------------------------
+  # ERR-G03-* are the authored message ids. G03 additionally carries bare domain
+  # reasons in error.code (ROSTER_OVERLAP, GEOFENCE_VIOLATION, PERIOD_LOCKED,
+  # etc.) each mapped to a standard wire status per §2 and shared_codes.
+  G03:
+    module_name: "Attendance & Leave Management"
+    codes:
+      - { code: ERR-G03-INSUFF-BAL,    http: CONFLICT,          message_id: ERR-G03-INSUFF-BAL,    meaning: "Insufficient leave balance (reason INSUFFICIENT_BALANCE)." }
+      - { code: ERR-G03-COMMUTED-HPL,  http: VALIDATION_FAILED, message_id: ERR-G03-COMMUTED-HPL,  meaning: "Commuted leave requires HPL (COMMUTED_REQUIRES_HPL)." }
+      - { code: ERR-G03-CONSENT,       http: FORBIDDEN,         message_id: ERR-G03-CONSENT,       meaning: "Consent required for the action (CONSENT_REQUIRED)." }
+      - { code: ERR-G03-BLACKOUT,      http: CONFLICT,          message_id: ERR-G03-BLACKOUT,      meaning: "Leave falls in a blackout period (BLACKOUT_PERIOD)." }
+      - { code: ERR-G03-LTC-EXHAUSTED, http: CONFLICT,          message_id: ERR-G03-LTC-EXHAUSTED, meaning: "LTC block exhausted (LTC_BLOCK_EXHAUSTED)." }
+
+  # --- G04 Leave-SR Integration --------------------------------------------
+  G04:
+    module_name: "Leave-SR Integration"
+    codes:
+      - { code: ERR-G04-MAPPING-NOT-FOUND,       http: VALIDATION_FAILED,   message_id: ERR-G04-MAPPING-NOT-FOUND,       meaning: "No published POST_SR mapping for an SR-affecting (leave_type, event_type)." }
+      - { code: ERR-G04-MAPPING-OVERLAP,         http: CONFLICT,            message_id: ERR-G04-MAPPING-OVERLAP,         meaning: "Overlapping mapping effective ranges at publish." }
+      - { code: ERR-G04-SR-CONFLICT,             http: CONFLICT,            message_id: ERR-G04-SR-CONFLICT,             meaning: "G12 rejected due to conflicting SR state." }
+      - { code: ERR-G04-ORPHAN-CORRECTION,       http: VALIDATION_FAILED,   message_id: ERR-G04-ORPHAN-CORRECTION,       meaning: "Correction has no locatable original entry." }
+      - { code: ERR-G04-IDEMPOTENT-DUPLICATE,    http: CONFLICT,            message_id: ERR-G04-IDEMPOTENT-DUPLICATE,    meaning: "Idempotent replay; original sr_event_id returned (no-op)." }
+      - { code: ERR-G04-DLQ-REPLAY-BLOCKED,      http: CONFLICT,            message_id: ERR-G04-DLQ-REPLAY-BLOCKED,      meaning: "Replay blocked (mapping still missing / signature unfixed)." }
+      - { code: ERR-G04-BATCH-VALIDATION-FAILED, http: VALIDATION_FAILED,   message_id: ERR-G04-BATCH-VALIDATION-FAILED, meaning: "Historical batch has rejected records blocking post." }
+      - { code: ERR-G04-RELAY-PAUSED,            http: PRECONDITION_FAILED, message_id: ERR-G04-RELAY-PAUSED,            meaning: "Posting paused by manual relay-pause override." }
+      - { code: ERR-G04-SR-UNAVAILABLE,          http: PRECONDITION_FAILED, message_id: ERR-G04-SR-UNAVAILABLE,          meaning: "G12 SR port unreachable (X.3-mapped, retryable; 500 if non-retryable; never public 503)." }
+      - { code: ERR-G04-SCOPE-TOO-LARGE,         http: VALIDATION_FAILED,   message_id: ERR-G04-SCOPE-TOO-LARGE,         meaning: "Replay/backfill/recon scope exceeds bound." }
+      - { code: ERR-G04-LINEAGE-MISSING,         http: VALIDATION_FAILED,   message_id: ERR-G04-LINEAGE-MISSING,         meaning: "Captured event lacks leave_spell_lineage_id." }
+      - { code: ERR-G04-SIGNATURE-INVALID,       http: FORBIDDEN,           message_id: ERR-G04-SIGNATURE-INVALID,       meaning: "Capture payload HMAC verification failed." }
+      - { code: ERR-G04-BLOCKED-AWAITING-ORIGINAL, http: CONFLICT,          message_id: ERR-G04-BLOCKED-AWAITING-ORIGINAL, meaning: "Correction not posting-eligible until original POSTED." }
+      - { code: ERR-G04-PORT-NOT-CONFORMANT,     http: PRECONDITION_FAILED, message_id: ERR-G04-PORT-NOT-CONFORMANT,     meaning: "Live posting gate closed: no passing G12 conformance run." }
+      - { code: ERR-G04-PROVISIONAL-ENTRY,       http: CONFLICT,            message_id: ERR-G04-PROVISIONAL-ENTRY,       meaning: "Operation blocked by an unadjudicated provisional migrated entry." }
+      - { code: ERR-G04-CERTIFICATE-FAILED,      http: VALIDATION_FAILED,   message_id: ERR-G04-CERTIFICATE-FAILED,      meaning: "Pre-pension certificate FAIL (blocking items remain)." }
+
+  # --- G05 Transfer / Relieving / Joining Workflow -------------------------
+  G05:
+    module_name: "Transfer / Relieving / Joining Workflow"
+    codes:
+      - { code: ERR-G05-ACTIVE-TRANSFER,      http: CONFLICT,            message_id: ERR-G05-ACTIVE-TRANSFER,      meaning: "Employee already has an active substantive transfer order." }
+      - { code: ERR-G05-ELIGIBILITY-BLOCKED,  http: VALIDATION_FAILED,   message_id: ERR-G05-ELIGIBILITY-BLOCKED,  meaning: "Hard-block eligibility policy failure at submit." }
+      - { code: ERR-G05-BAN-WINDOW,           http: VALIDATION_FAILED,   message_id: ERR-G05-BAN-WINDOW,           meaning: "Transfer falls inside a ban period." }
+      - { code: ERR-G05-CLEARANCE-INCOMPLETE, http: PRECONDITION_FAILED, message_id: ERR-G05-CLEARANCE-INCOMPLETE, meaning: "Relieving attempted before clearance / deemed relief." }
+      - { code: ERR-G05-HANDOVER-DISPUTED,    http: CONFLICT,            message_id: ERR-G05-HANDOVER-DISPUTED,    meaning: "Charge handover not accepted / under protest." }
+      - { code: ERR-G05-NOT-IN-TRANSIT,       http: CONFLICT,            message_id: ERR-G05-NOT-IN-TRANSIT,       meaning: "Joining attempted before relief (order not IN_TRANSIT)." }
+      - { code: ERR-G05-DEPUTATION-CAP,       http: VALIDATION_FAILED,   message_id: ERR-G05-DEPUTATION-CAP,       meaning: "Deputation extension beyond max tenure." }
+      - { code: ERR-G05-VACANCY-FULL,         http: CONFLICT,            message_id: ERR-G05-VACANCY-FULL,         meaning: "Allotment/join to a filled vacancy (incl. join-time re-check)." }
+      - { code: ERR-G05-DUAL-POSTING,         http: CONFLICT,            message_id: ERR-G05-DUAL-POSTING,         meaning: "Dual / zero in-transit custody." }
+      - { code: ERR-G05-STAY-HOLD,            http: CONFLICT,            message_id: ERR-G05-STAY-HOLD,            meaning: "Forward transition blocked by an active stay/hold." }
+      - { code: ERR-G05-MUTUAL-PAIR,          http: CONFLICT,            message_id: ERR-G05-MUTUAL-PAIR,          meaning: "Asymmetric mutual-transfer completion." }
+      - { code: ERR-G05-NOT-SERVED,           http: CONFLICT,            message_id: ERR-G05-NOT-SERVED,           meaning: "Relieving before proof-of-service." }
+      - { code: ERR-G05-NUMBER-LOCKED,        http: CONFLICT,            message_id: ERR-G05-NUMBER-LOCKED,        meaning: "Gapless order-number reservation contention (retry)." }
+      - { code: ERR-G05-COUNSEL-TURN,         http: CONFLICT,            message_id: ERR-G05-COUNSEL-TURN,         meaning: "Counselling choice attempted out of turn." }
+      - { code: ERR-G05-FORCED-PRECOND,       http: CONFLICT,            message_id: ERR-G05-FORCED-PRECOND,       meaning: "Forced action before SLA/escalation exhausted." }
+      - { code: ERR-G05-RELIEVE-DATE,         http: VALIDATION_FAILED,   message_id: ERR-G05-RELIEVE-DATE,         meaning: "Relieving/joining date inconsistency (VAL-G05-TRANSFER-ORDER)." }
+      - { code: ERR-G05-QUARTER-OVERSTAY,     http: VALIDATION_FAILED,   message_id: ERR-G05-QUARTER-OVERSTAY,     meaning: "Accommodation retained beyond permitted limit." }
+
+  # --- G06 Promotion / Posting / Progression -------------------------------
+  # G06 uses BARE domain codes carried in error.code (no ERR-G06-* alias);
+  # user copy resolves via shared ERR-* ids. Almost all are 409 CONFLICT.
+  G06:
+    module_name: "Promotion / Posting / Progression"
+    code_style: "bare-domain-code-in-error.code"
+    codes:
+      - { code: SENIORITY_RANK_CONFLICT,      http: CONFLICT,            message_id: "-", meaning: "Duplicate/gap rank on seniority-list publish." }
+      - { code: OBJECTION_WINDOW_CLOSED,      http: CONFLICT,            message_id: "-", meaning: "Objection filed outside the window." }
+      - { code: OBJECTIONS_PENDING,           http: CONFLICT,            message_id: "-", meaning: "Finalise blocked by open objections." }
+      - { code: SENIORITY_LIST_NOT_FINAL,     http: CONFLICT,            message_id: "-", meaning: "Case needs a finalised seniority list." }
+      - { code: NO_ELIGIBLE_CANDIDATES,       http: CONFLICT,            message_id: "-", meaning: "Eligibility field empty." }
+      - { code: QUORUM_NOT_MET,               http: CONFLICT,            message_id: "-", meaning: "DPC quorum failure." }
+      - { code: PANEL_CONFLICT_OF_INTEREST,   http: CONFLICT,            message_id: "-", meaning: "Candidate cannot be a panel member (P02 SoD)." }
+      - { code: VACANCY_EXCEEDED,             http: CONFLICT,            message_id: "-", meaning: "Select count exceeds vacancies." }
+      - { code: ROSTER_POINT_OCCUPIED,        http: CONFLICT,            message_id: "-", meaning: "Roster double-fill attempt." }
+      - { code: ROSTER_CATEGORY_MISMATCH,     http: CONFLICT,            message_id: "-", meaning: "Wrong category fill on roster point." }
+      - { code: SEALED_COVER_NOT_REVIEWABLE,  http: CONFLICT,            message_id: "-", meaning: "G09 case not concluded; sealed cover not reviewable." }
+      - { code: PROBATION_NOT_COMPLETE,       http: CONFLICT,            message_id: "-", meaning: "Declare probation before period elapsed." }
+      - { code: PROBATION_EXTENSION_LIMIT,    http: CONFLICT,            message_id: "-", meaning: "Probation extension over cap." }
+      - { code: OFFICIATING_OVERLAP,          http: CONFLICT,            message_id: "-", meaning: "Conflicting officiating arrangement." }
+      - { code: NO_REGULAR_SELECTION,         http: CONFLICT,            message_id: "-", meaning: "Regularise without a regular selection." }
+      - { code: MACP_CAP_REACHED,             http: CONFLICT,            message_id: "-", meaning: "3 financial up-gradations exhausted." }
+      - { code: POST_NOT_AVAILABLE,           http: CONFLICT,            message_id: "-", meaning: "Destination post unavailable." }
+      - { code: SR_POSTING_FAILED,            http: PRECONDITION_FAILED, message_id: "-", meaning: "SR write to G12 failed, held for retry (was 503)." }
+      - { code: VACANCY_NOT_RECONCILED,       http: CONFLICT,            message_id: "-", meaning: "Case vacancy != sanctioned promotion-quota vacancies." }
+      - { code: STRENGTH_INCONSISTENT,        http: CONFLICT,            message_id: "-", meaning: "filled_count > sanctioned_strength." }
+      - { code: QUOTA_SPLIT_INVALID,          http: CONFLICT,            message_id: "-", meaning: "DR + promotion + LDCE quota > 100." }
+      - { code: APAR_NOT_USABLE,              http: CONFLICT,            message_id: "-", meaning: "Uncommunicated adverse APAR relied upon (Dev Dutt)." }
+      - { code: EWS_CERT_EXPIRED,             http: CONFLICT,            message_id: "-", meaning: "EWS/creamy-layer certificate not current on crucial date." }
+      - { code: EXAM_NOT_PASSED,              http: CONFLICT,            message_id: "-", meaning: "LDCE/departmental exam gate failed." }
+      - { code: OWN_MERIT_MIGRATION_REQUIRED, http: CONFLICT,            message_id: "-", meaning: "Own-merit reserved candidate placed on reserved point." }
+      - { code: PANEL_EXPIRED,                http: CONFLICT,            message_id: "-", meaning: "Order generation from an expired select panel." }
+      - { code: ENTITY_SUB_JUDICE,            http: PRECONDITION_FAILED, message_id: "-", meaning: "Effecting blocked by an active interim stay (precondition)." }
+      - { code: EMPLOYEE_DEBARRED,            http: CONFLICT,            message_id: "-", meaning: "Re-consideration within refusal debarment window." }
+      - { code: REFUSAL_POLICY_MISSING,       http: CONFLICT,            message_id: "-", meaning: "Debarment/MACP-clock config absent." }
+      - { code: STREAM_TAG_MISSING,           http: CONFLICT,            message_id: "-", meaning: "Multi-stream construction missing stream tag." }
+      - { code: QUOTA_RULE_INVALID,           http: CONFLICT,            message_id: "-", meaning: "Invalid rota-quota rule." }
+      - { code: CASCADE_FAILED,               http: CONFLICT,            message_id: "-", meaning: "Correction recompute cascade rolled back." }
+
+  # --- G07 Training & Skill Development -------------------------------------
+  G07:
+    module_name: "Training & Skill Development"
+    codes:
+      - { code: ERR-G07-CAPACITY,        http: CONFLICT,          message_id: ERR-G07-CAPACITY,        meaning: "Session capacity exceeded." }
+      - { code: ERR-G07-BUDGET,          http: CONFLICT,          message_id: ERR-G07-BUDGET,          meaning: "Training budget exhausted/overrun." }
+      - { code: ERR-G07-EMPANEL,         http: CONFLICT,          message_id: ERR-G07-EMPANEL,         meaning: "Vendor/trainer not empanelled or empanelment expired." }
+      - { code: ERR-G07-SCHEDULE,        http: CONFLICT,          message_id: ERR-G07-SCHEDULE,        meaning: "Session schedule / double-booking conflict." }
+      - { code: ERR-G07-CERT-INELIGIBLE, http: CONFLICT,          message_id: ERR-G07-CERT-INELIGIBLE, meaning: "Certificate issued when employee ineligible." }
+      - { code: ERR-G07-WCAG,            http: VALIDATION_FAILED, message_id: ERR-G07-WCAG,            meaning: "Non-conformant mandatory content, no accessibility exception." }
+      - { code: ERR-G07-BOND,            http: CONFLICT,          message_id: ERR-G07-BOND,            meaning: "Sponsorship / service-bond recovery required." }
+      - { code: ERR-G07-RETENTION,       http: CONFLICT,          message_id: ERR-G07-RETENTION,       meaning: "Statutory retention hold blocks erasure/action." }
+      - { code: ERR-G07-MANDATORY,       http: FORBIDDEN,         message_id: ERR-G07-MANDATORY,       meaning: "Mandatory/campaign nomination cannot be self-withdrawn." }
+
+  # --- G08 Performance Appraisal Management ---------------------------------
+  G08:
+    module_name: "Performance Appraisal Management"
+    codes:
+      - { code: ERR-G08-WEIGHTAGE,     http: VALIDATION_FAILED,   message_id: ERR-G08-WEIGHTAGE,     meaning: "Goal weightages != 100% at lock (VAL-WEIGHTAGE/WSUM)." }
+      - { code: ERR-G08-TIERCONFLICT,  http: CONFLICT,            message_id: ERR-G08-TIERCONFLICT,  meaning: "Same person across tiers / self-adjudication." }
+      - { code: ERR-G08-SELFADJ,       http: FORBIDDEN,           message_id: ERR-G08-SELFADJ,       meaning: "Caller is the appraisee on this form." }
+      - { code: ERR-G08-COI,           http: FORBIDDEN,           message_id: ERR-G08-COI,           meaning: "Declared conflict of interest; recuse before acting (R22)." }
+      - { code: ERR-G08-STATE,         http: CONFLICT,            message_id: ERR-G08-STATE,         meaning: "Action not allowed in current form status." }
+      - { code: ERR-G08-GRADERANGE,    http: VALIDATION_FAILED,   message_id: ERR-G08-GRADERANGE,    meaning: "Grade outside scale bounds." }
+      - { code: ERR-G08-ADVEVID,       http: VALIDATION_FAILED,   message_id: ERR-G08-ADVEVID,       meaning: "Adverse remark lacks disclosable evidence (R5)." }
+      - { code: ERR-G08-REPWINDOW,     http: CONFLICT,            message_id: ERR-G08-REPWINDOW,     meaning: "Representation window elapsed (condonation required)." }
+      - { code: ERR-G08-DISCLOSE,      http: CONFLICT,            message_id: ERR-G08-DISCLOSE,      meaning: "Action blocked until APAR disclosed." }
+      - { code: ERR-G08-RATIFY,        http: CONFLICT,            message_id: ERR-G08-RATIFY,        meaning: "Calibration not ratified by competent authority (R1)." }
+      - { code: ERR-G08-FORCEDDIST,    http: VALIDATION_FAILED,   message_id: ERR-G08-FORCEDDIST,    meaning: "Forced distribution removed; method unavailable (R2)." }
+      - { code: ERR-G08-SEALED,        http: CONFLICT,            message_id: ERR-G08-SEALED,        meaning: "Finalise/post/feed blocked while sealed (R3)." }
+      - { code: ERR-G08-CHAIN,         http: PRECONDITION_FAILED, message_id: ERR-G08-CHAIN,         meaning: "Apex chain cannot satisfy 'all distinct'; needs config (R12)." }
+      - { code: ERR-G08-SIGN,          http: PRECONDITION_FAILED, message_id: ERR-G08-SIGN,          meaning: "Statutory act needs a valid DSC/eSign (R10)." }
+      - { code: ERR-G08-SIGNINVALID,   http: VALIDATION_FAILED,   message_id: ERR-G08-SIGNINVALID,   meaning: "Signature verification failed/revoked/expired." }
+      - { code: ERR-G08-DUALCTRL,      http: FORBIDDEN,           message_id: ERR-G08-DUALCTRL,      meaning: "Second-person approval needed for disposal/downgrade (R23)." }
+      - { code: ERR-G08-TAMPER,        http: CONFLICT,            message_id: ERR-G08-TAMPER,        meaning: "OPEN-PLAT-03 chain verification failed (R11)." }
+      - { code: ERR-G08-ERRATA,        http: CONFLICT,            message_id: ERR-G08-ERRATA,        meaning: "Concurrent cycle errata; serialize (R18)." }
+      - { code: ERR-G08-ALREADYPOSTED, http: CONFLICT,            message_id: ERR-G08-ALREADYPOSTED, meaning: "SR posting is an idempotent no-op." }
+      - { code: ERR-G08-CUSTODYORPHAN, http: CONFLICT,            message_id: ERR-G08-CUSTODYORPHAN, meaning: "No custodian resolvable on transfer." }
+
+  # --- G09 Disciplinary Cases & Punishment (full catalog, 32 codes) --------
+  G09:
+    module_name: "Disciplinary Cases & Punishment"
+    codes:
+      - { code: ERR-G09-DUPLICATE-COMPLAINT,             http: CONFLICT,            message_id: MSG-G09-DUPLICATE-COMPLAINT,             meaning: "Open complaint/case already exists for subject." }
+      - { code: ERR-G09-DA-NOT-RESOLVED,                 http: VALIDATION_FAILED,   message_id: MSG-G09-DA-NOT-RESOLVED,                 meaning: "Competent disciplinary authority not resolvable." }
+      - { code: ERR-G09-DA-BIAS-CONFLICT,                http: CONFLICT,            message_id: MSG-G09-DA-BIAS-CONFLICT,                meaning: "DA is also complainant/witness (DI-2)." }
+      - { code: ERR-G09-INVALID-STATE-TRANSITION,        http: CONFLICT,            message_id: MSG-G09-INVALID-STATE-TRANSITION,        meaning: "Stage/status transition not allowed." }
+      - { code: ERR-G09-ACTOR-CONFLICT,                  http: CONFLICT,            message_id: MSG-G09-ACTOR-CONFLICT,                  meaning: "DA/IO/PO/witness not mutually distinct." }
+      - { code: ERR-G09-DEFENCE-WINDOW-CLOSED,           http: CONFLICT,            message_id: MSG-G09-DEFENCE-WINDOW-CLOSED,           meaning: "Defence submitted after due date without extension." }
+      - { code: ERR-G09-INSPECTION-NOT-AFFORDED,         http: CONFLICT,            message_id: MSG-G09-INSPECTION-NOT-AFFORDED,         meaning: "Evidence recorded before document/witness inspection (DI-24)." }
+      - { code: ERR-G09-INCOMPLETE-FINDINGS,             http: VALIDATION_FAILED,   message_id: MSG-G09-INCOMPLETE-FINDINGS,             meaning: "Inquiry report missing an article/respondent finding." }
+      - { code: ERR-G09-NATURAL-JUSTICE-VIOLATION,       http: CONFLICT,            message_id: MSG-G09-NATURAL-JUSTICE-VIOLATION,       meaning: "Penalty on not-proved without memo; or relied-not-disclosed material (DI-9)." }
+      - { code: ERR-G09-PENALTY-EXCEEDS-PROPOSED,        http: CONFLICT,            message_id: MSG-G09-PENALTY-EXCEEDS-PROPOSED,        meaning: "Order penalty not a subset of show-cause (DI-4)." }
+      - { code: ERR-G09-DUE-PROCESS-INCOMPLETE,          http: CONFLICT,            message_id: MSG-G09-DUE-PROCESS-INCOMPLETE,          meaning: "Required prior stage missing / no lawful dispensation (DI-3/DI-23)." }
+      - { code: ERR-G09-AUTHORITY-NOT-COMPETENT,         http: CONFLICT,            message_id: MSG-G09-AUTHORITY-NOT-COMPETENT,         meaning: "Signing authority not competent for penalty class (DI-13, Art. 311(1))." }
+      - { code: ERR-G09-CONSULTATION-PENDING,            http: CONFLICT,            message_id: MSG-G09-CONSULTATION-PENDING,            meaning: "Mandatory UPSC/CVC/ICC consultation not closed (DI-14)." }
+      - { code: ERR-G09-INQUIRY-DISPENSATION-INVALID,    http: VALIDATION_FAILED,   message_id: MSG-G09-INQUIRY-DISPENSATION-INVALID,    meaning: "Dispensation reason not permitted by template (DI-23)." }
+      - { code: ERR-G09-INVALID-SERVICE-MODE,            http: CONFLICT,            message_id: MSG-G09-INVALID-SERVICE-MODE,            meaning: "Service mode not statutorily valid per template (DI-15)." }
+      - { code: ERR-G09-SIGNATURE-REQUIRED,              http: VALIDATION_FAILED,   message_id: MSG-G09-SIGNATURE-REQUIRED,              meaning: "Artefact lacks DSC/eSign (DI-28)." }
+      - { code: ERR-G09-SIGNATURE-INVALID,               http: CONFLICT,            message_id: MSG-G09-SIGNATURE-INVALID,               meaning: "Signature verification failed (namespaced; resolves G12/G13 collision)." }
+      - { code: ERR-G09-NON-EMPLOYMENT-CERT-REQUIRED,    http: VALIDATION_FAILED,   message_id: MSG-G09-NON-EMPLOYMENT-CERT-REQUIRED,    meaning: "Subsistence payment without NEC (DI-16)." }
+      - { code: ERR-G09-PROPORTIONALITY-REASONING-REQUIRED, http: VALIDATION_FAILED, message_id: MSG-G09-PROPORTIONALITY-REASONING-REQUIRED, meaning: "Order finalise without proportionality reasoning (DI-20)." }
+      - { code: ERR-G09-RECOVERY-CAP-EXCEEDED,           http: VALIDATION_FAILED,   message_id: MSG-G09-RECOVERY-CAP-EXCEEDED,           meaning: "Recovery beyond cap/instalment/retirement rule (DI-22)." }
+      - { code: ERR-G09-ICC-PROCEDURE-REQUIRED,          http: CONFLICT,            message_id: MSG-G09-ICC-PROCEDURE-REQUIRED,          meaning: "POSH case missing ICC composition (AI-16)." }
+      - { code: ERR-G09-RESPONDENT-UNRESOLVED,           http: CONFLICT,            message_id: MSG-G09-RESPONDENT-UNRESOLVED,           meaning: "Case close with an unresolved active respondent (DI-25)." }
+      - { code: ERR-G09-RETIREE-PROCEEDING-BARRED,       http: CONFLICT,            message_id: MSG-G09-RETIREE-PROCEEDING-BARRED,       meaning: "Retiree proceeding beyond four-year bar or without sanction (DI-27)." }
+      - { code: ERR-G09-CASE-ABATED,                     http: CONFLICT,            message_id: MSG-G09-CASE-ABATED,                     meaning: "Penalty finalise on an abated case/respondent (DI-26)." }
+      - { code: ERR-G09-SLA-PAUSE-INVALID,               http: CONFLICT,            message_id: MSG-G09-SLA-PAUSE-INVALID,               meaning: "Resume without an open pause (DI-18)." }
+      - { code: ERR-G09-IDEMPOTENCY-CONFLICT,            http: CONFLICT,            message_id: MSG-G09-IDEMPOTENCY-CONFLICT,            meaning: "Known idempotency key with mismatched fingerprint (DI-19)." }
+      - { code: ERR-G09-AUDIT-CHAIN-BROKEN,              http: CONFLICT,            message_id: MSG-G09-AUDIT-CHAIN-BROKEN,              meaning: "Per-case timeline-chain verification failed (DI-21)." }
+      - { code: ERR-G09-PROCEDURE-TEMPLATE-INVALID,      http: VALIDATION_FAILED,   message_id: MSG-G09-PROCEDURE-TEMPLATE-INVALID,      meaning: "No/ambiguous procedure template (DI-17)." }
+      - { code: ERR-G09-ORDER-IMMUTABLE,                 http: CONFLICT,            message_id: MSG-G09-ORDER-IMMUTABLE,                 meaning: "Edit attempted on a finalised order (DI-6)." }
+      - { code: ERR-G09-APPEAL-TIME-BARRED,              http: CONFLICT,            message_id: MSG-G09-APPEAL-TIME-BARRED,              meaning: "Appeal beyond limitation without condonation (DI-5)." }
+      - { code: ERR-G09-EVIDENCE-TAMPERED,               http: CONFLICT,            message_id: MSG-G09-EVIDENCE-TAMPERED,               meaning: "content_hash mismatch on evidence (DI-7)." }
+      - { code: ERR-G09-SUBSISTENCE-OUT-OF-BOUNDS,       http: VALIDATION_FAILED,   message_id: MSG-G09-SUBSISTENCE-OUT-OF-BOUNDS,       meaning: "Subsistence rate outside template bounds (DI-8)." }
+
+  # --- G10 Payroll & Benefits ----------------------------------------------
+  G10:
+    module_name: "Payroll & Benefits"
+    codes:
+      - { code: ERR-G10-RULE-EXPR,        http: VALIDATION_FAILED,   message_id: "-", meaning: "Bad formula expression." }
+      - { code: ERR-G10-DSL-PROPTEST,     http: VALIDATION_FAILED,   message_id: "-", meaning: "FORMULA rule failed property tests." }
+      - { code: ERR-G10-RULE-OVERLAP,     http: CONFLICT,            message_id: "-", meaning: "Overlapping rule versions." }
+      - { code: ERR-G10-RATE-OVERLAP,     http: CONFLICT,            message_id: "-", meaning: "Overlapping rate rows." }
+      - { code: ERR-G10-RATE-LOCKED,      http: CONFLICT,            message_id: "-", meaning: "Edit of a locked-referenced rate." }
+      - { code: ERR-G10-RATE-NOTFOUND,    http: VALIDATION_FAILED,   message_id: "-", meaning: "No effective rate for period." }
+      - { code: ERR-G10-PT-STATE,         http: VALIDATION_FAILED,   message_id: "-", meaning: "No PT slab for employee's state of posting." }
+      - { code: ERR-G10-STRUCT-OVERLAP,   http: CONFLICT,            message_id: "-", meaning: "Overlapping structure versions." }
+      - { code: ERR-G10-STRUCT-LOCKED,    http: CONFLICT,            message_id: "-", meaning: "Structure change in a locked period." }
+      - { code: ERR-G10-TAXSLAB-NOTFOUND, http: VALIDATION_FAILED,   message_id: "-", meaning: "No tax slab for FY/regime." }
+      - { code: ERR-G10-PERQ-REFRATE,     http: VALIDATION_FAILED,   message_id: "-", meaning: "No effective perquisite reference rate." }
+      - { code: ERR-G10-RECOVERY-NET,     http: CONFLICT,            message_id: "-", meaning: "Net too low for recovery (carryforward)." }
+      - { code: ERR-G10-RECOVERY-BARRED,  http: CONFLICT,            message_id: "-", meaning: "Overpayment recovery barred pending authority adjudication." }
+      - { code: ERR-G10-OFFCYCLE-DUP,     http: CONFLICT,            message_id: "-", meaning: "Duplicate off-cycle payment." }
+      - { code: ERR-G10-RUN-INFLIGHT,     http: CONFLICT,            message_id: "-", meaning: "Another FINAL run in flight for the cycle." }
+      - { code: ERR-G10-SNAPSHOT-FROZEN,  http: CONFLICT,            message_id: "-", meaning: "Mutation attempted after snapshot freeze." }
+      - { code: ERR-G10-RECON-TIEOUT,     http: CONFLICT,            message_id: "-", meaning: "Control totals do not tie out (disbursed+held+failed)." }
+      - { code: ERR-G10-RECON-UNSIGNED,   http: CONFLICT,            message_id: "-", meaning: "Approval before reconciliation sign-off." }
+      - { code: ERR-G10-RUN-NOTLOCKED,    http: CONFLICT,            message_id: "-", meaning: "Publish/disburse before lock." }
+      - { code: ERR-G10-REOPEN-BLOCKED,   http: CONFLICT,            message_id: "-", meaning: "Reopen after transmission." }
+      - { code: ERR-G10-BANK-INVALID,     http: VALIDATION_FAILED,   message_id: "-", meaning: "Invalid/missing payee accounts (parked to holds)." }
+      - { code: ERR-G10-SIGNING-DOWN,     http: PRECONDITION_FAILED, message_id: "-", meaning: "HSM/DSC signing service unavailable (X.3-mapped)." }
+      - { code: ERR-G10-RESEND-POSPAY,    http: CONFLICT,            message_id: "-", meaning: "Resend blocked until positive-pay non-debit confirmation." }
+      - { code: ERR-G10-RUN-IMMUTABLE,    http: CONFLICT,            message_id: "-", meaning: "Write to a locked run/payslip." }
+
+  # --- G11 Retirement & Pension --------------------------------------------
+  # Domain reasons carried under details.reason grouped by wire status.
+  G11:
+    module_name: "Retirement & Pension"
+    codes:
+      - { code: ERR-G11-EMOLUMENTS,             http: VALIDATION_FAILED, message_id: "-", meaning: "Emoluments/last-pay input invalid." }
+      - { code: ERR-G11-RULE-NOT-EFFECTIVE,     http: VALIDATION_FAILED, message_id: "-", meaning: "Pension rule not effective for the period." }
+      - { code: ERR-G11-COMMUTATION-LIMIT,      http: VALIDATION_FAILED, message_id: "-", meaning: "Commutation exceeds permitted limit." }
+      - { code: ERR-G11-FACTOR-NOT-FOUND,       http: VALIDATION_FAILED, message_id: "-", meaning: "Commutation factor not found." }
+      - { code: ERR-G11-NOMINEE-SPLIT,          http: VALIDATION_FAILED, message_id: "-", meaning: "Nominee share split invalid." }
+      - { code: ERR-G11-TAX-RULE,               http: VALIDATION_FAILED, message_id: "-", meaning: "Tax rule invalid/not found." }
+      - { code: ERR-G11-INVALID-ACCOUNT,        http: VALIDATION_FAILED, message_id: "-", meaning: "Invalid bank account details." }
+      - { code: ERR-G11-ACCOUNT-VERIFY,         http: VALIDATION_FAILED, message_id: "-", meaning: "Penny-drop / name-IFSC account verification failed." }
+      - { code: ERR-G11-DUP-CASE,               http: CONFLICT,          message_id: "-", meaning: "Duplicate pension case." }
+      - { code: ERR-G11-SERVICE-GAP,            http: CONFLICT,          message_id: "-", meaning: "Service gap in qualifying-service record." }
+      - { code: ERR-G11-VERIFICATION-INCOMPLETE, http: CONFLICT,         message_id: "-", meaning: "Service verification not signed off." }
+      - { code: ERR-G11-DISCREPANCY-OPEN,       http: CONFLICT,          message_id: "-", meaning: "Open verification discrepancy." }
+      - { code: ERR-G11-SPELL-NOT-ATTESTED,     http: CONFLICT,          message_id: "-", meaning: "Service spell not attested." }
+      - { code: ERR-G11-FP-NOT-NOMINEE,         http: CONFLICT,          message_id: "-", meaning: "Family-pension claimant not a nominee." }
+      - { code: ERR-G11-RECOVERY-PROTECTION,    http: CONFLICT,          message_id: "-", meaning: "Recovery blocked by protection rule." }
+      - { code: ERR-G11-SCHEME-MISMATCH,        http: CONFLICT,          message_id: "-", meaning: "Pension scheme mismatch." }
+      - { code: ERR-G11-CASE-NOT-SANCTIONED,    http: CONFLICT,          message_id: "-", meaning: "Action on a case not yet sanctioned." }
+      - { code: ERR-G11-DUP-PPO,                http: CONFLICT,          message_id: "-", meaning: "Duplicate PPO." }
+      - { code: ERR-G11-CASE-LOCKED-OPTIONS,    http: CONFLICT,          message_id: "-", meaning: "Options change on a locked case." }
+      - { code: ERR-G11-REVISION-IMMUTABLE,     http: CONFLICT,          message_id: "-", meaning: "Edit on an immutable revision." }
+      - { code: ERR-G11-LC-SUSPENDED,           http: CONFLICT,          message_id: "-", meaning: "Life-certificate suspended." }
+      - { code: ERR-G11-PROVISIONAL-PENDING,    http: CONFLICT,          message_id: "-", meaning: "Provisional pension pending resolution." }
+      - { code: ERR-G11-PDA-NOT-CERTIFIED,      http: CONFLICT,          message_id: "-", meaning: "PDA not certified." }
+      - { code: ERR-G11-AUDIT-OBJECTION-OPEN,   http: CONFLICT,          message_id: "-", meaning: "Open audit objection blocks action." }
+      - { code: ERR-G11-DRAWN-AFTER-DEATH,      http: CONFLICT,          message_id: "-", meaning: "Pension drawn after pensioner death." }
+
+  # --- G12 Digital Service Register (SR ledger) -----------------------------
+  # SR_* domain codes + explicit ERR-G12-* aliases. Each SR_* code is registered
+  # under an ERR-G12-* alias; only TYPE-NOT-FOUND and SIGNATURE-INVALID are
+  # explicitly named, the rest resolve via matching ERR-G12-*/MSG-G12-* ids.
+  G12:
+    module_name: "Digital Service Register (SR ledger)"
+    code_style: "SR_*-domain-code + ERR-G12-* alias"
+    codes:
+      - { code: SR_TYPE_NOT_FOUND,             http: NOT_FOUND,           message_id: ERR-G12-TYPE-NOT-FOUND,      meaning: "No published event type effective for the given date." }
+      - { code: SR_TYPE_OVERLAP,               http: CONFLICT,            message_id: "-", meaning: "Overlapping effective ranges on publish." }
+      - { code: SR_PAYLOAD_INVALID,            http: VALIDATION_FAILED,   message_id: "-", meaning: "Payload fails the type's JSON Schema." }
+      - { code: SR_SOURCE_NOT_ALLOWED,         http: FORBIDDEN,           message_id: "-", meaning: "Source module not in the type's allowlist." }
+      - { code: SR_EMPLOYEE_NOT_FOUND,         http: NOT_FOUND,           message_id: "-", meaning: "employee_id not in G01." }
+      - { code: SR_FUTURE_DATE,                http: VALIDATION_FAILED,   message_id: "-", meaning: "event_date beyond future tolerance." }
+      - { code: SR_DUPLICATE_EVENT,            http: CONFLICT,            message_id: "-", meaning: "Duplicate idempotency key (surfaced as DUPLICATE_NOOP)." }
+      - { code: SR_FACT_KEY_REQUIRED,          http: VALIDATION_FAILED,   message_id: "-", meaning: "Qualifying-service-bearing event missing semantic fact_key." }
+      - { code: SR_SEMANTIC_DUPLICATE,         http: CONFLICT,            message_id: "-", meaning: "Same real-world fact already recorded (SEMANTIC_DUPLICATE_NOOP)." }
+      - { code: SR_SEMANTIC_CONFLICT,          http: CONFLICT,            message_id: "-", meaning: "Same fact_key, disagreeing facts — flagged for reconciliation." }
+      - { code: SR_REVERSAL_TARGET_NOT_FOUND,  http: NOT_FOUND,           message_id: "-", meaning: "Reversal references an unknown source_reference_id." }
+      - { code: SR_ENTRY_IMMUTABLE,            http: CONFLICT,            message_id: "-", meaning: "Attempt to edit/delete a ledger entry." }
+      - { code: SR_ENTRY_SUPERSEDED,           http: CONFLICT,            message_id: "-", meaning: "Action invalid on a superseded entry." }
+      - { code: SR_ENTRY_DISPUTED,             http: CONFLICT,            message_id: "-", meaning: "Attest/verify blocked by an open dispute." }
+      - { code: SR_ATTESTATION_REQUIRED,       http: PRECONDITION_FAILED, message_id: "-", meaning: "Action needs prior attestation." }
+      - { code: SR_SIGNATURE_NOT_QUALIFIED,    http: VALIDATION_FAILED,   message_id: "-", meaning: "Server-signed signature rejected for a statutory output." }
+      - { code: ERR-G12-SIGNATURE-INVALID,     http: VALIDATION_FAILED,   message_id: ERR-G12-SIGNATURE-INVALID,   meaning: "Qualified signature on a certified extract/attestation fails validation (namespaced vs G13)." }
+      - { code: SR_INTEGRITY_FAILED,           http: VALIDATION_FAILED,   message_id: "-", meaning: "Hash-chain verification failed." }
+      - { code: SR_STATUS_CHAIN_FAILED,        http: VALIDATION_FAILED,   message_id: "-", meaning: "Status sub-ledger verification failed." }
+      - { code: SR_ANCHOR_MISMATCH,            http: VALIDATION_FAILED,   message_id: "-", meaning: "Chain head does not match the external anchor (insider/stale-restore)." }
+      - { code: SR_ANCHOR_MISSING,             http: PRECONDITION_FAILED, message_id: "-", meaning: "No current anchor within cadence." }
+      - { code: SR_PURPOSE_REQUIRED,           http: VALIDATION_FAILED,   message_id: "-", meaning: "Non-self access without a stated purpose." }
+      - { code: SR_REDACTION_REQUIRED,         http: PRECONDITION_FAILED, message_id: "-", meaning: "Requested scope exceeds redaction entitlement." }
+      - { code: SR_EXTRACT_REVOKED,            http: CONFLICT,            message_id: "-", meaning: "Operation on a revoked extract." }
+      - { code: SR_SECOND_CUSTODIAN_REQUIRED,  http: PRECONDITION_FAILED, message_id: "-", meaning: "FULL_SR extract/routine corrigendum lacks a distinct co-signer." }
+      - { code: SR_APPEAL_NOT_ELIGIBLE,        http: CONFLICT,            message_id: "-", meaning: "Appeal raised without a prior custodian uphold." }
+      - { code: SR_GAP_UNRESOLVED,             http: PRECONDITION_FAILED, message_id: "-", meaning: "CRITICAL completeness gap blocks pre-retirement finalisation." }
+      - { code: SR_DELIVERY_MODE_DEFERRED,     http: CONFLICT,            message_id: "-", meaning: "WEBHOOK/MESSAGE_BUS subscription registered while deferred." }
+      - { code: SR_LEGACY_UNMATCHED,           http: CONFLICT,            message_id: "-", meaning: "Promotion blocked: record not matched to master." }
+      - { code: SR_LEGAL_HOLD_ACTIVE,          http: CONFLICT,            message_id: "-", meaning: "Tiering/change blocked by legal hold." }
+      - { code: SR_STALE_RESTORE,              http: CONFLICT,            message_id: "-", meaning: "Restored chain heads predate the external anchor." }
+      - { code: SR_DELETION_FORBIDDEN,         http: FORBIDDEN,           message_id: "-", meaning: "Any deletion attempt on the statutory ledger." }
+
+  # --- G13 Document Management & Secure Storage (full catalog, 35 codes) ----
+  # Underscore-suffixed ERR-G13-* codes; the meaning text IS the rendered copy.
+  G13:
+    module_name: "Document Management & Secure Storage"
+    codes:
+      - { code: ERR-G13-INVALID_FILE_TYPE,           http: VALIDATION_FAILED,   message_id: "-", meaning: "MIME not in type whitelist (VAL-FILE)." }
+      - { code: ERR-G13-FILE_TOO_LARGE,              http: VALIDATION_FAILED,   message_id: "-", meaning: "Exceeds type size cap (VAL-FILE)." }
+      - { code: ERR-G13-EMPTY_FILE,                  http: VALIDATION_FAILED,   message_id: "-", meaning: "Zero-byte/corrupt upload." }
+      - { code: ERR-G13-FETCH_INTENT_REQUIRED,       http: VALIDATION_FAILED,   message_id: "-", meaning: ":fetch without intent=VIEW|DOWNLOAD." }
+      - { code: ERR-G13-METADATA_INVALID,            http: VALIDATION_FAILED,   message_id: "-", meaning: "Metadata fails type W.2/JSON-Schema." }
+      - { code: ERR-G13-MALWARE_DETECTED,            http: VALIDATION_FAILED,   message_id: "-", meaning: "AV flagged the upload." }
+      - { code: ERR-G13-RENDER_RESOURCE_LIMIT,       http: VALIDATION_FAILED,   message_id: "-", meaning: "Archive/decompression/nesting limit exceeded." }
+      - { code: ERR-G13-INTEGRITY_FAILED,            http: VALIDATION_FAILED,   message_id: "-", meaning: "Checksum mismatch (tamper/bit-rot)." }
+      - { code: ERR-G13-DOCUMENT_LOCKED,             http: CONFLICT,            message_id: "-", meaning: "Checked out by another user." }
+      - { code: ERR-G13-CHECKOUT_NOT_SUPPORTED,      http: CONFLICT,            message_id: "-", meaning: "Type checkout_mode=NONE." }
+      - { code: ERR-G13-WORM_IMMUTABLE,              http: CONFLICT,            message_id: "-", meaning: "Mutation/delete blocked by WORM lock." }
+      - { code: ERR-G13-RETENTION_SHORTEN_FORBIDDEN, http: VALIDATION_FAILED,   message_id: "-", meaning: "Attempt to reduce retain-until (VAL-G13-WORM)." }
+      - { code: ERR-G13-RETENTION_PERMANENT,         http: CONFLICT,            message_id: "-", meaning: "Destroy attempted on a permanent record." }
+      - { code: ERR-G13-LEGAL_HOLD_ACTIVE,           http: CONFLICT,            message_id: "-", meaning: "Action blocked by an active legal hold." }
+      - { code: ERR-G13-HOLD_RELEASE_SOD,            http: FORBIDDEN,           message_id: "-", meaning: "Hold release missing a distinct approver." }
+      - { code: ERR-G13-ANCHOR_UNCONFIRMED,          http: CONFLICT,            message_id: "-", meaning: "Auto-DESTROY blocked; retention anchor not confirmed." }
+      - { code: ERR-G13-SOD_VIOLATION,               http: FORBIDDEN,           message_id: "-", meaning: "Maker == checker / self-approval (P01-enforced)." }
+      - { code: ERR-G13-CLASSIFICATION_LOCKED,       http: FORBIDDEN,           message_id: "-", meaning: "Unauthorised classification downgrade." }
+      - { code: ERR-G13-CLEARANCE_INSUFFICIENT,      http: FORBIDDEN,           message_id: "-", meaning: "Principal clearance < document classification." }
+      - { code: ERR-G13-DOCUMENT_NOT_ATTACHABLE,     http: CONFLICT,            message_id: "-", meaning: "Document deleted/disposed/orphaned." }
+      - { code: ERR-G13-LINK_CONFLICT,               http: CONFLICT,            message_id: "-", meaning: "Duplicate primary link." }
+      - { code: ERR-G13-SHARE_BLOCKED_DLP,           http: FORBIDDEN,           message_id: "-", meaning: "DLP blocks external share." }
+      - { code: ERR-G13-SHARE_LIMIT_REACHED,         http: FORBIDDEN,           message_id: "-", meaning: "Access-count/expiry exceeded." }
+      - { code: ERR-G13-SHARE_LOCKED,                http: RATE_LIMITED,        message_id: "-", meaning: "Share password brute-force lockout." }
+      - { code: ERR-G13-BREAK_GLASS_LOCKED,          http: RATE_LIMITED,        message_id: "-", meaning: "Break-glass auth brute-force lockout." }
+      - { code: ERR-G13-SIGNATURE_INVALID,           http: VALIDATION_FAILED,   message_id: "-", meaning: "Signed content tampered (namespaced vs G12)." }
+      - { code: ERR-G13-SIGNATURE_METHOD_NOT_ALLOWED, http: VALIDATION_FAILED,  message_id: "-", meaning: "Signature method not in the type's allowed list." }
+      - { code: ERR-G13-SIGNATURE_LTV_REQUIRED,      http: VALIDATION_FAILED,   message_id: "-", meaning: "Statutory signature missing timestamp/LTV." }
+      - { code: ERR-G13-SIGNING_SERVICE_UNAVAILABLE, http: INTERNAL,            message_id: ERR-LOADFAIL, meaning: "PKI/eSign down (X.3-mapped; 503 collapses to 500)." }
+      - { code: ERR-G13-KEY_SERVICE_UNAVAILABLE,     http: INTERNAL,            message_id: ERR-LOADFAIL, meaning: "KMS unavailable (X.3-mapped; 503 collapses to 500)." }
+      - { code: ERR-G13-RENDITION_FAILED,            http: VALIDATION_FAILED,   message_id: "-", meaning: "Watermark/redaction/preview render failed." }
+      - { code: ERR-G13-REDACTION_INCOMPLETE,        http: VALIDATION_FAILED,   message_id: "-", meaning: "Re-OCR found recoverable text after redaction." }
+      - { code: ERR-G13-AUDIT_CHAIN_BROKEN,          http: INTERNAL,            message_id: ERR-LOADFAIL, meaning: "Audit hash-chain verification failed." }
+      - { code: ERR-G13-ERASURE_EXEMPTED,            http: CONFLICT,            message_id: "-", meaning: "DPDP erasure overridden by statutory/hold/WORM basis." }
+      - { code: ERR-G13-DOCUMENT_DISPOSED,           http: NOT_FOUND,           message_id: "-", meaning: "Fetch of a disposed document." }
+
+  # --- G14 Dashboard & Analytics -------------------------------------------
+  # Codes marked notice_surface also carry a 200 partial-data/notice presentation
+  # in-app; the registered wire status here is the canonical error mapping.
+  G14:
+    module_name: "Dashboard & Analytics"
+    codes:
+      - { code: ERR-G14-SCOPE-CHECKER,   http: FORBIDDEN,           message_id: "-", meaning: "Maker attempted to self-approve an analytics scope-policy change (SoD)." }
+      - { code: ERR-G14-WIDGET-BINDING,  http: CONFLICT,            message_id: "-", meaning: "Widget bound to a retired/missing KPI/report." }
+      - { code: ERR-G14-PUBLISH-CHECKER, http: FORBIDDEN,           message_id: "-", meaning: "Maker attempted a gated publication (P01)." }
+      - { code: ERR-G14-SMALL-CELL,      http: FORBIDDEN,           message_id: "-", meaning: "Group below privacy threshold (k-anonymity) on tiles/charts/exports/drill." }
+      - { code: ERR-G14-COMP-SUPPRESS,   http: FORBIDDEN,           message_id: "-", meaning: "Some cells suppressed to prevent recovery by subtraction (notice_surface)." }
+      - { code: ERR-G14-KPI-EXPR,        http: VALIDATION_FAILED,   message_id: "-", meaning: "KPI formula failed validation." }
+      - { code: ERR-G14-KPI-VER-OVERLAP, http: CONFLICT,            message_id: "-", meaning: "Two ACTIVE versions for a kpi_code." }
+      - { code: ERR-G14-XVER-AGG,        http: CONFLICT,            message_id: "-", meaning: "Trend aggregation crosses a definition version without acknowledgement." }
+      - { code: ERR-G14-MART-UNAVAIL,    http: PRECONDITION_FAILED, message_id: "-", meaning: "Source mart FAILED/absent (precondition)." }
+      - { code: ERR-G14-MART-REFRESH,    http: INTERNAL,            message_id: ERR-LOADFAIL, meaning: "ETL refresh error (last good retained)." }
+      - { code: ERR-G14-MART-BUSY,       http: CONFLICT,            message_id: "-", meaning: "Concurrent refresh lock (X.1 isolation)." }
+      - { code: ERR-G14-CONTRACT,        http: CONFLICT,            message_id: "-", meaning: "Source schema breached the data contract (also a CI failure)." }
+      - { code: ERR-G14-EXPORT-LIMIT,    http: VALIDATION_FAILED,   message_id: "-", meaning: "Report exceeds the configured row cap." }
+      - { code: ERR-G14-CHANNEL,         http: FORBIDDEN,           message_id: "-", meaning: "RESTRICTED report to an insecure channel." }
+      - { code: ERR-G14-PAYROLL-LOCK,    http: PRECONDITION_FAILED, message_id: "-", meaning: "Locked payroll snapshot unavailable." }
+      - { code: ERR-G14-METRIC-NA,       http: NOT_FOUND,           message_id: "-", meaning: "NL query references an unmodelled metric." }
+      - { code: ERR-G14-NLQ-CLARIFY,     http: VALIDATION_FAILED,   message_id: "-", meaning: "Ambiguous NL question; clarification offered (notice_surface)." }
+      - { code: ERR-G14-NLQ-CONF,        http: VALIDATION_FAILED,   message_id: "-", meaning: "NL intent confidence below threshold; refused not answered." }
+      - { code: ERR-G14-EMBED-INVALID,   http: UNAUTHENTICATED,     message_id: "-", meaning: "Embed token missing/expired/out-of-scope." }
+      - { code: ERR-G14-EMBED-REVOKED,   http: UNAUTHENTICATED,     message_id: "-", meaning: "Embed token revoked." }
+      - { code: ERR-G14-METHODOLOGY,     http: VALIDATION_FAILED,   message_id: "-", meaning: "Predictive model lacks required methodology." }
+      - { code: ERR-G14-FAIRNESS,        http: VALIDATION_FAILED,   message_id: "-", meaning: "Probabilistic model lacks fairness assessment/model card." }
+      - { code: ERR-G14-PRED-GATED,      http: FORBIDDEN,           message_id: "-", meaning: "Individual predictive score requires friction-gate + purpose." }
+      - { code: ERR-G14-ESTAB-MISSING,   http: VALIDATION_FAILED,   message_id: "-", meaning: "Sanctioned-strength/position reference absent (notice_surface)." }
+      - { code: ERR-G14-ERASURE-PENDING, http: CONFLICT,            message_id: "-", meaning: "DPDP erasure not yet fully propagated to derived data (notice_surface)." }
+      - { code: ERR-G14-RETENTION-BLOCK, http: CONFLICT,            message_id: "-", meaning: "Statutory retention overrides erasure; legal basis recorded (notice_surface)." }
+      - { code: ERR-G14-ASOF-NA,         http: NOT_FOUND,           message_id: "-", meaning: "Requested knowledge instant predates the first snapshot version." }
+
+# -----------------------------------------------------------------------------
+# 5. GOVERNANCE RULES
+# -----------------------------------------------------------------------------
+rules:
+  registration:
+    - "A new error code MUST be registered in this file BEFORE any service emits it."
+    - "New module codes follow ERR-G##-* (or an explicit registered bare/domain code, e.g. G06 SENIORITY_*, G12 SR_*)."
+    - "New shared/system copy follows ERR-<area> / MSG-SYS-* and is added to shared_codes."
+  mapping:
+    - "Every code maps to EXACTLY ONE of the 8 standard_codes HTTP statuses."
+    - "The wire error.code is either a standard_code OR a module/domain code carried in error.code; the message id resolves user copy."
+    - "No invented non-platform HTTP codes: no 400, no 423, no 502, no 503."
+    - "No non-platform code names: no VALIDATION_ERROR, AUTH_REQUIRED, INTERNAL_ERROR, UPSTREAM_UNAVAILABLE."
+  status_503_policy:
+    - "503 / UPSTREAM / service-unavailable is forbidden on the wire."
+    - "Retryable upstream failure -> PRECONDITION_FAILED (412) (X.3 retry path, e.g. ERR-G04-SR-UNAVAILABLE, ERR-G10-SIGNING-DOWN, SR_POSTING_FAILED)."
+    - "Non-retryable service/KMS/PKI failure -> INTERNAL (500) with ERR-LOADFAIL (e.g. ERR-G13-*_SERVICE_UNAVAILABLE, ERR-G14-MART-REFRESH)."
+  collision_policy:
+    - "Cross-module code collisions are resolved by namespacing: ERR-G09-SIGNATURE-INVALID, ERR-G12-SIGNATURE-INVALID, ERR-G13-SIGNATURE_INVALID are distinct codes."
+  scope_safety:
+    - "403 FORBIDDEN and 404 NOT_FOUND must never reveal the existence of out-of-scope records (P02)."
+  notice_surfaces:
+    - "Codes tagged (notice_surface) additionally have a 200 partial-data/notice in-app presentation; the wire status listed here is the canonical error mapping when returned as an error."

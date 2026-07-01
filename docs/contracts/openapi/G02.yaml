@@ -1,0 +1,3858 @@
+openapi: 3.1.0
+info:
+  title: Government HRMS — G02 Personal Details Modification Workflow API
+  version: 3.0.0
+  description: >
+    OpenAPI 3.1 contract for module G02-EPDM (Personal Details Modification
+    Workflow), the governed change-control configuration in front of the G01/M01
+    employee master. All approval routing runs on the PrimeSoft P01 WorkflowEngine
+    (change-request as subject_ref); all authorization on P02 Authorization.check;
+    all audit on P05. G02 is NOT a Digital-SR writer: on commit of a STATUTORY
+    change, G01 (the master/identity owner, source_module=G01) posts the SR event
+    to G12 and G02 only reads/reconciles the posting status. Conventions are the
+    platform Foundation §1 set: /api/v1 base, bearer JWT, Idempotency-Key on
+    state-changing POSTs (24h replay), X-Correlation-Id response header, cursor
+    pagination (limit default 25 / max 100, next_cursor), canonical error envelope.
+  contact:
+    name: Government HRMS — API Architecture / Platform Foundation
+servers:
+  - url: /api/v1
+    description: Platform API v1 (all endpoints; P02-enforced)
+security:
+  - bearerAuth: []
+tags:
+  - name: change-requests
+    description: Change-request authoring, submission and lifecycle (FR-G02-001/006)
+  - name: routing
+    description: Sensitivity-based P01 route preview (FR-G02-002)
+  - name: documents
+    description: Supporting-document & authority-portal verification (FR-G02-003)
+  - name: approvals
+    description: Maker-checker P01 decisions and queue (FR-G02-004)
+  - name: diff
+    description: Field-level before/after diff (FR-G02-005)
+  - name: sla
+    description: SLA tracking timeline (FR-G02-007)
+  - name: effective-dating
+    description: Correction/update, effective-date rules, DOB hard-block (FR-G02-008)
+  - name: bulk-corrections
+    description: HR-initiated bulk corrections (FR-G02-009)
+  - name: commit
+    description: Effective-dated commit status to G01/M01 (FR-G02-010)
+  - name: service-register
+    description: G01->G12 SR posting-status tracking (read/reconcile only) (FR-G02-011)
+  - name: admin-config
+    description: Approval-flow, sensitivity, e-sign-policy & regex config (FR-G02-012)
+  - name: delegations
+    description: Delegation of approval authority via P01 delegate (FR-G02-013)
+  - name: templates
+    description: Change-request templates bound to W.2 forms (FR-G02-014)
+  - name: esignatures
+    description: Strong e-signature on high-sensitivity approvals (FR-G02-015)
+  - name: history-reports
+    description: Provenance, field history, tamper-evident audit & reports (FR-G02-016)
+  - name: notices
+    description: Data-subject notification & confirmation/objection window (FR-G02-017)
+  - name: status-gate
+    description: Employment-status gating & elevated paths (FR-G02-018)
+  - name: fraud
+    description: Fraud, velocity & anomaly signals and review (FR-G02-019)
+  - name: reversals
+    description: Emergency break-glass reversal, dual authority (FR-G02-020)
+  - name: objections
+    description: Data-subject grievance & objection (FR-G02-021)
+  - name: retro-events
+    description: Downstream retro-impact reconciliation G10/G11/G06 (FR-G02-022)
+  - name: step-up
+    description: Requester step-up authentication for sensitive self-service (FR-G02-023)
+  - name: employees
+    description: Read-only employee-scoped helpers (editable fields, status gate)
+
+paths:
+  # -------------------------------------------------------------------------
+  # FR-G02-001 / 006 / 014 — Change request authoring & lifecycle
+  # -------------------------------------------------------------------------
+  /change-requests:
+    post:
+      tags: [change-requests]
+      summary: Create a draft change request (optionally from a template)
+      description: >
+        FR-G02-001 / FR-G02-014. Creates a DRAFT change request with per-field
+        before/after items (composite name supported via parent/child items,
+        explicit clear-intent). Governed fields only; non-governed field -> 403.
+        Use fromTemplate to seed from a W.2 template (P02-filtered).
+      operationId: createChangeRequest
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: fromTemplate
+          in: query
+          required: false
+          description: Template id to seed the draft from (FR-G02-014).
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChangeRequest'
+      responses:
+        '201':
+          description: Draft created (or PENDING_DOCS after seeding). X-Correlation-Id in header.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    get:
+      tags: [change-requests]
+      summary: Get a change request with full diff for review
+      description: FR-G02-004. Returns the request header, items and P02-masked diff.
+      operationId: getChangeRequest
+      responses:
+        '200':
+          description: Change request detail.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+    patch:
+      tags: [change-requests]
+      summary: Edit draft items
+      description: FR-G02-001. Edits items of a DRAFT/RETURNED request (before submit).
+      operationId: editChangeRequestDraft
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditChangeRequest'
+      responses:
+        '200':
+          description: Draft updated.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [change-requests]
+      summary: Validate and submit a change request (P01 startInstance)
+      description: >
+        FR-G02-001 / FR-G02-002. Validates, applies status gate (FR-018) and
+        step-up gate (FR-023), snapshots master + hash, derives sensitivity, runs
+        fraud eval (FR-019), and starts the P01 workflow instance. May return 412
+        for missing step-up (ERR-G02-STEPUP) / hard-block (ERR-G02-HARDBLOCK) /
+        risk-block (ERR-G02-RISKBLOCK), 403 for status gate (ERR-G02-STATUSGATE),
+        or 409 for duplicate workflow start (ERR-DUP-INSTANCE).
+      operationId: submitChangeRequest
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Submitted; workflow instance started.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/withdraw:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [change-requests]
+      summary: Withdraw (recall) a non-terminal request (P01 cancel)
+      description: FR-G02-006. Requester cancels a non-terminal request; stops SLA timers.
+      operationId: withdrawChangeRequest
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentBody'
+      responses:
+        '200':
+          description: Request withdrawn.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/resubmit:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [change-requests]
+      summary: Resubmit after correction (P01 re-trigger)
+      description: FR-G02-006. Re-validates and re-derives route for a RETURNED request.
+      operationId: resubmitChangeRequest
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Resubmitted; affected stages re-triggered.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-002 — Route preview
+  # -------------------------------------------------------------------------
+  /change-requests/{id}/route-preview:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [routing]
+      summary: Preview the computed P01 route (no persist)
+      description: >
+        FR-G02-002. Computes the ordered P01 stage chain (roles, order, SLA,
+        parallel groups, fraud/elevated injection) for the request without
+        persisting. Missing matrix with no fallback -> 500.
+      operationId: previewRoute
+      responses:
+        '200':
+          description: Computed route preview.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changeRequestId:
+                    type: string
+                  highestSensitivity:
+                    $ref: '#/components/schemas/SensitivityClass'
+                  riskBand:
+                    $ref: '#/components/schemas/RiskBand'
+                  routePreview:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RouteStage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-003 — Documents & authority-portal verification
+  # -------------------------------------------------------------------------
+  /change-requests/{id}/documents:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    get:
+      tags: [documents]
+      summary: List supporting documents with status (cursor)
+      operationId: listChangeRequestDocuments
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged list of linked documents.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChangeRequestDocument'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+    post:
+      tags: [documents]
+      summary: Link an uploaded G13 document to the request/item
+      description: FR-G02-003. Creates a change_request_documents link; mirrors G13 scan status.
+      operationId: linkChangeRequestDocument
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkDocument'
+      responses:
+        '201':
+          description: Document linked (scan_status PENDING).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequestDocument'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/documents/{docId}/verify:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+      - $ref: '#/components/parameters/DocId'
+    patch:
+      tags: [documents]
+      summary: Verify or reject a supporting document
+      description: FR-G02-003. HR/authority marks a document VERIFIED/REJECTED with reason (P05-captured).
+      operationId: verifyChangeRequestDocument
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentVerifyBody'
+      responses:
+        '200':
+          description: Verification status updated.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequestDocument'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/documents/{docId}/authority-verify:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+      - $ref: '#/components/parameters/DocId'
+    post:
+      tags: [documents]
+      summary: Trigger/record authority-portal verification (X.3)
+      description: >
+        FR-G02-003. Runs UIDAI/PAN/caste-portal verification via X.3 and records
+        authority_portal_ref + authority_verification_status. Portal unavailable ->
+        412 (ERR-G02-AUTHPORTAL at approval time if not VERIFIED).
+      operationId: authorityVerifyDocument
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorityVerifyBody'
+      responses:
+        '200':
+          description: Authority-portal verification result recorded.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequestDocument'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-004 / 015 — Approvals & e-signature
+  # -------------------------------------------------------------------------
+  /approvals/queue:
+    get:
+      tags: [approvals]
+      summary: My pending P01 approval actions (cursor)
+      description: FR-G02-004. Returns P01 actions assigned to the caller's role/scope or valid delegation.
+      operationId: listApprovalQueue
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            example: sla_due_at:asc
+      responses:
+        '200':
+          description: Paged approval queue.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApprovalQueueItem'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/approvals/{nodeId}/decide:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+      - $ref: '#/components/parameters/NodeId'
+    post:
+      tags: [approvals]
+      summary: Decide a P01 stage (approve / reject / sendBack)
+      description: >
+        FR-G02-004. Idempotent P01 decision. SoD enforced by P02 (maker/target
+        cannot approve; delegate must hold required_role -> else 403 ERR-G02-SOD).
+        STATUTORY/FINANCIAL-HIGH stages require valid strong e-signature (412
+        ERR-G02-ESIGN / 422 ERR-G02-ESIGN-METHOD). Reject/sendBack require a comment.
+      operationId: decideApproval
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecision'
+      responses:
+        '200':
+          description: Decision recorded; route recomputed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequestApproval'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/approvals/{nodeId}/esign:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+      - $ref: '#/components/parameters/NodeId'
+    post:
+      tags: [esignatures]
+      summary: Capture a strong e-signature for a sensitive stage (X.3)
+      description: >
+        FR-G02-015. Captures a cryptographically attributable e-signature bound to
+        the exact P01 decision payload hash. FINANCIAL/STATUTORY require PKI/DSC or
+        Aadhaar e-Sign; weak method -> 422 ERR-G02-ESIGN-METHOD. Provider down -> 412.
+      operationId: captureEsignature
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EsignCapture'
+      responses:
+        '201':
+          description: E-signature captured and hash-chained.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Esignature'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/esignatures:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    get:
+      tags: [esignatures]
+      summary: List captured e-signatures for a request (cursor)
+      operationId: listEsignatures
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged e-signature list.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Esignature'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-005 — Diff
+  # -------------------------------------------------------------------------
+  /change-requests/{id}/diff:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    get:
+      tags: [diff]
+      summary: P02-aware before/after diff payload
+      description: FR-G02-005. Returns per-item diff with field_mask applied on serialization (P02).
+      operationId: getChangeRequestDiff
+      responses:
+        '200':
+          description: Field-level diff.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changeRequestId:
+                    type: string
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DiffItem'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-007 — SLA
+  # -------------------------------------------------------------------------
+  /change-requests/{id}/sla:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    get:
+      tags: [sla]
+      summary: SLA timeline for a request
+      description: FR-G02-007. Milestones, reminders, breaches and escalations (P01 SLA runtime mirror).
+      operationId: getChangeRequestSla
+      responses:
+        '200':
+          description: SLA timeline.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changeRequestId:
+                    type: string
+                  slaDueAt:
+                    type: [string, 'null']
+                    format: date-time
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SlaEvent'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-008 — Effective-date rules & DOB hard-block
+  # -------------------------------------------------------------------------
+  /change-requests/effective-date-rules:
+    get:
+      tags: [effective-dating]
+      summary: Allowed effective-date range for a field & change type
+      description: FR-G02-008. Returns the VAL-EFFECTIVE bounds for the field/change-type.
+      operationId: getEffectiveDateRules
+      parameters:
+        - name: fieldKey
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: changeType
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/ChangeType'
+        - name: employeeId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Allowed date range.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EffectiveDateRules'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/hard-block-check:
+    get:
+      tags: [effective-dating]
+      summary: Evaluate the DOB statutory hard-block
+      description: >
+        FR-G02-008. Evaluates DOB_PRE_RETIREMENT_BAR. When barred, returns 412
+        ERR-G02-HARDBLOCK; only the legal-process path may proceed.
+      operationId: hardBlockCheck
+      parameters:
+        - name: fieldKey
+          in: query
+          required: true
+          schema:
+            type: string
+            example: dob
+        - name: employeeId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Hard-block not triggered; standard route allowed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HardBlockResult'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-009 — Bulk corrections
+  # -------------------------------------------------------------------------
+  /bulk-corrections:
+    post:
+      tags: [bulk-corrections]
+      summary: Upload a bulk correction file and create a batch
+      description: FR-G02-009. HR-only. Uploads CSV/XLSX (VAL-FILE) and creates a batch header.
+      operationId: createBulkCorrectionBatch
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBulkBatch'
+      responses:
+        '201':
+          description: Batch created (UPLOADED).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkCorrectionBatch'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /bulk-corrections/{id}/validate:
+    parameters:
+      - $ref: '#/components/parameters/BulkBatchId'
+    post:
+      tags: [bulk-corrections]
+      summary: Dry-run validate the batch rows
+      description: FR-G02-009. Validates rows (existence, scope, VAL-*, status gate, portal rules).
+      operationId: validateBulkCorrectionBatch
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Validation report produced.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkCorrectionBatch'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /bulk-corrections/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/BulkBatchId'
+    post:
+      tags: [bulk-corrections]
+      summary: Route the batch for aggregate P01 approval
+      description: FR-G02-009. Materializes child requests, fans out data-subject notices, starts P01.
+      operationId: submitBulkCorrectionBatch
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Batch routed for approval (PENDING_APPROVAL).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkCorrectionBatch'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /bulk-corrections/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/BulkBatchId'
+    post:
+      tags: [bulk-corrections]
+      summary: Aggregate-approve and commit valid rows
+      description: FR-G02-009. SoD-checked aggregate approval; valid rows commit individually & idempotently.
+      operationId: approveBulkCorrectionBatch
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentBody'
+      responses:
+        '200':
+          description: Batch approved; committed / partial-failed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkCorrectionBatch'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /bulk-corrections/{id}/report:
+    parameters:
+      - $ref: '#/components/parameters/BulkBatchId'
+    get:
+      tags: [bulk-corrections]
+      summary: Validation/commit report for the batch
+      operationId: getBulkCorrectionReport
+      responses:
+        '200':
+          description: Batch report.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkCorrectionReport'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-010 — Commit status
+  # -------------------------------------------------------------------------
+  /change-requests/{id}/commit-status:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    get:
+      tags: [commit]
+      summary: Commit / SR / retro status for a request
+      description: FR-G02-010. Effective-dated commit outcome plus separate SR and retro statuses.
+      operationId: getCommitStatus
+      responses:
+        '200':
+          description: Commit status.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitStatus'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-011 — SR posting-status tracking (read/reconcile only)
+  # -------------------------------------------------------------------------
+  /change-requests/{id}/sr-status:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    get:
+      tags: [service-register]
+      summary: Observed G01->G12 SR posting status (read only)
+      description: >
+        FR-G02-011. G02 is not an SR writer; on commit G01 (source_module=G01)
+        posts the SR event. This returns the observed posting status per statutory item.
+      operationId: getSrStatus
+      responses:
+        '200':
+          description: SR posting status per item.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changeRequestId:
+                    type: string
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SrItemStatus'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/sr-retry:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [service-register]
+      summary: Manually reconcile / re-request the G01 SR post
+      description: FR-G02-011. HR Admin/SR Custodian triggers reconciliation of a FAILED/PENDING SR post.
+      operationId: retrySrPost
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Reconciliation re-queued.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changeRequestId:
+                    type: string
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SrItemStatus'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-012 — Admin config (W.1 / W.2)
+  # -------------------------------------------------------------------------
+  /admin/field-sensitivity:
+    get:
+      tags: [admin-config]
+      summary: List the field-sensitivity catalog (cursor)
+      operationId: listFieldSensitivity
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged catalog.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FieldSensitivityEntry'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+    post:
+      tags: [admin-config]
+      summary: Create a field-sensitivity catalog entry (versioned)
+      description: FR-G02-012. Org-Admin only. Validates regex safety, e-sign method policy, auth-bearing rules.
+      operationId: createFieldSensitivity
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldSensitivityEntry'
+      responses:
+        '201':
+          description: Catalog entry created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldSensitivityEntry'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+    patch:
+      tags: [admin-config]
+      summary: Update (new version of) a field-sensitivity entry
+      operationId: updateFieldSensitivity
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldSensitivityEntry'
+      responses:
+        '200':
+          description: Catalog entry versioned.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldSensitivityEntry'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /admin/approval-matrices:
+    get:
+      tags: [admin-config]
+      summary: List approval-matrix configs (cursor)
+      operationId: listApprovalMatrices
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged approval matrices.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApprovalMatrixConfig'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+    post:
+      tags: [admin-config]
+      summary: Create an approval-matrix config (versioned, DRAFT)
+      description: FR-G02-012. Rejects invalid routes (VAL-FLOW-NOCYCLE, unknown roles, weak methods) with 422.
+      operationId: createApprovalMatrix
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalMatrixConfig'
+      responses:
+        '201':
+          description: Matrix created (DRAFT).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalMatrixConfig'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+    patch:
+      tags: [admin-config]
+      summary: Update (new version of) an approval-matrix config
+      operationId: updateApprovalMatrix
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalMatrixConfig'
+      responses:
+        '200':
+          description: Matrix versioned.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalMatrixConfig'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /admin/approval-matrices/{id}/activate:
+    parameters:
+      - $ref: '#/components/parameters/MatrixId'
+    post:
+      tags: [admin-config]
+      summary: Activate an approval-matrix version
+      description: FR-G02-012. Sets effective_from and retires the prior active for the scope; cannot retire the last default.
+      operationId: activateApprovalMatrix
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                effectiveFrom:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Matrix activated.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalMatrixConfig'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /admin/validation-regex/test:
+    post:
+      tags: [admin-config]
+      summary: Safe-regex test (VAL-G02-REGEXSAFE)
+      description: FR-G02-012. Compiles and executes a candidate validation regex under ReDoS-safety bounds.
+      operationId: testValidationRegex
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegexTestRequest'
+      responses:
+        '200':
+          description: Regex safety/test result.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegexTestResult'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-013 — Delegations
+  # -------------------------------------------------------------------------
+  /delegations:
+    get:
+      tags: [delegations]
+      summary: List delegations (cursor)
+      operationId: listDelegations
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged delegations.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Delegation'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+    post:
+      tags: [delegations]
+      summary: Create a delegation (P01 delegate, role-independent)
+      description: FR-G02-013. Delegate must independently hold the required role (P02); else 403 ERR-G02-SOD.
+      operationId: createDelegation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDelegation'
+      responses:
+        '201':
+          description: Delegation created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delegation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /delegations/{id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/DelegationId'
+    post:
+      tags: [delegations]
+      summary: Revoke a delegation early
+      operationId: revokeDelegation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Delegation revoked.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delegation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-014 — Templates
+  # -------------------------------------------------------------------------
+  /change-request-templates:
+    get:
+      tags: [templates]
+      summary: List available change-request templates (cursor)
+      operationId: listChangeRequestTemplates
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged templates.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChangeRequestTemplate'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /admin/change-request-templates:
+    post:
+      tags: [templates]
+      summary: Create a change-request template
+      operationId: createChangeRequestTemplate
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeRequestTemplate'
+      responses:
+        '201':
+          description: Template created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequestTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+    patch:
+      tags: [templates]
+      summary: Update a change-request template
+      operationId: updateChangeRequestTemplate
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeRequestTemplate'
+      responses:
+        '200':
+          description: Template updated.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequestTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-016 — History & reports
+  # -------------------------------------------------------------------------
+  /employees/{id}/field-history:
+    parameters:
+      - $ref: '#/components/parameters/EmployeeId'
+    get:
+      tags: [history-reports]
+      summary: Per-field change history for an employee (cursor)
+      description: FR-G02-016. Ordered history sourced from committed requests + P05, P02-masked.
+      operationId: getFieldHistory
+      parameters:
+        - name: fieldKey
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged field history.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FieldHistoryEntry'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /employees/{id}/editable-fields:
+    parameters:
+      - $ref: '#/components/parameters/EmployeeId'
+    get:
+      tags: [employees]
+      summary: P02-authorized editable fields + current values (status-gated)
+      description: FR-G02-001. Lists governed fields the caller may request changes to, with current masked values.
+      operationId: getEditableFields
+      responses:
+        '200':
+          description: Editable field list.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employeeId:
+                    type: string
+                  employmentStatus:
+                    type: string
+                  fields:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EditableField'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /employees/{id}/status-gate:
+    parameters:
+      - $ref: '#/components/parameters/EmployeeId'
+    get:
+      tags: [status-gate]
+      summary: Employment-status gate decision and required path
+      description: FR-G02-018. Returns ALLOW/BLOCK/ELEVATE for the target/field; fail-closed on read error (412).
+      operationId: getStatusGate
+      parameters:
+        - name: fieldKey
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Gate decision.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusGateResult'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /reports/change-requests:
+    get:
+      tags: [history-reports]
+      summary: Filterable change-request report (cursor)
+      operationId: reportChangeRequests
+      parameters:
+        - name: dateFrom
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: fieldGroup
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: sensitivity
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SensitivityClass'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ChangeRequestStatus'
+        - name: orgUnit
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: riskBand
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/RiskBand'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged report rows.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChangeRequest'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /reports/sr-reconciliation:
+    get:
+      tags: [history-reports]
+      summary: Unposted statutory items (SR reconciliation, cursor)
+      operationId: reportSrReconciliation
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged SR reconciliation rows.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SrItemStatus'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /reports/retro-reconciliation:
+    get:
+      tags: [history-reports]
+      summary: Unacked / dead-letter retro events (cursor)
+      description: FR-G02-016 / FR-G02-022. Lists retro-impact events not yet ACKED.
+      operationId: reportRetroReconciliation
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged retro reconciliation rows.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RetroImpactEvent'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /reports/fraud:
+    get:
+      tags: [fraud]
+      summary: Fraud analytics report (cursor)
+      operationId: reportFraud
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged fraud analytics rows.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RiskSignal'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /audit/verify-chain:
+    post:
+      tags: [history-reports]
+      summary: Run P05 / OPEN-PLAT-03 integrity verification
+      description: FR-G02-016. Verifies the audit hash-chain and reports any break.
+      operationId: verifyAuditChain
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChainVerifyRequest'
+      responses:
+        '200':
+          description: Verification result.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChainVerifyResult'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-017 — Data-subject notice
+  # -------------------------------------------------------------------------
+  /change-requests/{id}/notice:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    get:
+      tags: [notices]
+      summary: Data-subject notice + window status
+      operationId: getDataSubjectNotice
+      responses:
+        '200':
+          description: Notice + window status.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSubjectNotice'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/notice/confirm:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [notices]
+      summary: Data subject confirms the change
+      description: FR-G02-017. Data subject only (P02 own-record). Releases the FINANCIAL hold early.
+      operationId: confirmDataSubjectNotice
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Notice confirmed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSubjectNotice'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/notice/object:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [notices]
+      summary: Data subject objects to the change
+      description: FR-G02-017 -> FR-G02-021. Pauses the request (OBJECTED) and routes to the Grievance Officer.
+      operationId: objectDataSubjectNotice
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentBody'
+      responses:
+        '201':
+          description: Objection recorded; request paused.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Objection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-019 — Fraud
+  # -------------------------------------------------------------------------
+  /fraud/queue:
+    get:
+      tags: [fraud]
+      summary: Fraud-review queue (cursor)
+      description: FR-G02-019. Gated by the Fraud Reviewer capability flag (P02).
+      operationId: listFraudQueue
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged fraud-review queue.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RiskSignal'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/risk:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    get:
+      tags: [fraud]
+      summary: Risk signals + aggregate score for a request
+      operationId: getChangeRequestRisk
+      responses:
+        '200':
+          description: Risk signals and score.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changeRequestId:
+                    type: string
+                  riskScore:
+                    type: [integer, 'null']
+                  riskBand:
+                    $ref: '#/components/schemas/RiskBand'
+                  signals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RiskSignal'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/risk/{signalId}/review:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+      - $ref: '#/components/parameters/SignalId'
+    post:
+      tags: [fraud]
+      summary: Clear / confirm / escalate a risk signal
+      description: FR-G02-019. CONFIRMED_FRAUD rejects the request (P01 reject) and raises a security alert.
+      operationId: reviewRiskSignal
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskReviewBody'
+      responses:
+        '200':
+          description: Review outcome recorded.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskSignal'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-020 — Reversals
+  # -------------------------------------------------------------------------
+  /change-requests/{id}/items/{itemId}/reversal:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+      - $ref: '#/components/parameters/ItemId'
+    post:
+      tags: [reversals]
+      summary: Initiate an emergency reversal (break-glass)
+      description: >
+        FR-G02-020. Raises a reversal against a COMMITTED item with mandatory
+        reason. Execution requires two distinct authorisers (auth1 != auth2 !=
+        maker; 412 ERR-G02-DUALAUTH). Statutory reversals cause G01 to post a
+        reversing SR event.
+      operationId: initiateReversal
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiateReversal'
+      responses:
+        '201':
+          description: Reversal raised (awaiting dual authorization).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reversal'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /reversals/{reversalId}/authorize:
+    parameters:
+      - $ref: '#/components/parameters/ReversalId'
+    post:
+      tags: [reversals]
+      summary: Authorize a reversal (auth1 / auth2)
+      description: FR-G02-020. Two distinct elevated authorisers required; maker excluded (P02 SoD).
+      operationId: authorizeReversal
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentBody'
+      responses:
+        '200':
+          description: Authorization recorded; executes on second distinct authoriser.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reversal'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /reversals/{reversalId}:
+    parameters:
+      - $ref: '#/components/parameters/ReversalId'
+    get:
+      tags: [reversals]
+      summary: Get reversal status
+      operationId: getReversal
+      responses:
+        '200':
+          description: Reversal status.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reversal'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-021 — Objections
+  # -------------------------------------------------------------------------
+  /objections:
+    post:
+      tags: [objections]
+      summary: Raise a data-subject objection (in-flight or committed)
+      description: FR-G02-021. Own-record only (P02). In-flight -> PAUSE; committed -> REVERSAL_REQUESTED.
+      operationId: createObjection
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateObjection'
+      responses:
+        '201':
+          description: Objection raised.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Objection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /objections/queue:
+    get:
+      tags: [objections]
+      summary: Grievance Officer objection queue (cursor)
+      operationId: listObjectionQueue
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paged objection queue.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Objection'
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /objections/{id}/resolve:
+    parameters:
+      - $ref: '#/components/parameters/ObjectionId'
+    post:
+      tags: [objections]
+      summary: Uphold or dismiss an objection (with comment)
+      description: FR-G02-021. Grievance Officer capability flag (P02). Upheld committed -> governed reversal (FR-020).
+      operationId: resolveObjection
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveObjection'
+      responses:
+        '200':
+          description: Objection resolved.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Objection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-022 — Retro events
+  # -------------------------------------------------------------------------
+  /retro-events/{id}/ack:
+    parameters:
+      - $ref: '#/components/parameters/RetroEventId'
+    post:
+      tags: [retro-events]
+      summary: Downstream module acknowledges a retro event
+      description: FR-G02-022. G10/G11/G06 service identity acknowledges recomputation (PENDING/SENT -> ACKED).
+      operationId: ackRetroEvent
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetroAckBody'
+      responses:
+        '200':
+          description: Retro event acknowledged.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetroImpactEvent'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /retro-events/{id}/retry:
+    parameters:
+      - $ref: '#/components/parameters/RetroEventId'
+    post:
+      tags: [retro-events]
+      summary: Manually retry a retro event (HR Admin)
+      operationId: retryRetroEvent
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Retry re-queued.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetroImpactEvent'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  # -------------------------------------------------------------------------
+  # FR-G02-023 — Step-up
+  # -------------------------------------------------------------------------
+  /change-requests/{id}/step-up/challenge:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [step-up]
+      summary: Initiate a platform step-up challenge
+      description: FR-G02-023. Invokes the platform step-up (MFA/WebAuthn/OTP) for sensitive self-service initiation.
+      operationId: stepUpChallenge
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Challenge issued.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepUpChallenge'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /change-requests/{id}/step-up/verify:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [step-up]
+      summary: Verify a step-up challenge result
+      description: FR-G02-023. Records a cr_step_up_events row (SUCCESS/FAILED) bound to the request.
+      operationId: stepUpVerify
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StepUpVerifyBody'
+      responses:
+        '200':
+          description: Step-up verified.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepUpEvent'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Platform session bearer JWT carrying resolved roles + tenant/entity scope.
+        Every endpoint calls P02 Authorization.check; endpoints never re-implement
+        permission logic. Step-up tokens are honored for sensitive initiation.
+
+  headers:
+    XCorrelationId:
+      description: Correlation id echoed on every response and written to every P05 audit/log line.
+      schema:
+        type: string
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >
+        Required on unsafe/workflow-initiating POSTs; a repeat within 24h returns
+        the original result. Duplicate workflow start -> 409 ERR-DUP-INSTANCE.
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (default 25, max 100).
+      schema:
+        type: integer
+        default: 25
+        minimum: 1
+        maximum: 100
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor from a prior response's next_cursor.
+      schema:
+        type: string
+    ChangeRequestId:
+      name: id
+      in: path
+      required: true
+      description: Change request id (P01 subject_ref).
+      schema:
+        type: string
+    EmployeeId:
+      name: id
+      in: path
+      required: true
+      description: Target employee id (G01/M01).
+      schema:
+        type: string
+    DocId:
+      name: docId
+      in: path
+      required: true
+      schema:
+        type: string
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      description: P01 approval node / workflow_action id.
+      schema:
+        type: string
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      description: change_request_item id.
+      schema:
+        type: string
+    SignalId:
+      name: signalId
+      in: path
+      required: true
+      schema:
+        type: string
+    BulkBatchId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    MatrixId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    DelegationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    ObjectionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    ReversalId:
+      name: reversalId
+      in: path
+      required: true
+      schema:
+        type: string
+    RetroEventId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    ValidationFailed:
+      description: >
+        422 VALIDATION_FAILED — a cited VAL-* failed (format/effective-date/required/
+        null-without-clear) or a weak/disallowed e-sign method (ERR-G02-ESIGN-METHOD).
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            weakEsign:
+              value:
+                error:
+                  code: VALIDATION_FAILED
+                  message: STATUTORY sanction requires PKI/DSC or Aadhaar e-Sign; OTP is not permitted.
+                  field: esignatureId
+                  details:
+                    id: ERR-G02-ESIGN-METHOD
+                    rule: VAL-G02-ESIGN-METHOD
+    Unauthenticated:
+      description: 401 UNAUTHENTICATED — missing, invalid, expired or revoked session/token.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: >
+        403 FORBIDDEN — ownership/scope/permission/SoD/status-gate violation (P02).
+        Never leaks existence of out-of-scope records. May carry ERR-G02-SOD or
+        ERR-G02-STATUSGATE.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            statusGate:
+              value:
+                error:
+                  code: FORBIDDEN
+                  message: This record is RETIRED; bank changes require HR with Appointing-Authority sanction.
+                  field: employmentStatus
+                  details:
+                    id: ERR-G02-STATUSGATE
+    NotFound:
+      description: 404 NOT_FOUND — resource absent or out of the caller's scope.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: >
+        409 CONFLICT — idempotency replay, duplicate workflow start (ERR-DUP-INSTANCE),
+        stale value (ERR-G02-STALE), illegal transition, or double-decision.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            duplicateStart:
+              value:
+                error:
+                  code: CONFLICT
+                  message: A request for this already exists and is in progress.
+                  field: fieldKey
+                  details:
+                    id: ERR-DUP-INSTANCE
+            staleValue:
+              value:
+                error:
+                  code: CONFLICT
+                  message: The master value changed since this request was raised.
+                  field: old_value_hash
+                  details:
+                    id: ERR-G02-STALE
+    PreconditionFailed:
+      description: >
+        412 PRECONDITION_FAILED — a required precondition is unmet: missing/unverified
+        document or authority-portal verification (ERR-G02-AUTHPORTAL), missing e-sign
+        (ERR-G02-ESIGN), missing/expired step-up (ERR-G02-STEPUP), DOB hard-block
+        (ERR-G02-HARDBLOCK), risk/fraud block (ERR-G02-RISKBLOCK), dual-auth unmet
+        (ERR-G02-DUALAUTH), or a retryable upstream (X.3-mapped, ERR-PRECOND).
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            stepUp:
+              value:
+                error:
+                  code: PRECONDITION_FAILED
+                  message: Confirm it's you (step-up authentication) to submit a STATUTORY change.
+                  field: stepUpEventId
+                  details:
+                    id: ERR-G02-STEPUP
+            hardBlock:
+              value:
+                error:
+                  code: PRECONDITION_FAILED
+                  message: DOB alteration is barred within 5 years of superannuation; a separate legal process is required.
+                  field: dob
+                  details:
+                    id: ERR-G02-HARDBLOCK
+                    rule: VAL-G02-HARDBLOCK
+            riskBlock:
+              value:
+                error:
+                  code: PRECONDITION_FAILED
+                  message: This bank account is already used by other employees; held for fraud review.
+                  field: bank_account_no
+                  details:
+                    id: ERR-G02-RISKBLOCK
+    RateLimited:
+      description: 429 RATE_LIMITED — rate limit or brute-force lockout exceeded.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Internal:
+      description: >
+        500 INTERNAL — unexpected server error, invalid-config fallback, or
+        non-retryable upstream failure (503 collapses here via X.3 -> ERR-LOADFAIL).
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    # --- Canonical error envelope (Foundation §1 / error-taxonomy) ---------
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: One of the 8 platform wire codes, or a module code carried here.
+              enum:
+                - VALIDATION_FAILED
+                - UNAUTHENTICATED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - PRECONDITION_FAILED
+                - RATE_LIMITED
+                - INTERNAL
+            message:
+              type: string
+              description: Human-readable message resolved from a MSG-*/ERR-* id.
+            field:
+              type: [string, 'null']
+              description: Offending field for validation errors.
+            details:
+              type: [object, 'null']
+              description: >
+                Structured discriminators, e.g. { id: ERR-G02-STEPUP, rule: VAL-*,
+                reason: ... }.
+              additionalProperties: true
+
+    # --- Enums -------------------------------------------------------------
+    SensitivityClass:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, STATUTORY, FINANCIAL, IDENTITY]
+    RiskBand:
+      type: [string, 'null']
+      enum: [LOW, MEDIUM, HIGH, BLOCKED, null]
+    ChangeType:
+      type: string
+      enum: [UPDATE, CORRECTION, REVERSAL]
+    RequestOrigin:
+      type: string
+      enum: [SELF_SERVICE, HR_ON_BEHALF, BULK, REVERSAL]
+    ChangeRequestStatus:
+      type: string
+      enum:
+        - DRAFT
+        - SUBMITTED
+        - PENDING_DOCS
+        - IN_REVIEW
+        - NOTICE_HOLD
+        - OBJECTED
+        - RETURNED
+        - APPROVED
+        - COMMITTED
+        - COMMIT_FAILED
+        - REJECTED
+        - WITHDRAWN
+        - REVERSED
+    ItemStatus:
+      type: string
+      enum: [PENDING, APPROVED, COMMITTED, REVERSED, FAILED]
+    SrPostingStatus:
+      type: string
+      enum: [NOT_APPLICABLE, PENDING, POSTED, FAILED]
+    RetroStatus:
+      type: string
+      enum: [NOT_APPLICABLE, PENDING, SENT, ACKED, FAILED, DEAD_LETTER]
+    EsignMethod:
+      type: string
+      enum: [PKI_DSC, AADHAAR_ESIGN, OTP]
+    WorkflowPattern:
+      type: string
+      enum: [SEQUENTIAL, PARALLEL_ALL_OF, PARALLEL_ANY_OF, CONDITIONAL, DYNAMIC_APPROVER]
+
+    # --- Change request (E1) + items (E2) ----------------------------------
+    ChangeRequestItemInput:
+      type: object
+      required: [fieldKey, m01FieldKey]
+      properties:
+        fieldKey:
+          type: string
+        m01FieldKey:
+          type: string
+          description: Canonical G01/M01 path, e.g. employees.first_name.
+        parentItemId:
+          type: [string, 'null']
+          description: For composite name sub-items (first/middle/last).
+        newValue:
+          type: [string, 'null']
+          description: Null only permitted with clearIntent=true (VAL-G02-CLEARINTENT).
+        clearIntent:
+          type: boolean
+          default: false
+    CreateChangeRequest:
+      type: object
+      required: [targetEmployeeId, items]
+      properties:
+        targetEmployeeId:
+          type: string
+        changeType:
+          $ref: '#/components/schemas/ChangeType'
+        requestOrigin:
+          $ref: '#/components/schemas/RequestOrigin'
+        effectiveFrom:
+          type: [string, 'null']
+          format: date
+        reason:
+          type: [string, 'null']
+          maxLength: 1000
+        stepUpEventId:
+          type: [string, 'null']
+        templateId:
+          type: [string, 'null']
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ChangeRequestItemInput'
+    EditChangeRequest:
+      type: object
+      properties:
+        changeType:
+          $ref: '#/components/schemas/ChangeType'
+        effectiveFrom:
+          type: [string, 'null']
+          format: date
+        reason:
+          type: [string, 'null']
+          maxLength: 1000
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChangeRequestItemInput'
+    ChangeRequestItem:
+      type: object
+      properties:
+        changeRequestItemId:
+          type: string
+        fieldKey:
+          type: string
+        m01FieldKey:
+          type: string
+        parentItemId:
+          type: [string, 'null']
+        oldValue:
+          type: [string, 'null']
+          description: Masked per P02 field-mask on serialization.
+        newValue:
+          type: [string, 'null']
+        clearIntent:
+          type: boolean
+        sensitivity:
+          $ref: '#/components/schemas/SensitivityClass'
+        itemStatus:
+          $ref: '#/components/schemas/ItemStatus'
+        srPostingStatus:
+          $ref: '#/components/schemas/SrPostingStatus'
+        retroStatus:
+          $ref: '#/components/schemas/RetroStatus'
+    ChangeRequest:
+      type: object
+      properties:
+        changeRequestId:
+          type: string
+        crNumber:
+          type: string
+          example: CR-2026-000124
+        targetEmployeeId:
+          type: string
+        requestedBy:
+          type: string
+        requestOrigin:
+          $ref: '#/components/schemas/RequestOrigin'
+        changeType:
+          $ref: '#/components/schemas/ChangeType'
+        highestSensitivity:
+          $ref: '#/components/schemas/SensitivityClass'
+        status:
+          $ref: '#/components/schemas/ChangeRequestStatus'
+        employmentStatusAtSubmit:
+          type: [string, 'null']
+        riskScore:
+          type: [integer, 'null']
+        riskBand:
+          $ref: '#/components/schemas/RiskBand'
+        effectiveDate:
+          type: [string, 'null']
+          format: date
+        reason:
+          type: [string, 'null']
+        workflowInstanceId:
+          type: [string, 'null']
+        stepUpEventId:
+          type: [string, 'null']
+        templateId:
+          type: [string, 'null']
+        bulkBatchId:
+          type: [string, 'null']
+        slaDueAt:
+          type: [string, 'null']
+          format: date-time
+        submittedAt:
+          type: [string, 'null']
+          format: date-time
+        decidedAt:
+          type: [string, 'null']
+          format: date-time
+        committedAt:
+          type: [string, 'null']
+          format: date-time
+        routePreview:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteStage'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChangeRequestItem'
+
+    # --- Routing (E6/E7 + P01) ---------------------------------------------
+    RouteStage:
+      type: object
+      properties:
+        levelNo:
+          type: integer
+        nodeType:
+          type: string
+          example: SANCTION
+        requiredRole:
+          type: string
+          example: APPOINTING_AUTHORITY
+        pattern:
+          $ref: '#/components/schemas/WorkflowPattern'
+        slaHours:
+          type: integer
+        escalationRole:
+          type: [string, 'null']
+        requiresEsignature:
+          type: boolean
+          default: false
+        allowedEsignMethods:
+          type: array
+          items:
+            $ref: '#/components/schemas/EsignMethod'
+
+    # --- Documents (E3) ----------------------------------------------------
+    LinkDocument:
+      type: object
+      required: [documentId, docType]
+      properties:
+        documentId:
+          type: string
+          description: G13/M11 document reference.
+        changeRequestItemId:
+          type: [string, 'null']
+        docType:
+          type: string
+    DocumentVerifyBody:
+      type: object
+      required: [verificationStatus]
+      properties:
+        verificationStatus:
+          type: string
+          enum: [VERIFIED, REJECTED]
+        reason:
+          type: [string, 'null']
+    AuthorityVerifyBody:
+      type: object
+      required: [portalType]
+      properties:
+        portalType:
+          type: string
+          enum: [UIDAI, PAN, CASTE]
+        attestation:
+          type: boolean
+          default: false
+    ChangeRequestDocument:
+      type: object
+      properties:
+        changeRequestDocumentId:
+          type: string
+        changeRequestId:
+          type: string
+        changeRequestItemId:
+          type: [string, 'null']
+        documentId:
+          type: string
+        docType:
+          type: string
+        scanStatus:
+          type: string
+          enum: [PENDING, CLEAN, INFECTED]
+        verificationStatus:
+          type: string
+          enum: [PENDING, VERIFIED, REJECTED]
+        authorityPortalRef:
+          type: [string, 'null']
+        authorityVerificationStatus:
+          type: [string, 'null']
+          enum: [PENDING, VERIFIED, FAILED, null]
+
+    # --- Approvals (E4) ----------------------------------------------------
+    ApprovalDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED, SENT_BACK]
+        comment:
+          type: [string, 'null']
+          description: Mandatory on REJECTED and SENT_BACK (ERR-REASON-REQ).
+        esignatureId:
+          type: [string, 'null']
+          description: Required strong e-sign on STATUTORY/FINANCIAL-HIGH stages.
+    ApprovalQueueItem:
+      type: object
+      properties:
+        changeRequestId:
+          type: string
+        crNumber:
+          type: string
+        nodeId:
+          type: string
+        levelNo:
+          type: integer
+        requiredRole:
+          type: string
+        highestSensitivity:
+          $ref: '#/components/schemas/SensitivityClass'
+        riskBand:
+          $ref: '#/components/schemas/RiskBand'
+        slaDueAt:
+          type: [string, 'null']
+          format: date-time
+        actingAsDelegateFor:
+          type: [string, 'null']
+    ChangeRequestApproval:
+      type: object
+      properties:
+        approvalId:
+          type: string
+        changeRequestId:
+          type: string
+        workflowActionId:
+          type: string
+        levelNo:
+          type: integer
+        requiredRole:
+          type: string
+        assignedTo:
+          type: [string, 'null']
+        delegatedFrom:
+          type: [string, 'null']
+        decision:
+          type: [string, 'null']
+          enum: [APPROVED, REJECTED, SENT_BACK, null]
+        decisionComment:
+          type: [string, 'null']
+        esignatureId:
+          type: [string, 'null']
+        decidedAt:
+          type: [string, 'null']
+          format: date-time
+        requestStatus:
+          $ref: '#/components/schemas/ChangeRequestStatus'
+
+    # --- E-signature (E10) -------------------------------------------------
+    EsignCapture:
+      type: object
+      required: [signMethod, decision]
+      properties:
+        signMethod:
+          $ref: '#/components/schemas/EsignMethod'
+        decision:
+          type: string
+          enum: [APPROVED]
+        providerPayload:
+          type: [object, 'null']
+          additionalProperties: true
+    Esignature:
+      type: object
+      properties:
+        esignatureId:
+          type: string
+        changeRequestId:
+          type: string
+        approvalNodeId:
+          type: string
+        signMethod:
+          $ref: '#/components/schemas/EsignMethod'
+        signedPayloadHash:
+          type: string
+          description: SHA-256 of the canonical decision payload.
+        chainHash:
+          type: string
+          description: Hash-chain link (E10, aligned to OPEN-PLAT-03).
+        signer:
+          type: string
+        signedAt:
+          type: string
+          format: date-time
+        method_metadata:
+          type: [object, 'null']
+          additionalProperties: true
+
+    # --- Diff (FR-005) -----------------------------------------------------
+    DiffItem:
+      type: object
+      properties:
+        fieldKey:
+          type: string
+        m01FieldKey:
+          type: string
+        oldValue:
+          type: [string, 'null']
+          description: Masked per PII ceiling (P02 serialization mask).
+        newValue:
+          type: [string, 'null']
+        cleared:
+          type: boolean
+        changeType:
+          $ref: '#/components/schemas/ChangeType'
+        effectiveFrom:
+          type: [string, 'null']
+          format: date
+        masked:
+          type: boolean
+
+    # --- SLA (E11) ---------------------------------------------------------
+    SlaEvent:
+      type: object
+      properties:
+        eventType:
+          type: string
+          enum: [SLA_SET, REMINDER, BREACHED, ESCALATED, REASSIGNED, PAUSED, RESUMED]
+        levelNo:
+          type: [integer, 'null']
+        at:
+          type: string
+          format: date-time
+        detail:
+          type: [string, 'null']
+
+    # --- Effective-dating (FR-008) -----------------------------------------
+    EffectiveDateRules:
+      type: object
+      properties:
+        fieldKey:
+          type: string
+        changeType:
+          $ref: '#/components/schemas/ChangeType'
+        minDate:
+          type: [string, 'null']
+          format: date
+        maxDate:
+          type: [string, 'null']
+          format: date
+        rule:
+          type: string
+          example: VAL-EFFECTIVE
+    HardBlockResult:
+      type: object
+      properties:
+        fieldKey:
+          type: string
+        employeeId:
+          type: string
+        blocked:
+          type: boolean
+        ruleRef:
+          type: [string, 'null']
+          example: DOB_PRE_RETIREMENT_BAR
+        legalProcessPathAvailable:
+          type: boolean
+
+    # --- Bulk (E12) --------------------------------------------------------
+    CreateBulkBatch:
+      type: object
+      required: [documentId]
+      properties:
+        documentId:
+          type: string
+          description: G13 reference to the uploaded CSV/XLSX (VAL-FILE).
+        defaultChangeType:
+          $ref: '#/components/schemas/ChangeType'
+        description:
+          type: [string, 'null']
+    BulkCorrectionBatch:
+      type: object
+      properties:
+        bulkBatchId:
+          type: string
+        status:
+          type: string
+          enum: [UPLOADED, VALIDATED, PENDING_APPROVAL, APPROVED, COMMITTED, PARTIAL_FAILED]
+        total:
+          type: [integer, 'null']
+        valid:
+          type: [integer, 'null']
+        invalid:
+          type: [integer, 'null']
+        highestSensitivity:
+          $ref: '#/components/schemas/SensitivityClass'
+        workflowInstanceId:
+          type: [string, 'null']
+        reportRef:
+          type: [string, 'null']
+    BulkCorrectionReport:
+      type: object
+      properties:
+        bulkBatchId:
+          type: string
+        total:
+          type: integer
+        valid:
+          type: integer
+        invalid:
+          type: integer
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              rowNo:
+                type: integer
+              employeeId:
+                type: string
+              fieldKey:
+                type: string
+              outcome:
+                type: string
+                enum: [VALID, INVALID, COMMITTED, FAILED]
+              reason:
+                type: [string, 'null']
+
+    # --- Commit (FR-010) ---------------------------------------------------
+    CommitStatus:
+      type: object
+      properties:
+        changeRequestId:
+          type: string
+        status:
+          $ref: '#/components/schemas/ChangeRequestStatus'
+        committedAt:
+          type: [string, 'null']
+          format: date-time
+        financialHold:
+          type: boolean
+          description: True while first credit is held for the objection window.
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              changeRequestItemId:
+                type: string
+              itemStatus:
+                $ref: '#/components/schemas/ItemStatus'
+              srPostingStatus:
+                $ref: '#/components/schemas/SrPostingStatus'
+              retroStatus:
+                $ref: '#/components/schemas/RetroStatus'
+
+    # --- SR status (FR-011) ------------------------------------------------
+    SrItemStatus:
+      type: object
+      properties:
+        changeRequestItemId:
+          type: string
+        crNumber:
+          type: string
+        fieldKey:
+          type: string
+        srEventType:
+          type: [string, 'null']
+        srPostingStatus:
+          $ref: '#/components/schemas/SrPostingStatus'
+        srReference:
+          type: [string, 'null']
+        sourceModule:
+          type: string
+          const: G01
+          description: SR events are posted by G01 (master/identity owner), never G02.
+        attempts:
+          type: [integer, 'null']
+
+    # --- Config (E5/E6/E7) -------------------------------------------------
+    FieldSensitivityEntry:
+      type: object
+      required: [fieldKey, sensitivity]
+      properties:
+        fieldKey:
+          type: string
+        m01FieldKey:
+          type: [string, 'null']
+        sensitivity:
+          $ref: '#/components/schemas/SensitivityClass'
+        version:
+          type: [integer, 'null']
+        isAuthBearing:
+          type: boolean
+          default: false
+        selfServiceEditable:
+          type: boolean
+          default: true
+        autoApplyOnLow:
+          type: boolean
+          default: false
+        requiresDocument:
+          type: boolean
+          default: false
+        requiresAuthorityPortalVerification:
+          type: boolean
+          default: false
+        postToSr:
+          type: boolean
+          default: false
+        requiredDocTypes:
+          type: array
+          items:
+            type: string
+        allowedEsignMethods:
+          type: array
+          items:
+            $ref: '#/components/schemas/EsignMethod'
+        hardBlockRuleRef:
+          type: [string, 'null']
+        evidencePath:
+          type: [string, 'null']
+        validationRef:
+          type: [string, 'null']
+          description: Cited VAL-* id.
+        validationRegex:
+          type: [string, 'null']
+          description: ReDoS-bounded (VAL-G02-REGEXSAFE).
+        retroTargets:
+          type: array
+          items:
+            type: string
+            enum: [G10, G11, G06]
+    ApprovalMatrixConfig:
+      type: object
+      required: [name, workflowCode, rules]
+      properties:
+        approvalMatrixConfigId:
+          type: [string, 'null']
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [GLOBAL, ENTITY, ORG_UNIT]
+        scopeRef:
+          type: [string, 'null']
+        workflowCode:
+          type: string
+          description: Bound P01 workflow_code.
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, RETIRED]
+        version:
+          type: [integer, 'null']
+        effectiveFrom:
+          type: [string, 'null']
+          format: date
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalMatrixRule'
+    ApprovalMatrixRule:
+      type: object
+      required: [levelNo, requiredRole]
+      properties:
+        levelNo:
+          type: integer
+        sensitivity:
+          $ref: '#/components/schemas/SensitivityClass'
+        employmentStatusScope:
+          type: [string, 'null']
+        requiredRole:
+          type: string
+        pattern:
+          $ref: '#/components/schemas/WorkflowPattern'
+        slaHours:
+          type: integer
+        escalationRole:
+          type: [string, 'null']
+        requiresEsignature:
+          type: boolean
+          default: false
+    RegexTestRequest:
+      type: object
+      required: [regex]
+      properties:
+        regex:
+          type: string
+        samples:
+          type: array
+          items:
+            type: string
+    RegexTestResult:
+      type: object
+      properties:
+        safe:
+          type: boolean
+        rule:
+          type: string
+          example: VAL-G02-REGEXSAFE
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              sample:
+                type: string
+              matched:
+                type: boolean
+
+    # --- Delegation (E8) ---------------------------------------------------
+    CreateDelegation:
+      type: object
+      required: [delegateUserId, validFrom, validTo]
+      properties:
+        delegateUserId:
+          type: string
+        validFrom:
+          type: string
+          format: date-time
+        validTo:
+          type: string
+          format: date-time
+        scopeRef:
+          type: [string, 'null']
+        nodeTypes:
+          type: array
+          items:
+            type: string
+    Delegation:
+      type: object
+      properties:
+        delegationId:
+          type: string
+        delegatorUserId:
+          type: string
+        delegateUserId:
+          type: string
+        validFrom:
+          type: string
+          format: date-time
+        validTo:
+          type: string
+          format: date-time
+        scopeRef:
+          type: [string, 'null']
+        nodeTypes:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [ACTIVE, REVOKED, EXPIRED]
+        delegateHoldsRoleVerified:
+          type: boolean
+
+    # --- Template (E9) -----------------------------------------------------
+    ChangeRequestTemplate:
+      type: object
+      required: [name, fieldKeys]
+      properties:
+        templateId:
+          type: [string, 'null']
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [GLOBAL, ENTITY, ORG_UNIT]
+        scopeRef:
+          type: [string, 'null']
+        changeType:
+          $ref: '#/components/schemas/ChangeType'
+        fieldKeys:
+          type: array
+          items:
+            type: string
+        requiredDocTypes:
+          type: array
+          items:
+            type: string
+        instructions:
+          type: [string, 'null']
+        w2FormRef:
+          type: [string, 'null']
+        active:
+          type: boolean
+          default: true
+
+    # --- History (FR-016) --------------------------------------------------
+    FieldHistoryEntry:
+      type: object
+      properties:
+        fieldKey:
+          type: string
+        m01FieldKey:
+          type: string
+        oldValue:
+          type: [string, 'null']
+        newValue:
+          type: [string, 'null']
+        changeType:
+          $ref: '#/components/schemas/ChangeType'
+        effectiveFrom:
+          type: [string, 'null']
+          format: date
+        recordedAt:
+          type: string
+          format: date-time
+        crNumber:
+          type: string
+        authority:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              action:
+                type: string
+              esign:
+                type: [string, 'null']
+        documents:
+          type: array
+          items:
+            type: string
+        srStatus:
+          $ref: '#/components/schemas/SrPostingStatus'
+        retroStatus:
+          type: [object, 'null']
+          additionalProperties:
+            $ref: '#/components/schemas/RetroStatus'
+        auditChainVerified:
+          type: boolean
+        auditSource:
+          type: string
+          example: P05
+    EditableField:
+      type: object
+      properties:
+        fieldKey:
+          type: string
+        m01FieldKey:
+          type: string
+        label:
+          type: string
+        currentValue:
+          type: [string, 'null']
+          description: Masked per P02 PII ceiling.
+        sensitivity:
+          $ref: '#/components/schemas/SensitivityClass'
+        selfServiceEditable:
+          type: boolean
+        requiresStepUp:
+          type: boolean
+    StatusGateResult:
+      type: object
+      properties:
+        employeeId:
+          type: string
+        fieldKey:
+          type: [string, 'null']
+        employmentStatus:
+          type: string
+        decision:
+          type: string
+          enum: [ALLOW, BLOCK, ELEVATE]
+        requiredPath:
+          type: [string, 'null']
+    ChainVerifyRequest:
+      type: object
+      properties:
+        dateFrom:
+          type: [string, 'null']
+          format: date
+        dateTo:
+          type: [string, 'null']
+          format: date
+        scopeRef:
+          type: [string, 'null']
+    ChainVerifyResult:
+      type: object
+      properties:
+        verified:
+          type: boolean
+        breaks:
+          type: array
+          items:
+            type: object
+            properties:
+              partition:
+                type: string
+              detail:
+                type: string
+        verifiedAt:
+          type: string
+          format: date-time
+
+    # --- Data-subject notice (E15) -----------------------------------------
+    DataSubjectNotice:
+      type: object
+      properties:
+        noticeId:
+          type: string
+        changeRequestId:
+          type: string
+        channel:
+          type: string
+          enum: [SMS, EMAIL, POSTAL, IN_APP]
+        sentAt:
+          type: [string, 'null']
+          format: date-time
+        objectionWindowEndsAt:
+          type: [string, 'null']
+          format: date-time
+        outcome:
+          type: [string, 'null']
+          enum: [PENDING, CONFIRMED, OBJECTED, WINDOW_ELAPSED, null]
+        deliveryStatus:
+          type: string
+          enum: [PENDING, DELIVERED, FAILED]
+        oldValueAlertSent:
+          type: boolean
+
+    # --- Objection (E16) ---------------------------------------------------
+    CreateObjection:
+      type: object
+      required: [changeRequestId, objectionType, reason]
+      properties:
+        changeRequestId:
+          type: string
+        changeRequestItemId:
+          type: [string, 'null']
+        objectionType:
+          type: string
+          enum: [IN_FLIGHT, COMMITTED]
+        reason:
+          type: string
+        onBehalfAuthorization:
+          type: [string, 'null']
+          description: Representative authorization reference, if not the data subject.
+    ResolveObjection:
+      type: object
+      required: [resolution, comment]
+      properties:
+        resolution:
+          type: string
+          enum: [UPHELD, DISMISSED]
+        comment:
+          type: string
+    Objection:
+      type: object
+      properties:
+        objectionId:
+          type: string
+        changeRequestId:
+          type: string
+        objectionType:
+          type: string
+          enum: [IN_FLIGHT, COMMITTED]
+        effect:
+          type: string
+          enum: [PAUSE, REVERSAL_REQUESTED]
+        status:
+          type: string
+          enum: [OPEN, UPHELD, DISMISSED]
+        grievanceOfficer:
+          type: [string, 'null']
+        resolutionComment:
+          type: [string, 'null']
+
+    # --- Reversal (E17) ----------------------------------------------------
+    InitiateReversal:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+        revertToValue:
+          type: [string, 'null']
+    Reversal:
+      type: object
+      properties:
+        reversalId:
+          type: string
+        changeRequestId:
+          type: string
+        changeRequestItemId:
+          type: string
+        auth1:
+          type: [string, 'null']
+        auth2:
+          type: [string, 'null']
+        originalMaker:
+          type: string
+        revertToValue:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [RAISED, AUTH1_DONE, EXECUTED, FAILED]
+        reversingSrStatus:
+          $ref: '#/components/schemas/SrPostingStatus'
+        reversingRetroStatus:
+          $ref: '#/components/schemas/RetroStatus'
+
+    # --- Risk (E13) --------------------------------------------------------
+    RiskReviewBody:
+      type: object
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [CLEARED, CONFIRMED_FRAUD, ESCALATED]
+        comment:
+          type: [string, 'null']
+    RiskSignal:
+      type: object
+      properties:
+        signalId:
+          type: string
+        changeRequestId:
+          type: string
+        signalType:
+          type: string
+          example: DUPLICATE_BANK_ACCOUNT
+        severity:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        score:
+          type: integer
+        reviewOutcome:
+          type: [string, 'null']
+          enum: [CLEARED, CONFIRMED_FRAUD, ESCALATED, null]
+        linkedEmployees:
+          type: array
+          items:
+            type: string
+        evidence:
+          type: [object, 'null']
+          additionalProperties: true
+
+    # --- Retro (E14) -------------------------------------------------------
+    RetroAckBody:
+      type: object
+      required: [ackReference]
+      properties:
+        ackReference:
+          type: string
+        targetModule:
+          type: string
+          enum: [G10, G11, G06]
+    RetroImpactEvent:
+      type: object
+      properties:
+        retroEventId:
+          type: string
+        changeRequestItemId:
+          type: string
+        itemId:
+          type: [string, 'null']
+        targetModule:
+          type: string
+          enum: [G10, G11, G06]
+        status:
+          $ref: '#/components/schemas/RetroStatus'
+        ackReference:
+          type: [string, 'null']
+        attempts:
+          type: integer
+        effectiveDate:
+          type: [string, 'null']
+          format: date
+
+    # --- Step-up (E19) -----------------------------------------------------
+    StepUpChallenge:
+      type: object
+      properties:
+        challengeId:
+          type: string
+        changeRequestId:
+          type: string
+        method:
+          type: string
+          enum: [TOTP, SMS_OTP, PUSH, WEBAUTHN]
+        expiresAt:
+          type: string
+          format: date-time
+    StepUpVerifyBody:
+      type: object
+      required: [challengeId]
+      properties:
+        challengeId:
+          type: string
+        code:
+          type: [string, 'null']
+        assertion:
+          type: [object, 'null']
+          additionalProperties: true
+    StepUpEvent:
+      type: object
+      properties:
+        stepUpEventId:
+          type: string
+        changeRequestId:
+          type: string
+        method:
+          type: string
+          enum: [TOTP, SMS_OTP, PUSH, WEBAUTHN]
+        result:
+          type: string
+          enum: [SUCCESS, FAILED]
+        authAssuranceLevel:
+          type: string
+          example: AAL2
+        expiresAt:
+          type: string
+          format: date-time
+
+    # --- Shared bodies -----------------------------------------------------
+    CommentBody:
+      type: object
+      properties:
+        comment:
+          type: [string, 'null']

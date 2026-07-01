@@ -1,0 +1,5277 @@
+# Generated for G10 Payroll & Benefits (Phase-2). Source: docs/brd/v3/G10-payroll-and-benefits.md
+openapi: 3.1.0
+info:
+  title: G10 — Payroll and Benefits Management API
+  version: 3.1.0
+  description: '**Phase-2** government-HRMS module **G10 — Payroll and Benefits Management**, a platform-native
+    extension of the PrimeSoft HRMS platform (M06/M07/M14 roadmap). Grounded in docs/brd/v3/G10-payroll-and-benefits.md
+    (Section 6 FR API tables + Section 8), docs/contracts/error-taxonomy.yaml (ERR-G10-*) and docs/brd/PLATFORM_FOUNDATION.md
+    §4.
+
+
+    Cross-cutting concerns run on platform engines: approvals/locking on P01, authorization/SoD on P02,
+    audit on P05, jobs on X.1, notifications on X.2, integrations on X.3. Every endpoint is enforced by
+    P02 `Authorization.check` with strict SoD (Payroll Officer ≠ Approver ≠ Disburser). Money fields are
+    NUMERIC fixed-point (modelled as strings to preserve precision). The G10→G12 SR posting endpoints
+    (`/sr/ingest*`, FR-G10-23) are **deferred build / Phase-2** — contracted, not yet implemented.'
+  contact:
+    name: API Architecture / Platform Foundation
+servers:
+- url: /api/v1
+  description: All endpoints are served under the /api/v1 base path.
+security:
+- bearerAuth: []
+tags:
+- name: Pay Components & Rules
+- name: Rate Tables & Pay Matrix
+- name: Salary Structures
+- name: Payroll Runs
+- name: Time & Leave Inputs
+- name: Deductions
+- name: Tax Declarations
+- name: Loans & Advances
+- name: Recoveries
+- name: Arrears
+- name: Supplementary & Off-Cycle
+- name: Benefits
+- name: Payslips
+- name: Bank Disbursement
+- name: Reconciliation
+- name: Approval & Locking
+- name: Statutory Outputs
+- name: Analytics
+- name: Remittance & GL
+- name: Full-and-Final Settlement
+- name: Perquisites
+- name: Run Input Snapshots
+- name: Service Register Posting
+paths:
+  /payroll/components:
+    post:
+      tags:
+      - Pay Components & Rules
+      summary: Create a pay component (earning/deduction/perquisite/rounding)
+      operationId: createPayComponent
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayComponentCreate'
+      responses:
+        '201':
+          description: Component created (draft).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayComponent'
+        '401': &id001
+          $ref: '#/components/responses/Unauthenticated'
+        '403': &id002
+          $ref: '#/components/responses/Forbidden'
+        '404': &id003
+          $ref: '#/components/responses/NotFound'
+        '409': &id004
+          $ref: '#/components/responses/Conflict'
+        '412': &id005
+          $ref: '#/components/responses/PreconditionFailed'
+        '422': &id006
+          $ref: '#/components/responses/ValidationFailed'
+        '429': &id007
+          $ref: '#/components/responses/RateLimited'
+        '500': &id008
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - Pay Components & Rules
+      summary: List pay components (cursor-paginated)
+      operationId: listPayComponents
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - &id015
+        $ref: '#/components/parameters/Limit'
+      - &id016
+        $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      - name: category
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/PayComponentCategory'
+      responses:
+        '200':
+          description: Page of pay components.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PayComponent'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': &id009
+          $ref: '#/components/responses/Unauthenticated'
+        '403': &id010
+          $ref: '#/components/responses/Forbidden'
+        '404': &id011
+          $ref: '#/components/responses/NotFound'
+        '422': &id012
+          $ref: '#/components/responses/ValidationFailed'
+        '429': &id013
+          $ref: '#/components/responses/RateLimited'
+        '500': &id014
+          $ref: '#/components/responses/InternalError'
+  /payroll/components/{id}/rules:
+    post:
+      tags:
+      - Pay Components & Rules
+      summary: Add a new (constrained-DSL) rule version to a component
+      operationId: addPayRuleVersion
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayRuleCreate'
+      responses:
+        '201':
+          description: Rule version created (draft, pending activation).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayRule'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/rules/{id}:activate:
+    post:
+      tags:
+      - Pay Components & Rules
+      summary: 'Activate a rule version (P01 checker; SoD: activator ≠ author)'
+      operationId: activatePayRule
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivateRequest'
+      responses:
+        '200':
+          description: Rule activated.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayRule'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/dsl/grammar:
+    get:
+      tags:
+      - Pay Components & Rules
+      summary: Current constrained-DSL grammar version and token set
+      operationId: getDslGrammar
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      responses:
+        '200':
+          description: Active DSL grammar version and permitted token set.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DslGrammar'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/rate-tables:
+    post:
+      tags:
+      - Rate Tables & Pay Matrix
+      summary: Add an effective-dated rate row (DA/HRA/PT-by-state/tax-slab)
+      operationId: createRateTable
+      description: PT_SLAB rows require a `state`; overlap yields `ERR-G10-RATE-OVERLAP`. Enforced by
+        P02 Authorization.check (RBAC v1.7 + SoD).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RateTableCreate'
+      responses:
+        '201':
+          description: Rate row created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateTable'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+    get:
+      tags:
+      - Rate Tables & Pay Matrix
+      summary: Resolve an effective rate as-of a date (PT keyed by state of posting)
+      operationId: resolveRateTable
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id015
+      - *id016
+      - name: type
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/RateType'
+      - name: state
+        in: query
+        required: false
+        schema:
+          type: string
+        description: State of posting; required for PT_SLAB.
+      - name: date
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+        description: As-of date; defaults to today.
+      responses:
+        '200':
+          description: Effective rate rows for the query.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RateTable'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/pay-matrix:
+    post:
+      tags:
+      - Rate Tables & Pay Matrix
+      summary: Add a pay-matrix level/cell (basic-pay progression)
+      operationId: createPayMatrixLevel
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayMatrixLevelCreate'
+      responses:
+        '201':
+          description: Pay-matrix level/cell created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayMatrixLevel'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/employees/{id}/structures:
+    post:
+      tags:
+      - Salary Structures
+      summary: Create a new salary-structure version for an employee
+      operationId: createSalaryStructure
+      description: Overlapping versions → `ERR-G10-STRUCT-OVERLAP`; locked period → `ERR-G10-STRUCT-LOCKED`.
+        Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Employee id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalaryStructureCreate'
+      responses:
+        '201':
+          description: Structure version created (draft).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaryStructure'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+    get:
+      tags:
+      - Salary Structures
+      summary: Salary-structure version history for an employee
+      operationId: listSalaryStructures
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Employee id.
+      - *id015
+      - *id016
+      responses:
+        '200':
+          description: Page of structure versions.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SalaryStructure'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/structures/{id}:approve:
+    post:
+      tags:
+      - Salary Structures
+      summary: Approve a salary-structure version (P01 checker)
+      operationId: approveSalaryStructure
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveRequest'
+      responses:
+        '200':
+          description: Structure version approved.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaryStructure'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/cycles/{id}/runs:
+    post:
+      tags:
+      - Payroll Runs
+      summary: Start a payroll run (acquires single-in-flight lock; binds snapshot)
+      operationId: startPayrollRun
+      description: FINAL/PARALLEL_WHATIF via `run_mode`. Another in-flight FINAL run → `ERR-G10-RUN-INFLIGHT`;
+        mutation after snapshot freeze → `ERR-G10-SNAPSHOT-FROZEN`. Enforced by P02 Authorization.check
+        (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Payroll cycle id.
+      - &id017
+        $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrollRunStart'
+      responses:
+        '202':
+          description: Run queued/computing.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/runs/{id}:
+    get:
+      tags:
+      - Payroll Runs
+      summary: Get run status and control totals
+      operationId: getPayrollRun
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: Run header, status and totals.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/runs/{id}/exceptions:
+    get:
+      tags:
+      - Payroll Runs
+      summary: Per-employee computation failures/exclusions (cursor-paginated)
+      operationId: listRunExceptions
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      - *id015
+      - *id016
+      responses:
+        '200':
+          description: Page of run exceptions.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RunException'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/runs/{id}:cancel:
+    post:
+      tags:
+      - Payroll Runs
+      summary: Cancel a draft run (releases the in-flight lock)
+      operationId: cancelPayrollRun
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Run cancelled; lock released.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/cycles/{id}/attendance-inputs:
+    get:
+      tags:
+      - Time & Leave Inputs
+      summary: Fetched G03 attendance/LWP inputs for the cycle (from snapshot)
+      operationId: getAttendanceInputs
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Payroll cycle id.
+      - *id015
+      - *id016
+      responses:
+        '200':
+          description: Page of per-employee attendance inputs.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AttendanceInput'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/cycles/{id}/attendance-inputs:refresh:
+    post:
+      tags:
+      - Time & Leave Inputs
+      summary: Re-pull G03 attendance inputs before cutoff
+      operationId: refreshAttendanceInputs
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Payroll cycle id.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '202':
+          description: Refresh job accepted.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/employees/{id}/deductions:
+    get:
+      tags:
+      - Deductions
+      summary: List an employee’s deductions with derived YTD
+      operationId: listEmployeeDeductions
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Employee id.
+      - *id015
+      - *id016
+      responses:
+        '200':
+          description: Page of deductions (YTD is a derived ledger sum).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Deduction'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+    post:
+      tags:
+      - Deductions
+      summary: Add a voluntary/manual deduction for an employee
+      operationId: addEmployeeDeduction
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Employee id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeductionCreate'
+      responses:
+        '201':
+          description: Deduction created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deduction'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/runs/{id}/statutory-summary:
+    get:
+      tags:
+      - Deductions
+      summary: Run-level statutory totals (feeds remittance FR-19)
+      operationId: getRunStatutorySummary
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: Run statutory totals by scheme.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatutorySummary'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/tax-declarations:
+    post:
+      tags:
+      - Tax Declarations
+      summary: Submit/update an income-tax declaration (self-service)
+      operationId: submitTaxDeclaration
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxDeclarationCreate'
+      responses:
+        '201':
+          description: Declaration submitted/updated.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxDeclaration'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/tax-declarations/{id}/proofs:
+    post:
+      tags:
+      - Tax Declarations
+      summary: Attach an investment proof (stored in G13)
+      operationId: uploadTaxProof
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxProofUpload'
+      responses:
+        '201':
+          description: Proof attached.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxProof'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/tax-declarations/{id}/form12b:
+    post:
+      tags:
+      - Tax Declarations
+      summary: Capture previous-employer income (Form-12B)
+      operationId: captureForm12b
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Form12BCreate'
+      responses:
+        '201':
+          description: Form-12B income captured.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxDeclaration'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/tax-declarations/{id}:verify:
+    post:
+      tags:
+      - Tax Declarations
+      summary: Verify a declaration (Payroll Officer, P01)
+      operationId: verifyTaxDeclaration
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+      responses:
+        '200':
+          description: Declaration verified / partially verified.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxDeclaration'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/tax-declarations/{id}/projection:
+    get:
+      tags:
+      - Tax Declarations
+      summary: Full traceable TDS projection breakdown
+      operationId: getTaxProjection
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: Traceable projection (slab→surcharge→cess→rebate→relief).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxProjection'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/tax-declarations/{id}/form10e:
+    get:
+      tags:
+      - Tax Declarations
+      summary: Section 89(1) relief working (Form-10E)
+      operationId: getForm10e
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: 89(1) relief working.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Form10E'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/loans:
+    post:
+      tags:
+      - Loans & Advances
+      summary: Apply for a loan/advance
+      operationId: applyLoan
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoanCreate'
+      responses:
+        '201':
+          description: Loan application created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Loan'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/loans/{id}:sanction:
+    post:
+      tags:
+      - Loans & Advances
+      summary: Sanction a loan/advance (DDO, P01)
+      operationId: sanctionLoan
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SanctionRequest'
+      responses:
+        '200':
+          description: Loan sanctioned.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Loan'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/loans/{id}:foreclose:
+    post:
+      tags:
+      - Loans & Advances
+      summary: Foreclose a loan
+      operationId: forecloseLoan
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForecloseRequest'
+      responses:
+        '200':
+          description: Loan foreclosed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Loan'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/loans/{id}/schedule:
+    get:
+      tags:
+      - Loans & Advances
+      summary: Amortization / EMI recovery schedule
+      operationId: getLoanSchedule
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      - *id015
+      - *id016
+      responses:
+        '200':
+          description: Page of scheduled installments.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LoanInstallment'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/loans/{id}/perquisite:
+    get:
+      tags:
+      - Loans & Advances
+      summary: Concessional-loan perquisite valuation for the loan
+      operationId: getLoanPerquisite
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: Concessional-loan perquisite valuation.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Perquisite'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/recoveries:
+    post:
+      tags:
+      - Recoveries
+      summary: Create a recovery (from disciplinary order or overpayment)
+      operationId: createRecovery
+      description: Net too low → `ERR-G10-RECOVERY-NET` (carryforward); legally barred overpayment → `ERR-G10-RECOVERY-BARRED`.
+        Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryCreate'
+      responses:
+        '201':
+          description: Recovery created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recovery'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/recoveries/{id}:
+    get:
+      tags:
+      - Recoveries
+      summary: Recovery status and recovered-to-date
+      operationId: getRecovery
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: Recovery detail.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recovery'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/recoveries/{id}:hold:
+    post:
+      tags:
+      - Recoveries
+      summary: Pause a recovery (justified)
+      operationId: holdRecovery
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Recovery held.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recovery'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/recoveries/{id}:adjudicate:
+    post:
+      tags:
+      - Recoveries
+      summary: Authority decision on a legally-barred overpayment recovery (P01)
+      operationId: adjudicateRecovery
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjudicateRequest'
+      responses:
+        '200':
+          description: Recovery adjudicated.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recovery'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/carryforwards:
+    get:
+      tags:
+      - Recoveries
+      summary: Rolled-forward un-recovered deduction backlog (aged)
+      operationId: listCarryforwards
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id015
+      - *id016
+      - name: ageing
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Ageing bucket filter, e.g. 0-30,31-60,61-90,90+.
+      responses:
+        '200':
+          description: Page of aged carryforwards.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DeductionCarryforward'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/arrears:compute:
+    post:
+      tags:
+      - Arrears
+      summary: Compute arrears for a trigger (DA/increment/fixation) with dependent cascade
+      operationId: computeArrears
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArrearComputeRequest'
+      responses:
+        '202':
+          description: Arrear computation queued/completed with component-wise cascade.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Arrear'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/arrears/{id}:
+    get:
+      tags:
+      - Arrears
+      summary: Arrear breakup (component-wise cascade)
+      operationId: getArrear
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: Arrear breakup detail.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Arrear'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/arrears/{id}:approve:
+    post:
+      tags:
+      - Arrears
+      summary: Approve arrears for payout (P01); posts pay SR event
+      operationId: approveArrear
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveRequest'
+      responses:
+        '200':
+          description: Arrear approved for payout.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Arrear'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/cycles:
+    post:
+      tags:
+      - Supplementary & Off-Cycle
+      summary: Create a supplementary / off-cycle / FnF cycle
+      operationId: createPayrollCycle
+      description: Duplicate off-cycle payment → `ERR-G10-OFFCYCLE-DUP`. Enforced by P02 Authorization.check
+        (RBAC v1.7 + SoD).
+      parameters:
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrollCycleCreate'
+      responses:
+        '201':
+          description: Cycle created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollCycle'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/cycles/{id}:sanction:
+    post:
+      tags:
+      - Supplementary & Off-Cycle
+      summary: Sanction an off-cycle/supplementary cycle (DDO, P01)
+      operationId: sanctionPayrollCycle
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Payroll cycle id.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SanctionRequest'
+      responses:
+        '200':
+          description: Cycle sanctioned.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollCycle'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/holds/{id}:redisburse:
+    post:
+      tags:
+      - Supplementary & Off-Cycle
+      summary: Clear a suspense hold via an off-cycle disbursement
+      operationId: redisburseHold
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Disbursement-hold id.
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedisburseRequest'
+      responses:
+        '202':
+          description: Hold scheduled for re-disbursement.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisbursementHold'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/benefit-claims:
+    post:
+      tags:
+      - Benefits
+      summary: Submit a benefit claim (reimbursement/LTC/medical/leave-encashment)
+      operationId: submitBenefitClaim
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BenefitClaimCreate'
+      responses:
+        '201':
+          description: Claim submitted.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenefitClaim'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/benefit-claims/{id}:approve:
+    post:
+      tags:
+      - Benefits
+      summary: Approve a benefit claim (P01)
+      operationId: approveBenefitClaim
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveRequest'
+      responses:
+        '200':
+          description: Claim approved.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenefitClaim'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/employees/{id}/gratuity-accrual:
+    get:
+      tags:
+      - Benefits
+      summary: Gratuity accrual as-of for an employee
+      operationId: getGratuityAccrual
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Employee id.
+      - name: as_of
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+        description: As-of date; defaults to today.
+      responses:
+        '200':
+          description: Gratuity accrual snapshot.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GratuityAccrual'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/employees/{id}/leave-encashment:compute:
+    get:
+      tags:
+      - Benefits
+      summary: Preview leave-encashment computation for an employee
+      operationId: computeLeaveEncashment
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Employee id.
+      responses:
+        '200':
+          description: Leave-encashment computation preview.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveEncashment'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/runs/{id}/payslips:publish:
+    post:
+      tags:
+      - Payslips
+      summary: Publish payslips for a run (post-lock)
+      operationId: publishPayslips
+      description: Publishing before lock → `ERR-G10-RUN-NOTLOCKED`. Enforced by P02 Authorization.check
+        (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishRequest'
+      responses:
+        '202':
+          description: Publish job accepted.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/employees/{id}/payslips:
+    get:
+      tags:
+      - Payslips
+      summary: List an employee’s payslips (including versions)
+      operationId: listEmployeePayslips
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Employee id.
+      - *id015
+      - *id016
+      responses:
+        '200':
+          description: Page of payslips.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payslip'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/payslips/{id}/document:
+    get:
+      tags:
+      - Payslips
+      summary: Download the payslip PDF (from G13 vault)
+      operationId: getPayslipDocument
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: Payslip document reference/download.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentRef'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/payslips/{id}/versions:
+    get:
+      tags:
+      - Payslips
+      summary: Payslip version history and lock-to-lock diff
+      operationId: getPayslipVersions
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      - *id015
+      - *id016
+      responses:
+        '200':
+          description: Page of payslip versions with diffs.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PayslipVersion'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/runs/{id}/disbursements:
+    post:
+      tags:
+      - Bank Disbursement
+      summary: Generate the bank disbursement file (parks excluded payees to holds)
+      operationId: generateDisbursement
+      description: Invalid/missing payee accounts → `ERR-G10-BANK-INVALID` (parked to holds). Enforced
+        by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisbursementGenerate'
+      responses:
+        '201':
+          description: Disbursement batch generated (DRAFT/VALIDATED).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disbursement'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/disbursements/{id}:sign:
+    post:
+      tags:
+      - Bank Disbursement
+      summary: DSC/HSM-sign the bank file (Payroll Disburser)
+      operationId: signDisbursement
+      description: HSM/DSC service unavailable → `ERR-G10-SIGNING-DOWN`. Enforced by P02 Authorization.check
+        (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignRequest'
+      responses:
+        '200':
+          description: File signed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disbursement'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/disbursements/{id}:transmit:
+    post:
+      tags:
+      - Bank Disbursement
+      summary: Transmit the signed file to the bank over X.3 (unique batch ref)
+      operationId: transmitDisbursement
+      description: Resend before positive-pay confirmation → `ERR-G10-RESEND-POSPAY`. Enforced by P02
+        Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      - *id017
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransmitRequest'
+      responses:
+        '202':
+          description: File transmitted; awaiting acknowledgement.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disbursement'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/disbursements/{id}/ack:
+    post:
+      tags:
+      - Bank Disbursement
+      summary: Ingest the bank acknowledgement
+      operationId: ingestDisbursementAck
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisbursementAck'
+      responses:
+        '200':
+          description: Acknowledgement ingested.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disbursement'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/disbursements/{id}:positive-pay:
+    post:
+      tags:
+      - Bank Disbursement
+      summary: Confirm treasury debit / non-debit before any resend (Finance)
+      operationId: confirmPositivePay
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PositivePayConfirm'
+      responses:
+        '200':
+          description: Positive-pay status confirmed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disbursement'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/runs/{id}/register:
+    get:
+      tags:
+      - Reconciliation
+      summary: Payroll register for a run (cursor-paginated)
+      operationId: getRunRegister
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      - *id015
+      - *id016
+      responses:
+        '200':
+          description: Page of register lines.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RegisterLine'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/runs/{id}/reconciliation:
+    get:
+      tags:
+      - Reconciliation
+      summary: Control totals, variance, disbursed/held/failed tie-out
+      operationId: getRunReconciliation
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: Reconciliation tie-out.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reconciliation'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/runs/{id}/reconciliation:signoff:
+    post:
+      tags:
+      - Reconciliation
+      summary: Sign off the reconciliation (disbursed+held+failed=net)
+      operationId: signoffReconciliation
+      description: Totals do not tie out → `ERR-G10-RECON-TIEOUT`. Enforced by P02 Authorization.check
+        (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignoffRequest'
+      responses:
+        '200':
+          description: Reconciliation signed off.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reconciliation'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/runs/{id}:approve:
+    post:
+      tags:
+      - Approval & Locking
+      summary: Approve a run (P01 checker; checker ≠ creator)
+      operationId: approveRun
+      description: Approval before reconciliation sign-off → `ERR-G10-RECON-UNSIGNED`. Enforced by P02
+        Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveRequest'
+      responses:
+        '200':
+          description: Run approved.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/runs/{id}:lock:
+    post:
+      tags:
+      - Approval & Locking
+      summary: Finalise and lock a run (payslips frozen, immutable)
+      operationId: lockRun
+      description: Write to a locked run → `ERR-G10-RUN-IMMUTABLE`. Enforced by P02 Authorization.check
+        (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LockRequest'
+      responses:
+        '200':
+          description: Run locked.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/runs/{id}:reopen:
+    post:
+      tags:
+      - Approval & Locking
+      summary: Reopen a locked run (justified, versioned, P01)
+      operationId: reopenRun
+      description: Reopen after transmission → `ERR-G10-REOPEN-BLOCKED`. Enforced by P02 Authorization.check
+        (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReopenRequest'
+      responses:
+        '200':
+          description: Run reopened; originals superseded.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/runs/{id}/lock-diff:
+    get:
+      tags:
+      - Approval & Locking
+      summary: Lock-to-lock diff versus a prior run
+      operationId: getLockDiff
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      - name: vs
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Prior run id to diff against.
+      responses:
+        '200':
+          description: Lock-to-lock diff.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LockDiff'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/statutory/form16:generate:
+    post:
+      tags:
+      - Statutory Outputs
+      summary: Generate Form-16 for an FY (Part A from MATCHED remittances)
+      operationId: generateForm16
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Form16Generate'
+      responses:
+        '202':
+          description: Form-16 generation job accepted.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/statutory/form24q:generate:
+    post:
+      tags:
+      - Statutory Outputs
+      summary: Generate the quarterly TDS return (Form-24Q)
+      operationId: generateForm24q
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Form24QGenerate'
+      responses:
+        '202':
+          description: Form-24Q generation job accepted.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/statutory/remittances:
+    get:
+      tags:
+      - Statutory Outputs
+      summary: Statutory remittance schedule (feeds FR-19)
+      operationId: getRemittanceSchedule
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id015
+      - *id016
+      - name: scheme
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/RemittanceScheme'
+      - name: period
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Period YYYY-MM.
+      responses:
+        '200':
+          description: Page of remittance schedule rows.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StatutoryRemittance'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/runs/{id}/comparison:
+    get:
+      tags:
+      - Analytics
+      summary: Scenario (what-if) run vs actual run comparison
+      operationId: compareRuns
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      - name: vs
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Actual run id to compare against.
+      responses:
+        '200':
+          description: Scenario-vs-actual comparison (exportable).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunComparison'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/analytics/cost-to-org:
+    get:
+      tags:
+      - Analytics
+      summary: Cost-to-organisation analytics
+      operationId: costToOrg
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id015
+      - *id016
+      - name: groupBy
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Comma-separated dimensions, e.g. org_unit,component.
+      - name: period
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Period YYYY-MM or range.
+      responses:
+        '200':
+          description: Page of cost-to-org rows.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CostToOrgRow'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/remittances:accrue:
+    post:
+      tags:
+      - Remittance & GL
+      summary: Accrue statutory liabilities per scheme/period from the ledger
+      operationId: accrueRemittances
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemittanceAccrueRequest'
+      responses:
+        '202':
+          description: Accrual queued/created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatutoryRemittance'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/remittances/{id}/challan:
+    post:
+      tags:
+      - Remittance & GL
+      summary: Capture challan/CIN/deposit for a remittance
+      operationId: captureChallan
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChallanCapture'
+      responses:
+        '200':
+          description: Deposit captured (DEPOSITED/SHORT_PAID).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatutoryRemittance'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/remittances/{id}:match:
+    post:
+      tags:
+      - Remittance & GL
+      summary: Match and certify a remittance (Payroll Approver)
+      operationId: matchRemittance
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchRequest'
+      responses:
+        '200':
+          description: Remittance MATCHED and certified.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatutoryRemittance'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/remittances:
+    get:
+      tags:
+      - Remittance & GL
+      summary: Remittance liability ledger (deducted→deposited→matched)
+      operationId: listRemittances
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id015
+      - *id016
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/RemittanceStatus'
+      - name: scheme
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/RemittanceScheme'
+      responses:
+        '200':
+          description: Page of remittances.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StatutoryRemittance'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/runs/{id}/gl-journal:export:
+    post:
+      tags:
+      - Remittance & GL
+      summary: Export the payroll cost journal (X.3 to Finance ERP)
+      operationId: exportGlJournal
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      - *id017
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlExportRequest'
+      responses:
+        '202':
+          description: Cost journal exported (POSTED, pending ack).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlJournal'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/gl-journals/{id}:acknowledge:
+    post:
+      tags:
+      - Remittance & GL
+      summary: Record the Finance ERP posting acknowledgement
+      operationId: acknowledgeGlJournal
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlAckRequest'
+      responses:
+        '200':
+          description: Journal ACKNOWLEDGED.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlJournal'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/fnf:
+    post:
+      tags:
+      - Full-and-Final Settlement
+      summary: Initiate a full-and-final settlement for an employee
+      operationId: initiateFnf
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FnfInitiate'
+      responses:
+        '201':
+          description: FnF initiated.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FnfSettlement'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/fnf/{id}:compute:
+    post:
+      tags:
+      - Full-and-Final Settlement
+      summary: Compute the consolidated FnF settlement
+      operationId: computeFnf
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FnfComputeRequest'
+      responses:
+        '200':
+          description: FnF computed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FnfSettlement'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/fnf/{id}:sanction:
+    post:
+      tags:
+      - Full-and-Final Settlement
+      summary: Sanction an FnF settlement (DDO, P01)
+      operationId: sanctionFnf
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SanctionRequest'
+      responses:
+        '200':
+          description: FnF sanctioned.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FnfSettlement'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/fnf/{id}:approve:
+    post:
+      tags:
+      - Full-and-Final Settlement
+      summary: Approve an FnF settlement (Approver ≠ creator, P01)
+      operationId: approveFnf
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveRequest'
+      responses:
+        '200':
+          description: FnF approved; G11 handoff.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FnfSettlement'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/fnf/{id}:
+    get:
+      tags:
+      - Full-and-Final Settlement
+      summary: FnF settlement breakdown
+      operationId: getFnf
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: FnF settlement detail.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FnfSettlement'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/perquisites:
+    post:
+      tags:
+      - Perquisites
+      summary: Create/value a taxable perquisite (Rule 3)
+      operationId: createPerquisite
+      description: No effective reference rate → `ERR-G10-PERQ-REFRATE`. Enforced by P02 Authorization.check
+        (RBAC v1.7 + SoD).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerquisiteCreate'
+      responses:
+        '201':
+          description: Perquisite valued.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Perquisite'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/employees/{id}/perquisites:
+    get:
+      tags:
+      - Perquisites
+      summary: List an employee’s perquisites for an FY
+      operationId: listPerquisites
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Employee id.
+      - *id015
+      - *id016
+      - name: fy
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Financial year, e.g. 2026-27.
+      responses:
+        '200':
+          description: Page of perquisites.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Perquisite'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/perquisites/{id}:revise:
+    post:
+      tags:
+      - Perquisites
+      summary: Revise a perquisite valuation on a basis change
+      operationId: revisePerquisite
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerquisiteReviseRequest'
+      responses:
+        '200':
+          description: Perquisite revised.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Perquisite'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/cycles/{id}/snapshot:freeze:
+    post:
+      tags:
+      - Run Input Snapshots
+      summary: Capture and freeze the as-of cross-module snapshot for a cycle
+      operationId: freezeSnapshot
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Payroll cycle id.
+      - *id017
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SnapshotFreezeRequest'
+      responses:
+        '202':
+          description: Snapshot freeze queued/completed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunInputSnapshot'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/snapshots/{id}:
+    get:
+      tags:
+      - Run Input Snapshots
+      summary: Snapshot facts and checksum
+      operationId: getSnapshot
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      responses:
+        '200':
+          description: Snapshot header, facts and checksum.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunInputSnapshot'
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /payroll/snapshots/{id}/deferrals:
+    get:
+      tags:
+      - Run Input Snapshots
+      summary: Post-cutoff deferred orders excluded from the snapshot
+      operationId: getSnapshotDeferrals
+      description: Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Resource identifier (UUID or business key).
+      - *id015
+      - *id016
+      responses:
+        '200':
+          description: Page of deferred post-cutoff orders.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SnapshotDeferral'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                    description: Opaque cursor for the next page; null on last page.
+                required:
+                - items
+        '401': *id009
+        '403': *id010
+        '404': *id011
+        '422': *id012
+        '429': *id013
+        '500': *id014
+  /sr/ingest:
+    post:
+      tags:
+      - Service Register Posting
+      summary: Canonical G12 write-port — post a pay event (deferred build)
+      operationId: ingestSrEvent
+      description: Deferred build (Phase-2). Sole ledger write path; missing fact_key → `SR_FACT_KEY_REQUIRED`;
+        dedup by (source_module, source_reference_id, source_event_version). Enforced by P02 Authorization.check
+        (RBAC v1.7 + SoD).
+      parameters:
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SrIngestRequest'
+      responses:
+        '202':
+          description: Event accepted / idempotent replay receipt.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SrEventReceipt'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /sr/ingest/reversal:
+    post:
+      tags:
+      - Service Register Posting
+      summary: Post a reversal to the G12 write-port (supersede-only)
+      operationId: ingestSrReversal
+      description: Deferred build (Phase-2). is_reversal=true + reverses_source_reference_id + *_REVERSAL
+        partner type. Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SrReversalRequest'
+      responses:
+        '202':
+          description: Reversal accepted.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SrEventReceipt'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+  /payroll/sr:post:
+    post:
+      tags:
+      - Service Register Posting
+      summary: Optional internal facade — relays to POST /sr/ingest (no direct ledger write)
+      operationId: postSrFacade
+      description: Deferred build (Phase-2). Internal relay only; never writes service_register_events
+        directly. Enforced by P02 Authorization.check (RBAC v1.7 + SoD).
+      parameters:
+      - *id017
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SrIngestRequest'
+      responses:
+        '202':
+          description: Relayed to canonical write-port.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SrEventReceipt'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '500': *id008
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT bearer carrying resolved roles + tenant/entity scope; permissions resolved per
+        request by P02.
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (cursor pagination).
+      schema:
+        type: integer
+        default: 25
+        minimum: 1
+        maximum: 100
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque pagination cursor from a previous next_cursor.
+      schema:
+        type: string
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: Sort spec, e.g. field:asc|desc.
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Mandatory on transaction/payment/run-initiating POSTs; 24h replay returns the original
+        result.
+      schema:
+        type: string
+  headers:
+    CorrelationId:
+      description: Echoed correlation id; written to every P05 audit and log line for the request.
+      schema:
+        type: string
+  responses:
+    ValidationFailed:
+      description: 'VALIDATION_FAILED (422): input failed a VAL-*/VAL-G10-* rule. ERR-G10-* mapped here:
+        RULE-EXPR, DSL-PROPTEST, RATE-NOTFOUND, PT-STATE, TAXSLAB-NOTFOUND, PERQ-REFRATE, BANK-INVALID.'
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthenticated:
+      description: 'UNAUTHENTICATED (401): no/invalid/expired session or token.'
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: 'FORBIDDEN (403): authenticated but not permitted; never leaks out-of-scope existence.
+        Includes SoD (maker=checker / self-approval) and PII-ceiling denials.'
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: 'NOT_FOUND (404): resource absent or out of the caller’s scope.'
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: 'CONFLICT (409): idempotency replay, duplicate workflow start, or state/uniqueness
+        conflict. ERR-G10-* mapped here: RUN-INFLIGHT, SNAPSHOT-FROZEN, RULE-OVERLAP, RATE-OVERLAP, RATE-LOCKED,
+        STRUCT-OVERLAP, STRUCT-LOCKED, RECOVERY-NET, RECOVERY-BARRED, OFFCYCLE-DUP, RECON-TIEOUT, RECON-UNSIGNED,
+        RUN-NOTLOCKED, REOPEN-BLOCKED, RESEND-POSPAY, RUN-IMMUTABLE.'
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    PreconditionFailed:
+      description: 'PRECONDITION_FAILED (412): a required precondition not met, incl. X.3-mapped upstream/integration
+        unavailability. ERR-G10-* mapped here: SIGNING-DOWN (HSM/DSC unavailable).'
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: 'RATE_LIMITED (429): rate limit or lockout exceeded.'
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: 'INTERNAL (500): unexpected server error or non-retryable upstream failure (ERR-LOADFAIL
+        to user).'
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      required:
+      - error
+      description: Canonical platform error envelope (PLATFORM_FOUNDATION.md §4.1). The correlation id
+        is carried in the X-Correlation-Id response header, not the body.
+      properties:
+        error:
+          type: object
+          required:
+          - code
+          - message
+          properties:
+            code:
+              type: string
+              description: One of the 8 platform wire codes (VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN,
+                NOT_FOUND, CONFLICT, PRECONDITION_FAILED, RATE_LIMITED, INTERNAL) or a module business
+                code (ERR-G10-*).
+            message:
+              type: string
+              description: Human-readable message resolved from a MSG-*/ERR-* id.
+            field:
+              type:
+              - string
+              - 'null'
+              description: Offending field for validation errors.
+            details:
+              type:
+              - object
+              - 'null'
+              additionalProperties: true
+              description: Structured discriminators, e.g. { reason, ... }.
+    PayComponentCategory:
+      type: string
+      enum:
+      - EARNING
+      - DEDUCTION
+      - PERQUISITE
+      - ROUNDING_ADJUSTMENT
+    RateType:
+      type: string
+      enum:
+      - DA
+      - HRA
+      - PT_SLAB
+      - TAX_SLAB
+    RemittanceScheme:
+      type: string
+      enum:
+      - TDS
+      - PT
+      - GPF
+      - PF
+      - NPS
+      - PENSION
+      - INSURANCE
+    RemittanceStatus:
+      type: string
+      enum:
+      - ACCRUED
+      - SCHEDULED
+      - DEPOSITED
+      - MATCHED
+      - OVERDUE
+      - SHORT_PAID
+    RunStatus:
+      type: string
+      enum:
+      - OPEN
+      - INPUT_LOCKED
+      - QUEUED
+      - COMPUTING
+      - COMPUTED
+      - RECONCILED
+      - APPROVED
+      - LOCKED
+      - DISBURSED
+      - CLOSED
+      - REOPENED
+      - FAILED
+      - CANCELLED
+    RunMode:
+      type: string
+      enum:
+      - FINAL
+      - PARALLEL_WHATIF
+    DisbursementStatus:
+      type: string
+      enum:
+      - DRAFT
+      - VALIDATED
+      - SIGNED
+      - TRANSMITTED
+      - RECONCILED
+      - SUSPECTED_PROCESSED
+      - REJECTED
+    SrEventType:
+      type: string
+      enum:
+      - PAY_FIXATION
+      - ANNUAL_INCREMENT
+      - INCREMENT_WITHHELD
+      - PAY_PROTECTION
+      - SEPARATION
+    PayComponent:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        code:
+          type: string
+        name:
+          type: string
+        category:
+          $ref: '#/components/schemas/PayComponentCategory'
+        taxable:
+          type: boolean
+        active_rule_version:
+          type:
+          - integer
+          - 'null'
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ACTIVE
+          - DEPRECATED
+    PayComponentCreate:
+      type: object
+      required:
+      - code
+      - name
+      - category
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        category:
+          $ref: '#/components/schemas/PayComponentCategory'
+        taxable:
+          type: boolean
+          default: false
+        entity_id:
+          type:
+          - string
+          - 'null'
+    PayRule:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        component_id:
+          type: string
+        version:
+          type: integer
+        rule_type:
+          type: string
+          enum:
+          - FORMULA
+          - LOOKUP
+          - FLAT
+        expression:
+          type:
+          - string
+          - 'null'
+          description: Constrained-DSL expression.
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type:
+          - string
+          - 'null'
+          format: date
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ACTIVE
+          - SUPERSEDED
+    PayRuleCreate:
+      type: object
+      required:
+      - rule_type
+      - effective_from
+      properties:
+        rule_type:
+          type: string
+          enum:
+          - FORMULA
+          - LOOKUP
+          - FLAT
+        expression:
+          type:
+          - string
+          - 'null'
+          description: Constrained-DSL expression (property-tested).
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type:
+          - string
+          - 'null'
+          format: date
+    DslGrammar:
+      type: object
+      properties:
+        grammar_version:
+          type: string
+        tokens:
+          type: array
+          items:
+            type: string
+        precedence:
+          type: array
+          items:
+            type: string
+        decimal_scale:
+          type: integer
+    RateTable:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        type:
+          $ref: '#/components/schemas/RateType'
+        state:
+          type:
+          - string
+          - 'null'
+          description: State of posting; required for PT_SLAB.
+        key:
+          type:
+          - string
+          - 'null'
+          description: e.g. HRA city class, slab label.
+        rate: &id018
+          type: string
+          description: NUMERIC(9,4) fixed-point rate.
+          example: '0.5000'
+        amount:
+          allOf:
+          - &id019
+            type: string
+            description: NUMERIC(15,2) fixed-point decimal (money; no binary float).
+            example: '13630000.00'
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type:
+          - string
+          - 'null'
+          format: date
+    RateTableCreate:
+      type: object
+      required:
+      - type
+      - effective_from
+      properties:
+        type:
+          $ref: '#/components/schemas/RateType'
+        state:
+          type:
+          - string
+          - 'null'
+        key:
+          type:
+          - string
+          - 'null'
+        rate: *id018
+        amount: *id019
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type:
+          - string
+          - 'null'
+          format: date
+    PayMatrixLevel:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        level:
+          type: string
+        cell_index:
+          type: integer
+        basic_pay: *id019
+        pay_scale_ref:
+          type:
+          - string
+          - 'null'
+    PayMatrixLevelCreate:
+      type: object
+      required:
+      - level
+      - cell_index
+      - basic_pay
+      properties:
+        level:
+          type: string
+        cell_index:
+          type: integer
+        basic_pay: *id019
+        pay_scale_ref:
+          type:
+          - string
+          - 'null'
+    SalaryStructure:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        version:
+          type: integer
+        pay_level:
+          type: string
+        effective_from:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - APPROVED
+          - SUPERSEDED
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              component_code:
+                type: string
+              override_amount:
+                allOf:
+                - *id019
+    SalaryStructureCreate:
+      type: object
+      required:
+      - pay_level
+      - effective_from
+      properties:
+        pay_level:
+          type: string
+        effective_from:
+          type: string
+          format: date
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              component_code:
+                type: string
+              override_amount:
+                allOf:
+                - *id019
+    PayrollRunStart:
+      type: object
+      required:
+      - run_mode
+      properties:
+        run_mode:
+          $ref: '#/components/schemas/RunMode'
+        snapshot_id:
+          type:
+          - string
+          - 'null'
+          description: Frozen snapshot to bind (FR-G10-22).
+        scope_filter:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+          description: Optional org-unit/cohort scope, e.g. { org_unit_id }.
+    PayrollRun:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        run_no:
+          type: string
+        cycle_id:
+          type: string
+        run_mode:
+          $ref: '#/components/schemas/RunMode'
+        status:
+          $ref: '#/components/schemas/RunStatus'
+        snapshot_id:
+          type:
+          - string
+          - 'null'
+        snapshot_checksum:
+          type:
+          - string
+          - 'null'
+        gross_control:
+          allOf:
+          - *id019
+        deduction_control:
+          allOf:
+          - *id019
+        net_control:
+          allOf:
+          - *id019
+        created_by:
+          type:
+          - string
+          - 'null'
+        approved_by:
+          type:
+          - string
+          - 'null'
+    RunException:
+      type: object
+      properties:
+        employee_id:
+          type: string
+        type:
+          type: string
+          example: SUSPENSE_HOLD
+        amount:
+          allOf:
+          - *id019
+        reason:
+          type: string
+          example: INVALID_ACCOUNT
+    AttendanceInput:
+      type: object
+      properties:
+        employee_id:
+          type: string
+        paid_days:
+          type: number
+        lwp_days:
+          type: number
+        dies_non_days:
+          type: number
+        subsistence_pct:
+          allOf:
+          - *id018
+        source:
+          type: string
+          example: G03_SNAPSHOT
+    Deduction:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        type:
+          type: string
+        amount:
+          allOf:
+          - *id019
+        cumulative_ytd:
+          allOf:
+          - *id019
+          description: Cache only; YTD source-of-truth is the payslip_lines ledger.
+        voluntary:
+          type: boolean
+    DeductionCreate:
+      type: object
+      required:
+      - type
+      - amount
+      properties:
+        type:
+          type: string
+        amount: *id019
+        effective_from:
+          type:
+          - string
+          - 'null'
+          format: date
+    StatutorySummary:
+      type: object
+      properties:
+        run_id:
+          type: string
+        by_scheme:
+          type: array
+          items:
+            type: object
+            properties:
+              scheme:
+                $ref: '#/components/schemas/RemittanceScheme'
+              total:
+                allOf:
+                - *id019
+    TaxDeclaration:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        fy:
+          type: string
+        regime:
+          type: string
+          enum:
+          - OLD
+          - NEW
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - SUBMITTED
+          - VERIFIED
+          - PARTIALLY_VERIFIED
+          - REJECTED
+          - LOCKED
+    TaxDeclarationCreate:
+      type: object
+      required:
+      - fy
+      - regime
+      properties:
+        fy:
+          type: string
+        regime:
+          type: string
+          enum:
+          - OLD
+          - NEW
+        declarations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    TaxProof:
+      type: object
+      properties:
+        id:
+          type: string
+        document_id:
+          type: string
+          description: G13 document reference.
+        section:
+          type: string
+        amount:
+          allOf:
+          - *id019
+    TaxProofUpload:
+      type: object
+      required:
+      - document_id
+      - section
+      properties:
+        document_id:
+          type: string
+        section:
+          type: string
+        amount: *id019
+    Form12BCreate:
+      type: object
+      required:
+      - previous_employer
+      - income
+      properties:
+        previous_employer:
+          type: string
+        income: *id019
+        tds_deducted:
+          allOf:
+          - *id019
+    TaxProjection:
+      type: object
+      properties:
+        gross_income:
+          allOf:
+          - *id019
+        standard_deduction:
+          allOf:
+          - *id019
+        chapter_via:
+          allOf:
+          - *id019
+        taxable_income:
+          allOf:
+          - *id019
+        slab_tax:
+          allOf:
+          - *id019
+        surcharge:
+          allOf:
+          - *id019
+        marginal_relief:
+          allOf:
+          - *id019
+        cess:
+          allOf:
+          - *id019
+        rebate_87a:
+          allOf:
+          - *id019
+        relief_89:
+          allOf:
+          - *id019
+        net_tds:
+          allOf:
+          - *id019
+    Form10E:
+      type: object
+      properties:
+        employee_id:
+          type: string
+        fy:
+          type: string
+        relief_amount:
+          allOf:
+          - *id019
+        working:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    Loan:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        loan_type:
+          type: string
+        principal: *id019
+        interest_rate: *id018
+        status:
+          type: string
+          enum:
+          - REQUESTED
+          - SANCTIONED
+          - DISBURSED
+          - RECOVERING
+          - ON_HOLD
+          - FORECLOSED
+          - CLOSED
+          - REJECTED
+    LoanCreate:
+      type: object
+      required:
+      - loan_type
+      - principal
+      properties:
+        loan_type:
+          type: string
+        principal: *id019
+        interest_rate: *id018
+        tenure_months:
+          type: integer
+    LoanInstallment:
+      type: object
+      properties:
+        installment_no:
+          type: integer
+        due_period:
+          type: string
+        principal_component:
+          allOf:
+          - *id019
+        interest_component:
+          allOf:
+          - *id019
+        balance:
+          allOf:
+          - *id019
+        status:
+          type: string
+          enum:
+          - SCHEDULED
+          - RECOVERED
+          - SKIPPED
+    Recovery:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        source:
+          type: string
+          enum:
+          - DISCIPLINARY_ORDER
+          - OVERPAYMENT
+          - ADHOC
+        total_amount: *id019
+        recovered_to_date:
+          allOf:
+          - *id019
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - ON_HOLD
+          - BARRED
+          - ADJUDICATED
+          - COMPLETED
+        legal_flag:
+          type:
+          - string
+          - 'null'
+          description: Legal-eligibility flag (e.g. Rafiq Masih bar).
+    RecoveryCreate:
+      type: object
+      required:
+      - source
+      - total_amount
+      properties:
+        employee_id:
+          type: string
+        source:
+          type: string
+          enum:
+          - DISCIPLINARY_ORDER
+          - OVERPAYMENT
+          - ADHOC
+        order_ref:
+          type:
+          - string
+          - 'null'
+          description: G09 order reference where applicable.
+        total_amount: *id019
+    DeductionCarryforward:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        deduction_type:
+          type: string
+        outstanding: *id019
+        age_days:
+          type: integer
+    ArrearComputeRequest:
+      type: object
+      required:
+      - trigger
+      - effective_from
+      properties:
+        employee_id:
+          type:
+          - string
+          - 'null'
+          description: Null for a bulk trigger.
+        trigger:
+          type: string
+          enum:
+          - DA_REVISION
+          - INCREMENT
+          - PAY_FIXATION
+        effective_from:
+          type: string
+          format: date
+        to_period:
+          type: string
+    Arrear:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        trigger:
+          type: string
+        total_arrear: *id019
+        status:
+          type: string
+          enum:
+          - COMPUTED
+          - APPROVED
+          - PAID
+        cascade:
+          type: array
+          description: Component-wise dependent-allowance cascade per month.
+          items:
+            type: object
+            properties:
+              period:
+                type: string
+              component:
+                type: string
+              delta:
+                allOf:
+                - *id019
+    PayrollCycle:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        period:
+          type: string
+        run_type:
+          type: string
+          enum:
+          - REGULAR
+          - SUPPLEMENTARY
+          - OFF_CYCLE
+          - ARREAR
+          - FNF
+        status:
+          type: string
+          enum:
+          - OPEN
+          - INPUT_LOCKED
+          - CLOSED
+    PayrollCycleCreate:
+      type: object
+      required:
+      - period
+      - run_type
+      properties:
+        period:
+          type: string
+        run_type:
+          type: string
+          enum:
+          - SUPPLEMENTARY
+          - OFF_CYCLE
+          - ARREAR
+          - FNF
+        reason:
+          type: string
+    DisbursementHold:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        run_id:
+          type: string
+        employee_id:
+          type: string
+        amount: *id019
+        reason:
+          type: string
+        status:
+          type: string
+          enum:
+          - HELD
+          - REDISBURSING
+          - CLEARED
+    RedisburseRequest:
+      type: object
+      required:
+      - off_cycle_id
+      properties:
+        off_cycle_id:
+          type: string
+        reason:
+          type: string
+    BenefitClaim:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        claim_type:
+          type: string
+          enum:
+          - REIMBURSEMENT
+          - LTC
+          - MEDICAL
+          - LEAVE_ENCASHMENT
+        amount: *id019
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - SUBMITTED
+          - RECOMMENDED
+          - APPROVED
+          - REJECTED
+          - PAID
+    BenefitClaimCreate:
+      type: object
+      required:
+      - claim_type
+      - amount
+      properties:
+        claim_type:
+          type: string
+          enum:
+          - REIMBURSEMENT
+          - LTC
+          - MEDICAL
+          - LEAVE_ENCASHMENT
+        amount: *id019
+        document_id:
+          type:
+          - string
+          - 'null'
+          description: G13 supporting document.
+    GratuityAccrual:
+      type: object
+      properties:
+        employee_id:
+          type: string
+        as_of:
+          type: string
+          format: date
+        accrued_amount:
+          allOf:
+          - *id019
+        qualifying_service_years:
+          type: number
+    LeaveEncashment:
+      type: object
+      properties:
+        employee_id:
+          type: string
+        eligible_days:
+          type: number
+        per_day_basis:
+          allOf:
+          - *id019
+        gross:
+          allOf:
+          - *id019
+        taxable:
+          allOf:
+          - *id019
+    Payslip:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        run_id:
+          type: string
+        period:
+          type: string
+        version:
+          type: integer
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - REVERSED
+          - SUPERSEDED
+        gross:
+          allOf:
+          - *id019
+        total_deductions:
+          allOf:
+          - *id019
+        net_pay:
+          allOf:
+          - *id019
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayslipLine'
+    PayslipLine:
+      type: object
+      properties:
+        component_code:
+          type: string
+        category:
+          $ref: '#/components/schemas/PayComponentCategory'
+        amount:
+          allOf:
+          - *id019
+    PayslipVersion:
+      type: object
+      properties:
+        version:
+          type: integer
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - REVERSED
+          - SUPERSEDED
+        locked_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        diff:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+          description: Lock-to-lock diff.
+    DocumentRef:
+      type: object
+      properties:
+        document_id:
+          type: string
+          description: G13 document id.
+        download_url:
+          type:
+          - string
+          - 'null'
+          format: uri
+        content_type:
+          type: string
+          example: application/pdf
+    DisbursementGenerate:
+      type: object
+      properties:
+        file_format:
+          type: string
+          enum:
+          - TREASURY
+          description: One certified format per deployment.
+    Disbursement:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        run_id:
+          type: string
+        status:
+          $ref: '#/components/schemas/DisbursementStatus'
+        bank_batch_ref:
+          type:
+          - string
+          - 'null'
+        signed:
+          type: boolean
+        positive_pay_status:
+          type:
+          - string
+          - 'null'
+          enum:
+          - PENDING
+          - DEBIT_CONFIRMED
+          - NON_DEBIT_CONFIRMED
+          - null
+        total_disbursed:
+          allOf:
+          - *id019
+        total_held:
+          allOf:
+          - *id019
+        total_failed:
+          allOf:
+          - *id019
+    DisbursementAck:
+      type: object
+      required:
+      - result
+      properties:
+        result:
+          type: string
+          enum:
+          - SUCCESS
+          - PARTIAL
+          - FAILED
+        bank_batch_ref:
+          type: string
+        failed_lines:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    PositivePayConfirm:
+      type: object
+      required:
+      - debit_confirmed
+      properties:
+        debit_confirmed:
+          type: boolean
+          description: True = treasury debit confirmed; false = non-debit, safe to resend.
+        reference:
+          type:
+          - string
+          - 'null'
+    RegisterLine:
+      type: object
+      properties:
+        employee_id:
+          type: string
+        gross:
+          allOf:
+          - *id019
+        deductions:
+          allOf:
+          - *id019
+        net_pay:
+          allOf:
+          - *id019
+    Reconciliation:
+      type: object
+      properties:
+        run_id:
+          type: string
+        gross_control:
+          allOf:
+          - *id019
+        deduction_control:
+          allOf:
+          - *id019
+        net_control:
+          allOf:
+          - *id019
+        disbursed:
+          allOf:
+          - *id019
+        held:
+          allOf:
+          - *id019
+        failed:
+          allOf:
+          - *id019
+        tieout_ok:
+          type: boolean
+          description: disbursed + held + failed = net_control.
+        variance_pct:
+          type: number
+        signoff_status:
+          type: string
+          enum:
+          - PENDING
+          - SIGNED_OFF
+    LockDiff:
+      type: object
+      properties:
+        run_id:
+          type: string
+        vs_run_id:
+          type: string
+        changes:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    StatutoryRemittance:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        scheme:
+          $ref: '#/components/schemas/RemittanceScheme'
+        period:
+          type: string
+        liability: *id019
+        deposited:
+          allOf:
+          - *id019
+        challan_no:
+          type:
+          - string
+          - 'null'
+        cin:
+          type:
+          - string
+          - 'null'
+        due_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        late_interest:
+          allOf:
+          - *id019
+          description: u/s 201 / 234E where late.
+        status:
+          $ref: '#/components/schemas/RemittanceStatus'
+    ChallanCapture:
+      type: object
+      required:
+      - challan_no
+      - deposited
+      - deposit_date
+      properties:
+        challan_no:
+          type: string
+        cin:
+          type:
+          - string
+          - 'null'
+        deposited: *id019
+        deposit_date:
+          type: string
+          format: date
+    GlJournal:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        run_id:
+          type: string
+        status:
+          type: string
+          enum:
+          - EXPORTED
+          - POSTED
+          - ACKNOWLEDGED
+          - FAILED
+        erp_reference:
+          type:
+          - string
+          - 'null'
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              account:
+                type: string
+              debit:
+                allOf:
+                - *id019
+              credit:
+                allOf:
+                - *id019
+    GlAckRequest:
+      type: object
+      required:
+      - erp_reference
+      properties:
+        erp_reference:
+          type: string
+        posted_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    FnfInitiate:
+      type: object
+      required:
+      - employee_id
+      - separation_date
+      properties:
+        employee_id:
+          type: string
+        separation_date:
+          type: string
+          format: date
+        separation_type:
+          type: string
+          enum:
+          - RESIGNATION
+          - RETIREMENT
+          - TERMINATION
+          - DEATH
+    FnfSettlement:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        separation_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - INITIATED
+          - COMPUTED
+          - RECONCILED
+          - APPROVED
+          - PAID
+          - RECOVERY_PENDING
+          - CLOSED
+        net_settlement:
+          allOf:
+          - *id019
+        created_by:
+          type:
+          - string
+          - 'null'
+        approved_by:
+          type:
+          - string
+          - 'null'
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              component:
+                type: string
+              amount:
+                allOf:
+                - *id019
+    Perquisite:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        employee_id:
+          type: string
+        fy:
+          type: string
+        perquisite_type:
+          type: string
+          enum:
+          - ACCOMMODATION
+          - CONCESSIONAL_LOAN
+          - CAR
+          - OTHER
+        taxable_value: *id019
+        basis:
+          type:
+          - string
+          - 'null'
+    PerquisiteCreate:
+      type: object
+      required:
+      - employee_id
+      - fy
+      - perquisite_type
+      properties:
+        employee_id:
+          type: string
+        fy:
+          type: string
+        perquisite_type:
+          type: string
+          enum:
+          - ACCOMMODATION
+          - CONCESSIONAL_LOAN
+          - CAR
+          - OTHER
+        inputs:
+          type: object
+          additionalProperties: true
+    PerquisiteReviseRequest:
+      type: object
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+        inputs:
+          type: object
+          additionalProperties: true
+    RunInputSnapshot:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          description: Non-null tenant scope (Platform §0.1).
+        entity_id:
+          type:
+          - string
+          - 'null'
+          description: Entity scope where entity-scoped.
+        cycle_id:
+          type: string
+        as_of:
+          type: string
+          format: date
+        checksum:
+          type: string
+          description: sha256 of the frozen facts.
+        frozen:
+          type: boolean
+        sources:
+          type: array
+          items:
+            type: string
+          description: G01/G03/G06/G09/org facts captured.
+    SnapshotDeferral:
+      type: object
+      properties:
+        order_ref:
+          type: string
+        source_module:
+          type: string
+          enum:
+          - G06
+          - G09
+        received_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          example: POST_CUTOFF
+    SrIngestRequest:
+      type: object
+      required:
+      - source_module
+      - source_reference_id
+      - source_event_version
+      - event_type_code
+      - fact_key
+      - tenant_id
+      description: Canonical G12 SR write-port payload (FR-G10-23, deferred build).
+      properties:
+        source_module:
+          type: string
+          enum:
+          - G10
+        source_reference_id:
+          type: string
+        source_event_version:
+          type: integer
+        event_type_code:
+          $ref: '#/components/schemas/SrEventType'
+        fact_key:
+          type: string
+          description: Derived per the type fact_correlation_rule; missing → SR_FACT_KEY_REQUIRED.
+        employee_id:
+          type: string
+        effective_date:
+          type: string
+          format: date
+        tenant_id:
+          type: string
+        entity_id:
+          type:
+          - string
+          - 'null'
+        payload:
+          type: object
+          additionalProperties: true
+    SrReversalRequest:
+      type: object
+      required:
+      - source_module
+      - reverses_source_reference_id
+      - is_reversal
+      - event_type_code
+      - tenant_id
+      properties:
+        source_module:
+          type: string
+          enum:
+          - G10
+        is_reversal:
+          type: boolean
+          enum:
+          - true
+        reverses_source_reference_id:
+          type: string
+        event_type_code:
+          type: string
+          description: The published *_REVERSAL partner type.
+        tenant_id:
+          type: string
+        entity_id:
+          type:
+          - string
+          - 'null'
+        reason:
+          type: string
+    SrEventReceipt:
+      type: object
+      properties:
+        sr_event_id:
+          type: string
+        deduped:
+          type: boolean
+          description: True if an idempotent replay returned the original event.
+        status:
+          type: string
+          enum:
+          - ACCEPTED
+          - DEDUP_NOOP
+          - REVERSED
+    ActivateRequest:
+      type: object
+      properties:
+        reason:
+          type:
+          - string
+          - 'null'
+    ApproveRequest:
+      type: object
+      properties:
+        comment:
+          type:
+          - string
+          - 'null'
+    VerifyRequest:
+      type: object
+      properties:
+        verdict:
+          type: string
+          enum:
+          - VERIFIED
+          - PARTIALLY_VERIFIED
+          - REJECTED
+        comment:
+          type:
+          - string
+          - 'null'
+    SanctionRequest:
+      type: object
+      properties:
+        comment:
+          type:
+          - string
+          - 'null'
+    ForecloseRequest:
+      type: object
+      properties:
+        foreclosure_date:
+          type: string
+          format: date
+        reason:
+          type:
+          - string
+          - 'null'
+    ReasonRequest:
+      type: object
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+    AdjudicateRequest:
+      type: object
+      required:
+      - decision
+      - reason
+      properties:
+        decision:
+          type: string
+          enum:
+          - ALLOW_RECOVERY
+          - WAIVE
+        reason:
+          type: string
+    RefreshRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          default: false
+    PublishRequest:
+      type: object
+      properties:
+        notify:
+          type: boolean
+          default: true
+    SignRequest:
+      type: object
+      properties:
+        dsc_token_ref:
+          type:
+          - string
+          - 'null'
+    TransmitRequest:
+      type: object
+      properties:
+        channel:
+          type:
+          - string
+          - 'null'
+    SignoffRequest:
+      type: object
+      properties:
+        comment:
+          type:
+          - string
+          - 'null'
+    LockRequest:
+      type: object
+      properties:
+        comment:
+          type:
+          - string
+          - 'null'
+    ReopenRequest:
+      type: object
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+    MatchRequest:
+      type: object
+      properties:
+        tolerance_pct:
+          type:
+          - number
+          - 'null'
+    GlExportRequest:
+      type: object
+      properties:
+        cost_center:
+          type:
+          - string
+          - 'null'
+    FnfComputeRequest:
+      type: object
+      properties:
+        include_loans:
+          type: boolean
+          default: true
+    SnapshotFreezeRequest:
+      type: object
+      properties:
+        as_of:
+          type:
+          - string
+          - 'null'
+          format: date
+    Form16Generate:
+      type: object
+      required:
+      - fy
+      properties:
+        fy:
+          type: string
+        employee_id:
+          type:
+          - string
+          - 'null'
+          description: Null = bulk for the FY.
+    Form24QGenerate:
+      type: object
+      required:
+      - fy
+      - quarter
+      properties:
+        fy:
+          type: string
+        quarter:
+          type: string
+          enum:
+          - Q1
+          - Q2
+          - Q3
+          - Q4
+    RemittanceAccrueRequest:
+      type: object
+      required:
+      - scheme
+      - period
+      properties:
+        scheme:
+          $ref: '#/components/schemas/RemittanceScheme'
+        period:
+          type: string
+    JobAccepted:
+      type: object
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+          enum:
+          - QUEUED
+          - RUNNING
+          - DONE
+    RunComparison:
+      type: object
+      properties:
+        scenario_run_id:
+          type: string
+        actual_run_id:
+          type: string
+        deltas:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    CostToOrgRow:
+      type: object
+      properties:
+        group:
+          type: object
+          additionalProperties: true
+        total_cost:
+          allOf:
+          - *id019
+        headcount:
+          type: integer

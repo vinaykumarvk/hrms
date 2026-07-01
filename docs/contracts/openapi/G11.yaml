@@ -1,0 +1,3054 @@
+openapi: 3.1.0
+info:
+  title: Government HRMS — G11 Retirement & Pension Management
+  version: 3.0.0
+  description: >
+    OpenAPI contract for government HRMS module G11 (Retirement & Pension Management),
+    grounded in docs/brd/v3/G11-retirement-and-pension.md (Section 6 FR API tables + Section 8),
+    docs/contracts/error-taxonomy.yaml (ERR-G11-* under the platform 8-code table) and
+    PLATFORM_FOUNDATION.md §4.
+
+
+    Platform conventions embedded verbatim: bearer JWT (P02 Authorization.check); cursor pagination
+    only (?limit= default 25 / max 100 + cursor= -> next_cursor); Idempotency-Key on every
+    transaction-creating POST (24h replay); X-Correlation-Id echoed on every response and written to
+    every P05 audit line; canonical {error:{code,message,field,details}} envelope; money as NUMERIC
+    strings; effective-dated mutations accept effective_from (staged via JOB-G11-EFFDATE). All external
+    calls (treasury/PDA, DigiLocker, penny-drop, death-registry, Jeevan Pramaan, CRA) run over X.3.
+    Separation/superannuation/retirement/death-in-service/family-pension-sanctioned life events are
+    posted by G11 (the SR writer) to the canonical write-port POST /api/v1/sr/ingest (§8.7).
+  contact:
+    name: G11 Pension Engine — API Architecture
+servers:
+  - url: /api/v1
+
+security:
+  - bearerAuth: []
+
+# YAML anchor reused (via merge key) by every operation so the platform error envelope
+# (422/401/403/404/409/412/429/500, annotated with ERR-G11-* reasons) is attached uniformly.
+x-common-error-responses: &commonErrors
+  '401': { $ref: '#/components/responses/Unauthenticated' }
+  '403': { $ref: '#/components/responses/Forbidden' }
+  '404': { $ref: '#/components/responses/NotFound' }
+  '409': { $ref: '#/components/responses/Conflict' }
+  '412': { $ref: '#/components/responses/PreconditionFailed' }
+  '422': { $ref: '#/components/responses/ValidationFailed' }
+  '429': { $ref: '#/components/responses/RateLimited' }
+  '500': { $ref: '#/components/responses/Internal' }
+
+tags:
+  - name: Forecasts
+    description: Retirement forecasting & due-for-retirement lists (FR-G11-01)
+  - name: Cases
+    description: Separation case management, all separation types (FR-G11-02/03)
+  - name: QualifyingService
+    description: Qualifying-service computation, spells, prior service (FR-G11-04)
+  - name: Pension
+    description: Pension calculation — OPS / NPS / UPS / service gratuity (FR-G11-05)
+  - name: Commutation
+    description: Commutation of pension (FR-G11-06)
+  - name: Gratuity
+    description: Retirement / death / service gratuity (FR-G11-07)
+  - name: FamilyPension
+    description: Path-specific family & enhanced family pension (FR-G11-08)
+  - name: Settlement
+    description: Terminal benefits & final settlement incl. tax/TDS (FR-G11-09)
+  - name: GPF
+    description: GPF final withdrawal (FR-G11-10)
+  - name: PPO
+    description: PPO generation & digital PPO (FR-G11-11)
+  - name: Pensioners
+    description: Pensioner master & lifecycle (FR-G11-12)
+  - name: Revisions
+    description: DA & pay-commission revision (FR-G11-13)
+  - name: Disbursements
+    description: Treasury / bank / PDA disbursement & pre-credit verification (FR-G11-14)
+  - name: SelfService
+    description: Retirement self-service portal & estimators (FR-G11-15)
+  - name: Grievances
+    description: Pensioner grievance management (FR-G11-16)
+  - name: Analytics
+    description: Forecasting & pension-liability analytics (FR-G11-17)
+  - name: ServiceVerification
+    description: e-SR completeness & discrepancy resolution gate (FR-G11-18)
+  - name: RuleTables
+    description: Effective-dated pension rule-table management (FR-G11-19)
+  - name: DeathDetection
+    description: Proactive death detection & overpayment recovery (FR-G11-20)
+  - name: PDA
+    description: PDA registry & disbursement model (FR-G11-21)
+  - name: Provisional
+    description: Provisional pension, Rule 9 pending proceedings (FR-G11-22)
+  - name: AuditObjections
+    description: AG / internal-audit objection management (FR-G11-23)
+  - name: DigitalDelivery
+    description: DigiLocker / DBT delivery & linkage (FR-G11-24)
+  - name: ServiceRegister
+    description: G11 as the SR writer for separation life events (§8.7)
+
+paths:
+
+  # --------------------------------------------------------------------------
+  # FR-G11-01 Retirement Forecasting
+  # --------------------------------------------------------------------------
+  /pension/forecasts:
+    get:
+      tags: [Forecasts]
+      summary: List due-for-retirement projections (cursor; horizon/org_unit/cadre filters)
+      operationId: listForecasts
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+        - { name: horizon_months, in: query, schema: { type: integer, minimum: 1, maximum: 120 } }
+        - { name: org_unit_id, in: query, schema: { type: string, format: uuid } }
+        - { name: cadre, in: query, schema: { type: string } }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Page of forecast rows
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ForecastList' }
+
+  /pension/forecasts:refresh:
+    post:
+      tags: [Forecasts]
+      summary: Recompute forecasts (delegates to JOB-G11-FORECAST on X.1)
+      operationId: refreshForecasts
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                org_unit_id: { type: [string, "null"], format: uuid }
+                horizon_months: { type: [integer, "null"] }
+      responses:
+        <<: *commonErrors
+        '202':
+          description: Refresh job accepted
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+
+  /pension/forecasts/{employeeId}:
+    get:
+      tags: [Forecasts]
+      summary: One employee's superannuation projection
+      operationId: getEmployeeForecast
+      parameters:
+        - { name: employeeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Forecast projection
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Forecast' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-02 Separation Case Management
+  # --------------------------------------------------------------------------
+  /pension/cases:
+    post:
+      tags: [Cases]
+      summary: Create a separation case (workflow-initiating; Idempotency-Key required)
+      operationId: createCase
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCaseRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Case created (P01 instance started). 409 ERR-G11-DUP-CASE on duplicate.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeparationCase' }
+
+  /pension/cases/{id}:
+    get:
+      tags: [Cases]
+      summary: Case detail & status
+      operationId: getCase
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Case detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeparationCase' }
+    patch:
+      tags: [Cases]
+      summary: Update type-specific inputs / PDA binding / scheme override
+      operationId: updateCase
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCaseRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Updated case. 409 ERR-G11-SCHEME-MISMATCH / ERR-G11-CASE-LOCKED-OPTIONS.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeparationCase' }
+
+  /pension/cases/{id}:advance:
+    post:
+      tags: [Cases]
+      summary: Transition case state (P01 advance)
+      operationId: advanceCase
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowActionRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Advanced. 409 ERR-G11-VERIFICATION-INCOMPLETE if FR-18 gate not met.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeparationCase' }
+
+  /pension/cases/{id}:sanction:
+    post:
+      tags: [Cases]
+      summary: Sanction case (P01 approve; checker, SoD-enforced)
+      operationId: sanctionCase
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SanctionRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Sanctioned. 403 on maker==checker SoD violation.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeparationCase' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-03 Pre-Retirement Processing
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/sr-verification:request:
+    post:
+      tags: [Cases]
+      summary: Request G12 gap-free service verification
+      operationId: requestSrVerification
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '202':
+          description: Verification requested (X.3 to G12). 412 ERR-PRECOND if G12 unavailable.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceVerification' }
+
+  /pension/cases/{id}/sr-verification:certify:
+    post:
+      tags: [Cases]
+      summary: SR Custodian certifies service verification
+      operationId: certifySrVerification
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Certified. 409 ERR-G11-DISCREPANCY-OPEN if ledger not closed.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceVerification' }
+
+  /pension/cases/{id}/no-dues:
+    get:
+      tags: [Cases]
+      summary: No-dues checklist
+      operationId: getNoDues
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: No-dues checklist
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoDues' }
+    patch:
+      tags: [Cases]
+      summary: Update no-dues checklist items
+      operationId: updateNoDues
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NoDues' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Updated no-dues checklist
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoDues' }
+
+  /pension/cases/{id}/anticipatory-pension:
+    post:
+      tags: [Cases]
+      summary: Authorise anticipatory pension
+      operationId: authoriseAnticipatoryPension
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { $ref: '#/components/schemas/Money' }
+                effective_from: { type: string, format: date }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Anticipatory pension authorised
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeparationCase' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-04 Qualifying Service
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/qualifying-service:compute:
+    post:
+      tags: [QualifyingService]
+      summary: Compute qualifying service (net of spells + prior service)
+      operationId: computeQualifyingService
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Computed QSR. 409 ERR-G11-SERVICE-GAP / ERR-G11-VERIFICATION-INCOMPLETE.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualifyingServiceRecord' }
+
+  /pension/cases/{id}/qualifying-service:
+    get:
+      tags: [QualifyingService]
+      summary: QSR with spells and prior service
+      operationId: getQualifyingService
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: QSR detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualifyingServiceRecord' }
+
+  /pension/cases/{id}/qualifying-service/spells:
+    post:
+      tags: [QualifyingService]
+      summary: Add or condone a non-qualifying spell
+      operationId: addQualifyingServiceSpell
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NonQualifyingSpell' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Spell recorded/condoned
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NonQualifyingSpell' }
+
+  /pension/cases/{id}/prior-service:
+    post:
+      tags: [QualifyingService]
+      summary: Add/verify counted prior/military service
+      operationId: addPriorService
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PriorServiceRecord' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Prior-service record added
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PriorServiceRecord' }
+
+  /pension/cases/{id}/qualifying-service:lock:
+    post:
+      tags: [QualifyingService]
+      summary: Lock QSR after verification
+      operationId: lockQualifyingService
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: QSR locked. 409 ERR-G11-SPELL-NOT-ATTESTED if spells unattested.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualifyingServiceRecord' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-05 Pension Calculation
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/pension:compute:
+    post:
+      tags: [Pension]
+      summary: Compute pension / route service gratuity / UPS / NPS-default
+      operationId: computePension
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                emoluments_method: { $ref: '#/components/schemas/EmolumentsMethod' }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: >
+            Pension computed. 422 ERR-G11-EMOLUMENTS / ERR-G11-RULE-NOT-EFFECTIVE;
+            409 ERR-G11-VERIFICATION-INCOMPLETE (input-provenance gate).
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PensionCalculation' }
+
+  /pension/cases/{id}/pension:
+    get:
+      tags: [Pension]
+      summary: Pension calculation + trace + benefit_outcome
+      operationId: getPension
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Pension calculation
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PensionCalculation' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-06 Commutation
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/commutation:
+    post:
+      tags: [Commutation]
+      summary: Submit / compute commutation
+      operationId: computeCommutation
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommutationRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: >
+            Commutation computed. 422 ERR-G11-COMMUTATION-LIMIT / ERR-G11-FACTOR-NOT-FOUND.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Commutation' }
+    get:
+      tags: [Commutation]
+      summary: Commutation detail (incl. reduction/restoration timing)
+      operationId: getCommutation
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Commutation detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Commutation' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-07 Gratuity
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/gratuity:compute:
+    post:
+      tags: [Gratuity]
+      summary: Compute gratuity (retirement / death / service)
+      operationId: computeGratuity
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [gratuity_type]
+              properties:
+                gratuity_type: { $ref: '#/components/schemas/GratuityType' }
+                nominee_split:
+                  type: [array, "null"]
+                  items: { $ref: '#/components/schemas/NomineeShare' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Gratuity computed (ceiling auto-stepped on DA milestone). 422 ERR-G11-NOMINEE-SPLIT.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Gratuity' }
+
+  /pension/cases/{id}/gratuity:
+    get:
+      tags: [Gratuity]
+      summary: Gratuity detail
+      operationId: getGratuity
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Gratuity detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Gratuity' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-08 Family Pension
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/family-pension:compute:
+    post:
+      tags: [FamilyPension]
+      summary: Compute family pension (path-specific window)
+      operationId: computeFamilyPension
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enhanced_basis]
+              properties:
+                enhanced_basis: { $ref: '#/components/schemas/EnhancedBasis' }
+                current_family_member_id: { type: [string, "null"], format: uuid }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Family pension computed. 409 ERR-G11-FP-NOT-NOMINEE is NOT used (E26 register).
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyPension' }
+
+  /pension/family-pension/{id}:
+    get:
+      tags: [FamilyPension]
+      summary: Family pension detail
+      operationId: getFamilyPension
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Family pension detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyPension' }
+
+  /pension/family-pension/{id}:transfer:
+    post:
+      tags: [FamilyPension]
+      summary: Transfer to the next eligible family member
+      operationId: transferFamilyPension
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to_family_member_id, reason]
+              properties:
+                to_family_member_id: { type: string, format: uuid }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Transferred to next eligible member
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyPension' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-09 Terminal Settlement
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/settlement:compute:
+    post:
+      tags: [Settlement]
+      summary: Assemble terminal settlement (incl. tax/TDS & 89(1) relief)
+      operationId: computeSettlement
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Settlement computed. 422 ERR-G11-TAX-RULE; 409 ERR-G11-RECOVERY-PROTECTION.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TerminalSettlement' }
+
+  /pension/cases/{id}/settlement:
+    get:
+      tags: [Settlement]
+      summary: Settlement detail (gross / taxable / TDS / net)
+      operationId: getSettlement
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Settlement detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TerminalSettlement' }
+
+  /pension/cases/{id}/settlement:sanction:
+    post:
+      tags: [Settlement]
+      summary: Sanction settlement (P01 approve)
+      operationId: sanctionSettlement
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SanctionRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Settlement sanctioned. 409 ERR-G11-CASE-NOT-SANCTIONED.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TerminalSettlement' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-10 GPF Final
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/gpf:compute:
+    post:
+      tags: [GPF]
+      summary: Compute GPF final balance
+      operationId: computeGpf
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: GPF final computed
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GpfSettlement' }
+
+  /pension/cases/{id}/gpf:authorise:
+    post:
+      tags: [GPF]
+      summary: Authorise GPF payment
+      operationId: authoriseGpf
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SanctionRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: GPF authorised
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GpfSettlement' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-11 PPO
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/ppo:generate:
+    post:
+      tags: [PPO]
+      summary: Generate a draft PPO
+      operationId: generatePpo
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ppo_type]
+              properties:
+                ppo_type: { $ref: '#/components/schemas/PpoType' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Draft PPO generated. 409 ERR-G11-CASE-NOT-SANCTIONED / ERR-G11-DUP-PPO.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ppo' }
+
+  /pension/ppos/{id}:authorise:
+    post:
+      tags: [PPO]
+      summary: Authorise & issue PPO (+ optional DigiLocker push)
+      operationId: authorisePpo
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                push_digilocker: { type: boolean, default: true }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: PPO authorised (AUTHORISED_TO_PDA). SR posting via §8.7 in same transaction.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ppo' }
+
+  /pension/ppos/{id}:
+    get:
+      tags: [PPO]
+      summary: PPO detail + e-PPO link
+      operationId: getPpo
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: PPO detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ppo' }
+
+  /pension/ppos/{id}:revise:
+    post:
+      tags: [PPO]
+      summary: Issue a REVISED PPO (supersedes original)
+      operationId: revisePpo
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Revised PPO issued. 409 ERR-G11-REVISION-IMMUTABLE.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ppo' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-12 Pensioner Lifecycle
+  # --------------------------------------------------------------------------
+  /pension/pensioners/{id}:
+    get:
+      tags: [Pensioners]
+      summary: Pensioner detail & lifecycle
+      operationId: getPensioner
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Pensioner detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pensioner' }
+    patch:
+      tags: [Pensioners]
+      summary: Update bank/contact (P01 maker-checker + penny-drop verification)
+      operationId: updatePensioner
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PensionerUpdate' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Update queued (E·AR via P01). 422 ERR-G11-ACCOUNT-VERIFY on penny-drop fail.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pensioner' }
+
+  /pension/pensioners/{id}/life-certificate:
+    post:
+      tags: [Pensioners]
+      summary: Submit life certificate / DLC (Jeevan Pramaan over X.3)
+      operationId: submitLifeCertificate
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LifeCertificateRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: LC recorded. 409 ERR-G11-LC-SUSPENDED if certificate is suspended.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LifeCertificate' }
+
+  /pension/pensioners/{id}:report-death:
+    post:
+      tags: [Pensioners]
+      summary: Record pensioner death → family-pension conversion
+      operationId: reportPensionerDeath
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date_of_death, source]
+              properties:
+                date_of_death: { type: string, format: date }
+                source: { $ref: '#/components/schemas/DeathDetectedSource' }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Death recorded; FAMILY_PENSION conversion + SR FAMILY_PENSION_SANCTIONED event.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pensioner' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-13 Revisions
+  # --------------------------------------------------------------------------
+  /pension/revisions:
+    post:
+      tags: [Revisions]
+      summary: Create a revision batch (type, effective date, scope)
+      operationId: createRevision
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Revision batch created
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Revision' }
+
+  /pension/revisions/{id}:compute:
+    post:
+      tags: [Revisions]
+      summary: Compute deltas / relief orders per PDA model (§16.9 order)
+      operationId: computeRevision
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Revision computed (JOB-G11-PENSION-RUN)
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Revision' }
+
+  /pension/revisions/{id}:approve:
+    post:
+      tags: [Revisions]
+      summary: Approve revision batch (P01)
+      operationId: approveRevision
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SanctionRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Revision approved
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Revision' }
+
+  /pension/revisions/{id}:apply:
+    post:
+      tags: [Revisions]
+      summary: Apply revision (instruct or issue relief order)
+      operationId: applyRevision
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Revision applied (immutable). 409 ERR-G11-REVISION-IMMUTABLE on re-apply.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Revision' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-14 Disbursements
+  # --------------------------------------------------------------------------
+  /pension/disbursements:
+    post:
+      tags: [Disbursements]
+      summary: Create a disbursement instruction batch
+      operationId: createDisbursement
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DisbursementRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Disbursement batch created
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Disbursement' }
+
+  /pension/accounts:verify:
+    post:
+      tags: [Disbursements]
+      summary: Run penny-drop / name-IFSC account verification (X.3)
+      operationId: verifyAccount
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountVerifyRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: >
+            Verification result. 422 ERR-G11-ACCOUNT-VERIFY / ERR-G11-INVALID-ACCOUNT on mismatch.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BankAccountVerification' }
+
+  /pension/disbursements/{id}:authorise:
+    post:
+      tags: [Disbursements]
+      summary: Authorise disbursement batch
+      operationId: authoriseDisbursement
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SanctionRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Batch authorised
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Disbursement' }
+
+  /pension/disbursements/{id}:transmit:
+    post:
+      tags: [Disbursements]
+      summary: Transmit batch to PDA/bank (X.3, §8.6 contract)
+      operationId: transmitDisbursement
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '202':
+          description: >
+            Transmitted. 409 if a line's account is not PASSED (IR16); 409 ERR-G11-PDA-NOT-CERTIFIED;
+            412 ERR-PRECOND if PDA channel unavailable after X.3 retry.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Disbursement' }
+
+  /pension/disbursements/{id}/ack:
+    post:
+      tags: [Disbursements]
+      summary: Record PDA/bank acknowledgement (per-line ack)
+      operationId: ackDisbursement
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DisbursementAck' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Acknowledgement reconciled
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Disbursement' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-15 Self-Service & Estimators
+  # --------------------------------------------------------------------------
+  /pension/estimates:
+    post:
+      tags: [SelfService]
+      summary: Run an outcome-framed estimate / what-if (non-binding)
+      operationId: runEstimate
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EstimateRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Estimate snapshot (non-binding)
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BenefitEstimate' }
+
+  /pension/me/case:
+    get:
+      tags: [SelfService]
+      summary: My 3-state plain-language case tracker
+      operationId: getMyCase
+      responses:
+        <<: *commonErrors
+        '200':
+          description: My case tracker
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MyCaseTracker' }
+
+  /pension/me/options:
+    post:
+      tags: [SelfService]
+      summary: Submit commutation / nominee / family / bank options
+      operationId: submitMyOptions
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MyOptionsRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Options submitted. 409 ERR-G11-CASE-LOCKED-OPTIONS if the case is locked.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MyCaseTracker' }
+
+  /pension/me/lc-calendar:
+    get:
+      tags: [SelfService]
+      summary: Life-certificate due dates & submission options
+      operationId: getMyLcCalendar
+      responses:
+        <<: *commonErrors
+        '200':
+          description: LC calendar
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LcCalendar' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-16 Grievances
+  # --------------------------------------------------------------------------
+  /pension/grievances:
+    post:
+      tags: [Grievances]
+      summary: Raise a grievance
+      operationId: createGrievance
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrievanceRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Grievance raised
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Grievance' }
+
+  /pension/grievances/{id}:
+    get:
+      tags: [Grievances]
+      summary: Grievance detail
+      operationId: getGrievance
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Grievance detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Grievance' }
+
+  /pension/grievances/{id}:assign:
+    post:
+      tags: [Grievances]
+      summary: Assign / route grievance
+      operationId: assignGrievance
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignee_ref]
+              properties:
+                assignee_ref: { type: string }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Grievance assigned
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Grievance' }
+
+  /pension/grievances/{id}:resolve:
+    post:
+      tags: [Grievances]
+      summary: Resolve / close grievance
+      operationId: resolveGrievance
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolution]
+              properties:
+                resolution: { type: string }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Grievance resolved
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Grievance' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-17 Analytics
+  # --------------------------------------------------------------------------
+  /pension/analytics/liability:
+    get:
+      tags: [Analytics]
+      summary: Pension-liability projection (scenario params)
+      operationId: getLiabilityAnalytics
+      parameters:
+        - { name: horizon_years, in: query, schema: { type: integer, minimum: 1, maximum: 50 } }
+        - { name: org_unit_id, in: query, schema: { type: string, format: uuid } }
+        - { name: da_scenario_pct, in: query, schema: { type: number } }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Liability projection
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /pension/analytics/workload:
+    get:
+      tags: [Analytics]
+      summary: Due-for-retirement workload analytics
+      operationId: getWorkloadAnalytics
+      parameters:
+        - { name: horizon_months, in: query, schema: { type: integer } }
+        - { name: org_unit_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Workload analytics
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /pension/analytics/sla:
+    get:
+      tags: [Analytics]
+      summary: Processing SLA & ageing analytics
+      operationId: getSlaAnalytics
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: SLA & ageing analytics
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-18 Service Verification
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/service-verification:build:
+    post:
+      tags: [ServiceVerification]
+      summary: Build/refresh the verification + discrepancy ledger
+      operationId: buildServiceVerification
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Verification built with discrepancy ledger
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceVerification' }
+
+  /pension/cases/{id}/service-verification:
+    get:
+      tags: [ServiceVerification]
+      summary: Verification + ledger + attestations
+      operationId: getServiceVerification
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Verification detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceVerification' }
+
+  /pension/cases/{id}/service-verification/discrepancies/{did}:resolve:
+    post:
+      tags: [ServiceVerification]
+      summary: Resolve a discrepancy ledger line (resolve / condone / waive / escalate)
+      operationId: resolveDiscrepancy
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - { name: did, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DiscrepancyResolution' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Discrepancy line resolved
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceDiscrepancy' }
+
+  /pension/cases/{id}/service-verification:signoff:
+    post:
+      tags: [ServiceVerification]
+      summary: Multi-point sign-off (P01 PARALLEL_ALL_OF) → SIGNED_OFF / LOCKED
+      operationId: signoffServiceVerification
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [signoff_role]
+              properties:
+                signoff_role: { type: string, enum: [SR_CUSTODIAN, PAYROLL, PENSION_OFFICER] }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: >
+            Sign-off recorded. 409 ERR-G11-DISCREPANCY-OPEN / ERR-G11-SPELL-NOT-ATTESTED if the
+            three-point PARALLEL_ALL_OF gate is not fully satisfied.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceVerification' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-19 Rule Tables
+  # --------------------------------------------------------------------------
+  /pension/rules/{table}:
+    get:
+      tags: [RuleTables]
+      summary: List rule-table rows (filter by effective date)
+      operationId: listRuleRows
+      parameters:
+        - $ref: '#/components/parameters/RuleTable'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - { name: effective_on, in: query, schema: { type: string, format: date } }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Page of rule rows
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleRowList' }
+    post:
+      tags: [RuleTables]
+      summary: Create a DRAFT rule row (effective-dated, staged)
+      operationId: createRuleRow
+      parameters:
+        - $ref: '#/components/parameters/RuleTable'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RuleRowRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: DRAFT rule row created (staged via JOB-G11-EFFDATE)
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleRow' }
+
+  /pension/rules/{table}/{rowId}:approve:
+    post:
+      tags: [RuleTables]
+      summary: Approve a rule row (SoD) → APPROVED / EFFECTIVE
+      operationId: approveRuleRow
+      parameters:
+        - $ref: '#/components/parameters/RuleTable'
+        - { name: rowId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SanctionRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Rule row approved. 403 on maker==checker SoD.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleRow' }
+
+  /pension/rules/{table}/resolve:
+    get:
+      tags: [RuleTables]
+      summary: Resolve the EFFECTIVE row for a date
+      operationId: resolveRuleRow
+      parameters:
+        - $ref: '#/components/parameters/RuleTable'
+        - { name: asOf, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Effective row for the date. 404 if none effective.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleRow' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-20 Death Detection & Overpayment
+  # --------------------------------------------------------------------------
+  /pension/death-detection:run:
+    post:
+      tags: [DeathDetection]
+      summary: Run death-registry / DBT reconciliation (JOB-G11-DEATHRECON over X.3)
+      operationId: runDeathDetection
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                as_of: { type: [string, "null"], format: date }
+      responses:
+        <<: *commonErrors
+        '202':
+          description: Reconciliation job accepted
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+
+  /pension/death-detection/flags:
+    get:
+      tags: [DeathDetection]
+      summary: Probable-death / anomaly flags
+      operationId: listDeathFlags
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - { name: source, in: query, schema: { $ref: '#/components/schemas/DeathDetectedSource' } }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Page of death/anomaly flags
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeathFlagList' }
+
+  /pension/overpayments:
+    post:
+      tags: [DeathDetection]
+      summary: Open an overpayment recovery row
+      operationId: createOverpayment
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OverpaymentRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Overpayment recovery opened
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Overpayment' }
+
+  /pension/overpayments/{id}:recover:
+    post:
+      tags: [DeathDetection]
+      summary: Record a recovery (mode, amount)
+      operationId: recoverOverpayment
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode, amount]
+              properties:
+                mode: { type: string, enum: [FROM_ESTATE, FROM_ARREARS, VOLUNTARY, WRITE_OFF] }
+                amount: { $ref: '#/components/schemas/Money' }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Recovery recorded. 409 ERR-G11-RECOVERY-PROTECTION where protected.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Overpayment' }
+
+  /pension/reports/drawn-after-death:
+    get:
+      tags: [DeathDetection]
+      summary: Drawn-after-death exception report
+      operationId: getDrawnAfterDeathReport
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Exception report (ERR-G11-DRAWN-AFTER-DEATH cases)
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeathFlagList' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-21 PDA Registry
+  # --------------------------------------------------------------------------
+  /pension/pdas:
+    get:
+      tags: [PDA]
+      summary: List PDAs + disbursement models
+      operationId: listPdas
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Page of PDAs
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PdaList' }
+    post:
+      tags: [PDA]
+      summary: Register / maintain a PDA
+      operationId: createPda
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PdaRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: PDA registered
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pda' }
+
+  /pension/pdas/{id}:certify:
+    post:
+      tags: [PDA]
+      summary: Mark PDA sandbox-certified (X.3 tie-out passed)
+      operationId: certifyPda
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: PDA certified
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pda' }
+
+  /pension/pdas/{id}:activate:
+    post:
+      tags: [PDA]
+      summary: Go-live (requires certification)
+      operationId: activatePda
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: PDA activated. 409 ERR-G11-PDA-NOT-CERTIFIED if not certified.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pda' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-22 Provisional Pension
+  # --------------------------------------------------------------------------
+  /pension/cases/{id}/provisional-pension:
+    post:
+      tags: [Provisional]
+      summary: Create provisional pension (Rule 9) + withhold DCRG
+      operationId: createProvisionalPension
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProvisionalPensionRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Provisional pension created; DCRG fully withheld
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProvisionalPension' }
+    get:
+      tags: [Provisional]
+      summary: Provisional pension detail
+      operationId: getProvisionalPension
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Provisional pension detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProvisionalPension' }
+
+  /pension/cases/{id}/provisional-pension:conclude:
+    post:
+      tags: [Provisional]
+      summary: Conclude on G09 decision → regularise / recover
+      operationId: concludeProvisionalPension
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, enum: [CONCLUDED_REGULARISED, CONCLUDED_RECOVERY] }
+                proceedings_concluded_on: { type: string, format: date }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Concluded. 409 ERR-G11-PROVISIONAL-PENDING if proceedings still open.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProvisionalPension' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-23 Audit Objections
+  # --------------------------------------------------------------------------
+  /pension/audit-objections:
+    post:
+      tags: [AuditObjections]
+      summary: Raise an audit objection (AG / internal audit)
+      operationId: createAuditObjection
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuditObjectionRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Objection raised
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditObjection' }
+
+  /pension/audit-objections/{id}:
+    get:
+      tags: [AuditObjections]
+      summary: Objection detail
+      operationId: getAuditObjection
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Objection detail
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditObjection' }
+
+  /pension/audit-objections/{id}:respond:
+    post:
+      tags: [AuditObjections]
+      summary: Record a response to an objection
+      operationId: respondAuditObjection
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response_text]
+              properties:
+                response_text: { type: string }
+                document_ref: { type: [string, "null"] }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Response recorded
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditObjection' }
+
+  /pension/audit-objections/{id}:close:
+    post:
+      tags: [AuditObjections]
+      summary: Close objection with outcome
+      operationId: closeAuditObjection
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, enum: [ACCEPTED, DROPPED, CLOSED] }
+                reason: { type: string }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Objection closed
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditObjection' }
+
+  # --------------------------------------------------------------------------
+  # FR-G11-24 Digital Delivery
+  # --------------------------------------------------------------------------
+  /pension/ppos/{id}:deliver-digilocker:
+    post:
+      tags: [DigitalDelivery]
+      summary: Push e-PPO to DigiLocker (X.3)
+      operationId: deliverPpoToDigilocker
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '202':
+          description: Delivery accepted (X.3). 412 ERR-PRECOND if DigiLocker unavailable.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryStatus' }
+
+  /pension/revisions/{id}:deliver-digilocker:
+    post:
+      tags: [DigitalDelivery]
+      summary: Push a revision order to DigiLocker (X.3)
+      operationId: deliverRevisionToDigilocker
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        <<: *commonErrors
+        '202':
+          description: Delivery accepted (X.3)
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryStatus' }
+
+  /pension/ppos/{id}/delivery-status:
+    get:
+      tags: [DigitalDelivery]
+      summary: e-PPO delivery status
+      operationId: getPpoDeliveryStatus
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Delivery status
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryStatus' }
+
+  /pension/pensioners/{id}:link-aadhaar-pran:
+    post:
+      tags: [DigitalDelivery]
+      summary: Link Aadhaar / PRAN to the pensioner (UIDAI/CRA over X.3)
+      operationId: linkAadhaarPran
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                aadhaar: { type: [string, "null"], description: Tier-1 PII; masked on serialization by P02 }
+                pran: { type: [string, "null"] }
+      responses:
+        <<: *commonErrors
+        '200':
+          description: Linkage recorded (values masked by P02)
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pensioner' }
+
+  # --------------------------------------------------------------------------
+  # §8.7 SR Writer — canonical write-port (G11 as SR writer)
+  # --------------------------------------------------------------------------
+  /sr/ingest:
+    post:
+      tags: [ServiceRegister]
+      summary: >
+        Post a separation/superannuation life event to the canonical G12 SR write-port
+        (dedup tuple + fact_key; source_module="G11")
+      operationId: srIngest
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SrIngestRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: >
+            SR event appended (all-or-nothing with the closure/sanction commit; P05 captures the
+            mutation). 409 on dedup-tuple replay returning the original sr_event_id;
+            422 SR_FACT_KEY_REQUIRED if a qualifying-service-bearing event omits fact_key.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrIngestResult' }
+
+  /sr/ingest/reversal:
+    post:
+      tags: [ServiceRegister]
+      summary: Post a supersede-only reversal/correction (is_reversal=true) to the SR write-port
+      operationId: srIngestReversal
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SrReversalRequest' }
+      responses:
+        <<: *commonErrors
+        '201':
+          description: Reversal appended; G12 auto-spawns the corrigendum
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrIngestResult' }
+
+# ============================================================================
+# COMPONENTS
+# ============================================================================
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Bearer JWT carrying resolved roles + tenant/entity scope; permissions resolved per request
+        by P02 (Authorization.check). MFA enforced for high-privilege statutory roles.
+
+  headers:
+    CorrelationId:
+      description: Echoed request/response correlation id, written to every P05 audit and log line.
+      schema: { type: string }
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RuleTable:
+      name: table
+      in: path
+      required: true
+      description: Effective-dated rule table (E30–E36)
+      schema:
+        type: string
+        enum:
+          - da-relief-rates
+          - commutation-factors
+          - family-pension-rates
+          - gratuity-ceilings
+          - retirement-age-rules
+          - pension-limit-rules
+          - rounding-rules
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (cursor pagination). Default 25, max 100.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque forward cursor (from a prior response next_cursor).
+      schema: { type: string }
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: 'Sort spec, e.g. field:asc|desc'
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Required on transaction-creating POSTs; a repeat within 24h returns the original result.
+      schema: { type: string }
+
+  responses:
+    Unauthenticated:
+      description: 401 UNAUTHENTICATED — no/invalid/expired session.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: 403 FORBIDDEN — role/scope/SoD/PII-ceiling denial (P02); never leaks out-of-scope existence.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: 404 NOT_FOUND — resource absent or out of the caller's scope.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: >
+        409 CONFLICT — idempotency replay / duplicate workflow start, or a G11 domain state conflict:
+        ERR-G11-DUP-CASE, ERR-G11-SERVICE-GAP, ERR-G11-VERIFICATION-INCOMPLETE, ERR-G11-DISCREPANCY-OPEN,
+        ERR-G11-SPELL-NOT-ATTESTED, ERR-G11-FP-NOT-NOMINEE, ERR-G11-RECOVERY-PROTECTION,
+        ERR-G11-SCHEME-MISMATCH, ERR-G11-CASE-NOT-SANCTIONED, ERR-G11-DUP-PPO, ERR-G11-CASE-LOCKED-OPTIONS,
+        ERR-G11-REVISION-IMMUTABLE, ERR-G11-LC-SUSPENDED, ERR-G11-PROVISIONAL-PENDING,
+        ERR-G11-PDA-NOT-CERTIFIED, ERR-G11-AUDIT-OBJECTION-OPEN, ERR-G11-DRAWN-AFTER-DEATH.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PreconditionFailed:
+      description: >
+        412 PRECONDITION_FAILED — a required precondition unmet (ERR-PRECOND), or an upstream
+        (G03/G10/G12/PDA/DigiLocker/registry) temporarily unavailable after X.3 retry (retryable).
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationFailed:
+      description: >
+        422 VALIDATION_FAILED — VAL-* / domain input failure: CASE_INPUT_INCOMPLETE, ERR-G11-EMOLUMENTS,
+        ERR-G11-RULE-NOT-EFFECTIVE, ERR-G11-COMMUTATION-LIMIT, ERR-G11-FACTOR-NOT-FOUND,
+        ERR-G11-NOMINEE-SPLIT, ERR-G11-TAX-RULE, ERR-G11-INVALID-ACCOUNT, ERR-G11-ACCOUNT-VERIFY.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: 429 RATE_LIMITED — rate limit / lockout exceeded.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Internal:
+      description: 500 INTERNAL — unexpected server error or non-retryable upstream failure (ERR-LOADFAIL).
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    # ---- Envelope & primitives ---------------------------------------------
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: One of the 8 platform wire codes, or a registered domain/ERR-G11-* code.
+              enum:
+                - VALIDATION_FAILED
+                - UNAUTHENTICATED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - PRECONDITION_FAILED
+                - RATE_LIMITED
+                - INTERNAL
+            message: { type: string }
+            field: { type: [string, "null"] }
+            details:
+              type: [object, "null"]
+              description: 'Structured discriminators, e.g. { reason: ERR-G11-COMMUTATION-LIMIT }.'
+              additionalProperties: true
+      additionalProperties: false
+
+    Money:
+      type: string
+      description: NUMERIC money as a decimal string (2 dp, INR).
+      pattern: '^-?\d+\.\d{2}$'
+      examples: ['56000.00']
+
+    Rate:
+      type: string
+      description: NUMERIC(9,4) rate/factor as a decimal string.
+      pattern: '^-?\d+(\.\d{1,4})?$'
+
+    PageMeta:
+      type: object
+      properties:
+        next_cursor:
+          type: [string, "null"]
+          description: Forward cursor for the next page; null when exhausted.
+
+    AuditFields:
+      type: object
+      properties:
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        created_by: { type: [string, "null"], format: uuid }
+        updated_by: { type: [string, "null"], format: uuid }
+        is_deleted: { type: boolean }
+
+    # ---- Enums -------------------------------------------------------------
+    SeparationType:
+      type: string
+      enum: [SUPERANNUATION, VOLUNTARY_RETIREMENT, COMPULSORY_RETIREMENT, INVALIDATION, DEATH_IN_SERVICE, RESIGNATION]
+    PensionScheme:
+      type: string
+      enum: [OPS, NPS, UPS]
+    BenefitOutcome:
+      type: string
+      enum: [FULL_PENSION, SERVICE_GRATUITY_ONLY, NPS_DEFAULT_FAMILY, NPS_DEFAULT_INVALID, UPS_ASSURED, NPS_INDICATIVE]
+    EmolumentsMethod:
+      type: string
+      enum: [LAST_DRAWN, AVG_10_MONTH, BENEFICIAL_OF_BOTH, AVG_12_MONTH]
+    GratuityType:
+      type: string
+      enum: [RETIREMENT_GRATUITY, DEATH_GRATUITY, SERVICE_GRATUITY]
+    PpoType:
+      type: string
+      enum: [SERVICE_PENSION, FAMILY_PENSION, ANTICIPATORY, PROVISIONAL, REVISED]
+    EnhancedBasis:
+      type: string
+      enum: [IN_SERVICE, AFTER_RETIREMENT]
+    PdaDisbursementModel:
+      type: string
+      enum: [M11_COMPUTES_FULL, PDA_APPLIES_RELIEF]
+    DeathDetectedSource:
+      type: string
+      enum: [REPORTED, DEATH_REGISTRY, DBT_ANOMALY, LC_FAILURE]
+    PriorServiceType:
+      type: string
+      enum: [MILITARY, PRIOR_CENTRAL, PRIOR_STATE, PRIOR_TEMPORARY, AUTONOMOUS_BODY]
+    Relationship:
+      type: string
+      enum: [SPOUSE, SON, DAUGHTER, FATHER, MOTHER, DISABLED_CHILD, WIDOWED_DAUGHTER, DEPENDENT_SIBLING, OTHER]
+    CaseStatus:
+      type: string
+      enum: [DRAFT, INITIATED, SR_VERIFICATION, NO_DUES, CALCULATION, PENDING_SANCTION, SANCTIONED, PPO_ISSUED, SETTLED, CLOSED, ON_HOLD, REJECTED]
+    NoDuesStatus:
+      type: string
+      enum: [NOT_STARTED, IN_PROGRESS, CLEARED, BLOCKED]
+    AccountVerifyResult:
+      type: string
+      enum: [PENDING, MATCH, NAME_MISMATCH, ACCOUNT_INVALID, FAILED]
+    RuleRowStatus:
+      type: string
+      enum: [DRAFT, APPROVED, EFFECTIVE, SUPERSEDED]
+
+    # ---- Requests ----------------------------------------------------------
+    ReasonRequest:
+      type: object
+      properties:
+        reason: { type: [string, "null"] }
+    WorkflowActionRequest:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [advance, sendBack, cancel] }
+        target_status: { type: [string, "null"] }
+        reason: { type: [string, "null"] }
+    SanctionRequest:
+      type: object
+      properties:
+        decision: { type: string, enum: [approve, reject], default: approve }
+        reason: { type: [string, "null"] }
+    CreateCaseRequest:
+      type: object
+      required: [employee_id, separation_type, retirement_date]
+      properties:
+        employee_id: { type: string, format: uuid }
+        separation_type: { $ref: '#/components/schemas/SeparationType' }
+        retirement_date: { type: string, format: date }
+        pension_scheme: { $ref: '#/components/schemas/PensionScheme' }
+        ups_opted_in: { type: boolean, default: false }
+        proceedings_pending: { type: boolean, default: false }
+        proceedings_ref: { type: [string, "null"] }
+        reason_ref: { type: [string, "null"] }
+        notice_date: { type: [string, "null"], format: date }
+        org_unit_id: { type: string, format: uuid }
+        initiated_by_role: { type: string, enum: [SELF, HR, SYSTEM_FORECAST, DISCIPLINARY_G09] }
+    UpdateCaseRequest:
+      type: object
+      properties:
+        pension_scheme: { $ref: '#/components/schemas/PensionScheme' }
+        scheme_override_reason: { type: [string, "null"] }
+        pda_id: { type: [string, "null"], format: uuid }
+        pension_commence_date: { type: [string, "null"], format: date }
+        proceedings_pending: { type: [boolean, "null"] }
+    CommutationRequest:
+      type: object
+      required: [opted]
+      properties:
+        opted: { type: boolean }
+        commuted_fraction: { $ref: '#/components/schemas/Rate' }
+        age_next_birthday: { type: [integer, "null"] }
+        commutation_payment_date: { type: [string, "null"], format: date }
+    RevisionRequest:
+      type: object
+      required: [revision_type, effective_from]
+      properties:
+        revision_type: { type: string, enum: [DA, PAY_COMMISSION] }
+        effective_from: { type: string, format: date }
+        scope:
+          type: object
+          properties:
+            org_unit_id: { type: [string, "null"], format: uuid }
+            pda_id: { type: [string, "null"], format: uuid }
+            all_pensioners: { type: boolean, default: false }
+        rule_version_ref: { type: [string, "null"], format: uuid }
+    DisbursementRequest:
+      type: object
+      required: [pda_id, period_month, period_year]
+      properties:
+        pda_id: { type: string, format: uuid }
+        period_month: { type: integer, minimum: 1, maximum: 12 }
+        period_year: { type: integer }
+        disbursement_type: { type: string, enum: [MONTHLY_PENSION, FIRST_PENSION, TERMINAL, GRATUITY, GPF, COMMUTED_VALUE, ARREAR] }
+    AccountVerifyRequest:
+      type: object
+      required: [account_no, ifsc, account_name]
+      properties:
+        pensioner_id: { type: [string, "null"], format: uuid }
+        account_no: { type: string, description: Tier-2 financial PII; masked on serialization by P02 }
+        ifsc: { type: string }
+        account_name: { type: string }
+    DisbursementAck:
+      type: object
+      required: [lines]
+      properties:
+        payload_contract_version: { type: string }
+        control_total_ack: { $ref: '#/components/schemas/Money' }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [line_no, ack_status]
+            properties:
+              line_no: { type: integer }
+              ack_status: { type: string, enum: [PAID, FAILED, RETURNED] }
+              ack_reference: { type: [string, "null"] }
+              failure_code: { type: [string, "null"], enum: [ACCOUNT_CLOSED, ACCOUNT_FROZEN, NAME_MISMATCH, INVALID_IFSC, LIMIT_EXCEEDED, DUPLICATE, PENSIONER_DECEASED, OTHER, null] }
+              paid_at: { type: [string, "null"], format: date-time }
+    EstimateRequest:
+      type: object
+      properties:
+        employee_id: { type: [string, "null"], format: uuid }
+        as_of_retirement_date: { type: [string, "null"], format: date }
+        commuted_fraction: { $ref: '#/components/schemas/Rate' }
+        emoluments_method: { $ref: '#/components/schemas/EmolumentsMethod' }
+        scheme: { $ref: '#/components/schemas/PensionScheme' }
+    MyOptionsRequest:
+      type: object
+      properties:
+        commuted_fraction: { $ref: '#/components/schemas/Rate' }
+        nominees:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/NomineeShare' }
+        current_family_member_id: { type: [string, "null"], format: uuid }
+        bank_account:
+          type: [object, "null"]
+          properties:
+            account_no: { type: string }
+            ifsc: { type: string }
+            account_name: { type: string }
+    GrievanceRequest:
+      type: object
+      required: [category, description]
+      properties:
+        pensioner_id: { type: [string, "null"], format: uuid }
+        category: { type: string }
+        description: { type: string }
+    OverpaymentRequest:
+      type: object
+      required: [pensioner_id, amount]
+      properties:
+        pensioner_id: { type: string, format: uuid }
+        amount: { $ref: '#/components/schemas/Money' }
+        detected_source: { $ref: '#/components/schemas/DeathDetectedSource' }
+        notes: { type: [string, "null"] }
+    PdaRequest:
+      type: object
+      required: [pda_code, name, disbursement_model, interface_type]
+      properties:
+        pda_code: { type: string }
+        name: { type: string }
+        disbursement_model: { $ref: '#/components/schemas/PdaDisbursementModel' }
+        interface_type: { type: string, enum: [FILE_SFTP, REST_API] }
+        payload_contract_version: { type: string }
+    ProvisionalPensionRequest:
+      type: object
+      required: [provisional_amount]
+      properties:
+        provisional_amount: { $ref: '#/components/schemas/Money' }
+        proceedings_ref: { type: string }
+        dcrg_withheld: { type: boolean, default: true }
+    AuditObjectionRequest:
+      type: object
+      required: [case_id, objection_text, source]
+      properties:
+        case_id: { type: string, format: uuid }
+        ppo_id: { type: [string, "null"], format: uuid }
+        source: { type: string, enum: [AG, INTERNAL_AUDIT] }
+        objection_text: { type: string }
+        calc_trace_ref: { type: [string, "null"] }
+    RuleRowRequest:
+      type: object
+      required: [effective_from, payload]
+      properties:
+        effective_from: { type: string, format: date }
+        effective_to: { type: [string, "null"], format: date }
+        payload:
+          type: object
+          description: Table-specific rule fields (rate, factor, ceiling, age, threshold, rounding).
+          additionalProperties: true
+    LifeCertificateRequest:
+      type: object
+      required: [method]
+      properties:
+        method: { type: string, enum: [JEEVAN_PRAMAAN, PHYSICAL, VIDEO_KYC, BANK_CERTIFIED] }
+        certificate_ref: { type: [string, "null"] }
+        submitted_on: { type: [string, "null"], format: date }
+    PensionerUpdate:
+      type: object
+      properties:
+        bank_account:
+          type: [object, "null"]
+          properties:
+            account_no: { type: string }
+            ifsc: { type: string }
+            account_name: { type: string }
+        contact:
+          type: [object, "null"]
+          properties:
+            mobile: { type: string }
+            email: { type: string, format: email }
+        reason: { type: string }
+    NonQualifyingSpell:
+      type: object
+      required: [spell_from, spell_to, spell_type]
+      properties:
+        spell_id: { type: [string, "null"], format: uuid, readOnly: true }
+        spell_from: { type: string, format: date }
+        spell_to: { type: string, format: date }
+        spell_type: { type: string, enum: [EOL_WITHOUT_PAY, DIES_NON, UNAUTHORISED_ABSENCE, SUSPENSION, OTHER] }
+        days: { type: [integer, "null"], readOnly: true }
+        reason_code: { type: [string, "null"] }
+        condoned: { type: boolean, default: false }
+        condonation_order_ref: { type: [string, "null"] }
+    PriorServiceRecord:
+      type: object
+      required: [prior_service_type, from_date, to_date]
+      properties:
+        prior_service_id: { type: [string, "null"], format: uuid, readOnly: true }
+        prior_service_type: { $ref: '#/components/schemas/PriorServiceType' }
+        from_date: { type: string, format: date }
+        to_date: { type: string, format: date }
+        counted_days: { type: [integer, "null"] }
+        verified: { type: boolean, default: false }
+        order_ref: { type: [string, "null"] }
+    NomineeShare:
+      type: object
+      required: [beneficiary_ref, share_pct]
+      properties:
+        beneficiary_ref: { type: string }
+        share_pct: { $ref: '#/components/schemas/Rate' }
+        benefit_scope: { type: string, enum: [GRATUITY, GPF, LEAVE_ENCASHMENT] }
+    DiscrepancyResolution:
+      type: object
+      required: [resolution]
+      properties:
+        resolution: { type: string, enum: [RESOLVED, CONDONED, WAIVED, ESCALATED] }
+        condonation_order_ref: { type: [string, "null"] }
+        reason: { type: string }
+    SrIngestRequest:
+      type: object
+      required: [source_module, source_reference_id, source_event_version, event_type_code, tenant_id, entity_id, employee_id]
+      properties:
+        source_module: { type: string, const: G11, description: Explicit, never inferred (§8.7). }
+        source_reference_id: { type: string, description: G11 case / sanction id. }
+        source_event_version: { type: integer, minimum: 1, description: Increments on supersession. }
+        event_type_code:
+          type: string
+          enum: [SEPARATION, SUPERANNUATION, RETIREMENT, VOLUNTARY_RETIREMENT, RESIGNATION, DEATH_IN_SERVICE, FAMILY_PENSION_SANCTIONED]
+        fact_key:
+          type: [string, "null"]
+          description: >
+            Mandatory for qualifying-service-bearing events (SEPARATION, SUPERANNUATION, RETIREMENT,
+            VOLUNTARY_RETIREMENT); derived per the event type's fact_correlation_rule.
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        event_date: { type: string, format: date }
+        payload:
+          type: [object, "null"]
+          additionalProperties: true
+    SrReversalRequest:
+      type: object
+      required: [source_module, reverses_source_reference_id, event_type_code, tenant_id, entity_id, employee_id]
+      properties:
+        source_module: { type: string, const: G11 }
+        is_reversal: { type: boolean, const: true }
+        reverses_source_reference_id: { type: string }
+        source_event_version: { type: integer, minimum: 1 }
+        event_type_code:
+          type: string
+          enum: [SEPARATION, SUPERANNUATION, RETIREMENT, VOLUNTARY_RETIREMENT, RESIGNATION, DEATH_IN_SERVICE, FAMILY_PENSION_SANCTIONED]
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        reason: { type: string }
+
+    # ---- Response entities -------------------------------------------------
+    JobAccepted:
+      type: object
+      properties:
+        job_id: { type: string }
+        status: { type: string, enum: [ACCEPTED, RUNNING, QUEUED] }
+        accepted_at: { type: string, format: date-time }
+
+    Forecast:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        name: { type: [string, "null"] }
+        cadre: { type: [string, "null"] }
+        org_unit_id: { type: [string, "null"], format: uuid }
+        projected_superannuation_date: { type: string, format: date }
+        months_to_retirement: { type: integer }
+        pension_scheme: { $ref: '#/components/schemas/PensionScheme' }
+    ForecastList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Forecast' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    SeparationCase:
+      allOf:
+        - $ref: '#/components/schemas/AuditFields'
+        - type: object
+          properties:
+            case_id: { type: string, format: uuid }
+            case_no: { type: string, examples: ['PEN-2026-000123'] }
+            employee_id: { type: string, format: uuid }
+            separation_type: { $ref: '#/components/schemas/SeparationType' }
+            pension_scheme: { $ref: '#/components/schemas/PensionScheme' }
+            ups_opted_in: { type: boolean }
+            retirement_date: { type: string, format: date }
+            pension_commence_date: { type: [string, "null"], format: date }
+            proceedings_pending: { type: boolean }
+            proceedings_ref: { type: [string, "null"] }
+            no_dues_status: { $ref: '#/components/schemas/NoDuesStatus' }
+            anticipatory_pension_flag: { type: boolean }
+            provisional_pension_flag: { type: boolean }
+            pda_id: { type: [string, "null"], format: uuid }
+            workflow_instance_id: { type: [string, "null"], format: uuid }
+            service_verification_id: { type: [string, "null"], format: uuid }
+            org_unit_id: { type: string, format: uuid }
+            status: { $ref: '#/components/schemas/CaseStatus' }
+
+    NoDues:
+      type: object
+      properties:
+        case_id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/NoDuesStatus' }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              department: { type: string }
+              cleared: { type: boolean }
+              remarks: { type: [string, "null"] }
+              amount_due: { $ref: '#/components/schemas/Money' }
+
+    QualifyingServiceRecord:
+      type: object
+      properties:
+        qsr_id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        service_start_date: { type: string, format: date }
+        service_end_date: { type: string, format: date }
+        gross_service_y: { type: integer }
+        gross_service_m: { type: integer }
+        gross_service_d: { type: integer }
+        non_qualifying_days: { type: integer }
+        prior_service_days: { type: integer }
+        net_qualifying_y: { type: integer }
+        net_qualifying_m: { type: integer }
+        net_qualifying_d: { type: integer }
+        reckonable_half_years: { type: integer }
+        weightage_years: { type: [integer, "null"] }
+        meets_min_pension_service: { type: boolean }
+        sr_verified: { type: boolean }
+        status: { type: string, enum: [DRAFT, VERIFIED, LOCKED] }
+        spells:
+          type: array
+          items: { $ref: '#/components/schemas/NonQualifyingSpell' }
+        prior_service:
+          type: array
+          items: { $ref: '#/components/schemas/PriorServiceRecord' }
+
+    PensionCalculation:
+      type: object
+      properties:
+        pension_calc_id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        scheme: { $ref: '#/components/schemas/PensionScheme' }
+        benefit_outcome: { $ref: '#/components/schemas/BenefitOutcome' }
+        emoluments_base: { $ref: '#/components/schemas/Money' }
+        emoluments_method: { $ref: '#/components/schemas/EmolumentsMethod' }
+        avg_emoluments: { $ref: '#/components/schemas/Money' }
+        qualifying_half_years: { type: [integer, "null"] }
+        pension_fraction: { $ref: '#/components/schemas/Rate' }
+        basic_pension: { $ref: '#/components/schemas/Money' }
+        minimum_pension_applied: { type: boolean }
+        maximum_pension_cap_applied: { type: boolean }
+        ups_assured_payout: { $ref: '#/components/schemas/Money' }
+        nps_default_benefit_amount: { $ref: '#/components/schemas/Money' }
+        nps_corpus_ref: { type: [string, "null"] }
+        nps_annuity_estimate: { $ref: '#/components/schemas/Money' }
+        calc_trace: { type: object, additionalProperties: true }
+        rule_version_ref: { type: string, format: uuid }
+        status: { type: string, enum: [DRAFT, COMPUTED, SANCTIONED, SUPERSEDED] }
+
+    Commutation:
+      type: object
+      properties:
+        commutation_id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        pension_calc_id: { type: string, format: uuid }
+        opted: { type: boolean }
+        commuted_fraction: { $ref: '#/components/schemas/Rate' }
+        commuted_pension_amount: { $ref: '#/components/schemas/Money' }
+        age_next_birthday: { type: [integer, "null"] }
+        commutation_factor: { $ref: '#/components/schemas/Rate' }
+        commutation_factor_ref: { type: [string, "null"], format: uuid }
+        commuted_value: { $ref: '#/components/schemas/Money' }
+        residual_pension: { $ref: '#/components/schemas/Money' }
+        commutation_payment_date: { type: [string, "null"], format: date }
+        reduction_effective_date: { type: [string, "null"], format: date }
+        restoration_due_date: { type: [string, "null"], format: date }
+        migrated_date_unknown: { type: boolean }
+        restored: { type: boolean }
+        status: { type: string, enum: [DRAFT, COMPUTED, SANCTIONED, RESTORED, SUPERSEDED] }
+
+    Gratuity:
+      type: object
+      properties:
+        gratuity_id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        gratuity_type: { $ref: '#/components/schemas/GratuityType' }
+        emoluments_base: { $ref: '#/components/schemas/Money' }
+        qualifying_half_years: { type: integer }
+        computed_amount: { $ref: '#/components/schemas/Money' }
+        statutory_ceiling: { $ref: '#/components/schemas/Money' }
+        ceiling_ref: { type: [string, "null"], format: uuid }
+        ceiling_applied: { type: boolean }
+        payable_amount: { $ref: '#/components/schemas/Money' }
+        withheld_amount: { $ref: '#/components/schemas/Money' }
+        nominee_split:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/NomineeShare' }
+        rule_version_ref: { type: string, format: uuid }
+        status: { type: string, enum: [DRAFT, COMPUTED, SANCTIONED, PAID, WITHHELD_PROCEEDINGS, SUPERSEDED] }
+
+    FamilyPension:
+      type: object
+      properties:
+        fp_id: { type: string, format: uuid }
+        case_id: { type: [string, "null"], format: uuid }
+        source_pensioner_id: { type: [string, "null"], format: uuid }
+        employee_id: { type: string, format: uuid }
+        enhanced_basis: { $ref: '#/components/schemas/EnhancedBasis' }
+        emoluments_base: { $ref: '#/components/schemas/Money' }
+        normal_rate_pct: { $ref: '#/components/schemas/Rate' }
+        enhanced_rate_pct: { $ref: '#/components/schemas/Rate' }
+        normal_amount: { $ref: '#/components/schemas/Money' }
+        enhanced_amount: { $ref: '#/components/schemas/Money' }
+        enhanced_from: { type: [string, "null"], format: date }
+        enhanced_to: { type: [string, "null"], format: date }
+        enhanced_window_rule: { type: string }
+        current_family_member_id: { type: [string, "null"], format: uuid }
+        dual_family_pension: { type: boolean }
+        dual_cap_applied: { type: boolean }
+        status: { type: string, enum: [DRAFT, COMPUTED, SANCTIONED, ACTIVE, TRANSFERRED, CEASED, SUPERSEDED] }
+
+    TerminalSettlement:
+      type: object
+      properties:
+        settlement_id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        leave_encashment_days: { type: [integer, "null"] }
+        leave_encashment_amount: { $ref: '#/components/schemas/Money' }
+        recoveries_total: { $ref: '#/components/schemas/Money' }
+        gross_settlement: { $ref: '#/components/schemas/Money' }
+        gratuity_exempt_amount: { $ref: '#/components/schemas/Money' }
+        gratuity_taxable_amount: { $ref: '#/components/schemas/Money' }
+        commutation_exempt_amount: { $ref: '#/components/schemas/Money' }
+        leave_encashment_exempt_amount: { $ref: '#/components/schemas/Money' }
+        taxable_total: { $ref: '#/components/schemas/Money' }
+        tds_amount: { $ref: '#/components/schemas/Money' }
+        section_89_relief: { $ref: '#/components/schemas/Money' }
+        tax_breakdown: { type: object, additionalProperties: true }
+        net_settlement: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [DRAFT, COMPUTED, SANCTIONED, PAID, PARTIALLY_WITHHELD, SUPERSEDED] }
+
+    GpfSettlement:
+      type: object
+      properties:
+        gpf_settlement_id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        closing_balance: { $ref: '#/components/schemas/Money' }
+        interest_amount: { $ref: '#/components/schemas/Money' }
+        advances_adjusted: { $ref: '#/components/schemas/Money' }
+        final_payable: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [DRAFT, COMPUTED, AUTHORISED, PAID, SUPERSEDED] }
+
+    Ppo:
+      type: object
+      properties:
+        ppo_id: { type: string, format: uuid }
+        ppo_no: { type: string, examples: ['PPO-2026-004512'] }
+        case_id: { type: string, format: uuid }
+        pensioner_id: { type: [string, "null"], format: uuid }
+        ppo_type: { $ref: '#/components/schemas/PpoType' }
+        basic_pension: { $ref: '#/components/schemas/Money' }
+        commuted_portion: { $ref: '#/components/schemas/Money' }
+        residual_pension: { $ref: '#/components/schemas/Money' }
+        relief_formula_ref: { type: [string, "null"], format: uuid }
+        pda_id: { type: [string, "null"], format: uuid }
+        pda_disbursement_model: { $ref: '#/components/schemas/PdaDisbursementModel' }
+        effective_from: { type: string, format: date }
+        e_ppo_document_id: { type: [string, "null"], format: uuid }
+        digilocker_pushed: { type: boolean }
+        digilocker_ref: { type: [string, "null"] }
+        supersedes_ppo_id: { type: [string, "null"], format: uuid }
+        status: { type: string, enum: [DRAFT, ISSUED, AUTHORISED_TO_PDA, ACTIVE, SUPERSEDED, CANCELLED] }
+
+    Pensioner:
+      allOf:
+        - $ref: '#/components/schemas/AuditFields'
+        - type: object
+          properties:
+            pensioner_id: { type: string, format: uuid }
+            pensioner_no: { type: string }
+            employee_id: { type: string, format: uuid }
+            aadhaar_masked: { type: [string, "null"], description: Encrypted; masked by P02. }
+            pran: { type: [string, "null"] }
+            disbursement_model: { $ref: '#/components/schemas/PdaDisbursementModel' }
+            death_detected_source: { $ref: '#/components/schemas/DeathDetectedSource' }
+            overpayment_open: { type: boolean }
+            lifecycle_status: { type: string, enum: [ACTIVE, LC_PENDING, SUSPENDED, DECEASED, CONVERTED_FAMILY_PENSION, RESTORED] }
+
+    LifeCertificate:
+      type: object
+      properties:
+        lc_id: { type: string, format: uuid }
+        pensioner_id: { type: string, format: uuid }
+        method: { type: string, enum: [JEEVAN_PRAMAAN, PHYSICAL, VIDEO_KYC, BANK_CERTIFIED] }
+        certificate_ref: { type: [string, "null"] }
+        submitted_on: { type: string, format: date }
+        valid_until: { type: [string, "null"], format: date }
+        status: { type: string, enum: [SUBMITTED, VERIFIED, REJECTED, EXPIRED] }
+
+    Revision:
+      type: object
+      properties:
+        revision_id: { type: string, format: uuid }
+        revision_type: { type: string, enum: [DA, PAY_COMMISSION] }
+        effective_from: { type: string, format: date }
+        pensioner_count: { type: integer }
+        total_delta: { $ref: '#/components/schemas/Money' }
+        applied_order: { type: array, items: { type: string } }
+        status: { type: string, enum: [DRAFT, COMPUTED, APPROVED, APPLIED, SUPERSEDED] }
+
+    Disbursement:
+      type: object
+      properties:
+        disbursement_id: { type: string, format: uuid }
+        batch_no: { type: string }
+        pda_id: { type: string, format: uuid }
+        period_month: { type: integer }
+        period_year: { type: integer }
+        line_count: { type: integer }
+        control_total: { $ref: '#/components/schemas/Money' }
+        acknowledged_count: { type: [integer, "null"] }
+        failed_count: { type: [integer, "null"] }
+        status: { type: string, enum: [DRAFT, AUTHORISED, TRANSMITTED, ACK_PARTIAL, ACK_COMPLETE, FAILED] }
+
+    BankAccountVerification:
+      type: object
+      properties:
+        verification_ref: { type: string, format: uuid }
+        pensioner_id: { type: [string, "null"], format: uuid }
+        account_masked: { type: string }
+        ifsc: { type: string }
+        account_name_matched: { type: [string, "null"] }
+        match_score: { type: [number, "null"] }
+        result: { $ref: '#/components/schemas/AccountVerifyResult' }
+        verified_at: { type: string, format: date-time }
+
+    ServiceVerification:
+      type: object
+      properties:
+        verification_id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        coverage_from: { type: string, format: date }
+        coverage_to: { type: string, format: date }
+        gap_count: { type: integer }
+        discrepancy_open_count: { type: integer }
+        spells_attested_count: { type: integer }
+        spells_total_count: { type: integer }
+        signoff_complete: { type: boolean }
+        signoff_workflow_instance_id: { type: [string, "null"], format: uuid }
+        status: { type: string, enum: [DRAFT, DISCREPANCIES_OPEN, ATTESTED, SIGNED_OFF, LOCKED] }
+        discrepancies:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceDiscrepancy' }
+
+    ServiceDiscrepancy:
+      type: object
+      properties:
+        discrepancy_id: { type: string, format: uuid }
+        verification_id: { type: string, format: uuid }
+        discrepancy_type: { type: string, enum: [SERVICE_GAP, MISSING_REASON_CODE, SUSPENSION_UNREGULARISED, OVERLAPPING_SPELL, MISSING_ORDER, PAY_ANOMALY, PRIOR_SERVICE_UNVERIFIED, OTHER] }
+        detail: { type: [string, "null"] }
+        condonation_order_ref: { type: [string, "null"] }
+        status: { type: string, enum: [OPEN, RESOLVED, CONDONED, WAIVED, ESCALATED] }
+
+    RuleRow:
+      type: object
+      properties:
+        row_id: { type: string, format: uuid }
+        table: { type: string }
+        effective_from: { type: string, format: date }
+        effective_to: { type: [string, "null"], format: date }
+        payload: { type: object, additionalProperties: true }
+        status: { $ref: '#/components/schemas/RuleRowStatus' }
+        supersedes_row_id: { type: [string, "null"], format: uuid }
+    RuleRowList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/RuleRow' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    Overpayment:
+      type: object
+      properties:
+        overpayment_id: { type: string, format: uuid }
+        pensioner_id: { type: string, format: uuid }
+        amount: { $ref: '#/components/schemas/Money' }
+        recovered_amount: { $ref: '#/components/schemas/Money' }
+        detected_source: { $ref: '#/components/schemas/DeathDetectedSource' }
+        status: { type: string, enum: [IDENTIFIED, NOTIFIED, UNDER_RECOVERY, RECOVERED, WRITTEN_OFF, LEGAL] }
+
+    DeathFlag:
+      type: object
+      properties:
+        flag_id: { type: string, format: uuid }
+        pensioner_id: { type: string, format: uuid }
+        source: { $ref: '#/components/schemas/DeathDetectedSource' }
+        probable_date_of_death: { type: [string, "null"], format: date }
+        amount_drawn_after_death: { $ref: '#/components/schemas/Money' }
+        detected_at: { type: string, format: date-time }
+    DeathFlagList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/DeathFlag' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    Pda:
+      type: object
+      properties:
+        pda_id: { type: string, format: uuid }
+        pda_code: { type: string }
+        name: { type: string }
+        disbursement_model: { $ref: '#/components/schemas/PdaDisbursementModel' }
+        interface_type: { type: string, enum: [FILE_SFTP, REST_API] }
+        payload_contract_version: { type: string }
+        sandbox_certified: { type: boolean }
+        status: { type: string, enum: [REGISTERED, CERTIFIED, ACTIVE, SUSPENDED] }
+    PdaList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Pda' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    ProvisionalPension:
+      type: object
+      properties:
+        provisional_id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        provisional_amount: { $ref: '#/components/schemas/Money' }
+        dcrg_withheld: { type: boolean }
+        proceedings_ref: { type: string }
+        proceedings_concluded_on: { type: [string, "null"], format: date }
+        status: { type: string, enum: [ACTIVE, CONCLUDED_REGULARISED, CONCLUDED_RECOVERY] }
+
+    AuditObjection:
+      type: object
+      properties:
+        objection_id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        ppo_id: { type: [string, "null"], format: uuid }
+        source: { type: string, enum: [AG, INTERNAL_AUDIT] }
+        objection_text: { type: string }
+        response_text: { type: [string, "null"] }
+        calc_trace_ref: { type: [string, "null"] }
+        status: { type: string, enum: [RAISED, UNDER_RESPONSE, RESPONDED, ACCEPTED, DROPPED, CLOSED] }
+
+    Grievance:
+      type: object
+      properties:
+        grievance_id: { type: string, format: uuid }
+        pensioner_id: { type: [string, "null"], format: uuid }
+        category: { type: string }
+        description: { type: string }
+        assignee_ref: { type: [string, "null"] }
+        sla_due_at: { type: [string, "null"], format: date-time }
+        resolution: { type: [string, "null"] }
+        status: { type: string, enum: [OPEN, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED] }
+
+    BenefitEstimate:
+      type: object
+      properties:
+        estimate_id: { type: string, format: uuid }
+        non_binding: { type: boolean, default: true }
+        scheme: { $ref: '#/components/schemas/PensionScheme' }
+        benefit_outcome: { $ref: '#/components/schemas/BenefitOutcome' }
+        estimated_basic_pension: { $ref: '#/components/schemas/Money' }
+        estimated_commuted_value: { $ref: '#/components/schemas/Money' }
+        estimated_gratuity: { $ref: '#/components/schemas/Money' }
+        estimated_monthly_in_hand: { $ref: '#/components/schemas/Money' }
+        plain_language_summary: { type: string }
+
+    MyCaseTracker:
+      type: object
+      properties:
+        case_id: { type: [string, "null"], format: uuid }
+        stage_label: { type: string, description: Plain-language 3-state tracker label. }
+        stage_code: { type: string, enum: [IN_PREPARATION, UNDER_APPROVAL, COMPLETED] }
+        next_action: { type: [string, "null"] }
+        options_locked: { type: boolean }
+
+    LcCalendar:
+      type: object
+      properties:
+        pensioner_id: { type: string, format: uuid }
+        next_due_date: { type: string, format: date }
+        submission_methods:
+          type: array
+          items: { type: string, enum: [JEEVAN_PRAMAAN, PHYSICAL, VIDEO_KYC, BANK_CERTIFIED] }
+        last_submitted_on: { type: [string, "null"], format: date }
+
+    AnalyticsResult:
+      type: object
+      properties:
+        metric: { type: string }
+        generated_at: { type: string, format: date-time }
+        dimensions: { type: object, additionalProperties: true }
+        series:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              value: { type: [number, string] }
+
+    DeliveryStatus:
+      type: object
+      properties:
+        resource_id: { type: string, format: uuid }
+        channel: { type: string, enum: [DIGILOCKER, DBT] }
+        pushed: { type: boolean }
+        digilocker_ref: { type: [string, "null"] }
+        status: { type: string, enum: [PENDING, PUSHED, DELIVERED, FAILED] }
+        last_attempt_at: { type: [string, "null"], format: date-time }
+
+    SrIngestResult:
+      type: object
+      properties:
+        sr_event_id: { type: string, format: uuid }
+        event_type_code: { type: string }
+        source_module: { type: string, const: G11 }
+        source_reference_id: { type: string }
+        source_event_version: { type: integer }
+        fact_key: { type: [string, "null"] }
+        deduplicated: { type: boolean, description: true when the dedup tuple replayed an existing event. }
+        accepted_at: { type: string, format: date-time }

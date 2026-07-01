@@ -1,0 +1,6178 @@
+openapi: 3.1.0
+info:
+  title: Government HRMS G08 — Performance Appraisal Management
+  version: 3.0.0
+  description: 'OpenAPI 3.1 contract for module G08 (Performance Appraisal Management), a public-sector statutory-APAR extension
+    of the PrimeSoft M09 Performance model. Covers appraisal cycles, goal/KRA plans + check-ins, self-appraisal, the multi-tier
+    APAR workflow (Reporting -> Reviewing -> Accepting, run on P01), ratings, calibration, representation, disclosure/custody
+    ledger, 360/MSF, PIP, probation confirmation, sealed cover and digital signature. Conventions per PLATFORM_FOUNDATION.md
+    §4: cursor pagination, Idempotency-Key on state-changing POSTs, X-Correlation-Id response header, canonical error envelope
+    with the 8-code standard table; ERR-G08-* annotated on responses. APAR_FINAL_GRADE / PROBATION_CONFIRMED post to the canonical
+    G12 write-port POST /sr/ingest (event_category APPRAISAL, no fact_key).'
+servers:
+- url: /api/v1
+security:
+- bearerAuth: []
+tags:
+- name: Cycles
+  description: FR-G08-01 appraisal cycle configuration (extends M09 review/goal cycles)
+- name: Templates
+  description: FR-G08-01 APAR templates as W.2 form definitions
+- name: RatingScales
+  description: FR-G08-07 rating scales & weightage-policy grade roll-up
+- name: Goals
+  description: FR-G08-02 goal/KRA/OKR plans, check-ins, snapshot-on-lock
+- name: SelfAppraisal
+  description: FR-G08-03 self-appraisal (M09 self review)
+- name: AssessmentReporting
+  description: FR-G08-04 Reporting-tier (RO) multi-RO part-period assessment
+- name: AssessmentReviewing
+  description: FR-G08-05 Reviewing-tier (RvO) assessment + COI recusal
+- name: AssessmentAccepting
+  description: FR-G08-06 Accepting-tier (AA) certification
+- name: Disclosure
+  description: FR-G08-08 mandatory full disclosure & disclosure log
+- name: Representations
+  description: FR-G08-08 representation against adverse remarks + escalation ladder
+- name: Calibration
+  description: FR-G08-09 calibration recommendations/sessions (ratified, absolute grading)
+- name: Feedback
+  description: FR-G08-10 continuous feedback & check-ins
+- name: Feedback360
+  description: FR-G08-11 360/MSF nominations & responses
+- name: Competencies
+  description: FR-G08-12 competency assessment + G07 training nomination
+- name: PIP
+  description: FR-G08-13 Performance Improvement Plans + milestones
+- name: Finalisation
+  description: FR-G08-14 finalise + post final grade to G12 SR
+- name: Forms
+  description: FR-G08-15 APAR form read (P02 field-masked) & PDF
+- name: Custody
+  description: FR-G08-15 custody, tamper-evidence, heir access, retention, dual-control
+- name: Analytics
+  description: FR-G08-16 distribution/skew/completion/gap/bias-disparity
+- name: SealedCover
+  description: FR-G08-17 Sealed Cover Procedure (G09-driven)
+- name: ReportPeriods
+  description: FR-G08-18 multi-RO part-period reports + No-Report Certificate
+- name: Escalation
+  description: FR-G08-19 SLA auto-escalation / authoring-right transfer
+- name: Signatures
+  description: FR-G08-20 DSC/eSign non-repudiation
+- name: Probation
+  description: FR-G08-21 probation confirmation appraisal
+- name: Errata
+  description: FR-G08-22 controlled cycle errata correction
+- name: ServiceRegister
+  description: 'Reference: canonical G12 SR write-port (POST /sr/ingest)'
+paths:
+  /g08/cycles:
+    post:
+      tags:
+      - Cycles
+      operationId: createCycle
+      summary: Create an appraisal cycle
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppraisalCycleCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: &id001
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalCycle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - Cycles
+      operationId: listCycles
+      summary: List appraisal cycles
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: type
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/CycleType'
+        description: Filter by cycle type (e.g. PROBATION)
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalCyclePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/cycles/{cycleId}:
+    put:
+      tags:
+      - Cycles
+      operationId: updateCycle
+      summary: Update an appraisal cycle
+      parameters:
+      - &id002
+        name: cycleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Appraisal cycle id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppraisalCycleUpdate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalCycle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/cycles/{cycleId}/open:
+    post:
+      tags:
+      - Cycles
+      operationId: openCycle
+      summary: Open a cycle (materialise forms, open M09 goal/review windows)
+      parameters:
+      - *id002
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalCycle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/templates:
+    post:
+      tags:
+      - Templates
+      operationId: createTemplate
+      summary: Create/publish an APAR template (W.2 form)
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppraisalTemplateCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/rating-scales:
+    post:
+      tags:
+      - RatingScales
+      operationId: createRatingScale
+      summary: Create a rating scale
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RatingScaleCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RatingScale'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - RatingScales
+      operationId: listRatingScales
+      summary: List rating scales
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RatingScalePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/rating-scales/{scaleId}:
+    put:
+      tags:
+      - RatingScales
+      operationId: updateRatingScale
+      summary: Update a rating scale
+      parameters:
+      - name: scaleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Rating scale id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RatingScaleCreate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RatingScale'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/grade/preview:
+    post:
+      tags:
+      - RatingScales
+      operationId: previewGrade
+      summary: Preview weightage-policy grade roll-up (no mutation)
+      parameters:
+      - &id003
+        name: formId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: APAR form (appraisal_forms.form_id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GradePreviewRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GradePreview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/goals:
+    post:
+      tags:
+      - Goals
+      operationId: createGoal
+      summary: Create a goal/KRA/OKR (form-less allowed)
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/goals/{goalId}:
+    put:
+      tags:
+      - Goals
+      operationId: updateGoal
+      summary: Update a goal
+      parameters:
+      - name: goalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Goal id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalUpdate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/goals/{goalId}/approve:
+    post:
+      tags:
+      - Goals
+      operationId: approveGoal
+      summary: Approve a goal (RO)
+      parameters:
+      - name: goalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Goal id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/goals/{goalId}/return:
+    post:
+      tags:
+      - Goals
+      operationId: returnGoal
+      summary: Return a goal for revision (RO)
+      parameters:
+      - name: goalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Goal id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/goals/lock:
+    post:
+      tags:
+      - Goals
+      operationId: lockGoals
+      summary: Lock goals into an immutable form snapshot
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalSnapshotResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/goal-snapshots:
+    get:
+      tags:
+      - Goals
+      operationId: listGoalSnapshots
+      summary: List locked goal snapshots for a form
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalSnapshotPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/goals/{goalId}/checkins:
+    post:
+      tags:
+      - Goals
+      operationId: createCheckin
+      summary: Record a goal check-in
+      parameters:
+      - name: goalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Goal id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalCheckinCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalCheckin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/self-appraisal:
+    get:
+      tags:
+      - SelfAppraisal
+      operationId: getSelfAppraisal
+      summary: Get the self-appraisal for a form
+      parameters:
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfAppraisal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags:
+      - SelfAppraisal
+      operationId: saveSelfAppraisal
+      summary: Save/draft the self-appraisal
+      parameters:
+      - *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelfAppraisalUpdate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfAppraisal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/self-appraisal/submit:
+    post:
+      tags:
+      - SelfAppraisal
+      operationId: submitSelfAppraisal
+      summary: Submit the self-appraisal (advances P01)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfAppraisal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/self-appraisal/return:
+    post:
+      tags:
+      - SelfAppraisal
+      operationId: returnSelfAppraisal
+      summary: Return the self-appraisal to the appraisee
+      parameters:
+      - *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfAppraisal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/assessment/reporting:
+    get:
+      tags:
+      - AssessmentReporting
+      operationId: getReportingAssessment
+      summary: Get the Reporting-tier assessment
+      parameters:
+      - name: periodId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Report period id (multi-RO)
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags:
+      - AssessmentReporting
+      operationId: saveReportingAssessment
+      summary: Save/draft the Reporting-tier assessment
+      parameters:
+      - *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentUpdate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/assessment/reporting/submit:
+    post:
+      tags:
+      - AssessmentReporting
+      operationId: submitReportingAssessment
+      summary: Submit RO part-period assessment (P01 approve)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportingAssessmentSubmit'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/assessment/reviewing:
+    get:
+      tags:
+      - AssessmentReviewing
+      operationId: getReviewingAssessment
+      summary: Get the Reviewing-tier assessment
+      parameters:
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags:
+      - AssessmentReviewing
+      operationId: saveReviewingAssessment
+      summary: Save/draft the Reviewing-tier assessment
+      parameters:
+      - *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentUpdate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/assessment/reviewing/submit:
+    post:
+      tags:
+      - AssessmentReviewing
+      operationId: submitReviewingAssessment
+      summary: Submit RvO review (concur/vary with reasons)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewingAssessmentSubmit'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/assessment/reviewing/return:
+    post:
+      tags:
+      - AssessmentReviewing
+      operationId: returnReviewingAssessment
+      summary: Return the form to the Reporting tier
+      parameters:
+      - *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/recuse:
+    post:
+      tags:
+      - AssessmentReviewing
+      operationId: recuse
+      summary: Record a conflict-of-interest recusal (COI)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecuseRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoiRecusal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/assessment/accepting:
+    get:
+      tags:
+      - AssessmentAccepting
+      operationId: getAcceptingAssessment
+      summary: Get the Accepting-tier assessment
+      parameters:
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags:
+      - AssessmentAccepting
+      operationId: saveAcceptingAssessment
+      summary: Save/draft the Accepting-tier assessment
+      parameters:
+      - *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentUpdate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/assessment/accepting/certify:
+    post:
+      tags:
+      - AssessmentAccepting
+      operationId: certifyForm
+      summary: Certify final grade (DSC + MFA step-up; opens disclosure)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertifyRequest'
+      responses:
+        '200':
+          description: Certified; status DISCLOSURE
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/assessment/accepting/return:
+    post:
+      tags:
+      - AssessmentAccepting
+      operationId: returnAcceptingAssessment
+      summary: Return the form to a lower tier
+      parameters:
+      - *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/disclose:
+    post:
+      tags:
+      - Disclosure
+      operationId: discloseForm
+      summary: Disclose the full APAR to the appraisee (mandatory)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscloseRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/acknowledge:
+    post:
+      tags:
+      - Disclosure
+      operationId: acknowledgeDisclosure
+      summary: Acknowledge disclosure (eSign; starts representation clock)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcknowledgeRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/representations:
+    post:
+      tags:
+      - Representations
+      operationId: fileRepresentation
+      summary: File a representation against adverse/below-benchmark remarks
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepresentationCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Representation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/disclosure-log:
+    get:
+      tags:
+      - Disclosure
+      operationId: getDisclosureLog
+      summary: Read the disclosure & custody ledger (append-only)
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisclosureLogPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/representations/{repId}/condone:
+    post:
+      tags:
+      - Representations
+      operationId: condoneRepresentation
+      summary: Condone a late representation (condonation authority)
+      parameters:
+      - name: repId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Representation id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CondoneRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Representation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/representations/{repId}/decide:
+    post:
+      tags:
+      - Representations
+      operationId: decideRepresentation
+      summary: Adjudicate a representation (uphold/expunge/modify; DSC)
+      parameters:
+      - name: repId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Representation id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepresentationDecision'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Representation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/representations/{repId}/escalate:
+    post:
+      tags:
+      - Representations
+      operationId: escalateRepresentation
+      summary: Escalate a representation (ladder / external tribunal)
+      parameters:
+      - name: repId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Representation id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepresentationEscalate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Representation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/calibration/sessions:
+    post:
+      tags:
+      - Calibration
+      operationId: createCalibrationSession
+      summary: Create a calibration/moderation session
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalibrationSessionCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/calibration/sessions/{sessionId}/distribution:
+    get:
+      tags:
+      - Calibration
+      operationId: getCalibrationDistribution
+      summary: Get the rating distribution (diagnostic only, VAL-DISTRIB)
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Calibration session id
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DistributionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/calibration/sessions/{sessionId}/recommendations:
+    post:
+      tags:
+      - Calibration
+      operationId: createRecommendation
+      summary: Propose a calibration recommendation
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Calibration session id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationRecommendation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/calibration/recommendations/{recId}/vote:
+    post:
+      tags:
+      - Calibration
+      operationId: voteRecommendation
+      summary: Vote on a calibration recommendation
+      parameters:
+      - name: recId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Recommendation id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoteRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationRecommendation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/calibration/recommendations/{recId}/ratify:
+    post:
+      tags:
+      - Calibration
+      operationId: ratifyRecommendation
+      summary: Ratify a recommendation (competent authority; step-up + DSC)
+      parameters:
+      - name: recId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Recommendation id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RatifyRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationAdjustment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/calibration/recommendations/{recId}/decline:
+    post:
+      tags:
+      - Calibration
+      operationId: declineRecommendation
+      summary: Decline a calibration recommendation
+      parameters:
+      - name: recId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Recommendation id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationRecommendation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/feedback:
+    post:
+      tags:
+      - Feedback
+      operationId: createFeedback
+      summary: Post continuous feedback
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContinuousFeedbackCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContinuousFeedback'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - Feedback
+      operationId: listFeedback
+      summary: List continuous feedback
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: subjectId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Subject employee id
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContinuousFeedbackPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/feedback/{feedbackId}/acknowledge:
+    post:
+      tags:
+      - Feedback
+      operationId: acknowledgeFeedback
+      summary: Acknowledge a feedback note
+      parameters:
+      - name: feedbackId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Feedback id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContinuousFeedback'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/360/requests:
+    post:
+      tags:
+      - Feedback360
+      operationId: createFeedback360Requests
+      summary: Nominate 360/MSF raters
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Feedback360RequestCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feedback360RequestBatch'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/360/requests/assigned:
+    get:
+      tags:
+      - Feedback360
+      operationId: listAssigned360Requests
+      summary: List 360/MSF requests assigned to the caller
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feedback360RequestPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/360/requests/{requestId}/respond:
+    post:
+      tags:
+      - Feedback360
+      operationId: respond360Request
+      summary: Submit a 360/MSF response
+      parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: 360 request id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Feedback360ResponseCreate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feedback360Response'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/360/summary:
+    get:
+      tags:
+      - Feedback360
+      operationId: get360Summary
+      summary: Get the aggregated 360/MSF summary for a form
+      parameters:
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feedback360Summary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/competencies:
+    get:
+      tags:
+      - Competencies
+      operationId: getCompetencies
+      summary: Get competency assessments for a form
+      parameters:
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetencyAssessmentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags:
+      - Competencies
+      operationId: saveCompetencies
+      summary: Upsert competency assessments (with skill gaps)
+      parameters:
+      - *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompetencyAssessmentUpsert'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetencyAssessmentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/competencies/{compId}/nominate:
+    post:
+      tags:
+      - Competencies
+      operationId: nominateTraining
+      summary: Create a G07 training nomination from a skill gap
+      parameters:
+      - *id003
+      - name: compId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Competency assessment id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingNominationResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/pips:
+    post:
+      tags:
+      - PIP
+      operationId: createPip
+      summary: Create a Performance Improvement Plan
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceImprovementPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - PIP
+      operationId: listPips
+      summary: List PIPs
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: employeeId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/pips/{pipId}/activate:
+    post:
+      tags:
+      - PIP
+      operationId: activatePip
+      summary: Activate a PIP
+      parameters:
+      - name: pipId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: PIP id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceImprovementPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/pips/{pipId}/milestones/{milestoneId}:
+    put:
+      tags:
+      - PIP
+      operationId: updatePipMilestone
+      summary: Update a PIP milestone
+      parameters:
+      - name: pipId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: PIP id
+      - name: milestoneId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Milestone id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipMilestoneUpdate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipMilestone'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/pips/{pipId}/close:
+    post:
+      tags:
+      - PIP
+      operationId: closePip
+      summary: Close a PIP with an outcome
+      parameters:
+      - name: pipId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: PIP id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipCloseRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceImprovementPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/finalise:
+    post:
+      tags:
+      - Finalisation
+      operationId: finaliseForm
+      summary: Finalise the APAR (post-disclosure, not sealed)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/post-to-sr:
+    post:
+      tags:
+      - Finalisation
+      operationId: postToServiceRegister
+      summary: Post final grade to G12 SR (internal facade to POST /sr/ingest)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostingStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/posting-status:
+    get:
+      tags:
+      - Finalisation
+      operationId: getPostingStatus
+      summary: Get the SR posting status
+      parameters:
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostingStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}:
+    get:
+      tags:
+      - Forms
+      operationId: getForm
+      summary: Get an APAR form (P02 field-masked)
+      parameters:
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/pdf:
+    get:
+      tags:
+      - Forms
+      operationId: getFormPdf
+      summary: Get the generated (watermarked) APAR PDF
+      parameters:
+      - *id003
+      responses:
+        '200':
+          description: PDF document reference
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentRef'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/custody-transfer:
+    post:
+      tags:
+      - Custody
+      operationId: transferCustody
+      summary: Transfer APAR custody on movement (G05)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustodyTransferRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/access-log:
+    get:
+      tags:
+      - Custody
+      operationId: getAccessLog
+      summary: Read the APAR access log
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisclosureLogPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/access-log/verify:
+    get:
+      tags:
+      - Custody
+      operationId: verifyAccessLog
+      summary: Verify OPEN-PLAT-03 tamper-evidence chain
+      parameters:
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChainVerification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/heir-access:
+    post:
+      tags:
+      - Custody
+      operationId: grantHeirAccess
+      summary: Grant time-bound legal-heir/nominee access (DSC)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeirAccessRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeirAccessGrant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/dispose:
+    post:
+      tags:
+      - Custody
+      operationId: disposeForm
+      summary: Propose retention disposal (maker; dual-control)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisposeRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/dispose/approve:
+    post:
+      tags:
+      - Custody
+      operationId: approveDisposal
+      summary: Approve retention disposal (checker; DSC)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignatureRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/downgrade:
+    post:
+      tags:
+      - Custody
+      operationId: downgradeConfidentiality
+      summary: Downgrade confidentiality class (maker+checker; DSC)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DowngradeRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/analytics/distribution:
+    get:
+      tags:
+      - Analytics
+      operationId: getRatingDistribution
+      summary: Rating-distribution analytics
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: cycleId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: orgUnitId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/analytics/skew:
+    get:
+      tags:
+      - Analytics
+      operationId: getRatingSkew
+      summary: Rating-skew analytics
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: cycleId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: orgUnitId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/analytics/completion:
+    get:
+      tags:
+      - Analytics
+      operationId: getCompletionAnalytics
+      summary: Cycle-completion analytics
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: cycleId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: orgUnitId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/analytics/competency-gaps:
+    get:
+      tags:
+      - Analytics
+      operationId: getCompetencyGaps
+      summary: Competency-gap analytics
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: cycleId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: orgUnitId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/analytics/bias-disparity:
+    get:
+      tags:
+      - Analytics
+      operationId: getBiasDisparity
+      summary: DPDP-safe bias-disparity analytics (min-N suppressed)
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: cycleId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: orgUnitId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/analytics/rater-leniency:
+    get:
+      tags:
+      - Analytics
+      operationId: getRaterLeniency
+      summary: Rater-leniency analytics
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: cycleId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: orgUnitId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/seal:
+    post:
+      tags:
+      - SealedCover
+      operationId: sealForm
+      summary: Seal a cover (G09 charge / sub-judice)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SealRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/seal/release:
+    post:
+      tags:
+      - SealedCover
+      operationId: releaseSeal
+      summary: Release a sealed cover on conclusion (DSC)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SealReleaseRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/seal-status:
+    get:
+      tags:
+      - SealedCover
+      operationId: getSealStatus
+      summary: Get sealed-cover status
+      parameters:
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SealStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/report-periods:
+    post:
+      tags:
+      - ReportPeriods
+      operationId: createReportPeriod
+      summary: Add a multi-RO part-period report
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportPeriodCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportPeriod'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/report-periods/{periodId}:
+    put:
+      tags:
+      - ReportPeriods
+      operationId: updateReportPeriod
+      summary: Update a part-period report
+      parameters:
+      - *id003
+      - name: periodId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Report period id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportPeriodUpdate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportPeriod'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/report-periods/{periodId}/no-report:
+    post:
+      tags:
+      - ReportPeriods
+      operationId: issueNoReport
+      summary: Issue a No-Report Certificate (min-supervision; DSC)
+      parameters:
+      - *id003
+      - name: periodId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Report period id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoReportRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportPeriod'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/report-periods/aggregate:
+    post:
+      tags:
+      - ReportPeriods
+      operationId: aggregateReportPeriods
+      summary: Supervision-weighted aggregation of part-period grades
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/escalate:
+    post:
+      tags:
+      - Escalation
+      operationId: escalateForm
+      summary: Escalate on tier default (authoring-right transfer)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscalateRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/cycles/{cycleId}/sla-status:
+    get:
+      tags:
+      - Escalation
+      operationId: getCycleSlaStatus
+      summary: Get per-tier SLA status for a cycle
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - *id002
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlaStatusPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/no-report-tier:
+    post:
+      tags:
+      - Escalation
+      operationId: recordNoReportTier
+      summary: Record 'No Report due to RO/RvO' on missed window (DSC)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoReportTierRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/signatures:
+    post:
+      tags:
+      - Signatures
+      operationId: createSignature
+      summary: Perform a DSC/eSign signing ceremony
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignatureCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DigitalSignature'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/signatures/{signatureId}/verify:
+    get:
+      tags:
+      - Signatures
+      operationId: verifySignature
+      summary: Verify a digital signature
+      parameters:
+      - name: signatureId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Signature id
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignatureVerification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/signatures:
+    get:
+      tags:
+      - Signatures
+      operationId: listFormSignatures
+      summary: List signatures bound to a form
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - *id003
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DigitalSignaturePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/probation/decide:
+    post:
+      tags:
+      - Probation
+      operationId: decideProbation
+      summary: Record a probation confirmation/discharge decision (feeds G01/G12)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbationDecision'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/forms/{formId}/probation/extend:
+    post:
+      tags:
+      - Probation
+      operationId: extendProbation
+      summary: Extend the probation period (capped)
+      parameters:
+      - *id003
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbationExtend'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppraisalForm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/cycles/{cycleId}/errata/propose:
+    post:
+      tags:
+      - Errata
+      operationId: proposeErrata
+      summary: Propose a cycle errata correction
+      parameters:
+      - *id002
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrataProposeRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleErrata'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/cycles/{cycleId}/errata/{errataId}/impact:
+    get:
+      tags:
+      - Errata
+      operationId: getErrataImpact
+      summary: Get the impact assessment of an errata
+      parameters:
+      - *id002
+      - name: errataId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Errata id
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrataImpact'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/cycles/{cycleId}/errata/{errataId}/approve:
+    post:
+      tags:
+      - Errata
+      operationId: approveErrata
+      summary: Approve an errata (checker)
+      parameters:
+      - *id002
+      - name: errataId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Errata id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleErrata'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/cycles/{cycleId}/errata/{errataId}/apply:
+    post:
+      tags:
+      - Errata
+      operationId: applyErrata
+      summary: Apply an approved errata (re-derive + re-notify)
+      parameters:
+      - *id002
+      - name: errataId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Errata id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleErrata'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /sr/ingest:
+    post:
+      tags:
+      - ServiceRegister
+      operationId: ingestServiceRegisterEvent
+      summary: Canonical G12 SR write-port (reference; APAR_FINAL_GRADE / PROBATION_CONFIRMED, event_category APPRAISAL, no
+        fact_key)
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SrIngestEvent'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SrIngestResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  headers:
+    XCorrelationId:
+      description: Correlation id echoed on every response and written to every P05 audit/log line
+      schema:
+        type: string
+  parameters:
+    limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+      description: Page size (default 25, max 100)
+    cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Opaque forward cursor
+    sort:
+      name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+      description: field:asc|desc
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Idempotency key for state-changing POSTs; 24h replay window
+  responses:
+    ValidationFailed:
+      description: 422 Validation failed (VAL-* / ERR-G08-WEIGHTAGE, -GRADERANGE, -ADVEVID, -SIGNINVALID, -FORCEDDIST)
+      headers:
+        X-Correlation-Id: *id001
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: VALIDATION_FAILED
+              message: '...'
+              field: null
+              details: null
+    Unauthorized:
+      description: 401 No/invalid session or step-up required
+      headers:
+        X-Correlation-Id: *id001
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: UNAUTHENTICATED
+              message: '...'
+              field: null
+              details: null
+    Forbidden:
+      description: 403 Not permitted (ERR-G08-SELFADJ, -COI, -DUALCTRL; never leaks out-of-scope existence)
+      headers:
+        X-Correlation-Id: *id001
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: FORBIDDEN
+              message: '...'
+              field: null
+              details: null
+    NotFound:
+      description: 404 Resource absent or out of scope
+      headers:
+        X-Correlation-Id: *id001
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: NOT_FOUND
+              message: '...'
+              field: null
+              details: null
+    Conflict:
+      description: 409 State/idempotency/uniqueness conflict (ERR-G08-STATE, -TIERCONFLICT, -DISCLOSE, -SEALED, -RATIFY, -REPWINDOW,
+        -TAMPER, -ERRATA, -ALREADYPOSTED, -CUSTODYORPHAN)
+      headers:
+        X-Correlation-Id: *id001
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: CONFLICT
+              message: '...'
+              field: null
+              details: null
+    PreconditionFailed:
+      description: 412 Precondition not met (ERR-G08-CHAIN, -SIGN; upstream retryable)
+      headers:
+        X-Correlation-Id: *id001
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: PRECONDITION_FAILED
+              message: '...'
+              field: null
+              details: null
+    RateLimited:
+      description: 429 Rate limit / lockout exceeded
+      headers:
+        X-Correlation-Id: *id001
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: RATE_LIMITED
+              message: '...'
+              field: null
+              details: null
+    InternalError:
+      description: 500 Unexpected server error (ERR-LOADFAIL; upstream via X.3)
+      headers:
+        X-Correlation-Id: *id001
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: INTERNAL
+              message: '...'
+              field: null
+              details: null
+  schemas:
+    Error:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: object
+          required:
+          - code
+          - message
+          properties:
+            code:
+              type: string
+              description: One of the 8 platform wire codes
+            message:
+              type: string
+            field:
+              type:
+              - string
+              - 'null'
+            details:
+              type:
+              - object
+              - 'null'
+              additionalProperties: true
+              description: 'Structured discriminators, e.g. {err_id: ERR-G08-*, reason}'
+    CycleType:
+      type: string
+      enum:
+      - ANNUAL_APAR
+      - MID_YEAR
+      - PROBATION
+      - CONTINUOUS
+      - AD_HOC
+    CycleStatus:
+      type: string
+      enum:
+      - DRAFT
+      - OPEN
+      - GOALS_LOCKED
+      - IN_PROGRESS
+      - CALIBRATION
+      - DISCLOSURE
+      - ERRATA
+      - CLOSED
+      - ARCHIVED
+    AppraisalCycle:
+      type: object
+      required:
+      - cycle_id
+      - cycle_code
+      - cycle_type
+      - status
+      properties:
+        cycle_id: &id004
+          type: string
+          format: uuid
+        tenant_id: *id004
+        entity_id: *id004
+        cycle_code: &id008
+          type: string
+          maxLength: 40
+        name: &id009
+          type: string
+          maxLength: 160
+        cycle_type: &id010
+          $ref: '#/components/schemas/CycleType'
+        fiscal_year: &id011
+          type: string
+        m09_review_cycle_id: &id005
+          type:
+          - string
+          - 'null'
+          format: uuid
+        m09_goal_plan_window_id: *id005
+        goal_window_start: &id012
+          type: string
+          format: date
+        goal_window_end: &id013
+          type: string
+          format: date
+        appraisal_period_start: &id014
+          type: string
+          format: date
+        appraisal_period_end: &id015
+          type: string
+          format: date
+        self_appraisal_due: &id006
+          type:
+          - string
+          - 'null'
+          format: date
+        ro_due: *id006
+        rvo_due: *id006
+        aa_due: *id006
+        template_id: *id004
+        rating_scale_id: *id004
+        eligibility_rule: &id016
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        disclosure_channel: &id017
+          type: string
+          enum:
+          - IN_APP
+          - EMAIL
+          - PHYSICAL
+          - HYBRID
+        representation_clock_start: &id018
+          type: string
+          enum:
+          - DISPATCH
+          - ACKNOWLEDGEMENT
+        representation_window_days: &id019
+          type: integer
+        deemed_disclosure_days: &id020
+          type: integer
+        calibration_enabled: &id007
+          type: boolean
+        min_supervision_months: &id021
+          type: number
+        chain_truncation_policy: &id022
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        probation_period_months: &id023
+          type:
+          - integer
+          - 'null'
+        probation_extension_max_months: &id024
+          type:
+          - integer
+          - 'null'
+        status:
+          $ref: '#/components/schemas/CycleStatus'
+        created_at: &id026
+          type: string
+          format: date-time
+        updated_at: &id027
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    AppraisalCycleCreate:
+      type: object
+      required:
+      - cycle_code
+      - name
+      - cycle_type
+      - fiscal_year
+      - goal_window_start
+      - goal_window_end
+      - appraisal_period_start
+      - appraisal_period_end
+      - template_id
+      - rating_scale_id
+      - disclosure_channel
+      - representation_clock_start
+      - representation_window_days
+      properties: &id025
+        cycle_code: *id008
+        name: *id009
+        cycle_type: *id010
+        fiscal_year: *id011
+        goal_window_start: *id012
+        goal_window_end: *id013
+        appraisal_period_start: *id014
+        appraisal_period_end: *id015
+        self_appraisal_due: *id006
+        ro_due: *id006
+        rvo_due: *id006
+        aa_due: *id006
+        template_id: *id004
+        rating_scale_id: *id004
+        eligibility_rule: *id016
+        disclosure_channel: *id017
+        representation_clock_start: *id018
+        representation_window_days: *id019
+        deemed_disclosure_days: *id020
+        calibration_enabled: *id007
+        min_supervision_months: *id021
+        chain_truncation_policy: *id022
+        probation_period_months: *id023
+        probation_extension_max_months: *id024
+      additionalProperties: false
+    AppraisalCycleUpdate:
+      type: object
+      properties: *id025
+    AppraisalCyclePage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppraisalCycle'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    AppraisalTemplate:
+      type: object
+      required:
+      - template_id
+      - template_code
+      - version
+      - status
+      properties:
+        template_id: *id004
+        tenant_id: *id004
+        entity_id: *id004
+        template_code: &id028
+          type: string
+          maxLength: 40
+        name: &id029
+          type: string
+        version: &id030
+          type: integer
+        applies_to_cadre: &id031
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        w2_form_def_id: *id005
+        sections: &id032
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        competency_set: &id033
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        weightage_policy: &id034
+          $ref: '#/components/schemas/WeightagePolicy'
+        integrity_column_enabled: *id007
+        penpicture_min_words: &id035
+          type:
+          - integer
+          - 'null'
+        requires_dsc: *id007
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - RETIRED
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    WeightagePolicy:
+      type: object
+      properties:
+        performance_sum:
+          type: number
+          default: 100
+        goal_split_pct:
+          type: number
+        competency_split_pct:
+          type: number
+        development_in_sum:
+          type: boolean
+          default: false
+        competency_in_sum:
+          type: boolean
+        caps:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+    AppraisalTemplateCreate:
+      type: object
+      required:
+      - template_code
+      - name
+      - version
+      - sections
+      - competency_set
+      - weightage_policy
+      properties:
+        template_code: *id028
+        name: *id029
+        version: *id030
+        applies_to_cadre: *id031
+        w2_form_def_id: *id005
+        sections: *id032
+        competency_set: *id033
+        weightage_policy: *id034
+        integrity_column_enabled: *id007
+        penpicture_min_words: *id035
+        requires_dsc: *id007
+    RatingScale:
+      type: object
+      required:
+      - rating_scale_id
+      - scale_code
+      - min_value
+      - max_value
+      - grades
+      properties:
+        rating_scale_id: *id004
+        tenant_id: *id004
+        scale_code: &id036
+          type: string
+          maxLength: 40
+        name: &id037
+          type: string
+        min_value: &id038
+          type: number
+        max_value: &id039
+          type: number
+        grades: &id040
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              min:
+                type: number
+              max:
+                type: number
+              descriptor:
+                type: string
+        benchmark_grade: &id041
+          type: number
+        adverse_threshold: &id042
+          type: number
+        decimal_places: &id043
+          type: integer
+          default: 2
+        contribution_level_map: &id044
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - RETIRED
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    RatingScaleCreate:
+      type: object
+      required:
+      - scale_code
+      - name
+      - min_value
+      - max_value
+      - grades
+      - benchmark_grade
+      - adverse_threshold
+      properties:
+        scale_code: *id036
+        name: *id037
+        min_value: *id038
+        max_value: *id039
+        grades: *id040
+        benchmark_grade: *id041
+        adverse_threshold: *id042
+        decimal_places: *id043
+        contribution_level_map: *id044
+    RatingScalePage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RatingScale'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    GradePreviewRequest:
+      type: object
+      properties:
+        section_grades:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionGrade'
+    SectionGrade:
+      type: object
+      required:
+      - section
+      - grade
+      - weightage
+      properties:
+        section:
+          type: string
+        grade:
+          type: number
+        weightage:
+          type: number
+    GradePreview:
+      type: object
+      properties:
+        rolled_up_grade:
+          type: number
+        grade_label:
+          type: string
+        is_adverse: *id007
+        below_benchmark: *id007
+        breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionGrade'
+    GoalType:
+      type: string
+      enum:
+      - KRA
+      - KPI
+      - OKR_OBJECTIVE
+      - OKR_KEYRESULT
+      - DEVELOPMENT
+    GoalStatus:
+      type: string
+      enum:
+      - DRAFT
+      - PROPOSED
+      - APPROVED
+      - REVISED
+      - ACHIEVED
+      - NOT_ACHIEVED
+      - DROPPED
+    Goal:
+      type: object
+      required:
+      - goal_id
+      - appraisee_id
+      - goal_type
+      - title
+      - weightage
+      - status
+      properties:
+        goal_id: *id004
+        tenant_id: *id004
+        entity_id: *id004
+        goal_plan_id: *id005
+        appraisee_id: *id004
+        cycle_id: *id005
+        form_id: *id005
+        period_scope: &id047
+          type: string
+          enum:
+          - SINGLE_CYCLE
+          - CROSS_CYCLE
+        goal_type: &id048
+          $ref: '#/components/schemas/GoalType'
+        parent_goal_id: *id005
+        cascaded_from_employee_id: *id005
+        title: &id049
+          type: string
+          maxLength: 200
+        description: &id045
+          type:
+          - string
+          - 'null'
+        metric: *id045
+        target_value: *id045
+        weightage: &id050
+          type: number
+        due_date: *id006
+        achievement_pct: &id046
+          type:
+          - number
+          - 'null'
+        self_rating: *id046
+        ro_rating: *id046
+        snapshotted: *id007
+        status: &id051
+          $ref: '#/components/schemas/GoalStatus'
+        approved_by: *id005
+        approved_at: *id027
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    GoalCreate:
+      type: object
+      required:
+      - appraisee_id
+      - goal_type
+      - period_scope
+      - title
+      - weightage
+      properties:
+        appraisee_id: *id004
+        goal_plan_id: *id005
+        cycle_id: *id005
+        form_id: *id005
+        period_scope: *id047
+        goal_type: *id048
+        parent_goal_id: *id005
+        cascaded_from_employee_id: *id005
+        title: *id049
+        description: *id045
+        metric: *id045
+        target_value: *id045
+        weightage: *id050
+        due_date: *id006
+    GoalUpdate:
+      type: object
+      properties:
+        title: *id049
+        description: *id045
+        metric: *id045
+        target_value: *id045
+        weightage: *id050
+        due_date: *id006
+        achievement_pct: *id046
+        self_rating: *id046
+        status: *id051
+    GoalSnapshotResult:
+      type: object
+      properties:
+        form_id: *id004
+        snapshot_count:
+          type: integer
+        performance_weightage_total:
+          type: number
+        snapshotted_at:
+          type: string
+          format: date-time
+    GoalSnapshot:
+      type: object
+      properties:
+        snapshot_id: *id004
+        form_id: *id004
+        goal_id: *id004
+        title:
+          type: string
+        goal_type:
+          $ref: '#/components/schemas/GoalType'
+        weightage:
+          type: number
+        achievement_pct: *id046
+        ro_rating: *id046
+        snapshotted_at:
+          type: string
+          format: date-time
+    GoalSnapshotPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GoalSnapshot'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    GoalCheckin:
+      type: object
+      required:
+      - checkin_id
+      - goal_id
+      - checkin_date
+      properties:
+        checkin_id: *id004
+        tenant_id: *id004
+        goal_id: *id004
+        checkin_date:
+          type: string
+          format: date
+        progress_pct: *id046
+        status_note: *id045
+        blockers: *id045
+        raised_by: *id004
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    GoalCheckinCreate:
+      type: object
+      required:
+      - checkin_date
+      properties:
+        checkin_date:
+          type: string
+          format: date
+        progress_pct:
+          type: number
+        status_note:
+          type: string
+        blockers:
+          type: string
+    SelfAppraisal:
+      type: object
+      required:
+      - self_appraisal_id
+      - form_id
+      - status
+      properties:
+        self_appraisal_id: *id004
+        tenant_id: *id004
+        form_id: *id004
+        achievements:
+          type: string
+        goal_summary:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        competency_self_rating:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        constraints_faced: *id045
+        training_needs: *id045
+        submitted_at: *id027
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - SUBMITTED
+          - RETURNED
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    SelfAppraisalUpdate:
+      type: object
+      required:
+      - achievements
+      properties:
+        achievements:
+          type: string
+        goal_summary:
+          type: object
+          additionalProperties: true
+        competency_self_rating:
+          type: object
+          additionalProperties: true
+        constraints_faced:
+          type: string
+        training_needs:
+          type: string
+    Tier:
+      type: string
+      enum:
+      - REPORTING
+      - REVIEWING
+      - ACCEPTING
+    Assessment:
+      type: object
+      required:
+      - assessment_id
+      - form_id
+      - tier
+      properties:
+        assessment_id: *id004
+        tenant_id: *id004
+        form_id: *id004
+        report_period_id: *id005
+        tier:
+          $ref: '#/components/schemas/Tier'
+        assessor_id: *id004
+        workflow_action_id: *id005
+        is_escalated_author: *id007
+        overall_grade: *id046
+        section_grades:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/SectionGrade'
+        remarks: *id045
+        adverse_evidence_refs:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            format: uuid
+        concurs_with_lower_tier:
+          type:
+          - boolean
+          - 'null'
+        variance_reason: *id045
+        signature_id: *id005
+        decision:
+          type: string
+          enum:
+          - SUBMITTED
+          - RETURNED
+          - CONCURRED
+          - VARIED
+          - CERTIFIED
+        acted_at: *id027
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    AssessmentUpdate:
+      type: object
+      properties:
+        overall_grade:
+          type: number
+        section_grades:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionGrade'
+        remarks:
+          type: string
+        adverse_evidence_refs:
+          type: array
+          items:
+            type: string
+            format: uuid
+    ReportingAssessmentSubmit:
+      type: object
+      required:
+      - integrity_certified
+      - section_grades
+      - part_period_grade
+      - signature_id
+      properties:
+        report_period_id: *id005
+        integrity_certified:
+          type: string
+          enum:
+          - BEYOND_DOUBT
+          - WATCH
+          - NOT_CERTIFIED
+        integrity_remark:
+          type: string
+        pen_picture:
+          type: string
+        section_grades:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionGrade'
+        part_period_grade:
+          type: number
+        adverse_evidence_refs:
+          type: array
+          items:
+            type: string
+            format: uuid
+        signature_id: *id004
+    ReviewingAssessmentSubmit:
+      type: object
+      required:
+      - concurs_with_lower_tier
+      - signature_id
+      properties:
+        reviewed_grade:
+          type: number
+        concurs_with_lower_tier:
+          type: boolean
+        variance_reason:
+          type: string
+        remarks:
+          type: string
+        adverse_evidence_refs:
+          type: array
+          items:
+            type: string
+            format: uuid
+        signature_id: *id004
+    CertifyRequest:
+      type: object
+      required:
+      - final_grade
+      - signature_id
+      properties:
+        final_grade:
+          type: number
+        concurs_with_lower_tier:
+          type: boolean
+        variance_reason:
+          type: string
+        remarks:
+          type: string
+        recommendation_id:
+          type: string
+          format: uuid
+          description: Required if a calibration change is applied
+        signature_id: *id004
+    ReasonRequest:
+      type: object
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+          description: VAL-COMMENT / ERR-REASON-REQ
+    SignatureRequest:
+      type: object
+      required:
+      - signature_id
+      properties:
+        signature_id: *id004
+        reason:
+          type: string
+    RecuseRequest:
+      type: object
+      required:
+      - coi_type
+      - reason
+      properties:
+        coi_type:
+          type: string
+          enum:
+          - SPOUSE
+          - CLOSE_RELATION
+          - SAME_PRIOR_POSTING
+          - FINANCIAL
+          - OTHER
+        reason:
+          type: string
+    CoiRecusal:
+      type: object
+      properties:
+        recusal_id: *id004
+        tenant_id: *id004
+        form_id: *id004
+        recused_by: *id004
+        coi_type:
+          type: string
+        reason:
+          type: string
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    FormStatus:
+      type: string
+      enum:
+      - DRAFT
+      - GOALS_LOCKED
+      - SELF_APPRAISAL
+      - REPORTING
+      - REVIEWING
+      - ACCEPTING
+      - CALIBRATION
+      - DISCLOSURE
+      - REPRESENTATION
+      - SEALED_COVER
+      - FINALISED
+      - POSTED
+      - DISPOSED
+    AppraisalForm:
+      type: object
+      required:
+      - form_id
+      - apar_no
+      - cycle_id
+      - appraisee_id
+      - status
+      properties:
+        form_id: *id004
+        tenant_id: *id004
+        entity_id: *id004
+        apar_no:
+          type: string
+          maxLength: 40
+        cycle_id: *id004
+        m09_review_id: *id005
+        appraisee_id: *id004
+        org_unit_id: *id004
+        designation_id: *id004
+        reporting_officer_id: *id005
+        has_multi_ro: *id007
+        reviewing_officer_id: *id005
+        accepting_authority_id: *id005
+        chain_truncated: *id007
+        chain_config:
+          type: string
+          enum:
+          - FULL
+          - NO_RVO
+          - NO_AA
+          - SINGLE_TIER
+          - DESIGNATED_ALTERNATE
+        integrity_certified:
+          type:
+          - string
+          - 'null'
+          enum:
+          - BEYOND_DOUBT
+          - WATCH
+          - NOT_CERTIFIED
+          - null
+        integrity_remark: *id045
+        pen_picture: *id045
+        provisional_grade: *id046
+        reviewed_grade: *id046
+        final_grade: *id046
+        final_grade_label: *id045
+        is_adverse: *id007
+        below_benchmark: *id007
+        adverse_evidence_refs:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            format: uuid
+        calibrated: *id007
+        pre_calibration_grade: *id046
+        sealed_cover: *id007
+        sealed_cover_reason: *id045
+        sealed_cover_case_ref: *id045
+        sealed_at: *id027
+        sealed_released_at: *id027
+        dispatched_at: *id027
+        disclosed_at: *id027
+        acknowledged_at: *id027
+        representation_window_start_at: *id027
+        representation_window_end_at: *id027
+        probation_outcome:
+          type:
+          - string
+          - 'null'
+          enum:
+          - CONFIRMED
+          - EXTENDED
+          - DISCHARGE_RECOMMENDED
+          - null
+        certification_signature_id: *id005
+        status:
+          $ref: '#/components/schemas/FormStatus'
+        workflow_instance_id: *id005
+        generated_pdf_doc_id: *id005
+        posted_to_sr: *id007
+        confidentiality_class:
+          type: string
+          enum:
+          - CONFIDENTIAL
+          - RESTRICTED
+          - INTERNAL
+        masked_fields:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+          description: 'P02 field-mask: fields absent from payload, listed here with why-hidden reasons'
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    DiscloseRequest:
+      type: object
+      properties:
+        channel:
+          type: string
+          enum:
+          - IN_APP
+          - EMAIL
+          - PHYSICAL
+          - HYBRID
+        signature_id: *id005
+    AcknowledgeRequest:
+      type: object
+      required:
+      - signature_id
+      properties:
+        signature_id: *id004
+        acknowledgement_note:
+          type: string
+    DisclosureLogEntry:
+      type: object
+      properties:
+        log_id: *id004
+        tenant_id: *id004
+        form_id: *id004
+        event_type:
+          type: string
+          enum:
+          - DISCLOSED
+          - ACKNOWLEDGED
+          - ACCESSED
+          - CUSTODY_TRANSFER
+          - HEIR_ACCESS
+          - DISPOSED
+          - DOWNGRADED
+          - ANCHOR
+          - SEALED
+          - SEAL_RELEASED
+        actor_id: *id005
+        detail:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        chain_hash: *id045
+        created_at:
+          type: string
+          format: date-time
+        created_by: *id005
+    DisclosureLogPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DisclosureLogEntry'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    ChainVerification:
+      type: object
+      properties:
+        form_id: *id004
+        chain_valid: *id007
+        rows_verified:
+          type: integer
+        last_anchor_ref: *id045
+        basis:
+          type: string
+          example: P05 + OPEN-PLAT-03
+    Representation:
+      type: object
+      required:
+      - representation_id
+      - rep_no
+      - form_id
+      - status
+      properties:
+        representation_id: *id004
+        tenant_id: *id004
+        entity_id: *id004
+        rep_no:
+          type: string
+        form_id: *id004
+        appraisee_id: *id004
+        grounds:
+          type: string
+        contested_items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        supporting_doc_ids:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            format: uuid
+        filed_at:
+          type: string
+          format: date-time
+        sla_due_at:
+          type: string
+          format: date-time
+        disposal_deadline_at:
+          type: string
+          format: date-time
+        is_late: *id007
+        condoned: *id007
+        condonation_authority_id: *id005
+        condonation_reason: *id045
+        escalation_level:
+          type: integer
+        external_reference:
+          type: string
+          enum:
+          - NONE
+          - CAT
+          - HIGH_COURT
+          - TRIBUNAL
+        external_ref_no: *id045
+        decision:
+          type:
+          - string
+          - 'null'
+          enum:
+          - UPHELD
+          - PARTIALLY_UPHELD
+          - REJECTED
+          - EXPUNGED
+          - MODIFIED
+          - ESCALATED_EXTERNAL
+          - null
+        decision_authority_id: *id005
+        decision_reason: *id045
+        revised_grade: *id046
+        workflow_instance_id: *id005
+        status:
+          type: string
+          enum:
+          - FILED
+          - UNDER_REVIEW
+          - DECIDED
+          - ESCALATED
+          - CLOSED
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    RepresentationCreate:
+      type: object
+      required:
+      - grounds
+      - contested_items
+      properties:
+        grounds:
+          type: string
+        contested_items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        supporting_doc_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+    CondoneRequest:
+      type: object
+      required:
+      - reason
+      - signature_id
+      properties:
+        reason:
+          type: string
+        signature_id: *id004
+    RepresentationDecision:
+      type: object
+      required:
+      - decision
+      - decision_reason
+      - signature_id
+      properties:
+        decision:
+          type: string
+          enum:
+          - UPHELD
+          - PARTIALLY_UPHELD
+          - REJECTED
+          - EXPUNGED
+          - MODIFIED
+        decision_reason:
+          type: string
+        revised_grade:
+          type: number
+        signature_id: *id004
+    RepresentationEscalate:
+      type: object
+      required:
+      - escalation_level
+      properties:
+        escalation_level:
+          type: integer
+        external_reference:
+          type: string
+          enum:
+          - NONE
+          - CAT
+          - HIGH_COURT
+          - TRIBUNAL
+        external_ref_no:
+          type: string
+        reason:
+          type: string
+    CalibrationSession:
+      type: object
+      required:
+      - session_id
+      - status
+      properties:
+        session_id: *id004
+        tenant_id: *id004
+        entity_id: *id004
+        name:
+          type: string
+        cycle_id: *id004
+        org_unit_id: *id005
+        method:
+          type: string
+          enum:
+          - COMMITTEE_REVIEW
+          - NORMALISATION
+          - BELL_CURVE
+        member_ids:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            format: uuid
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - IN_SESSION
+          - RECOMMENDED
+          - RATIFIED
+          - CLOSED
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    CalibrationSessionCreate:
+      type: object
+      required:
+      - name
+      - cycle_id
+      - method
+      properties:
+        name:
+          type: string
+        cycle_id:
+          type: string
+          format: uuid
+        org_unit_id:
+          type: string
+          format: uuid
+        method:
+          type: string
+          enum:
+          - COMMITTEE_REVIEW
+          - NORMALISATION
+          - BELL_CURVE
+        member_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+    DistributionResult:
+      type: object
+      properties:
+        session_id: *id004
+        diagnostic_only:
+          type: boolean
+          default: true
+        buckets:
+          type: array
+          items:
+            type: object
+            properties:
+              grade_label:
+                type: string
+              count:
+                type: integer
+              pct:
+                type: number
+              target_pct:
+                type:
+                - number
+                - 'null'
+    CalibrationRecommendation:
+      type: object
+      required:
+      - recommendation_id
+      - form_id
+      - status
+      properties:
+        recommendation_id: *id004
+        tenant_id: *id004
+        session_id: *id004
+        form_id: *id004
+        current_grade: *id046
+        recommended_grade:
+          type: number
+        rationale:
+          type: string
+        votes_for:
+          type: integer
+        votes_against:
+          type: integer
+        status:
+          type: string
+          enum:
+          - PROPOSED
+          - VOTING
+          - CARRIED
+          - DECLINED
+          - RATIFIED
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    RecommendationCreate:
+      type: object
+      required:
+      - form_id
+      - recommended_grade
+      - rationale
+      properties:
+        form_id:
+          type: string
+          format: uuid
+        recommended_grade:
+          type: number
+        rationale:
+          type: string
+    VoteRequest:
+      type: object
+      required:
+      - vote
+      properties:
+        vote:
+          type: string
+          enum:
+          - FOR
+          - AGAINST
+          - ABSTAIN
+        comment:
+          type: string
+    RatifyRequest:
+      type: object
+      required:
+      - signature_id
+      properties:
+        signature_id: *id004
+        reason:
+          type: string
+    CalibrationAdjustment:
+      type: object
+      properties:
+        adjustment_id: *id004
+        tenant_id: *id004
+        form_id: *id004
+        recommendation_id: *id004
+        pre_calibration_grade:
+          type: number
+        adjusted_grade:
+          type: number
+        ratified_by: *id004
+        signature_id: *id004
+        ratified_at:
+          type: string
+          format: date-time
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    ContinuousFeedback:
+      type: object
+      required:
+      - feedback_id
+      - subject_employee_id
+      - author_id
+      - body
+      properties:
+        feedback_id: *id004
+        tenant_id: *id004
+        subject_employee_id: *id004
+        author_id: *id004
+        cycle_id: *id005
+        feedback_type:
+          type: string
+          enum:
+          - PRAISE
+          - CONSTRUCTIVE
+          - COACHING
+          - GENERAL
+        visibility:
+          type: string
+          enum:
+          - PRIVATE_TO_SUBJECT
+          - MANAGER_ONLY
+          - MANAGER_AND_SUBJECT
+        body:
+          type: string
+        parent_feedback_id: *id005
+        linked_goal_id: *id005
+        is_acknowledged: *id007
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    ContinuousFeedbackCreate:
+      type: object
+      required:
+      - subject_employee_id
+      - feedback_type
+      - visibility
+      - body
+      properties:
+        subject_employee_id:
+          type: string
+          format: uuid
+        cycle_id:
+          type: string
+          format: uuid
+        feedback_type:
+          type: string
+          enum:
+          - PRAISE
+          - CONSTRUCTIVE
+          - COACHING
+          - GENERAL
+        visibility:
+          type: string
+          enum:
+          - PRIVATE_TO_SUBJECT
+          - MANAGER_ONLY
+          - MANAGER_AND_SUBJECT
+        body:
+          type: string
+        parent_feedback_id:
+          type: string
+          format: uuid
+        linked_goal_id:
+          type: string
+          format: uuid
+    ContinuousFeedbackPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContinuousFeedback'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    Feedback360Request:
+      type: object
+      required:
+      - request_id
+      - form_id
+      - subject_employee_id
+      - rater_id
+      - status
+      properties:
+        request_id: *id004
+        tenant_id: *id004
+        form_id: *id004
+        subject_employee_id: *id004
+        rater_id: *id004
+        rater_relationship:
+          type: string
+          enum:
+          - PEER
+          - SUBORDINATE
+          - MANAGER
+          - INTERNAL_CUSTOMER
+          - EXTERNAL
+        anonymous: *id007
+        due_date: *id006
+        status:
+          type: string
+          enum:
+          - INVITED
+          - IN_PROGRESS
+          - SUBMITTED
+          - DECLINED
+          - EXPIRED
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    Feedback360RequestCreate:
+      type: object
+      required:
+      - raters
+      properties:
+        raters:
+          type: array
+          items:
+            type: object
+            required:
+            - rater_id
+            - rater_relationship
+            properties:
+              rater_id:
+                type: string
+                format: uuid
+              rater_relationship:
+                type: string
+                enum:
+                - PEER
+                - SUBORDINATE
+                - MANAGER
+                - INTERNAL_CUSTOMER
+                - EXTERNAL
+              anonymous:
+                type: boolean
+              due_date:
+                type: string
+                format: date
+    Feedback360RequestBatch:
+      type: object
+      properties:
+        created:
+          type: integer
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/Feedback360Request'
+    Feedback360RequestPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Feedback360Request'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    Feedback360Response:
+      type: object
+      required:
+      - response_id
+      - request_id
+      properties:
+        response_id: *id004
+        tenant_id: *id004
+        request_id: *id004
+        ratings:
+          type: object
+          additionalProperties: true
+        strengths: *id045
+        improvements: *id045
+        submitted_at: *id027
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    Feedback360ResponseCreate:
+      type: object
+      required:
+      - ratings
+      properties:
+        ratings:
+          type: object
+          additionalProperties: true
+        strengths:
+          type: string
+        improvements:
+          type: string
+    Feedback360Summary:
+      type: object
+      properties:
+        form_id: *id004
+        response_count:
+          type: integer
+        min_n_met: *id007
+        aggregates:
+          type: object
+          additionalProperties: true
+    CompetencyAssessment:
+      type: object
+      required:
+      - comp_assessment_id
+      - form_id
+      - competency_id
+      properties:
+        comp_assessment_id: *id004
+        tenant_id: *id004
+        form_id: *id004
+        competency_id: *id004
+        competency_name:
+          type: string
+        required_level:
+          type: integer
+        self_level:
+          type:
+          - integer
+          - 'null'
+        assessed_level:
+          type:
+          - integer
+          - 'null'
+        gap:
+          type:
+          - integer
+          - 'null'
+        gap_severity:
+          type:
+          - string
+          - 'null'
+          enum:
+          - NONE
+          - MINOR
+          - MODERATE
+          - CRITICAL
+          - null
+        training_nomination_id: *id005
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    CompetencyAssessmentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompetencyAssessment'
+    CompetencyAssessmentUpsert:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required:
+            - competency_id
+            - assessed_level
+            properties:
+              comp_assessment_id:
+                type: string
+                format: uuid
+              competency_id:
+                type: string
+                format: uuid
+              self_level:
+                type: integer
+              assessed_level:
+                type: integer
+    TrainingNominationResult:
+      type: object
+      properties:
+        training_nomination_id: *id004
+        competency_id: *id004
+        gap_severity:
+          type: string
+        status:
+          type: string
+    PerformanceImprovementPlan:
+      type: object
+      required:
+      - pip_id
+      - employee_id
+      - status
+      properties:
+        pip_id: *id004
+        tenant_id: *id004
+        entity_id: *id004
+        employee_id: *id004
+        form_id: *id005
+        cycle_id: *id005
+        objective:
+          type: string
+        start_date: *id006
+        end_date: *id006
+        supervisor_id: *id005
+        outcome:
+          type:
+          - string
+          - 'null'
+          enum:
+          - SUCCESSFUL
+          - EXTENDED
+          - FAILED
+          - null
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ACTIVE
+          - UNDER_REVIEW
+          - CLOSED
+        milestones:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/PipMilestone'
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    PipCreate:
+      type: object
+      required:
+      - employee_id
+      - objective
+      - start_date
+      - end_date
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        form_id:
+          type: string
+          format: uuid
+        cycle_id:
+          type: string
+          format: uuid
+        objective:
+          type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        supervisor_id:
+          type: string
+          format: uuid
+        milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipMilestoneUpdate'
+    PipMilestone:
+      type: object
+      required:
+      - milestone_id
+      - pip_id
+      properties:
+        milestone_id: *id004
+        tenant_id: *id004
+        pip_id: *id004
+        title:
+          type: string
+        target_date: *id006
+        success_criteria: *id045
+        status:
+          type: string
+          enum:
+          - PENDING
+          - IN_PROGRESS
+          - MET
+          - MISSED
+        review_note: *id045
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    PipMilestoneUpdate:
+      type: object
+      required:
+      - title
+      properties:
+        title:
+          type: string
+        target_date:
+          type: string
+          format: date
+        success_criteria:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - IN_PROGRESS
+          - MET
+          - MISSED
+        review_note:
+          type: string
+    PipCloseRequest:
+      type: object
+      required:
+      - outcome
+      properties:
+        outcome:
+          type: string
+          enum:
+          - SUCCESSFUL
+          - EXTENDED
+          - FAILED
+        closing_note:
+          type: string
+    PipPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PerformanceImprovementPlan'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    PostingStatus:
+      type: object
+      properties:
+        form_id: *id004
+        posted_to_sr: *id007
+        sr_event_id: *id005
+        posting_state:
+          type: string
+          enum:
+          - PENDING
+          - POSTED
+          - SUPPRESSED_SEALED
+          - FAILED_RETRYING
+        g06_feed_suppressed: *id007
+        posted_at: *id027
+    SrIngestEvent:
+      type: object
+      required:
+      - event_type
+      - event_category
+      - source_module
+      - source_reference_id
+      properties:
+        event_type:
+          type: string
+          enum:
+          - APAR_FINAL_GRADE
+          - PROBATION_CONFIRMED
+        event_category:
+          type: string
+          enum:
+          - APPRAISAL
+        source_module:
+          type: string
+          enum:
+          - G08
+        source_reference_id: *id004
+        source_event_version:
+          type: integer
+        tenant_id: *id004
+        entity_id: *id004
+        employee_id: *id004
+        cycle_id: *id005
+        final_grade: *id046
+        label: *id045
+        is_adverse:
+          type:
+          - boolean
+          - 'null'
+        confirmation_date: *id006
+        form_ref:
+          type: string
+        chain_anchor_ref: *id045
+        fact_key:
+          type:
+          - string
+          - 'null'
+          description: Not applicable to APPRAISAL events; omit (no qualifying-service fact)
+    SrIngestResult:
+      type: object
+      properties:
+        sr_event_id: *id004
+        event_type:
+          type: string
+        accepted: *id007
+        idempotent_replay:
+          type: boolean
+          default: false
+    DocumentRef:
+      type: object
+      properties:
+        document_id: *id004
+        download_url:
+          type:
+          - string
+          - 'null'
+        content_type:
+          type: string
+          default: application/pdf
+        watermarked: *id007
+        encrypted: *id007
+    CustodyTransferRequest:
+      type: object
+      required:
+      - to_custodian_id
+      properties:
+        to_custodian_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        transfer_event_ref:
+          type: string
+          description: G05 transfer reference
+    HeirAccessRequest:
+      type: object
+      required:
+      - heir_employee_ref
+      - valid_until
+      - signature_id
+      properties:
+        heir_employee_ref:
+          type: string
+        relationship:
+          type: string
+        valid_until:
+          type: string
+          format: date-time
+        signature_id: *id004
+        reason:
+          type: string
+    HeirAccessGrant:
+      type: object
+      properties:
+        grant_id: *id004
+        form_id: *id004
+        heir_employee_ref:
+          type: string
+        valid_until:
+          type: string
+          format: date-time
+        signature_id: *id004
+        status:
+          type: string
+    DisposeRequest:
+      type: object
+      required:
+      - reason
+      - signature_id
+      properties:
+        reason:
+          type: string
+        retention_basis:
+          type: string
+        signature_id: *id004
+    DowngradeRequest:
+      type: object
+      required:
+      - target_class
+      - reason
+      - maker_signature_id
+      - checker_signature_id
+      properties:
+        target_class:
+          type: string
+          enum:
+          - RESTRICTED
+          - INTERNAL
+        reason:
+          type: string
+        maker_signature_id: *id004
+        checker_signature_id: *id004
+    AnalyticsResult:
+      type: object
+      properties:
+        metric:
+          type: string
+        scope:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        min_n_suppressed: *id007
+        freshness_seconds:
+          type:
+          - integer
+          - 'null'
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    SealRequest:
+      type: object
+      required:
+      - reason
+      - case_ref
+      properties:
+        reason:
+          type: string
+        case_ref:
+          type: string
+          description: G09 case reference
+    SealReleaseRequest:
+      type: object
+      required:
+      - conclusion_outcome
+      - signature_id
+      properties:
+        conclusion_outcome:
+          type: string
+        signature_id: *id004
+        reason:
+          type: string
+    SealStatus:
+      type: object
+      properties:
+        form_id: *id004
+        sealed_cover: *id007
+        sealed_cover_reason: *id045
+        sealed_cover_case_ref: *id045
+        sealed_at: *id027
+        sealed_released_at: *id027
+        g06_feed_suppressed: *id007
+    ReportPeriod:
+      type: object
+      required:
+      - report_period_id
+      - form_id
+      properties:
+        report_period_id: *id004
+        tenant_id: *id004
+        form_id: *id004
+        reporting_officer_id: *id005
+        period_start: *id006
+        period_end: *id006
+        supervision_months: *id046
+        part_period_grade: *id046
+        is_no_report: *id007
+        no_report_reason: *id045
+        no_report_signature_id: *id005
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - SUBMITTED
+          - NO_REPORT
+          - AGGREGATED
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    ReportPeriodCreate:
+      type: object
+      required:
+      - reporting_officer_id
+      - period_start
+      - period_end
+      properties:
+        reporting_officer_id:
+          type: string
+          format: uuid
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        supervision_months:
+          type: number
+    ReportPeriodUpdate:
+      type: object
+      properties:
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        supervision_months:
+          type: number
+        part_period_grade:
+          type: number
+    NoReportRequest:
+      type: object
+      required:
+      - reason
+      - signature_id
+      properties:
+        reason:
+          type: string
+        signature_id: *id004
+    EscalateRequest:
+      type: object
+      required:
+      - tier
+      - action
+      properties:
+        tier:
+          $ref: '#/components/schemas/Tier'
+        action:
+          type: string
+          enum:
+          - TRANSFER_AUTHORING_RIGHT
+          - RECORD_NO_REPORT
+        reason:
+          type: string
+    NoReportTierRequest:
+      type: object
+      required:
+      - tier
+      - reason
+      - signature_id
+      properties:
+        tier:
+          $ref: '#/components/schemas/Tier'
+        reason:
+          type: string
+        signature_id: *id004
+    SlaStatus:
+      type: object
+      properties:
+        form_id: *id004
+        apar_no:
+          type: string
+        tier:
+          $ref: '#/components/schemas/Tier'
+        due_at: *id027
+        breached: *id007
+        escalated: *id007
+    SlaStatusPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlaStatus'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    DigitalSignature:
+      type: object
+      required:
+      - signature_id
+      - status
+      properties:
+        signature_id: *id004
+        tenant_id: *id004
+        entity_id: *id004
+        subject_type: &id052
+          type: string
+          enum:
+          - FORM
+          - ASSESSMENT
+          - ACKNOWLEDGEMENT
+          - RATIFICATION
+          - REPRESENTATION
+          - NO_REPORT
+          - SEAL_RELEASE
+          - DISPOSAL
+          - DOWNGRADE
+          - HEIR_ACCESS
+        subject_ref: *id004
+        method:
+          type: string
+          enum:
+          - DSC
+          - AADHAAR_ESIGN
+          - HSM
+        payload_hash:
+          type: string
+        certificate_serial: *id045
+        signature_value: *id045
+        signed_by: *id004
+        signed_at: *id027
+        status:
+          type: string
+          enum:
+          - PENDING
+          - SIGNED
+          - VERIFIED
+          - REVOKED
+          - EXPIRED
+          - FAILED
+        document_id: *id005
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    SignatureCreate:
+      type: object
+      required:
+      - subject_type
+      - subject_ref
+      - method
+      - payload_hash
+      properties:
+        subject_type: *id052
+        subject_ref:
+          type: string
+          format: uuid
+        method:
+          type: string
+          enum:
+          - DSC
+          - AADHAAR_ESIGN
+          - HSM
+        payload_hash:
+          type: string
+        certificate_serial:
+          type: string
+    SignatureVerification:
+      type: object
+      properties:
+        signature_id: *id004
+        valid: *id007
+        status:
+          type: string
+          enum:
+          - VERIFIED
+          - REVOKED
+          - EXPIRED
+          - FAILED
+        verified_at: *id027
+    DigitalSignaturePage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DigitalSignature'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    ProbationDecision:
+      type: object
+      required:
+      - outcome
+      - signature_id
+      properties:
+        outcome:
+          type: string
+          enum:
+          - CONFIRMED
+          - DISCHARGE_RECOMMENDED
+        confirmation_date:
+          type: string
+          format: date
+        effective_from:
+          type: string
+          format: date
+        reason:
+          type: string
+        signature_id: *id004
+    ProbationExtend:
+      type: object
+      required:
+      - extension_months
+      - reason
+      properties:
+        extension_months:
+          type: integer
+        reason:
+          type: string
+        new_end_date:
+          type: string
+          format: date
+    CycleErrata:
+      type: object
+      required:
+      - errata_id
+      - cycle_id
+      - status
+      properties:
+        errata_id: *id004
+        tenant_id: *id004
+        cycle_id: *id004
+        description:
+          type: string
+        correction:
+          type: object
+          additionalProperties: true
+        proposed_by: *id005
+        approved_by: *id005
+        status:
+          type: string
+          enum:
+          - PROPOSED
+          - APPROVED
+          - APPLIED
+          - REJECTED
+        applied_at: *id027
+        created_at: *id026
+        updated_at: *id027
+        created_by: *id005
+        updated_by: *id005
+        is_deleted: *id007
+    ErrataProposeRequest:
+      type: object
+      required:
+      - description
+      - correction
+      properties:
+        description:
+          type: string
+        correction:
+          type: object
+          additionalProperties: true
+    ErrataImpact:
+      type: object
+      properties:
+        errata_id: *id004
+        affected_form_count:
+          type: integer
+        affected_form_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        requires_renotify: *id007
+        requires_regrade: *id007

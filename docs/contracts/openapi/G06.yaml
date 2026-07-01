@@ -1,0 +1,3656 @@
+openapi: 3.1.0
+info:
+  title: Government HRMS — G06 Promotion, Posting & Progression Monitoring
+  version: 3.0.0
+  description: >-
+    OpenAPI contract for module G06 (Promotion / Posting / Progression). Grounded
+    in docs/brd/v3/G06-promotion-posting-progression.md (Sections 5, 6, 9),
+    docs/contracts/error-taxonomy.yaml (G06 bare-domain codes carried in
+    error.code, mostly 409 CONFLICT), and docs/brd/PLATFORM_FOUNDATION.md §4.
+    Conventions adopted verbatim from the platform: /api/v1 base path, JWT
+    bearerAuth, X-Correlation-Id response header, Idempotency-Key on unsafe
+    transaction-creating POSTs (24h replay), cursor pagination (limit default 25
+    / max 100 + cursor -> next_cursor). All SR establishment events
+    (PROMOTION / OFFICIATING / MACP / CONFIRMATION / POSTING / REVERSION) relay
+    to the canonical G12 write-port POST /api/v1/sr/ingest (reversals via
+    /sr/ingest/reversal), deduped on the tuple
+    (source_module="G06", source_reference_id, source_event_version) with a
+    mandatory fact_key + explicit tenant_id/entity_id. The pay-fixation SR event
+    (PAY_FIXATION / ANNUAL_INCREMENT) is G10's, not G06's.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Seniority
+    description: Seniority lists, entries, objections, multi-stream construction.
+  - name: Eligibility
+    description: Eligibility rule engine and assessments.
+  - name: Promotion Cases
+    description: Promotion case creation, field assembly, candidates.
+  - name: DPC & Panels
+    description: DPC / promotion panels and proceedings.
+  - name: Reservation Roster
+    description: Reservation rosters, points, compliance.
+  - name: Orders
+    description: Promotion order generation, acceptance, refusal, SR posting.
+  - name: Sealed Cover
+    description: Sealed-cover handling and review DPC.
+  - name: Probation
+    description: Probation lifecycle on promotion.
+  - name: Officiating
+    description: Ad-hoc / officiating / in-situ arrangements.
+  - name: Financial Upgradation
+    description: ACP/MACP screening and sanction.
+  - name: Postings
+    description: Posting after promotion.
+  - name: Progression
+    description: Progression monitoring alerts and timeline.
+  - name: Career & Succession
+    description: Advisory career-path modelling and succession planning.
+  - name: Establishment
+    description: Sanctioned posts and vacancy computation.
+  - name: Qualifying Service
+    description: Qualifying-service ledger and exclusion rules.
+  - name: Legal
+    description: Legal-case linkage and sub-judice handling.
+  - name: Corrections
+    description: Correction lineage and retrospective recompute cascade.
+  - name: Refusals
+    description: Refusal-of-promotion consequence management.
+  - name: SR Ingest
+    description: Canonical G12 SR ledger write-port (facade relay from G06).
+
+paths:
+  # ---------------------------------------------------------------------------
+  # FR-PPP-001 — Seniority list generation
+  # ---------------------------------------------------------------------------
+  /seniority-lists:
+    post:
+      tags: [Seniority]
+      operationId: createSeniorityList
+      summary: Create a cadre-wise seniority list and auto-generate entries.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeniorityListCreate'
+      responses:
+        '201':
+          description: List created with generated entries.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeniorityList' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /seniority-lists/{id}:
+    get:
+      tags: [Seniority]
+      operationId: getSeniorityList
+      summary: Fetch a seniority list with its entries (cursor paginated).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Seniority list with a page of entries.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SeniorityList'
+                  - type: object
+                    properties:
+                      entries:
+                        type: array
+                        items: { $ref: '#/components/schemas/SeniorityEntry' }
+                      next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /seniority-lists/{id}/entries/{entryId}:
+    patch:
+      tags: [Seniority]
+      operationId: overrideSeniorityEntryRank
+      summary: Manual rank override on a seniority entry (audited by P05).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rank_position, reason]
+              properties:
+                rank_position: { type: integer, minimum: 1 }
+                reckoning_basis: { $ref: '#/components/schemas/ReckoningBasis' }
+                tiebreak_value: { type: [string, "null"] }
+                reason: { type: string, description: Mandatory reason (VAL-COMMENT / ERR-REASON-REQ). }
+      responses:
+        '200':
+          description: Entry updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeniorityEntry' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-002 — Publication, objections & finalisation
+  # ---------------------------------------------------------------------------
+  /seniority-lists/{id}/publish:
+    post:
+      tags: [Seniority]
+      operationId: publishSeniorityList
+      summary: Publish a tentative seniority list (P01 checker).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [objection_window_start, objection_window_end]
+              properties:
+                objection_window_start: { type: string, format: date }
+                objection_window_end: { type: string, format: date }
+      responses:
+        '200':
+          description: List published tentative; objection window open.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeniorityList' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /seniority-lists/{id}/objections:
+    post:
+      tags: [Seniority]
+      operationId: fileSeniorityObjection
+      summary: File an objection against a published seniority list.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObjectionCreate'
+      responses:
+        '201':
+          description: Objection filed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Objection' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /objections/{id}/dispose:
+    post:
+      tags: [Seniority]
+      operationId: disposeObjection
+      summary: Dispose (uphold / reject / partially uphold) a seniority objection.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [disposal, disposal_remarks]
+              properties:
+                disposal:
+                  type: string
+                  enum: [UPHELD, REJECTED, PARTIALLY_UPHELD, TIME_BARRED, WITHDRAWN]
+                disposal_remarks: { type: string }
+                creates_correction_event: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Objection disposed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Objection' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /seniority-lists/{id}/finalise:
+    post:
+      tags: [Seniority]
+      operationId: finaliseSeniorityList
+      summary: Finalise a seniority list (blocked while objections are open).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: List finalised.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeniorityList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-020 — Multi-stream inter-se seniority construction
+  # ---------------------------------------------------------------------------
+  /seniority-quota-rules:
+    get:
+      tags: [Seniority]
+      operationId: listSeniorityQuotaRules
+      summary: List rota-quota rules.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of quota rules.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeniorityQuotaRulePage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Seniority]
+      operationId: createSeniorityQuotaRule
+      summary: Create a rota-quota rule.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SeniorityQuotaRule' }
+      responses:
+        '201':
+          description: Quota rule created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeniorityQuotaRule' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Seniority]
+      operationId: upsertSeniorityQuotaRule
+      summary: Update a rota-quota rule version.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SeniorityQuotaRule' }
+      responses:
+        '200':
+          description: Quota rule updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeniorityQuotaRule' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /seniority-lists/{id}/construct-combined:
+    post:
+      tags: [Seniority]
+      operationId: constructCombinedSeniority
+      summary: Build the combined multi-stream inter-se order (rota-quota).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quota_rule_id]
+              properties:
+                quota_rule_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Combined list constructed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SeniorityList' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            Conflict (e.g. STREAM_TAG_MISSING, QUOTA_RULE_INVALID,
+            SENIORITY_RANK_CONFLICT).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /seniority-lists/{id}/rotation-trace:
+    get:
+      tags: [Seniority]
+      operationId: getRotationTrace
+      summary: Fetch the rotation slot trace for a multi-stream list.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Rotation slot trace.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  seniority_list_id: { type: string, format: uuid }
+                  slots:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        quota_slot_label: { type: string }
+                        rotation_cycle_no: { type: integer }
+                        recruitment_stream: { $ref: '#/components/schemas/RecruitmentStream' }
+                        employee_id: { type: string, format: uuid }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-003 — Eligibility rule engine & computation
+  # ---------------------------------------------------------------------------
+  /promotion-cases/{caseId}/compute-eligibility:
+    post:
+      tags: [Eligibility]
+      operationId: computeEligibility
+      summary: Batch-compute eligibility assessments for a case (async; progress).
+      parameters:
+        - $ref: '#/components/parameters/CaseId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Batch computation accepted; assessment excerpt returned.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  caseId: { type: string }
+                  assessed: { type: integer }
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/EligibilityAssessment' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /employees/{id}/eligibility:
+    get:
+      tags: [Eligibility]
+      operationId: getEmployeeEligibility
+      summary: Fetch a single employee's eligibility assessment (P02 field-masked).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - name: caseId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Eligibility assessment.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibilityAssessment' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /eligibility-rules:
+    get:
+      tags: [Eligibility]
+      operationId: listEligibilityRules
+      summary: List eligibility rules.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of eligibility rules.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibilityRulePage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Eligibility]
+      operationId: createEligibilityRule
+      summary: Create an eligibility rule.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EligibilityRule' }
+      responses:
+        '201':
+          description: Rule created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibilityRule' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Eligibility]
+      operationId: upsertEligibilityRule
+      summary: Update an eligibility rule version.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EligibilityRule' }
+      responses:
+        '200':
+          description: Rule updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibilityRule' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-004 — Promotion case creation & field assembly
+  # ---------------------------------------------------------------------------
+  /promotion-cases:
+    post:
+      tags: [Promotion Cases]
+      operationId: createPromotionCase
+      summary: Create a promotion case (vacancy validated vs sanctioned_posts).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PromotionCaseCreate' }
+      responses:
+        '201':
+          description: Case created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromotionCase' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            Conflict (e.g. VACANCY_NOT_RECONCILED, STRENGTH_INCONSISTENT,
+            QUOTA_SPLIT_INVALID, ERR-DUP-INSTANCE).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /promotion-cases/{id}/assemble-field:
+    post:
+      tags: [Promotion Cases]
+      operationId: assembleCandidateField
+      summary: Build the eligible-candidate field for a promotion case.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                zone_extension_factor: { type: number, description: DoPT zone-of-consideration slab factor (Appendix D.1). }
+      responses:
+        '200':
+          description: Field assembled.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  promotion_case_id: { type: string, format: uuid }
+                  candidate_count: { type: integer }
+                  status: { $ref: '#/components/schemas/PromotionCaseStatus' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (e.g. NO_ELIGIBLE_CANDIDATES, SENIORITY_LIST_NOT_FINAL).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /promotion-cases/{id}/candidates:
+    get:
+      tags: [Promotion Cases]
+      operationId: listCaseCandidates
+      summary: List candidates in a promotion case (cursor paginated).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of candidates.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CandidatePage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-005 — DPC / panel constitution & proceedings
+  # ---------------------------------------------------------------------------
+  /promotion-cases/{id}/panels:
+    post:
+      tags: [DPC & Panels]
+      operationId: constitutePanel
+      summary: Constitute a DPC/promotion panel (with validity; starts P01 instance).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PanelCreate' }
+      responses:
+        '201':
+          description: Panel constituted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Panel' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (e.g. PANEL_CONFLICT_OF_INTEREST, QUORUM_NOT_MET).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /panels/{id}/proceedings:
+    post:
+      tags: [DPC & Panels]
+      operationId: recordProceedings
+      summary: Record DPC proceedings (minutes, benchmark, quorum).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DpcProceedingCreate' }
+      responses:
+        '201':
+          description: Proceedings recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DpcProceeding' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (e.g. QUORUM_NOT_MET, APAR_NOT_USABLE).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /candidates/{id}/verdict:
+    patch:
+      tags: [DPC & Panels]
+      operationId: setCandidateVerdict
+      summary: Set a candidate DPC verdict (P01 member action, idempotent).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dpc_verdict]
+              properties:
+                dpc_verdict: { $ref: '#/components/schemas/DpcVerdict' }
+                remarks: { type: [string, "null"] }
+      responses:
+        '200':
+          description: Verdict recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Candidate' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /promotion-cases/{id}/select-list/approve:
+    post:
+      tags: [DPC & Panels]
+      operationId: approveSelectList
+      summary: Approve the select list (P01 checker).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Select list approved.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromotionCase' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (e.g. VACANCY_EXCEEDED, QUORUM_NOT_MET).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /promotion-cases/{id}/supplementary-dpc:
+    post:
+      tags: [DPC & Panels]
+      operationId: constituteSupplementaryDpc
+      summary: Constitute a supplementary / review DPC.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PanelCreate' }
+      responses:
+        '201':
+          description: Supplementary/review DPC constituted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Panel' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-006 — Reservation roster
+  # ---------------------------------------------------------------------------
+  /rosters:
+    post:
+      tags: [Reservation Roster]
+      operationId: createRoster
+      summary: Create a reservation roster (with enabling justification).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReservationRoster' }
+      responses:
+        '201':
+          description: Roster created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationRoster' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /rosters/{id}/points/{pointId}/fill:
+    post:
+      tags: [Reservation Roster]
+      operationId: fillRosterPoint
+      summary: Fill a roster point (own-merit migration aware).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/PointId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filled_by_employee_id, filled_in_case_id]
+              properties:
+                filled_by_employee_id: { type: string, format: uuid }
+                filled_in_case_id: { type: string, format: uuid }
+                selected_on_own_merit: { type: boolean, default: false }
+                adjusted_against_category: { $ref: '#/components/schemas/ReservationCategory' }
+      responses:
+        '200':
+          description: Roster point filled.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RosterPoint' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            Conflict (e.g. ROSTER_POINT_OCCUPIED, ROSTER_CATEGORY_MISMATCH,
+            OWN_MERIT_MIGRATION_REQUIRED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /rosters/{id}/points/{pointId}/de-reserve:
+    post:
+      tags: [Reservation Roster]
+      operationId: deReserveRosterPoint
+      summary: De-reserve / interchange a roster point (P01 checker).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/PointId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dereservation_authority_ref, reason]
+              properties:
+                dereservation_authority_ref: { type: string }
+                interchange_with_point_id: { type: [string, "null"], format: uuid }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Point de-reserved / interchanged.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RosterPoint' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /promotion-cases/{id}/roster-compliance:
+    get:
+      tags: [Reservation Roster]
+      operationId: getRosterCompliance
+      summary: Roster compliance report for a case (with own-merit migrations).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Compliance report.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  promotion_case_id: { type: string, format: uuid }
+                  compliant: { type: boolean }
+                  points:
+                    type: array
+                    items: { $ref: '#/components/schemas/RosterPoint' }
+                  own_merit_migrations: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-007 / 019 — Order generation, acceptance, refusal, SR posting
+  # ---------------------------------------------------------------------------
+  /promotion-cases/{id}/orders/generate:
+    post:
+      tags: [Orders]
+      operationId: generateOrders
+      summary: Bulk-generate promotion orders for a case.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Orders generated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  promotion_case_id: { type: string, format: uuid }
+                  generated_count: { type: integer }
+                  orders:
+                    type: array
+                    items: { $ref: '#/components/schemas/PromotionOrder' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (e.g. PANEL_EXPIRED, PANEL_CURRENCY block).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /orders/{id}:
+    get:
+      tags: [Orders]
+      operationId: getOrder
+      summary: Fetch a promotion order.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Order.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromotionOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /orders/{id}/accept:
+    post:
+      tags: [Orders]
+      operationId: acceptOrder
+      summary: Record acceptance of a promotion order.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Acceptance recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromotionOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /orders/{id}/decline:
+    post:
+      tags: [Orders, Refusals]
+      operationId: declineOrder
+      summary: Record refusal of a promotion order (creates a refusal → FR-019).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refusal_date, reason]
+              properties:
+                refusal_date: { type: string, format: date }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Refusal recorded; consequences applied.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromotionRefusal' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (e.g. REFUSAL_POLICY_MISSING).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /orders/{id}/effect:
+    post:
+      tags: [Orders]
+      operationId: effectOrder
+      summary: >-
+        Effect a promotion order and post the SR PROMOTION event (facade relays
+        to POST /api/v1/sr/ingest). Blocked while an interim stay is active.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Order effected; SR PROMOTION event posted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderEffectResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412':
+          description: >-
+            Precondition failed (e.g. ENTITY_SUB_JUDICE active interim stay,
+            SR_POSTING_FAILED held for retry).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /refusals:
+    get:
+      tags: [Refusals]
+      operationId: listRefusals
+      summary: List refusals (cursor paginated).
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, EXPIRED, WAIVED] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of refusals.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RefusalPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /refusals/{id}/waive:
+    post:
+      tags: [Refusals]
+      operationId: waiveRefusal
+      summary: Waive a refusal debarment (P01 checker).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Debarment waived.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromotionRefusal' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-008 — Sealed cover handling
+  # ---------------------------------------------------------------------------
+  /sealed-covers:
+    get:
+      tags: [Sealed Cover]
+      operationId: listSealedCovers
+      summary: List sealed covers (P02-restricted).
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, reviewed, closed] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of sealed-cover candidates.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CandidatePage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /sealed-covers/{candidateId}/review:
+    post:
+      tags: [Sealed Cover]
+      operationId: reviewSealedCover
+      summary: Open a sealed cover via Review DPC (requires concluded G09 case).
+      parameters:
+        - $ref: '#/components/parameters/CandidateId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, enum: [FIT, NOT_FIT, MINOR_PENALTY] }
+                remarks: { type: [string, "null"] }
+      responses:
+        '200':
+          description: Sealed cover reviewed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Candidate' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (SEALED_COVER_NOT_REVIEWABLE — G09 case not concluded).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /sealed-covers/{candidateId}/minor-penalty-decision:
+    post:
+      tags: [Sealed Cover]
+      operationId: sealedCoverMinorPenaltyDecision
+      summary: Record the partially-upheld / minor-penalty branch decision.
+      parameters:
+        - $ref: '#/components/parameters/CandidateId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [PROMOTE_WITH_PENALTY, DEFER, SUPERSEDE] }
+                remarks: { type: [string, "null"] }
+      responses:
+        '200':
+          description: Decision recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Candidate' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-009 — Probation lifecycle
+  # ---------------------------------------------------------------------------
+  /probations:
+    get:
+      tags: [Probation]
+      operationId: listProbations
+      summary: List probation records (cursor paginated).
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ProbationStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of probation records.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProbationPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /probations/{id}/extend:
+    post:
+      tags: [Probation]
+      operationId: extendProbation
+      summary: Extend a probation period.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [extended_to, reason]
+              properties:
+                extended_to: { type: string, format: date }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Probation extended.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Probation' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (PROBATION_EXTENSION_LIMIT over cap).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /probations/{id}/declare:
+    post:
+      tags: [Probation]
+      operationId: declareProbationSatisfactory
+      summary: Declare probation satisfactory (posts SR CONFIRMATION event).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Probation declared satisfactory; SR CONFIRMATION posted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Probation'
+                  - type: object
+                    properties:
+                      sr_event_id: { type: [string, "null"] }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (PROBATION_NOT_COMPLETE — period not elapsed).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /probations/{id}/revert:
+    post:
+      tags: [Probation]
+      operationId: revertProbation
+      summary: Revert an employee on unsatisfactory probation (posts SR REVERSION).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Reverted; SR REVERSION posted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Probation' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-010 — Officiating / ad-hoc / in-situ
+  # ---------------------------------------------------------------------------
+  /officiating:
+    post:
+      tags: [Officiating]
+      operationId: createOfficiating
+      summary: Create an officiating / ad-hoc / in-situ arrangement (SR OFFICIATING).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OfficiatingCreate' }
+      responses:
+        '201':
+          description: Arrangement created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Officiating' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (OFFICIATING_OVERLAP, POST_NOT_AVAILABLE).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /officiating/{id}/extend:
+    post:
+      tags: [Officiating]
+      operationId: extendOfficiating
+      summary: Extend an officiating arrangement.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [end_date]
+              properties:
+                end_date: { type: string, format: date }
+                reason: { type: [string, "null"] }
+      responses:
+        '200':
+          description: Arrangement extended.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Officiating' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /officiating/{id}/regularise:
+    post:
+      tags: [Officiating]
+      operationId: regulariseOfficiating
+      summary: Regularise an officiating arrangement to a regular order (same incumbent).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [promotion_case_id]
+              properties:
+                promotion_case_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Regularised to a promotion order.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Officiating' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (NO_REGULAR_SELECTION — no regular selection exists).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /officiating/{id}/terminate:
+    post:
+      tags: [Officiating]
+      operationId: terminateOfficiating
+      summary: Terminate an officiating arrangement (or supersede by regular; SR OFFICIATING_CANCELLED).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [termination_type]
+              properties:
+                termination_type: { type: string, enum: [TERMINATED, SUPERSEDED_BY_REGULAR, LAPSED] }
+                reason: { type: [string, "null"] }
+      responses:
+        '200':
+          description: Arrangement terminated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Officiating' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-011 — Financial upgradation (ACP/MACP)
+  # ---------------------------------------------------------------------------
+  /financial-upgradations:
+    get:
+      tags: [Financial Upgradation]
+      operationId: listFinancialUpgradations
+      summary: List financial up-gradations (cursor paginated).
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/FinancialUpgradationStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of financial up-gradations.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinancialUpgradationPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /financial-upgradations/{id}/screen:
+    post:
+      tags: [Financial Upgradation]
+      operationId: screenFinancialUpgradation
+      summary: Record the MACP/ACP screening assessment.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MacpAssessment' }
+      responses:
+        '200':
+          description: Screening recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinancialUpgradation' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /financial-upgradations/{id}/sanction:
+    post:
+      tags: [Financial Upgradation]
+      operationId: sanctionFinancialUpgradation
+      summary: Sanction the up-gradation, generate order, and post SR MACP event.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sanctioned; order + SR MACP event created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/FinancialUpgradation'
+                  - type: object
+                    properties:
+                      order_id: { type: [string, "null"] }
+                      sr_event_id: { type: [string, "null"] }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (MACP_CAP_REACHED — 3 up-gradations exhausted).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412':
+          description: Precondition failed (SR_POSTING_FAILED held for retry).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /financial-upgradations/{id}/defer:
+    post:
+      tags: [Financial Upgradation]
+      operationId: deferFinancialUpgradation
+      summary: Defer an up-gradation (e.g. penalty currency).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deferral_reason]
+              properties:
+                deferral_reason: { type: string }
+      responses:
+        '200':
+          description: Deferred.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinancialUpgradation' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-012 — Posting after promotion
+  # ---------------------------------------------------------------------------
+  /orders/{id}/postings:
+    post:
+      tags: [Postings]
+      operationId: createPosting
+      summary: Create a posting after promotion (sanctioned-post validated).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PostingCreate' }
+      responses:
+        '201':
+          description: Posting created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Posting' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (POST_NOT_AVAILABLE — destination post unavailable).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /postings/{id}:
+    get:
+      tags: [Postings]
+      operationId: getPosting
+      summary: Fetch a posting status.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Posting.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Posting' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /postings/{id}/sync-movement:
+    post:
+      tags: [Postings]
+      operationId: syncPostingMovement
+      summary: Sync the posting with a G05 relieving/joining movement (SR POSTING on joining).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Movement synced.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Posting' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /postings/{id}/mark-not-joined:
+    post:
+      tags: [Postings]
+      operationId: markPostingNotJoined
+      summary: Record NOT_JOINED and its consequence.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [not_joined_consequence, reason]
+              properties:
+                not_joined_consequence:
+                  type: string
+                  enum: [ORDER_REVIEW, FORFEITED, EXTENSION_GRANTED]
+                reason: { type: string }
+      responses:
+        '200':
+          description: NOT_JOINED recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Posting' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-013 — Progression monitoring
+  # ---------------------------------------------------------------------------
+  /progression/alerts:
+    get:
+      tags: [Progression]
+      operationId: listProgressionAlerts
+      summary: List progression alerts (cursor paginated).
+      parameters:
+        - name: type
+          in: query
+          schema: { $ref: '#/components/schemas/AlertType' }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AlertStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of alerts.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /progression/alerts/{id}/acknowledge:
+    post:
+      tags: [Progression]
+      operationId: acknowledgeAlert
+      summary: Acknowledge a progression alert.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Alert acknowledged.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProgressionAlert' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /employees/{id}/progression-timeline:
+    get:
+      tags: [Progression]
+      operationId: getProgressionTimeline
+      summary: Fetch an employee's self progression timeline.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Progression timeline.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employee_id: { type: string, format: uuid }
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        event_type: { type: string }
+                        effective_date: { type: string, format: date }
+                        designation_id: { type: string, format: uuid }
+                        reference_id: { type: string, format: uuid }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /progression/run:
+    post:
+      tags: [Progression]
+      operationId: runProgression
+      summary: Trigger a progression-monitoring run (admin; X.1 job).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cadre_id: { type: [string, "null"], format: uuid }
+                org_unit_id: { type: [string, "null"], format: uuid }
+      responses:
+        '202':
+          description: Run enqueued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string }
+                  status: { type: string, enum: [ENQUEUED, RUNNING] }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-014 — Career-path & succession (advisory)
+  # ---------------------------------------------------------------------------
+  /career-paths:
+    get:
+      tags: [Career & Succession]
+      operationId: listCareerPaths
+      summary: List career paths.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of career paths.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareerPathPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Career & Succession]
+      operationId: createCareerPath
+      summary: Create a career path.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CareerPath' }
+      responses:
+        '201':
+          description: Career path created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareerPath' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Career & Succession]
+      operationId: upsertCareerPath
+      summary: Update a career path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CareerPath' }
+      responses:
+        '200':
+          description: Career path updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareerPath' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /employees/{id}/career-path:
+    get:
+      tags: [Career & Succession]
+      operationId: getEmployeeCareerPath
+      summary: Fetch an employee's self career path.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Career path for the employee.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareerPath' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /succession-plans:
+    get:
+      tags: [Career & Succession]
+      operationId: listSuccessionPlans
+      summary: List succession plans.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of succession plans.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessionPlanPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Career & Succession]
+      operationId: createSuccessionPlan
+      summary: Create a succession plan.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SuccessionPlan' }
+      responses:
+        '201':
+          description: Succession plan created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessionPlan' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /eligibility-dashboard:
+    get:
+      tags: [Career & Succession]
+      operationId: getEligibilityDashboard
+      summary: Eligibility projection dashboard by grade / cycle.
+      parameters:
+        - name: grade
+          in: query
+          schema: { type: string }
+        - name: cycle
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Projection.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grade: { type: string }
+                  cycle: { type: integer }
+                  projected_eligible: { type: integer }
+                  rows:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-015 — Sanctioned posts & vacancy
+  # ---------------------------------------------------------------------------
+  /sanctioned-posts:
+    post:
+      tags: [Establishment]
+      operationId: createSanctionedPost
+      summary: Create / revise a sanctioned strength (P01 maker-checker).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SanctionedPost' }
+      responses:
+        '201':
+          description: Sanctioned post created / revised.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SanctionedPost' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Conflict (STRENGTH_INCONSISTENT, QUOTA_SPLIT_INVALID).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [Establishment]
+      operationId: listSanctionedPosts
+      summary: List sanctioned posts with vacancy computation (cursor paginated).
+      parameters:
+        - name: grade
+          in: query
+          schema: { type: string }
+        - name: orgUnit
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of sanctioned posts.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SanctionedPostPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /sanctioned-posts/{id}/vacancy-computation:
+    get:
+      tags: [Establishment]
+      operationId: getVacancyComputation
+      summary: Promotion-quota vacancy figure for a sanctioned post.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Vacancy computation.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sanctioned_post_id: { type: string, format: uuid }
+                  sanctioned_strength: { type: integer }
+                  filled_count: { type: integer }
+                  current_vacancies: { type: integer }
+                  anticipated_vacancies: { type: integer }
+                  carried_forward_vacancies: { type: integer }
+                  promotion_quota_vacancies: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /sanctioned-posts/{id}/reconcile:
+    post:
+      tags: [Establishment]
+      operationId: reconcileSanctionedPost
+      summary: Reconcile filled / anticipated counts with G01 / G11.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Reconciled.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SanctionedPost' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (STRENGTH_INCONSISTENT — filled > sanctioned).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-016 — Qualifying-service ledger & exclusion rules
+  # ---------------------------------------------------------------------------
+  /qualifying-service/compute:
+    post:
+      tags: [Qualifying Service]
+      operationId: computeQualifyingService
+      summary: Compute and snapshot qualifying service (employee, grade, as-of).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employee_id, grade_designation_id, as_of_date]
+              properties:
+                employee_id: { type: string, format: uuid }
+                grade_designation_id: { type: string, format: uuid }
+                as_of_date: { type: string, format: date }
+                service_exclusion_rule_id: { type: [string, "null"], format: uuid }
+      responses:
+        '201':
+          description: Immutable QSL snapshot created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualifyingServiceSnapshot' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /employees/{id}/qualifying-service:
+    get:
+      tags: [Qualifying Service]
+      operationId: getEmployeeQualifyingService
+      summary: Fetch the current qualifying-service snapshot for an employee.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - name: grade
+          in: query
+          schema: { type: string }
+        - name: asOf
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Current QSL snapshot.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualifyingServiceSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /qualifying-service/{snapshotId}:
+    get:
+      tags: [Qualifying Service]
+      operationId: getQualifyingServiceSnapshot
+      summary: Fetch an immutable (citable) qualifying-service snapshot.
+      parameters:
+        - name: snapshotId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: QSL snapshot.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualifyingServiceSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /service-exclusion-rules:
+    get:
+      tags: [Qualifying Service]
+      operationId: listServiceExclusionRules
+      summary: List service-exclusion rules.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of exclusion rules.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceExclusionRulePage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Qualifying Service]
+      operationId: createServiceExclusionRule
+      summary: Create a service-exclusion rule.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceExclusionRule' }
+      responses:
+        '201':
+          description: Exclusion rule created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceExclusionRule' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Qualifying Service]
+      operationId: upsertServiceExclusionRule
+      summary: Update a service-exclusion rule version.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceExclusionRule' }
+      responses:
+        '200':
+          description: Exclusion rule updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceExclusionRule' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-017 — Legal-case linkage & sub-judice
+  # ---------------------------------------------------------------------------
+  /legal-case-links:
+    post:
+      tags: [Legal]
+      operationId: createLegalCaseLink
+      summary: Attach a legal reference to a G06 entity.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LegalCaseLink' }
+      responses:
+        '201':
+          description: Legal case link created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalCaseLink' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [Legal]
+      operationId: listLegalCaseLinks
+      summary: List legal-case links for an entity (cursor paginated).
+      parameters:
+        - name: entityType
+          in: query
+          schema: { $ref: '#/components/schemas/LegalLinkedEntityType' }
+        - name: entityId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of legal-case links.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalCaseLinkPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /legal-case-links/{id}/interim-stay:
+    post:
+      tags: [Legal]
+      operationId: recordInterimStay
+      summary: Record or vacate an interim stay on a legal-case link.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [interim_stay]
+              properties:
+                interim_stay: { type: boolean }
+                stay_from_date: { type: [string, "null"], format: date }
+                stay_to_date: { type: [string, "null"], format: date }
+      responses:
+        '200':
+          description: Interim stay updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalCaseLink' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /legal-case-links/{id}/dispose:
+    post:
+      tags: [Legal]
+      operationId: disposeLegalCaseLink
+      summary: Record the outcome of a legal case (may trigger correction cascade).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome:
+                  type: string
+                  enum: [DISPOSED_FAVOURABLE, DISPOSED_ADVERSE, CONTEMPT, WITHDRAWN]
+                outcome_document_id: { type: [string, "null"], format: uuid }
+                creates_correction_event: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Outcome recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalCaseLink' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-PPP-018 — Correction lineage & recompute cascade
+  # ---------------------------------------------------------------------------
+  /correction-events:
+    post:
+      tags: [Corrections]
+      operationId: createCorrectionEvent
+      summary: Create a correction event (maker; P01).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CorrectionEventCreate' }
+      responses:
+        '201':
+          description: Correction event created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CorrectionEvent' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /correction-events/{id}/approve:
+    post:
+      tags: [Corrections]
+      operationId: approveCorrectionEvent
+      summary: Approve a correction event (P01 checker).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Correction event approved.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CorrectionEvent' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /correction-events/{id}/run-cascade:
+    post:
+      tags: [Corrections]
+      operationId: runCorrectionCascade
+      summary: >-
+        Execute the recompute cascade (X.1, idempotent/resumable). Emits SR
+        reversal events and a G10 stepping-up signal on pay anomaly.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Cascade completed (or resumed).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CascadeResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (CASCADE_FAILED — recompute rolled back).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /correction-events/{id}:
+    get:
+      tags: [Corrections]
+      operationId: getCorrectionEvent
+      summary: Fetch correction-event status and lineage.
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Correction event.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CorrectionEvent' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # Canonical G12 SR ingestion write-port (G06 facade relay)
+  # ---------------------------------------------------------------------------
+  /sr/ingest:
+    post:
+      tags: [SR Ingest]
+      operationId: srIngest
+      summary: >-
+        Canonical SR ledger write-port. G06 relays establishment events
+        (PROMOTION / OFFICIATING / MACP / CONFIRMATION / POSTING / REVERSION)
+        here. Idempotent; deduped on
+        (source_module="G06", source_reference_id, source_event_version).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SrIngestRequest' }
+      responses:
+        '201':
+          description: SR event appended (or idempotent replay of the original).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrIngestResult' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflict (idempotent duplicate; original sr_event_id returned).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412':
+          description: Precondition failed (SR_POSTING_FAILED — held for retry; upstream down).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /sr/ingest/reversal:
+    post:
+      tags: [SR Ingest]
+      operationId: srIngestReversal
+      summary: >-
+        Canonical SR reversal/correction write-port. Uses is_reversal=true +
+        reverses_source_reference_id and, where published, a *_CANCELLED partner
+        code (PROMOTION_CANCELLED / OFFICIATING_CANCELLED).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SrReversalRequest' }
+      responses:
+        '201':
+          description: SR reversal appended; G12 auto-spawns the corrigendum.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrIngestResult' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412':
+          description: Precondition failed (SR_POSTING_FAILED — held for retry).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT carrying resolved roles + tenant/entity scope (P02).
+
+  headers:
+    XCorrelationId:
+      description: Correlation id echoed on every response and written to every audit/log line.
+      schema: { type: string }
+
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    EntryId:
+      name: entryId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PointId:
+      name: pointId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CandidateId:
+      name: candidateId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Required on unsafe transaction-creating POSTs; 24h replay returns the original result.
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      description: Page size (default 25, max 100).
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque forward cursor from a prior response's next_cursor.
+      schema: { type: string }
+    Sort:
+      name: sort
+      in: query
+      description: Sort expression, e.g. field:asc or field:desc.
+      schema: { type: string }
+
+  responses:
+    ValidationFailed:
+      description: 422 — input failed a VAL-* / VAL-G06-* rule.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: 401 — no/invalid/expired session.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: 403 — authenticated but not permitted (never leaks out-of-scope existence).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: 404 — resource absent or out of scope.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: >-
+        409 — idempotency replay, duplicate workflow start, or a G06 domain
+        state/uniqueness conflict (bare domain code carried in error.code).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PreconditionFailed:
+      description: >-
+        412 — a required precondition is not met (e.g. ENTITY_SUB_JUDICE,
+        SR_POSTING_FAILED, upstream G08/G09/G10/G12 unavailable).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: 429 — rate limit exceeded.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: 500 — unexpected server error (503 collapses here per X.3 mapping).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    # ---- Canonical error envelope ----
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: >-
+                One of the 8 platform wire codes (VALIDATION_FAILED /
+                UNAUTHENTICATED / FORBIDDEN / NOT_FOUND / CONFLICT /
+                PRECONDITION_FAILED / RATE_LIMITED / INTERNAL) OR a G06 bare
+                domain code (e.g. VACANCY_NOT_RECONCILED, MACP_CAP_REACHED,
+                ENTITY_SUB_JUDICE, SR_POSTING_FAILED) carried in this field.
+              example: VACANCY_NOT_RECONCILED
+            message:
+              type: string
+              example: Case vacancy (13) does not match sanctioned promotion-quota vacancies (12).
+            field:
+              type: [string, "null"]
+              example: vacancy_count
+            details:
+              type: [object, "null"]
+              additionalProperties: true
+              example: { case_vacancy: 13, sanctioned_promotion_quota: 12 }
+
+    NextCursor:
+      type: [string, "null"]
+      description: Opaque cursor for the next page; null when exhausted.
+
+    # ---- Common enums ----
+    ReservationCategory:
+      type: string
+      enum: [GEN, SC, ST, OBC, EWS, PWBD]
+    RecruitmentStream:
+      type: string
+      enum: [DIRECT, PROMOTEE, LDCE, DEPUTATION_ABSORPTION]
+    ReckoningBasis:
+      type: string
+      enum: [DOJ_GRADE, REGULARISATION_DATE, MERIT_BATCH, DOB_TIEBREAK, ROSTER_POINT, EXAM_RESULT]
+    Benchmark:
+      type: string
+      enum: [GOOD, VERY_GOOD, OUTSTANDING]
+    DpcVerdict:
+      type: string
+      enum: [FIT, NOT_FIT, UNFIT, SEALED_COVER, DEFERRED, SUPERSEDED]
+    PromotionCaseStatus:
+      type: string
+      enum:
+        - DRAFT
+        - FIELD_ASSEMBLED
+        - ELIGIBILITY_DONE
+        - PANEL_CONSTITUTED
+        - DPC_HELD
+        - SELECT_LIST_APPROVED
+        - ORDERS_ISSUED
+        - INTERIM_STAYED
+        - CLOSED
+        - CANCELLED
+    ProbationStatus:
+      type: string
+      enum: [ON_PROBATION, EXTENDED, DECLARED_SATISFACTORY, REVERTED, DISCHARGED]
+    FinancialUpgradationStatus:
+      type: string
+      enum: [DUE, UNDER_SCREENING, SANCTIONED, DEFERRED, REJECTED, EFFECTED]
+    AlertType:
+      type: string
+      enum:
+        - DUE_FOR_PROMOTION
+        - MACP_DUE
+        - STAGNATION
+        - INCREMENT_DUE
+        - PROBATION_ENDING
+        - APAR_GAP_BLOCKING
+        - SEALED_COVER_REVIEW_DUE
+        - REFUSAL_DEBARMENT_ENDING
+    AlertStatus:
+      type: string
+      enum: [OPEN, ACKNOWLEDGED, ACTIONED, DISMISSED, EXPIRED]
+    LegalLinkedEntityType:
+      type: string
+      enum: [PROMOTION_CASE, PROMOTION_ORDER, SENIORITY_LIST, ROSTER, CANDIDATE]
+    SrEventType:
+      type: string
+      enum:
+        - PROMOTION
+        - OFFICIATING
+        - REVERSION
+        - MACP
+        - CONFIRMATION
+        - POSTING
+    SrReversalEventType:
+      type: string
+      enum: [PROMOTION_CANCELLED, OFFICIATING_CANCELLED]
+
+    # ---- Seniority ----
+    SeniorityListCreate:
+      type: object
+      required: [cadre_id, grade_designation_id, as_on_date, list_type]
+      properties:
+        list_no: { type: string, maxLength: 40 }
+        cadre_id: { type: string, format: uuid }
+        grade_designation_id: { type: string, format: uuid }
+        org_unit_scope_id: { type: [string, "null"], format: uuid, description: NULL = state-wide. }
+        as_on_date: { type: string, format: date }
+        list_type: { type: string, enum: [TENTATIVE, FINAL] }
+        is_multi_stream: { type: boolean, default: false }
+        quota_rule_id: { type: [string, "null"], format: uuid }
+    SeniorityList:
+      type: object
+      properties:
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: [string, "null"], format: uuid }
+        seniority_list_id: { type: string, format: uuid }
+        list_no: { type: string }
+        cadre_id: { type: string, format: uuid }
+        grade_designation_id: { type: string, format: uuid }
+        org_unit_scope_id: { type: [string, "null"], format: uuid }
+        as_on_date: { type: string, format: date }
+        list_type: { type: string, enum: [TENTATIVE, FINAL] }
+        status:
+          type: string
+          enum:
+            - DRAFT
+            - PUBLISHED_TENTATIVE
+            - OBJECTIONS_OPEN
+            - OBJECTIONS_CLOSED
+            - FINALISED
+            - UNDER_CORRECTION
+            - SUPERSEDED
+        is_multi_stream: { type: boolean }
+        quota_rule_id: { type: [string, "null"], format: uuid }
+        objection_window_start: { type: [string, "null"], format: date }
+        objection_window_end: { type: [string, "null"], format: date }
+        supersedes_list_id: { type: [string, "null"], format: uuid }
+        correction_event_id: { type: [string, "null"], format: uuid }
+        subject_to_litigation: { type: boolean }
+        document_id: { type: [string, "null"], format: uuid }
+        workflow_instance_id: { type: [string, "null"], format: uuid }
+    SeniorityEntry:
+      type: object
+      properties:
+        seniority_entry_id: { type: string, format: uuid }
+        seniority_list_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        rank_position: { type: integer, minimum: 1 }
+        recruitment_stream: { $ref: '#/components/schemas/RecruitmentStream' }
+        quota_slot_label: { type: [string, "null"] }
+        rotation_cycle_no: { type: [integer, "null"] }
+        reckoning_basis: { $ref: '#/components/schemas/ReckoningBasis' }
+        entry_into_grade_date: { type: string, format: date }
+        tiebreak_value: { type: [string, "null"] }
+        reservation_category: { $ref: '#/components/schemas/ReservationCategory' }
+        is_provisional: { type: boolean }
+        superseded_by_correction: { type: boolean }
+        remarks: { type: [string, "null"] }
+    ObjectionCreate:
+      type: object
+      required: [raised_by_employee_id, objection_type, grounds]
+      properties:
+        raised_by_employee_id: { type: string, format: uuid }
+        target_entry_id: { type: [string, "null"], format: uuid }
+        objection_type:
+          type: string
+          enum: [WRONG_POSITION, WRONG_DATE, OMISSION, CATEGORY_ERROR, STREAM_QUOTA_ERROR, OTHER]
+        grounds: { type: string }
+        supporting_document_id: { type: [string, "null"], format: uuid }
+    Objection:
+      type: object
+      properties:
+        objection_id: { type: string, format: uuid }
+        objection_no: { type: string }
+        seniority_list_id: { type: string, format: uuid }
+        raised_by_employee_id: { type: string, format: uuid }
+        target_entry_id: { type: [string, "null"], format: uuid }
+        objection_type: { type: string }
+        grounds: { type: string }
+        supporting_document_id: { type: [string, "null"], format: uuid }
+        status:
+          type: string
+          enum: [SUBMITTED, UNDER_REVIEW, UPHELD, REJECTED, PARTIALLY_UPHELD, TIME_BARRED, WITHDRAWN]
+        disposal_remarks: { type: [string, "null"] }
+        disposed_by: { type: [string, "null"], format: uuid }
+        disposed_at: { type: [string, "null"], format: date-time }
+
+    SeniorityQuotaRule:
+      type: object
+      required: [rule_code, cadre_id, grade_designation_id, dr_quota_ratio, promotee_quota_ratio, rotation_method, rotation_start_slot]
+      properties:
+        quota_rule_id: { type: string, format: uuid }
+        rule_code: { type: string, maxLength: 40 }
+        cadre_id: { type: string, format: uuid }
+        grade_designation_id: { type: string, format: uuid }
+        dr_quota_ratio: { type: integer }
+        promotee_quota_ratio: { type: integer }
+        ldce_quota_ratio: { type: integer, default: 0 }
+        rotation_method: { type: string, enum: [ROTA_QUOTA, RUNNING_ACCOUNT, SEPARATE_STREAM] }
+        rotation_start_slot: { type: string, enum: [DR_FIRST, PROMOTEE_FIRST] }
+        unfilled_quota_carry_forward: { type: boolean, default: true }
+        policy_reference: { type: [string, "null"] }
+        effective_from: { type: [string, "null"], format: date }
+        effective_to: { type: [string, "null"], format: date }
+        is_active: { type: boolean }
+    SeniorityQuotaRulePage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/SeniorityQuotaRule' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+
+    # ---- Eligibility ----
+    EligibilityRule:
+      type: object
+      required: [rule_code, from_grade_id, to_grade_id, channel, min_qualifying_service_years, apar_lookback_years, apar_benchmark, apar_min_count_meeting_benchmark]
+      properties:
+        eligibility_rule_id: { type: string, format: uuid }
+        rule_code: { type: string, maxLength: 40 }
+        from_grade_id: { type: string, format: uuid }
+        to_grade_id: { type: string, format: uuid }
+        channel: { type: string, enum: [PROMOTION, MACP, OFFICIATING, LDCE] }
+        min_qualifying_service_years: { type: number }
+        min_qualifying_service_months: { type: [integer, "null"] }
+        service_exclusion_rule_id: { type: [string, "null"], format: uuid }
+        apar_lookback_years: { type: integer }
+        apar_benchmark: { $ref: '#/components/schemas/Benchmark' }
+        apar_min_count_meeting_benchmark: { type: integer }
+        require_apar_communicated: { type: boolean, default: true }
+        requires_vigilance_clearance: { type: boolean, default: true }
+        disqualify_if_penalty_current: { type: boolean, default: true }
+        qualification_exam_ref: { type: [string, "null"] }
+        requires_exam_pass: { type: boolean, default: false }
+        requires_cert_currency: { type: boolean, default: true }
+        roster_applicable: { type: boolean, default: true }
+        effective_from: { type: [string, "null"], format: date }
+        effective_to: { type: [string, "null"], format: date }
+        is_active: { type: boolean }
+    EligibilityRulePage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/EligibilityRule' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+    EligibilityAssessment:
+      type: object
+      properties:
+        assessment_id: { type: string, format: uuid }
+        promotion_case_id: { type: [string, "null"], format: uuid }
+        employee_id: { type: string, format: uuid }
+        eligibility_rule_id: { type: string, format: uuid }
+        qsl_snapshot_id: { type: string, format: uuid }
+        qualifying_service_years: { type: number }
+        apar_pass: { type: boolean }
+        apar_communicated: { type: boolean }
+        apar_representation_status: { type: string, enum: [NONE, PENDING, DISPOSED, NOT_APPLICABLE] }
+        apar_usable: { type: boolean }
+        vigilance_status: { type: string, enum: [CLEAR, SEALED_COVER, NOT_CLEAR, PENDING] }
+        disciplinary_status: { type: string, enum: [CLEAR, PENALTY_CURRENT, CHARGE_PENDING] }
+        qualification_met: { type: boolean }
+        exam_result_id: { type: [string, "null"], format: uuid }
+        obc_creamy_layer_status: { type: [string, "null"], enum: [NON_CREAMY, CREAMY, NA] }
+        ews_cert_valid_on_crucial_date: { type: [boolean, "null"] }
+        overall_result: { type: string, enum: [ELIGIBLE, NOT_ELIGIBLE, SEALED_COVER, PROVISIONALLY_ELIGIBLE] }
+        failure_reasons:
+          type: [array, "null"]
+          items: { type: string }
+        rule_trace_json: { type: [object, "null"], additionalProperties: true }
+        assessed_at: { type: string, format: date-time }
+
+    # ---- Promotion case / panel / candidate ----
+    PromotionCaseCreate:
+      type: object
+      required: [from_grade_id, to_grade_id, cadre_id, sanctioned_post_id, vacancy_year, promotion_mode, eligibility_rule_id, crucial_date]
+      properties:
+        from_grade_id: { type: string, format: uuid }
+        to_grade_id: { type: string, format: uuid }
+        cadre_id: { type: string, format: uuid }
+        org_unit_scope_id: { type: [string, "null"], format: uuid }
+        sanctioned_post_id: { type: string, format: uuid }
+        vacancy_count: { type: integer, minimum: 0, description: Derived/validated from sanctioned_posts (VAL-G06-VACANCY-RECON). }
+        vacancy_year: { type: integer }
+        promotion_mode: { type: string, enum: [SENIORITY_FIT, SELECTION_MERIT, SENIORITY_CUM_FITNESS, LDCE] }
+        eligibility_rule_id: { type: string, format: uuid }
+        crucial_date: { type: string, format: date }
+    PromotionCase:
+      type: object
+      properties:
+        promotion_case_id: { type: string, format: uuid }
+        case_no: { type: string }
+        from_grade_id: { type: string, format: uuid }
+        to_grade_id: { type: string, format: uuid }
+        cadre_id: { type: string, format: uuid }
+        org_unit_scope_id: { type: [string, "null"], format: uuid }
+        sanctioned_post_id: { type: string, format: uuid }
+        vacancy_count: { type: integer, minimum: 0 }
+        vacancy_year: { type: integer }
+        promotion_mode: { type: string, enum: [SENIORITY_FIT, SELECTION_MERIT, SENIORITY_CUM_FITNESS, LDCE] }
+        eligibility_rule_id: { type: string, format: uuid }
+        crucial_date: { type: string, format: date }
+        status: { $ref: '#/components/schemas/PromotionCaseStatus' }
+        subject_to_litigation: { type: boolean }
+        workflow_instance_id: { type: [string, "null"], format: uuid }
+    PanelMember:
+      type: object
+      properties:
+        member_employee_id: { type: [string, "null"], format: uuid }
+        external_member_name: { type: [string, "null"] }
+        member_role: { type: string, enum: [CHAIRPERSON, MEMBER, SECRETARY, COMMISSION_NOMINEE, EXPERT] }
+        attendance: { type: [string, "null"], enum: [PRESENT, ABSENT, RECUSED] }
+        recusal_reason: { type: [string, "null"] }
+    PanelCreate:
+      type: object
+      required: [panel_type, quorum_required, members]
+      properties:
+        panel_type:
+          type: string
+          enum: [DPC, DEPARTMENTAL_SELECTION_COMMITTEE, REVIEW_DPC, SUPPLEMENTARY_DPC, SCREENING_COMMITTEE]
+        convened_date: { type: [string, "null"], format: date }
+        panel_valid_from: { type: [string, "null"], format: date }
+        panel_valid_until: { type: [string, "null"], format: date }
+        quorum_required: { type: integer }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/PanelMember' }
+    Panel:
+      type: object
+      properties:
+        panel_id: { type: string, format: uuid }
+        promotion_case_id: { type: string, format: uuid }
+        panel_type: { type: string }
+        workflow_instance_id: { type: [string, "null"], format: uuid }
+        convened_date: { type: [string, "null"], format: date }
+        panel_valid_from: { type: [string, "null"], format: date }
+        panel_valid_until: { type: [string, "null"], format: date }
+        quorum_required: { type: integer }
+        status: { type: string, enum: [CONSTITUTED, CONVENED, CONCLUDED, EXPIRED, DISSOLVED] }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/PanelMember' }
+    DpcProceedingCreate:
+      type: object
+      required: [promotion_case_id, meeting_date, benchmark_applied, quorum_met, select_list_count]
+      properties:
+        promotion_case_id: { type: string, format: uuid }
+        meeting_date: { type: string, format: date }
+        benchmark_applied: { $ref: '#/components/schemas/Benchmark' }
+        quorum_met: { type: boolean }
+        minutes_document_id: { type: [string, "null"], format: uuid }
+        select_list_count: { type: integer }
+        reserve_list_count: { type: integer, default: 0 }
+        sealed_cover_count: { type: integer, default: 0 }
+    DpcProceeding:
+      type: object
+      properties:
+        proceeding_id: { type: string, format: uuid }
+        panel_id: { type: string, format: uuid }
+        promotion_case_id: { type: string, format: uuid }
+        meeting_date: { type: string, format: date }
+        benchmark_applied: { $ref: '#/components/schemas/Benchmark' }
+        quorum_met: { type: boolean }
+        minutes_document_id: { type: [string, "null"], format: uuid }
+        select_list_count: { type: integer }
+        reserve_list_count: { type: integer }
+        sealed_cover_count: { type: integer }
+        status: { type: string, enum: [DRAFT_MINUTES, APPROVED, RATIFIED] }
+        approved_by: { type: [string, "null"], format: uuid }
+    Candidate:
+      type: object
+      properties:
+        candidate_id: { type: string, format: uuid }
+        promotion_case_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        seniority_entry_id: { type: [string, "null"], format: uuid }
+        zone_of_consideration: { type: string, enum: [IN_ZONE, EXTENDED_ZONE, OUT_OF_ZONE] }
+        eligibility_assessment_id: { type: [string, "null"], format: uuid }
+        reservation_category: { $ref: '#/components/schemas/ReservationCategory' }
+        selected_on_own_merit: { type: boolean }
+        roster_point_id: { type: [string, "null"], format: uuid }
+        dpc_verdict: { $ref: '#/components/schemas/DpcVerdict' }
+        select_list_rank: { type: [integer, "null"] }
+        is_selected: { type: boolean }
+        remarks: { type: [string, "null"] }
+    CandidatePage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Candidate' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+
+    # ---- Reservation roster ----
+    ReservationRoster:
+      type: object
+      required: [roster_no, cadre_id, grade_designation_id, roster_type, cycle_size, policy_version, consequential_seniority_mode]
+      properties:
+        roster_id: { type: string, format: uuid }
+        roster_no: { type: string, maxLength: 40 }
+        cadre_id: { type: string, format: uuid }
+        grade_designation_id: { type: string, format: uuid }
+        roster_type: { type: string, enum: [PROMOTION_RESERVATION, DIRECT_RECRUITMENT, POST_BASED, VACANCY_BASED] }
+        cycle_size: { type: integer }
+        policy_version: { type: string }
+        roster_applicable: { type: boolean, default: true }
+        enabling_provision_ref: { type: [string, "null"] }
+        quantifiable_data_doc_id: { type: [string, "null"], format: uuid }
+        consequential_seniority_mode: { type: string, enum: [CONSEQUENTIAL, CATCH_UP], default: CATCH_UP }
+        status: { type: string, enum: [ACTIVE, REVISED, ARCHIVED] }
+    RosterPoint:
+      type: object
+      properties:
+        roster_point_id: { type: string, format: uuid }
+        roster_id: { type: string, format: uuid }
+        point_number: { type: integer }
+        reserved_for: { $ref: '#/components/schemas/ReservationCategory' }
+        is_horizontal_pwbd: { type: boolean }
+        status: { type: string, enum: [VACANT, FILLED, CARRIED_FORWARD, DE_RESERVED, INTERCHANGED] }
+        filled_by_employee_id: { type: [string, "null"], format: uuid }
+        adjusted_against_category: { $ref: '#/components/schemas/ReservationCategory' }
+        filled_in_case_id: { type: [string, "null"], format: uuid }
+        carry_forward_from_point_id: { type: [string, "null"], format: uuid }
+        dereservation_authority_ref: { type: [string, "null"] }
+
+    # ---- Orders / probation / refusals ----
+    PromotionOrder:
+      type: object
+      properties:
+        order_id: { type: string, format: uuid }
+        order_no: { type: string }
+        promotion_case_id: { type: [string, "null"], format: uuid }
+        candidate_id: { type: [string, "null"], format: uuid }
+        employee_id: { type: string, format: uuid }
+        order_type: { type: string, enum: [REGULAR_PROMOTION, AD_HOC, OFFICIATING, IN_SITU, MACP, LDCE_PROMOTION] }
+        from_designation_id: { type: string, format: uuid }
+        to_designation_id: { type: string, format: uuid }
+        from_pay_scale_id: { type: [string, "null"], format: uuid }
+        to_pay_scale_id: { type: [string, "null"], format: uuid }
+        effective_date: { type: string, format: date }
+        notional_date: { type: [string, "null"], format: date }
+        subject_to_litigation: { type: boolean }
+        acceptance_status: { type: string, enum: [PENDING, ACCEPTED, DECLINED, DEEMED_ACCEPTED] }
+        status: { type: string, enum: [DRAFT, ISSUED, PUBLISHED, EFFECTED, INTERIM_STAYED, SUPERSEDED, CANCELLED] }
+        order_document_id: { type: [string, "null"], format: uuid }
+        sr_event_id: { type: [string, "null"], format: uuid }
+        correction_event_id: { type: [string, "null"], format: uuid }
+        workflow_instance_id: { type: [string, "null"], format: uuid }
+    OrderEffectResult:
+      type: object
+      properties:
+        order_id: { type: string, format: uuid }
+        order_no: { type: string }
+        status: { type: string, example: EFFECTED }
+        subject_to_litigation: { type: boolean }
+        sr_event_id: { type: string }
+        effective_date: { type: string, format: date }
+        sr_ingest: { $ref: '#/components/schemas/SrIngestRequest' }
+    Probation:
+      type: object
+      properties:
+        probation_id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        probation_start: { type: string, format: date }
+        probation_months: { type: integer }
+        scheduled_end: { type: string, format: date }
+        extended_to: { type: [string, "null"], format: date }
+        status: { $ref: '#/components/schemas/ProbationStatus' }
+        declaration_date: { type: [string, "null"], format: date }
+        declared_by: { type: [string, "null"], format: uuid }
+        remarks: { type: [string, "null"] }
+    ProbationPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Probation' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+    PromotionRefusal:
+      type: object
+      properties:
+        refusal_id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        refusal_date: { type: string, format: date }
+        refusal_reason: { type: [string, "null"] }
+        debarment_months: { type: integer }
+        debarment_until: { type: string, format: date }
+        macp_clock_effect: { type: string, enum: [NONE, STOP, FORFEIT_NEXT, RESET] }
+        next_consideration_after: { type: [string, "null"], format: date }
+        status: { type: string, enum: [ACTIVE, EXPIRED, WAIVED] }
+    RefusalPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/PromotionRefusal' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+
+    # ---- Officiating ----
+    OfficiatingCreate:
+      type: object
+      required: [arrangement_no, employee_id, arrangement_type, against_post_id, org_unit_id, start_date]
+      properties:
+        arrangement_no: { type: string, maxLength: 40 }
+        employee_id: { type: string, format: uuid }
+        arrangement_type: { type: string, enum: [AD_HOC, OFFICIATING, IN_SITU, CURRENT_DUTY_CHARGE] }
+        against_post_id: { type: string, format: uuid }
+        sanctioned_post_id: { type: [string, "null"], format: uuid }
+        org_unit_id: { type: string, format: uuid }
+        start_date: { type: string, format: date }
+        end_date: { type: [string, "null"], format: date }
+        linked_case_id: { type: [string, "null"], format: uuid }
+        pay_allowed: { type: boolean, default: true }
+    Officiating:
+      type: object
+      properties:
+        arrangement_id: { type: string, format: uuid }
+        arrangement_no: { type: string }
+        employee_id: { type: string, format: uuid }
+        arrangement_type: { type: string, enum: [AD_HOC, OFFICIATING, IN_SITU, CURRENT_DUTY_CHARGE] }
+        against_post_id: { type: string, format: uuid }
+        sanctioned_post_id: { type: [string, "null"], format: uuid }
+        org_unit_id: { type: string, format: uuid }
+        start_date: { type: string, format: date }
+        end_date: { type: [string, "null"], format: date }
+        linked_case_id: { type: [string, "null"], format: uuid }
+        regularised_order_id: { type: [string, "null"], format: uuid }
+        status: { type: string, enum: [ACTIVE, EXTENDED, REGULARISED, TERMINATED, SUPERSEDED_BY_REGULAR, LAPSED] }
+        pay_allowed: { type: boolean }
+        sr_event_id: { type: [string, "null"], format: uuid }
+
+    # ---- Financial upgradation ----
+    MacpAssessment:
+      type: object
+      required: [benchmark_required, benchmark_met, financial_upgradations_availed, promotions_earned_count, result, assessment_date]
+      properties:
+        macp_assessment_id: { type: string, format: uuid }
+        screening_committee_panel_id: { type: [string, "null"], format: uuid }
+        benchmark_required: { type: string, enum: [GOOD, VERY_GOOD] }
+        benchmark_met: { type: boolean }
+        financial_upgradations_availed: { type: integer }
+        promotions_earned_count: { type: integer }
+        result: { type: string, enum: [RECOMMENDED, NOT_RECOMMENDED, DEFERRED] }
+        assessment_date: { type: string, format: date }
+    FinancialUpgradation:
+      type: object
+      properties:
+        upgradation_id: { type: string, format: uuid }
+        upgradation_no: { type: string }
+        employee_id: { type: string, format: uuid }
+        scheme: { type: string, enum: [TBP, ACP, MACP] }
+        upgrade_level: { type: string, enum: [FIRST, SECOND, THIRD] }
+        qsl_snapshot_id: { type: string, format: uuid }
+        qualifying_years_completed: { type: number }
+        regular_promotions_availed: { type: integer }
+        clock_reset_date: { type: [string, "null"], format: date }
+        refusal_effect_applied: { type: boolean }
+        due_date: { type: string, format: date }
+        granted_pay_level_id: { type: [string, "null"], format: uuid }
+        effective_date: { type: [string, "null"], format: date }
+        macp_assessment_id: { type: [string, "null"], format: uuid }
+        status: { $ref: '#/components/schemas/FinancialUpgradationStatus' }
+        deferral_reason: { type: [string, "null"] }
+        order_id: { type: [string, "null"], format: uuid }
+        sr_event_id: { type: [string, "null"], format: uuid }
+    FinancialUpgradationPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/FinancialUpgradation' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+
+    # ---- Postings ----
+    PostingCreate:
+      type: object
+      required: [employee_id, to_org_unit_id, to_post_designation_id, to_sanctioned_post_id, posting_type]
+      properties:
+        employee_id: { type: string, format: uuid }
+        to_org_unit_id: { type: string, format: uuid }
+        to_post_designation_id: { type: string, format: uuid }
+        to_sanctioned_post_id: { type: string, format: uuid }
+        posting_type: { type: string, enum: [LOCAL, OUT_STATION, DEPUTATION] }
+        report_by_date: { type: [string, "null"], format: date }
+    Posting:
+      type: object
+      properties:
+        posting_id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        to_org_unit_id: { type: string, format: uuid }
+        to_post_designation_id: { type: string, format: uuid }
+        to_sanctioned_post_id: { type: string, format: uuid }
+        posting_type: { type: string, enum: [LOCAL, OUT_STATION, DEPUTATION] }
+        g05_movement_id: { type: [string, "null"], format: uuid }
+        report_by_date: { type: [string, "null"], format: date }
+        status: { type: string, enum: [PENDING, RELIEVED, JOINED, NOT_JOINED, CANCELLED] }
+        not_joined_consequence: { type: [string, "null"], enum: [ORDER_REVIEW, FORFEITED, EXTENSION_GRANTED] }
+        sr_event_id: { type: [string, "null"], format: uuid }
+
+    # ---- Progression ----
+    ProgressionAlert:
+      type: object
+      properties:
+        alert_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        alert_type: { $ref: '#/components/schemas/AlertType' }
+        due_date: { type: [string, "null"], format: date }
+        severity: { type: string, enum: [INFO, WARNING, CRITICAL] }
+        status: { $ref: '#/components/schemas/AlertStatus' }
+        context_json: { type: [object, "null"], additionalProperties: true }
+    AlertPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ProgressionAlert' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+
+    # ---- Career & succession ----
+    CareerPathStage:
+      type: object
+      properties:
+        stage_id: { type: string, format: uuid }
+        stage_order: { type: integer }
+        designation_id: { type: string, format: uuid }
+        typical_years_in_stage: { type: [number, "null"] }
+        required_competencies: { type: [object, "null"], additionalProperties: true }
+    CareerPath:
+      type: object
+      required: [path_code, path_name]
+      properties:
+        career_path_id: { type: string, format: uuid }
+        path_code: { type: string, maxLength: 40 }
+        path_name: { type: string }
+        cadre_id: { type: [string, "null"], format: uuid }
+        description: { type: [string, "null"] }
+        is_active: { type: boolean }
+        stages:
+          type: array
+          items: { $ref: '#/components/schemas/CareerPathStage' }
+    CareerPathPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/CareerPath' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+    SuccessionCandidate:
+      type: object
+      properties:
+        succession_candidate_id: { type: string, format: uuid }
+        candidate_employee_id: { type: string, format: uuid }
+        readiness: { type: string, enum: [READY_NOW, READY_1_2Y, READY_3Y_PLUS, DEVELOPMENT_NEEDED] }
+        bench_rank: { type: [integer, "null"] }
+    SuccessionPlan:
+      type: object
+      required: [critical_position_designation_id, org_unit_id, risk_of_loss]
+      properties:
+        succession_plan_id: { type: string, format: uuid }
+        critical_position_designation_id: { type: string, format: uuid }
+        org_unit_id: { type: string, format: uuid }
+        incumbent_employee_id: { type: [string, "null"], format: uuid }
+        risk_of_loss: { type: string, enum: [LOW, MEDIUM, HIGH] }
+        status: { type: string, enum: [DRAFT, ACTIVE, REVIEWED, ARCHIVED] }
+        candidates:
+          type: array
+          items: { $ref: '#/components/schemas/SuccessionCandidate' }
+    SuccessionPlanPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/SuccessionPlan' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+
+    # ---- Establishment ----
+    SanctionedPost:
+      type: object
+      required: [cadre_id, grade_designation_id, org_unit_id, sanction_order_ref, sanctioned_strength, as_on_date]
+      properties:
+        sanctioned_post_id: { type: string, format: uuid }
+        cadre_id: { type: string, format: uuid }
+        grade_designation_id: { type: string, format: uuid }
+        org_unit_id: { type: string, format: uuid }
+        sanction_order_ref: { type: string, maxLength: 80 }
+        sanctioned_strength: { type: integer, minimum: 0 }
+        filled_count: { type: integer, minimum: 0, default: 0 }
+        dr_quota_pct: { type: number, minimum: 0, maximum: 100, default: 0 }
+        promotion_quota_pct: { type: number, minimum: 0, maximum: 100, default: 0 }
+        ldce_quota_pct: { type: number, minimum: 0, maximum: 100, default: 0 }
+        current_vacancies: { type: integer, minimum: 0, default: 0 }
+        anticipated_vacancies: { type: integer, minimum: 0, default: 0 }
+        carried_forward_vacancies: { type: integer, minimum: 0, default: 0 }
+        as_on_date: { type: string, format: date }
+        status: { type: string, enum: [ACTIVE, REVISED, ARCHIVED] }
+    SanctionedPostPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/SanctionedPost' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+
+    # ---- Qualifying service ----
+    QualifyingServiceSnapshot:
+      type: object
+      properties:
+        qsl_snapshot_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        grade_designation_id: { type: string, format: uuid }
+        as_of_date: { type: string, format: date }
+        gross_service_years: { type: number }
+        total_exclusion_days: { type: integer }
+        net_qualifying_years: { type: number }
+        exclusion_breakdown_json: { type: object, additionalProperties: true }
+        service_exclusion_rule_id: { type: string, format: uuid }
+        computed_by_version: { type: string }
+        is_current: { type: boolean }
+        superseding_snapshot_id: { type: [string, "null"], format: uuid }
+        computed_at: { type: string, format: date-time }
+    ServiceExclusionRule:
+      type: object
+      required: [rule_code, suspension_treatment]
+      properties:
+        service_exclusion_rule_id: { type: string, format: uuid }
+        rule_code: { type: string, maxLength: 40 }
+        eol_counts_as_qualifying: { type: boolean, default: false }
+        eol_max_condonable_days: { type: [integer, "null"] }
+        dies_non_excluded: { type: boolean, default: true }
+        suspension_treatment: { type: string, enum: [EXCLUDE, INCLUDE_IF_EXONERATED, PER_OUTCOME] }
+        adhoc_service_counts: { type: boolean, default: false }
+        adhoc_counts_if_regularised: { type: boolean, default: true }
+        deputation_counts: { type: boolean, default: true }
+        break_in_service_resets_clock: { type: boolean, default: false }
+        effective_from: { type: [string, "null"], format: date }
+        effective_to: { type: [string, "null"], format: date }
+        is_active: { type: boolean }
+    ServiceExclusionRulePage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceExclusionRule' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+
+    # ---- Legal / correction ----
+    LegalCaseLink:
+      type: object
+      required: [linked_entity_type, linked_entity_id, forum, case_reference]
+      properties:
+        legal_case_link_id: { type: string, format: uuid }
+        link_no: { type: string, maxLength: 40 }
+        linked_entity_type: { $ref: '#/components/schemas/LegalLinkedEntityType' }
+        linked_entity_id: { type: string, format: uuid }
+        forum: { type: string, enum: [CAT, HIGH_COURT, SUPREME_COURT, TRIBUNAL_OTHER] }
+        case_reference: { type: string, maxLength: 80 }
+        petitioner: { type: [string, "null"] }
+        interim_stay: { type: boolean, default: false }
+        stay_from_date: { type: [string, "null"], format: date }
+        stay_to_date: { type: [string, "null"], format: date }
+        subject_to_outcome: { type: boolean, default: false }
+        status:
+          type: string
+          enum: [FILED, INTERIM_STAYED, PENDING, DISPOSED_FAVOURABLE, DISPOSED_ADVERSE, CONTEMPT, WITHDRAWN]
+        outcome_document_id: { type: [string, "null"], format: uuid }
+        triggers_correction_event_id: { type: [string, "null"], format: uuid }
+    LegalCaseLinkPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/LegalCaseLink' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+    CorrectionEventCreate:
+      type: object
+      required: [reason_class, affected_entity_type, affected_entity_id, recompute_scope_json]
+      properties:
+        reason_class: { type: string, enum: [OBJECTION_UPHELD, COURT_ORDER, ADMIN_ERROR] }
+        trigger_legal_case_link_id: { type: [string, "null"], format: uuid }
+        trigger_objection_id: { type: [string, "null"], format: uuid }
+        affected_entity_type: { type: string, enum: [SENIORITY_LIST, PROMOTION_CASE, PROMOTION_ORDER] }
+        affected_entity_id: { type: string, format: uuid }
+        recompute_scope_json: { type: object, additionalProperties: true }
+    CorrectionEvent:
+      type: object
+      properties:
+        correction_event_id: { type: string, format: uuid }
+        correction_no: { type: string }
+        reason_class: { type: string, enum: [OBJECTION_UPHELD, COURT_ORDER, ADMIN_ERROR] }
+        trigger_legal_case_link_id: { type: [string, "null"], format: uuid }
+        trigger_objection_id: { type: [string, "null"], format: uuid }
+        affected_entity_type: { type: string, enum: [SENIORITY_LIST, PROMOTION_CASE, PROMOTION_ORDER] }
+        affected_entity_id: { type: string, format: uuid }
+        recompute_scope_json: { type: object, additionalProperties: true }
+        cascade_status: { type: string, enum: [PENDING, RUNNING, COMPLETED, FAILED, ROLLED_BACK] }
+        pay_anomaly_flag: { type: boolean }
+        pay_anomaly_signal_ref: { type: [string, "null"] }
+        approved_by: { type: [string, "null"], format: uuid }
+        workflow_instance_id: { type: [string, "null"], format: uuid }
+        sr_correction_event_id: { type: [string, "null"], format: uuid }
+    CascadeResult:
+      type: object
+      properties:
+        correction_event_id: { type: string, format: uuid }
+        reason_class: { type: string }
+        cascade_status: { type: string, enum: [PENDING, RUNNING, COMPLETED, FAILED, ROLLED_BACK] }
+        reranked_entries: { type: integer }
+        resnapshotted_qsl: { type: integer }
+        pay_anomaly_flag: { type: boolean }
+        pay_anomaly_signal_ref: { type: [string, "null"] }
+        sr_correction_event_id: { type: [string, "null"] }
+        sr_reversal: { $ref: '#/components/schemas/SrReversalRequest' }
+
+    # ---- SR ingestion contract (G12) ----
+    SrIngestRequest:
+      type: object
+      required: [event_type, source_module, source_reference_id, source_event_version, fact_key, tenant_id, entity_id]
+      properties:
+        event_type: { $ref: '#/components/schemas/SrEventType' }
+        source_module: { type: string, enum: [G06], description: Set explicitly to G06; never inferred. }
+        source_reference_id:
+          type: string
+          description: G06 business key of the originating row (order_id / arrangement_id / upgradation_id / posting_id / correction_event_id).
+        source_event_version: { type: integer, minimum: 1 }
+        fact_key:
+          type: string
+          description: Qualifying-service-bearing correlation key (required; per the event type's fact_correlation_rule; missing -> SR_FACT_KEY_REQUIRED).
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: string, format: uuid }
+        effective_date: { type: [string, "null"], format: date }
+        payload: { type: [object, "null"], additionalProperties: true }
+    SrReversalRequest:
+      type: object
+      required: [is_reversal, reverses_source_reference_id, source_module, source_reference_id, source_event_version, tenant_id, entity_id]
+      properties:
+        is_reversal: { type: boolean, enum: [true] }
+        reverses_source_reference_id: { type: string, description: Original source_reference_id being reversed. }
+        event_type: { $ref: '#/components/schemas/SrReversalEventType' }
+        source_module: { type: string, enum: [G06] }
+        source_reference_id: { type: string }
+        source_event_version: { type: integer, minimum: 1 }
+        fact_key: { type: [string, "null"] }
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: string, format: uuid }
+    SrIngestResult:
+      type: object
+      properties:
+        sr_event_id: { type: string }
+        deduped: { type: boolean, description: True when an idempotent replay returned the original event. }
+        event_type: { type: string }
+        source_module: { type: string, example: G06 }
+        source_reference_id: { type: string }
+        source_event_version: { type: integer }
+        fact_key: { type: [string, "null"] }
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: string, format: uuid }

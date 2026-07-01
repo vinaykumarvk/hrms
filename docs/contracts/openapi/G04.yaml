@@ -1,0 +1,2444 @@
+openapi: 3.1.0
+info:
+  title: G04 — Leave to Digital Service Register (SR) Integration API
+  version: "3.1.0"
+  description: >-
+    Government HRMS module **G04** — the reliable, idempotent, reconciled bridge that
+    maps approved/cancelled/amended leave events (from **G03**) into the append-only
+    statutory **Digital Service Register** ledger (owned by **G12**, on the P05 audit
+    substrate) with **exactly-once effect**.
+
+
+    This document specifies the G04 **management surface** under `/api/v1/lsr`
+    (outbox/relay observability, SR posting-log queries, reconciliation runs/findings,
+    dead-letter queue triage + replay, integration config, historical digitisation
+    batches, port-conformance runs, source-ledger integrity, and the pre-pension
+    completeness certificate). It **also references** the single canonical G12 SR
+    write port — `POST /api/v1/sr/ingest` (+ `/api/v1/sr/ingest/reversal`) — which is
+    **owned by G12** and reached by the G04 relay as an X.3 outbound integration; G04
+    never writes the SR ledger by any other path.
+
+
+    Conventions (PLATFORM_FOUNDATION.md §4): all endpoints under `/api/v1`; bearer JWT
+    auth resolved per request by P02 `Authorization.check`; unsafe POSTs accept an
+    `Idempotency-Key` header (24h replay -> `CONFLICT`); cursor pagination only
+    (`limit` default 25 / max 100, `cursor` -> `next_cursor`); `X-Correlation-Id`
+    echoed on every response; canonical error envelope `{ error: { code, message,
+    field, details } }` over the 8-code platform status table.
+  contact:
+    name: API Architecture / Platform Foundation
+  license:
+    name: Government HRMS Internal
+servers:
+  - url: /api/v1
+    description: Platform API v1 base path
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Capture & Outbox
+    description: Transactional outbox / relay observability (FR-01, FR-03)
+  - name: Event Mapping
+    description: Versioned leave->SR mapping catalog (FR-02)
+  - name: SR Posting
+    description: Posting-log queries and the G12 canonical SR write port (FR-03, FR-16)
+  - name: Dead-letter Queue
+    description: DLQ triage, replay, discard (FR-04, FR-05)
+  - name: Reconciliation
+    description: State-aware reconciliation runs and findings (FR-06, FR-07)
+  - name: Corrections
+    description: Correction/reversal chain resolution (FR-08)
+  - name: Qualifying Service & Annotations
+    description: Qualifying-impact + statutory annotations (FR-09, FR-10)
+  - name: Historical Digitisation
+    description: Legacy leave batches and provisional records (FR-11)
+  - name: Replay & Backfill
+    description: Deterministic replay/backfill tooling (FR-12)
+  - name: Monitoring
+    description: Dashboard KPIs, metrics, alerts (FR-13)
+  - name: Audit & Evidence
+    description: Chain reconstruction + evidence pack export (FR-14)
+  - name: Port Conformance
+    description: G12 SR write-port conformance runs (FR-16)
+  - name: Capture Integrity
+    description: Source-ledger <-> outbox integrity reconciliation (FR-17)
+  - name: Pre-pension Certificate
+    description: Signed pre-pension completeness certificate (FR-18)
+  - name: Configuration
+    description: Retry/SLA/lease/relay-pause configuration
+
+paths:
+
+  # ---------------------------------------------------------------------------
+  # FR-01 / FR-03 — Capture & Outbox observability
+  # ---------------------------------------------------------------------------
+  /lsr/outbox:
+    get:
+      tags: [Capture & Outbox]
+      operationId: listOutboxEvents
+      summary: List transactional-outbox leave events (IntegOps observability)
+      description: >-
+        Lists captured leave domain events with their relay/posting status. Supports
+        the stranded-in-flight probe used by the reaper operating model
+        (`?status=IN_FLIGHT&leaseExpired=true`).
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+        - name: status
+          in: query
+          description: Filter by outbox status.
+          schema: { $ref: '#/components/schemas/OutboxStatus' }
+        - name: leaseExpired
+          in: query
+          description: When true with status=IN_FLIGHT, returns stranded rows past their lease.
+          schema: { type: boolean }
+        - name: leaveSpellLineageId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: employeeId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Page of outbox events.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/OutboxEvent' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-02 — Event mapping catalog
+  # ---------------------------------------------------------------------------
+  /lsr/mappings:
+    get:
+      tags: [Event Mapping]
+      operationId: listMappings
+      summary: List event-mapping versions (cursor, effective-date filter)
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+        - name: leaveTypeCode
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/MappingStatus' }
+        - name: effectiveOn
+          in: query
+          description: Return the mapping version effective on this date.
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Page of mappings.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/EventMapping' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Event Mapping]
+      operationId: createMappingDraft
+      summary: Create a draft mapping version (Sys Admin)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventMappingWrite' }
+      responses:
+        '201':
+          description: Draft mapping created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventMapping' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/mappings/{mappingId}:
+    parameters:
+      - $ref: '#/components/parameters/MappingId'
+    put:
+      tags: [Event Mapping]
+      operationId: updateMappingDraft
+      summary: Edit a draft mapping version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventMappingWrite' }
+      responses:
+        '200':
+          description: Draft mapping updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventMapping' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/mappings/{mappingId}/publish:
+    parameters:
+      - $ref: '#/components/parameters/MappingId'
+    post:
+      tags: [Event Mapping]
+      operationId: publishMapping
+      summary: Submit a mapping version for P01 maker-checker publish
+      description: >-
+        Starts a P01 approval instance; on approval the version becomes PUBLISHED.
+        Overlapping effective ranges are rejected with `ERR-G04-MAPPING-OVERLAP`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Publish workflow started.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowStarted' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-03 / FR-16 — Posting log + G12 canonical SR write port (referenced)
+  # ---------------------------------------------------------------------------
+  /lsr/postings:
+    get:
+      tags: [SR Posting]
+      operationId: listPostingLog
+      summary: Query the SR posting log (every posting attempt & outcome)
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+        - name: leaveSpellLineageId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: outcome
+          in: query
+          schema: { $ref: '#/components/schemas/PostingOutcome' }
+        - name: srEventId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Page of posting-log rows.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PostingLogEntry' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/ingest:
+    post:
+      tags: [SR Posting]
+      operationId: srIngest
+      summary: "[G12-OWNED] Canonical idempotent SR ledger write port"
+      description: >-
+        **Owned by G12**, documented here because it is the only ledger write path
+        the G04 relay calls (as an X.3 outbound integration; credentials from P04).
+        G04 sends `sourceModule="G04"` with the canonical dedup tuple
+        `(sourceModule, sourceReferenceId, sourceEventVersion)`, the mandatory
+        semantic `factKey` (missing -> `SR_FACT_KEY_REQUIRED`), explicit
+        `tenantId`/`entityId`, `leaveSpellLineageId` (business correlation key), and
+        one of the published G04 event codes (EL_AVAILED / HPL_AVAILED /
+        COMMUTED_LEAVE / STUDY_LEAVE / MATERNITY_LEAVE / LWP_SPELL / EOL_SPELL).
+        The `Idempotency-Key` header carries the mapping-version-independent
+        `dedupe_key`; a repeat within the retention window returns the original
+        `srEventId` as a `DUPLICATE_NOOP`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SrIngestRequest' }
+      responses:
+        '201':
+          description: SR entry created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrIngestResult' }
+        '200':
+          description: >-
+            Idempotent duplicate — original `srEventId` returned as a no-op
+            (`ERR-G04-IDEMPOTENT-DUPLICATE`).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrIngestDuplicate' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: >-
+            State conflict — `ERR-G04-SR-CONFLICT`, or correction ordering guard
+            `ERR-G04-BLOCKED-AWAITING-ORIGINAL`.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412':
+          description: >-
+            Precondition not met — `ERR-G04-PORT-NOT-CONFORMANT` (live-posting gate
+            closed), `ERR-G04-RELAY-PAUSED`, or `ERR-G04-SR-UNAVAILABLE` (retryable).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: >-
+            Validation failure — `SR_FACT_KEY_REQUIRED`, `ERR-G04-LINEAGE-MISSING`,
+            or `ERR-G04-MAPPING-NOT-FOUND`.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/ingest/reversal:
+    post:
+      tags: [SR Posting]
+      operationId: srIngestReversal
+      summary: "[G12-OWNED] SR reversal envelope (supersede-not-delete)"
+      description: >-
+        **Owned by G12.** Posts the G12 reversal envelope for a cancelled/amended
+        leave: `isReversal=true` + `reversesSourceReferenceId` (the original spell's
+        `sourceReferenceId`) and the published `*_CANCELLED` partner event code
+        (e.g. `EL_AVAILED_CANCELLED`). G12 auto-spawns the corrigendum/supersession;
+        the original entry remains immutable. Flows through the same outbox + dedup
+        (X.3 outbound) path as forward posts.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SrIngestReversalRequest' }
+      responses:
+        '201':
+          description: Reversal entry created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrIngestResult' }
+        '200':
+          description: Idempotent duplicate reversal — original returned as no-op.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrIngestDuplicate' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: >-
+            `ERR-G04-BLOCKED-AWAITING-ORIGINAL` (original not yet POSTED) or
+            `ERR-G04-ORPHAN-CORRECTION` (no locatable original).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-04 / FR-05 — Dead-letter queue
+  # ---------------------------------------------------------------------------
+  /lsr/dlq:
+    get:
+      tags: [Dead-letter Queue]
+      operationId: listDeadLetters
+      summary: List dead-lettered (quarantined) events
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/DlqState' }
+        - name: failureClass
+          in: query
+          schema: { $ref: '#/components/schemas/DlqFailureClass' }
+        - name: assignedTo
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Page of DLQ items.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/DeadLetter' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/dlq/{dlqId}/assign:
+    parameters:
+      - $ref: '#/components/parameters/DlqId'
+    post:
+      tags: [Dead-letter Queue]
+      operationId: assignDeadLetter
+      summary: Assign / annotate a DLQ item for triage
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignedTo]
+              properties:
+                assignedTo: { type: string, format: uuid }
+                note: { type: string, maxLength: 2000 }
+      responses:
+        '200':
+          description: DLQ item assigned.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeadLetter' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/dlq/{dlqId}/replay:
+    parameters:
+      - $ref: '#/components/parameters/DlqId'
+    post:
+      tags: [Dead-letter Queue]
+      operationId: replayDeadLetter
+      summary: Replay a DLQ item (starts a P01 maker-checker instance)
+      description: >-
+        Re-queues the quarantined event for posting after the underlying cause is
+        fixed. Blocked with `ERR-G04-DLQ-REPLAY-BLOCKED` if the mapping is still
+        missing or the signature is unfixed.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string, maxLength: 2000 }
+      responses:
+        '202':
+          description: Replay workflow started.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowStarted' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`ERR-G04-DLQ-REPLAY-BLOCKED` — replay blocked (mapping/signature unfixed).'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/dlq/{dlqId}/discard:
+    parameters:
+      - $ref: '#/components/parameters/DlqId'
+    post:
+      tags: [Dead-letter Queue]
+      operationId: discardDeadLetter
+      summary: Discard a DLQ item (starts a P01 maker-checker instance)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 2000 }
+      responses:
+        '202':
+          description: Discard workflow started.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowStarted' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # Configuration + manual relay pause/resume
+  # ---------------------------------------------------------------------------
+  /lsr/config:
+    put:
+      tags: [Configuration]
+      operationId: updateIntegrationConfig
+      summary: Update retry/SLA/lease/rate-limit config (Sys Admin, effective-dated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IntegrationConfigWrite' }
+      responses:
+        '200':
+          description: Configuration updated (staged by effective date).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrationConfig' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/relay/pause:
+    post:
+      tags: [Configuration]
+      operationId: pauseRelay
+      summary: Manually pause the posting relay
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 2000 }
+      responses:
+        '200':
+          description: Relay paused.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelayState' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/relay/resume:
+    post:
+      tags: [Configuration]
+      operationId: resumeRelay
+      summary: Resume a paused posting relay
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Relay resumed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelayState' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-06 / FR-07 — Reconciliation
+  # ---------------------------------------------------------------------------
+  /lsr/reconciliation/runs:
+    post:
+      tags: [Reconciliation]
+      operationId: triggerReconciliationRun
+      summary: Trigger an on-demand / pre-pension reconciliation run
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReconciliationRunRequest' }
+      responses:
+        '202':
+          description: Reconciliation run accepted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReconciliationRun' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422':
+          description: '`ERR-G04-SCOPE-TOO-LARGE` or validation failure.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/reconciliation/runs/{runId}:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Reconciliation]
+      operationId: getReconciliationRun
+      summary: Reconciliation run status + summary
+      responses:
+        '200':
+          description: Reconciliation run detail.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReconciliationRun' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/reconciliation/findings:
+    get:
+      tags: [Reconciliation]
+      operationId: listReconciliationFindings
+      summary: List reconciliation findings (cursor)
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+        - name: runId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: findingType
+          in: query
+          schema: { $ref: '#/components/schemas/ReconFindingType' }
+        - name: severity
+          in: query
+          schema: { $ref: '#/components/schemas/Severity' }
+        - name: remediationState
+          in: query
+          schema: { $ref: '#/components/schemas/RemediationState' }
+      responses:
+        '200':
+          description: Page of findings.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ReconciliationFinding' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/findings/{findingId}:
+    parameters:
+      - $ref: '#/components/parameters/FindingId'
+    get:
+      tags: [Reconciliation]
+      operationId: getReconciliationFinding
+      summary: Reconciliation finding detail
+      responses:
+        '200':
+          description: Finding detail.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReconciliationFinding' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/findings/{findingId}/remediate:
+    parameters:
+      - $ref: '#/components/parameters/FindingId'
+    post:
+      tags: [Reconciliation]
+      operationId: remediateFinding
+      summary: Propose remediation for a finding (maker; starts P01)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [remediationAction]
+              properties:
+                remediationAction:
+                  type: string
+                  enum: [REPOST, POST_CORRECTION, BACKFILL, LINK_CORRECTION, INVESTIGATE]
+                note: { type: string, maxLength: 2000 }
+      responses:
+        '202':
+          description: Remediation workflow started.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowStarted' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/findings/{findingId}/waive:
+    parameters:
+      - $ref: '#/components/parameters/FindingId'
+    post:
+      tags: [Reconciliation]
+      operationId: waiveFinding
+      summary: Waive a finding with justification
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [justification]
+              properties:
+                justification: { type: string, maxLength: 2000 }
+      responses:
+        '200':
+          description: Finding waived.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReconciliationFinding' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-08 — Corrections chain
+  # ---------------------------------------------------------------------------
+  /lsr/corrections:
+    get:
+      tags: [Corrections]
+      operationId: resolveCorrectionChain
+      summary: Resolve the correction/reversal chain for a lineage
+      parameters:
+        - name: lineageId
+          in: query
+          required: true
+          description: The leave_spell_lineage_id whose correction chain to resolve.
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Correction links for the lineage (net-effective resolvable).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CorrectionLink' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-09 / FR-10 — Qualifying impact + annotations
+  # ---------------------------------------------------------------------------
+  /lsr/employees/{employeeId}/qualifying-impact:
+    parameters:
+      - $ref: '#/components/parameters/EmployeeId'
+    get:
+      tags: [Qualifying Service & Annotations]
+      operationId: getQualifyingImpact
+      summary: Non-qualifying days summary for G11
+      responses:
+        '200':
+          description: Qualifying-service impact summary.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualifyingImpact' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/employees/{employeeId}/annotations:
+    parameters:
+      - $ref: '#/components/parameters/EmployeeId'
+    get:
+      tags: [Qualifying Service & Annotations]
+      operationId: listEmployeeAnnotations
+      summary: Statutory annotations for G06 (cursor)
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of statutory annotations.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/StatutoryAnnotation' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-11 — Historical digitisation
+  # ---------------------------------------------------------------------------
+  /lsr/historical/batches:
+    post:
+      tags: [Historical Digitisation]
+      operationId: createHistoricalBatch
+      summary: Create a historical leave digitisation batch (maker)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HistoricalBatchWrite' }
+      responses:
+        '201':
+          description: Batch created (STAGED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HistoricalBatch' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/historical/batches/{batchId}:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+    get:
+      tags: [Historical Digitisation]
+      operationId: getHistoricalBatch
+      summary: Historical batch status
+      responses:
+        '200':
+          description: Batch detail.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HistoricalBatch' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/historical/batches/{batchId}/validate:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+    post:
+      tags: [Historical Digitisation]
+      operationId: validateHistoricalBatch
+      summary: Validate a batch and assign confidence to records
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Validation started/completed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HistoricalBatch' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422':
+          description: '`ERR-G04-BATCH-VALIDATION-FAILED` — rejected records block posting.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/historical/batches/{batchId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+    post:
+      tags: [Historical Digitisation]
+      operationId: approveHistoricalBatch
+      summary: Approve/promote a batch (SR Custodian checker via P01)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Approval workflow completed/started.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HistoricalBatch' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/historical/batches/{batchId}/post:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+    post:
+      tags: [Historical Digitisation]
+      operationId: postHistoricalBatch
+      summary: Post valid records of an approved batch to the SR (as PROVISIONAL)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Posting started.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HistoricalBatch' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412':
+          description: '`ERR-G04-PORT-NOT-CONFORMANT` or batch not APPROVED.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: '`ERR-G04-BATCH-VALIDATION-FAILED`.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/historical/records/{recordId}/adjudicate:
+    parameters:
+      - $ref: '#/components/parameters/RecordId'
+    post:
+      tags: [Historical Digitisation]
+      operationId: adjudicateHistoricalRecord
+      summary: Confirm/reject a PROVISIONAL migrated entry (SR Custodian)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [ADJUDICATED_CONFIRMED, ADJUDICATED_REJECTED] }
+                statutoryRuleRef: { type: string, maxLength: 120 }
+                note: { type: string, maxLength: 2000 }
+      responses:
+        '200':
+          description: Record adjudicated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HistoricalRecord' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`ERR-G04-PROVISIONAL-ENTRY` — already adjudicated / blocked.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-12 — Replay & backfill
+  # ---------------------------------------------------------------------------
+  /lsr/replay:
+    post:
+      tags: [Replay & Backfill]
+      operationId: triggerReplay
+      summary: Replay posting by scope (deterministic identity from lineage)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplayRequest' }
+      responses:
+        '202':
+          description: Replay accepted (or dry-run plan returned).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReplayResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422':
+          description: '`ERR-G04-SCOPE-TOO-LARGE` or validation failure.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/backfill:
+    post:
+      tags: [Replay & Backfill]
+      operationId: triggerBackfill
+      summary: Backfill missing SR entries by scope (dry-run supported)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplayRequest' }
+      responses:
+        '202':
+          description: Backfill accepted (or dry-run plan returned).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReplayResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422':
+          description: '`ERR-G04-SCOPE-TOO-LARGE` or validation failure.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-13 — Monitoring dashboard
+  # ---------------------------------------------------------------------------
+  /lsr/dashboard/summary:
+    get:
+      tags: [Monitoring]
+      operationId: getDashboardSummary
+      summary: Aggregated integration-health KPIs
+      responses:
+        '200':
+          description: Dashboard summary.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardSummary' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/dashboard/metrics:
+    get:
+      tags: [Monitoring]
+      operationId: getDashboardMetrics
+      summary: Time-series integration metrics
+      parameters:
+        - name: metric
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [posting_lag, throughput, dlq_depth, reaped_in_flight, recon_pending, error_rate, breaker_state]
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Time-series data points.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MetricSeries' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/alerts/{alertId}/ack:
+    parameters:
+      - $ref: '#/components/parameters/AlertId'
+    post:
+      tags: [Monitoring]
+      operationId: acknowledgeAlert
+      summary: Acknowledge an SLA / reaped-in-flight / conformance alert
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Alert acknowledged.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertAck' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-14 — Audit & evidence
+  # ---------------------------------------------------------------------------
+  /lsr/audit/chain:
+    get:
+      tags: [Audit & Evidence]
+      operationId: reconstructAuditChain
+      summary: Reconstruct the lineage chain for an employee
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: leaveSpellLineageId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Reconstructed chain of capture/posting/correction events.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditChainNode' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/audit/export:
+    post:
+      tags: [Audit & Evidence]
+      operationId: exportEvidencePack
+      summary: Generate a signed, checksummed evidence pack (P05 Audit.export)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employeeId]
+              properties:
+                employeeId: { type: string, format: uuid }
+                leaveSpellLineageId: { type: string, format: uuid }
+                fromDate: { type: string, format: date }
+                toDate: { type: string, format: date }
+      responses:
+        '202':
+          description: Evidence pack export accepted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvidencePack' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-16 — Port conformance
+  # ---------------------------------------------------------------------------
+  /lsr/port/conformance/runs:
+    get:
+      tags: [Port Conformance]
+      operationId: listConformanceRuns
+      summary: List G12 port conformance runs (cursor)
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+        - name: result
+          in: query
+          schema: { $ref: '#/components/schemas/ConformanceResult' }
+      responses:
+        '200':
+          description: Page of conformance runs.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ConformanceRun' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Port Conformance]
+      operationId: triggerConformanceRun
+      summary: Trigger a G12 port conformance run (CI / Sys Admin)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contractVersion]
+              properties:
+                contractVersion: { type: string, maxLength: 32 }
+      responses:
+        '202':
+          description: Conformance run accepted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConformanceRun' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/port/conformance/runs/{conformanceId}:
+    parameters:
+      - $ref: '#/components/parameters/ConformanceId'
+    get:
+      tags: [Port Conformance]
+      operationId: getConformanceRun
+      summary: Conformance run result detail + checksum
+      responses:
+        '200':
+          description: Conformance run detail.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConformanceRun' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-17 — Capture integrity
+  # ---------------------------------------------------------------------------
+  /lsr/integrity/runs:
+    post:
+      tags: [Capture Integrity]
+      operationId: triggerIntegrityRun
+      summary: Trigger a source-ledger <-> outbox integrity reconciliation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope: { $ref: '#/components/schemas/ReconScope' }
+      responses:
+        '202':
+          description: Integrity run accepted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReconciliationRun' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422':
+          description: '`ERR-G04-SCOPE-TOO-LARGE` or validation failure.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/integrity/findings:
+    get:
+      tags: [Capture Integrity]
+      operationId: listIntegrityFindings
+      summary: List capture-integrity findings (cursor)
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+        - name: findingType
+          in: query
+          schema: { $ref: '#/components/schemas/IntegrityFindingType' }
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/IntegrityState' }
+        - name: severity
+          in: query
+          schema: { $ref: '#/components/schemas/Severity' }
+      responses:
+        '200':
+          description: Page of integrity findings.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/IntegrityFinding' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-18 — Pre-pension certificate
+  # ---------------------------------------------------------------------------
+  /lsr/prepension/certificates:
+    get:
+      tags: [Pre-pension Certificate]
+      operationId: listPrepensionCertificates
+      summary: Retrieve pre-pension certificates (G11 retrieves latest)
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of certificates for the employee.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PrepensionCertificate' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Pre-pension Certificate]
+      operationId: generatePrepensionCertificate
+      summary: Generate a certificate from a PRE_PENSION reconciliation run
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employeeId, runId]
+              properties:
+                employeeId: { type: string, format: uuid }
+                runId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Certificate generated (PASS or FAIL).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PrepensionCertificate' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422':
+          description: '`ERR-G04-CERTIFICATE-FAILED` — blocking items remain.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /lsr/prepension/certificates/{certificateId}/sign:
+    parameters:
+      - $ref: '#/components/parameters/CertificateId'
+    post:
+      tags: [Pre-pension Certificate]
+      operationId: signPrepensionCertificate
+      summary: SR Custodian signs a PASS certificate (P01)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Certificate signed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PrepensionCertificate' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412':
+          description: '`ERR-G04-CERTIFICATE-FAILED` — cannot sign a FAIL certificate.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+# =============================================================================
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        OIDC/SSO (+MFA for high-privilege statutory roles) bearer token carrying
+        resolved roles + tenant/entity scope; permissions resolved per request by
+        P02 `Authorization.check`.
+
+  headers:
+    XCorrelationId:
+      description: Correlation id echoed on every response and written to every P05 audit/log line.
+      schema: { type: string }
+
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      description: Page size (default 25, max 100).
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor from a previous response's next_cursor.
+      schema: { type: string }
+    Sort:
+      name: sort
+      in: query
+      description: 'Sort spec, e.g. field:asc|desc.'
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Idempotency key for unsafe POSTs; a repeat within 24h returns the original result.
+      schema: { type: string, maxLength: 255 }
+    MappingId:
+      name: mappingId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DlqId:
+      name: dlqId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    FindingId:
+      name: findingId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    EmployeeId:
+      name: employeeId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    BatchId:
+      name: batchId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RecordId:
+      name: recordId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AlertId:
+      name: alertId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ConformanceId:
+      name: conformanceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CertificateId:
+      name: certificateId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    ValidationFailed:
+      description: 422 — input failed a VAL-* rule (`VALIDATION_FAILED` / `ERR-G04-*`).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: 401 — no/invalid session (`UNAUTHENTICATED`).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: 403 — authenticated but not permitted (`FORBIDDEN`); never leaks out-of-scope records.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: 404 — resource absent or out of scope (`NOT_FOUND`).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: 409 — idempotency replay / duplicate / state conflict (`CONFLICT`).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PreconditionFailed:
+      description: 412 — a required precondition is not met (`PRECONDITION_FAILED`).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: 429 — rate limit exceeded (`RATE_LIMITED`).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Internal:
+      description: 500 — unexpected server error, or non-retryable upstream failure (`INTERNAL` / `ERR-LOADFAIL`).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    # ---- Canonical error envelope (Foundation §4.1) ----
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: >-
+                One of the 8 platform status codes (VALIDATION_FAILED,
+                UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT,
+                PRECONDITION_FAILED, RATE_LIMITED, INTERNAL) OR a module/domain
+                code carried in this field (e.g. ERR-G04-SR-CONFLICT,
+                SR_FACT_KEY_REQUIRED).
+            message: { type: string }
+            field:
+              type: [string, "null"]
+              description: Offending field for validation errors.
+            details:
+              type: [object, "null"]
+              description: 'Structured discriminators, e.g. { reason, lineage, seq }.'
+              additionalProperties: true
+
+    NextCursor:
+      type: [string, "null"]
+      description: Opaque cursor for the next page; null when no further pages.
+
+    # ---- Shared enums ----
+    OutboxEventType:
+      type: string
+      enum: [LEAVE_APPROVED, LEAVE_CANCELLED, LEAVE_AMENDED]
+    OutboxStatus:
+      type: string
+      enum: [PENDING, BLOCKED_AWAITING_ORIGINAL, IN_FLIGHT, POSTED, FAILED, DEAD_LETTERED, EXCLUDED]
+    MappingDisposition:
+      type: string
+      enum: [POST_SR, EXCLUDED_NON_SR]
+    QualifyingServiceRule:
+      type: string
+      enum: [QUALIFYING, NON_QUALIFYING, PARTIAL, RULE_REF]
+    StraddleHandling:
+      type: string
+      enum: [SPLIT_BY_EFFECTIVE, PIN_TO_SPELL_START]
+    MappingStatus:
+      type: string
+      enum: [DRAFT, PUBLISHED, RETIRED]
+    MappingEventType:
+      type: string
+      enum: [APPROVED, CANCELLED, AMENDED]
+    PostingOutcome:
+      type: string
+      enum: [SUCCESS, RETRYABLE_FAILURE, PERMANENT_FAILURE, DUPLICATE_NOOP]
+    DlqFailureClass:
+      type: string
+      enum: [MAPPING_MISSING, VALIDATION_REJECT, UPSTREAM_DOWN, DATA_CONFLICT, SIGNATURE_INVALID, UNKNOWN]
+    DlqState:
+      type: string
+      enum: [OPEN, IN_REVIEW, RESOLVED_REPLAYED, RESOLVED_DISCARDED]
+    ReconRunType:
+      type: string
+      enum: [SCHEDULED, ON_DEMAND, PRE_PENSION, SOURCE_OUTBOX_INTEGRITY]
+    ReconRunStatus:
+      type: string
+      enum: [RUNNING, COMPLETED, FAILED]
+    ReconFindingType:
+      type: string
+      enum: [MISSING_SR, DUPLICATE_SR, DIVERGENT_FIELD, ORPHAN_CORRECTION, UNMAPPED_LEAVE, CORRECTION_WITHOUT_LINK]
+    Severity:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, CRITICAL]
+    RemediationState:
+      type: string
+      enum: [OPEN, REMEDIATION_PROPOSED, APPROVED, APPLIED, WAIVED]
+    CorrectionType:
+      type: string
+      enum: [REVERSAL, AMENDMENT, SUPERSEDE]
+    CorrectionReasonCode:
+      type: string
+      enum: [LEAVE_CANCELLED, LEAVE_AMENDED, RECON_FIX, MIGRATION_FIX]
+    BatchSourceType:
+      type: string
+      enum: [PAPER_SCAN, LEGACY_SYSTEM, SPREADSHEET]
+    BatchStatus:
+      type: string
+      enum: [STAGED, VALIDATED, APPROVED, POSTED, PARTIALLY_POSTED, REJECTED]
+    HistValidationState:
+      type: string
+      enum: [PENDING, VALID, REJECTED]
+    HistConfidence:
+      type: string
+      enum: [HIGH, MEDIUM, LOW]
+    HistAdjudicationState:
+      type: string
+      enum: [PROVISIONAL, ADJUDICATED_CONFIRMED, ADJUDICATED_REJECTED]
+    ConformanceResult:
+      type: string
+      enum: [PASS, FAIL]
+    IntegrityFindingType:
+      type: string
+      enum: [LEDGER_WITHOUT_OUTBOX, OUTBOX_WITHOUT_LEDGER, SIGNATURE_MISMATCH]
+    IntegrityState:
+      type: string
+      enum: [OPEN, BACKFILLED, WAIVED]
+    SrEventTypeCode:
+      type: string
+      description: G12-published G04 event codes (forward + *_CANCELLED reversal partners).
+      enum:
+        - EL_AVAILED
+        - HPL_AVAILED
+        - COMMUTED_LEAVE
+        - STUDY_LEAVE
+        - MATERNITY_LEAVE
+        - LWP_SPELL
+        - EOL_SPELL
+        - EL_AVAILED_CANCELLED
+        - HPL_AVAILED_CANCELLED
+        - COMMUTED_LEAVE_CANCELLED
+        - STUDY_LEAVE_CANCELLED
+        - MATERNITY_LEAVE_CANCELLED
+        - LWP_SPELL_CANCELLED
+        - EOL_SPELL_CANCELLED
+
+    # ---- Common value objects ----
+    SpellWindow:
+      type: object
+      required: [start, end, days]
+      properties:
+        start: { type: string, format: date }
+        end: { type: string, format: date }
+        days: { type: number, format: float }
+    ReconScope:
+      type: object
+      description: Bounded reconciliation/replay scope; oversized scope -> ERR-G04-SCOPE-TOO-LARGE.
+      properties:
+        orgUnitId: { type: string, format: uuid }
+        employeeIds:
+          type: array
+          items: { type: string, format: uuid }
+        fromDate: { type: string, format: date }
+        toDate: { type: string, format: date }
+
+    # ---- E8 leave_event_outbox ----
+    OutboxEvent:
+      type: object
+      properties:
+        outboxId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        correlationId: { type: string, format: uuid }
+        leaveSpellLineageId: { type: string, format: uuid }
+        eventSequence: { type: integer }
+        employeeId: { type: string, format: uuid }
+        partitionKey: { type: string }
+        leaveLedgerEntryId: { type: string, format: uuid }
+        eventType: { $ref: '#/components/schemas/OutboxEventType' }
+        leaveTypeCode: { type: string }
+        spellStart: { type: string, format: date }
+        spellEnd: { type: string, format: date }
+        daysCount: { type: number, format: float }
+        priorOutboxId: { type: [string, "null"], format: uuid }
+        dedupeKey: { type: [string, "null"] }
+        pinnedMappingVersion: { type: [integer, "null"] }
+        status: { $ref: '#/components/schemas/OutboxStatus' }
+        claimedAt: { type: [string, "null"], format: date-time }
+        leaseExpiresAt: { type: [string, "null"], format: date-time }
+        availableAt: { type: string, format: date-time }
+        attemptCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    # ---- E9 sr_event_mapping ----
+    EventMapping:
+      allOf:
+        - $ref: '#/components/schemas/EventMappingWrite'
+        - type: object
+          properties:
+            mappingId: { type: string, format: uuid }
+            mappingVersion: { type: integer }
+            status: { $ref: '#/components/schemas/MappingStatus' }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    EventMappingWrite:
+      type: object
+      required: [leaveTypeCode, eventType, disposition, straddleHandling, effectiveFrom]
+      properties:
+        leaveTypeCode: { type: string, maxLength: 32 }
+        eventType: { $ref: '#/components/schemas/MappingEventType' }
+        spellPredicate:
+          type: [object, "null"]
+          additionalProperties: true
+          description: 'e.g. { daysCount_gte: 120 } => LONG_LEAVE.'
+        disposition: { $ref: '#/components/schemas/MappingDisposition' }
+        srEntryType:
+          description: Target G12-published event code; null when EXCLUDED_NON_SR.
+          anyOf:
+            - $ref: '#/components/schemas/SrEventTypeCode'
+            - type: "null"
+        qualifyingServiceRule:
+          anyOf:
+            - $ref: '#/components/schemas/QualifyingServiceRule'
+            - type: "null"
+        qualifyingRuleRef: { type: [string, "null"], maxLength: 64 }
+        statutoryRuleRef:
+          type: [string, "null"]
+          maxLength: 120
+          description: Citation; NOT NULL for POST_SR (VAL-G04-CITATION).
+        straddleHandling: { $ref: '#/components/schemas/StraddleHandling' }
+        annotationTemplate: { type: [string, "null"] }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: [string, "null"], format: date }
+
+    # ---- E10 sr_posting_log ----
+    PostingLogEntry:
+      type: object
+      properties:
+        postingId: { type: string, format: uuid }
+        outboxId: { type: string, format: uuid }
+        correlationId: { type: string, format: uuid }
+        leaveSpellLineageId: { type: string, format: uuid }
+        eventSequence: { type: integer }
+        sourceModule: { type: string, example: "G04" }
+        sourceReferenceId: { type: string }
+        sourceEventVersion: { type: integer }
+        factKey: { type: string }
+        dedupeKey: { type: string }
+        mappingId: { type: string, format: uuid }
+        srEventId: { type: [string, "null"] }
+        srEntryType: { $ref: '#/components/schemas/SrEventTypeCode' }
+        attemptNo: { type: integer }
+        outcome: { $ref: '#/components/schemas/PostingOutcome' }
+        httpStatus: { type: [integer, "null"] }
+        errorCode: { type: [string, "null"] }
+        errorDetail: { type: [string, "null"] }
+        latencyMs: { type: [integer, "null"] }
+        postedAt: { type: string, format: date-time }
+        postedBy: { type: string }
+
+    # ---- G12 canonical ingest port schemas ----
+    SrIngestRequest:
+      type: object
+      required:
+        - tenantId
+        - employeeId
+        - sourceModule
+        - sourceReferenceId
+        - sourceEventVersion
+        - factKey
+        - leaveSpellLineageId
+        - eventTypeCode
+        - correlationId
+      properties:
+        tenantId: { type: string }
+        entityId: { type: string }
+        employeeId: { type: string }
+        sourceModule:
+          type: string
+          const: "G04"
+          description: Canonical dedup-tuple member; G04 always sends "G04".
+        sourceReferenceId:
+          type: string
+          description: 'Canonical dedup-tuple member — {leaveSpellLineageId}:{eventType}.'
+        sourceEventVersion:
+          type: integer
+          description: Canonical dedup-tuple member — equals eventSequence (monotonic per lineage).
+        factKey:
+          type: string
+          description: >-
+            Mandatory semantic dedup field derived per the type's fact_correlation_rule;
+            missing -> SR_FACT_KEY_REQUIRED.
+        leaveSpellLineageId:
+          type: string
+          description: G03 business correlation key; persisted + indexed on the SR entry (>=7y).
+        eventSequence: { type: integer }
+        eventTypeCode: { $ref: '#/components/schemas/SrEventTypeCode' }
+        correlationId: { type: string }
+        spell: { $ref: '#/components/schemas/SpellWindow' }
+        qualifyingServiceRule: { $ref: '#/components/schemas/QualifyingServiceRule' }
+        statutoryRuleRef: { type: string, maxLength: 120 }
+        annotations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        isReversal:
+          type: boolean
+          default: false
+        reversesSourceReferenceId:
+          type: [string, "null"]
+          description: Original spell's sourceReferenceId when this is a reversal.
+        provenance:
+          type: object
+          properties:
+            type: { type: string, enum: [LIVE_CAPTURE, HISTORICAL, REPLAY, BACKFILL] }
+            mappingVersion: { type: integer }
+            payloadVersion: { type: string }
+    SrIngestReversalRequest:
+      allOf:
+        - $ref: '#/components/schemas/SrIngestRequest'
+        - type: object
+          required: [isReversal, reversesSourceReferenceId]
+          properties:
+            isReversal:
+              type: boolean
+              const: true
+            reversesSourceReferenceId:
+              type: string
+              description: Original spell's sourceReferenceId being superseded.
+    SrIngestResult:
+      type: object
+      required: [srEventId, status]
+      properties:
+        srEventId: { type: string }
+        status: { type: string, enum: [CREATED] }
+    SrIngestDuplicate:
+      type: object
+      required: [srEventId, status]
+      properties:
+        srEventId: { type: string }
+        status: { type: string, enum: [DUPLICATE_NOOP] }
+        code: { type: string, example: "ERR-G04-IDEMPOTENT-DUPLICATE" }
+
+    # ---- E11 sr_dead_letter ----
+    DeadLetter:
+      type: object
+      properties:
+        dlqId: { type: string, format: uuid }
+        outboxId: { type: string, format: uuid }
+        correlationId: { type: string, format: uuid }
+        leaveSpellLineageId: { type: string, format: uuid }
+        failureClass: { $ref: '#/components/schemas/DlqFailureClass' }
+        lastErrorCode: { type: string }
+        lastErrorDetail: { type: [string, "null"] }
+        attemptsExhausted: { type: integer }
+        state: { $ref: '#/components/schemas/DlqState' }
+        assignedTo: { type: [string, "null"], format: uuid }
+        resolutionWorkflowId: { type: [string, "null"], format: uuid }
+        resolutionNote: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # ---- E12 reconciliation_run ----
+    ReconciliationRunRequest:
+      type: object
+      required: [runType]
+      properties:
+        runType: { $ref: '#/components/schemas/ReconRunType' }
+        scope: { $ref: '#/components/schemas/ReconScope' }
+    ReconciliationRun:
+      type: object
+      properties:
+        runId: { type: string, format: uuid }
+        runType: { $ref: '#/components/schemas/ReconRunType' }
+        scope:
+          type: [object, "null"]
+          additionalProperties: true
+        leaveRecordsExamined: { type: integer }
+        srEntriesExamined: { type: integer }
+        pendingExcludedCount: { type: integer }
+        findingsCount: { type: integer }
+        status: { $ref: '#/components/schemas/ReconRunStatus' }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+        triggeredBy: { type: [string, "null"], format: uuid }
+
+    # ---- E13 reconciliation_finding ----
+    ReconciliationFinding:
+      type: object
+      properties:
+        findingId: { type: string, format: uuid }
+        runId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        correlationId: { type: [string, "null"], format: uuid }
+        leaveSpellLineageId: { type: [string, "null"], format: uuid }
+        findingType: { $ref: '#/components/schemas/ReconFindingType' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        leaveSnapshot:
+          type: [object, "null"]
+          additionalProperties: true
+        srSnapshot:
+          type: [object, "null"]
+          additionalProperties: true
+        divergentFields:
+          type: [object, "null"]
+          additionalProperties: true
+        remediationState: { $ref: '#/components/schemas/RemediationState' }
+        remediationWorkflowId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # ---- E14 sr_correction_link ----
+    CorrectionLink:
+      type: object
+      properties:
+        linkId: { type: string, format: uuid }
+        originalSrEventId: { type: string }
+        correctingSrEventId: { type: string }
+        leaveSpellLineageId: { type: string, format: uuid }
+        correctionType: { $ref: '#/components/schemas/CorrectionType' }
+        reasonCode: { $ref: '#/components/schemas/CorrectionReasonCode' }
+        correlationId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+
+    # ---- E15 historical_leave_batch ----
+    HistoricalBatchWrite:
+      type: object
+      required: [batchLabel, sourceType]
+      properties:
+        batchLabel: { type: string, maxLength: 120 }
+        sourceType: { $ref: '#/components/schemas/BatchSourceType' }
+        sourceDocumentId: { type: [string, "null"], format: uuid }
+        migrationRunId: { type: [string, "null"], format: uuid }
+        records:
+          type: array
+          description: Staged legacy leave records (optional at create; may be loaded via P06).
+          items: { $ref: '#/components/schemas/HistoricalRecordWrite' }
+    HistoricalBatch:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        batchLabel: { type: string }
+        sourceType: { $ref: '#/components/schemas/BatchSourceType' }
+        sourceDocumentId: { type: [string, "null"], format: uuid }
+        migrationRunId: { type: [string, "null"], format: uuid }
+        recordsTotal: { type: integer }
+        recordsValid: { type: integer }
+        recordsRejected: { type: integer }
+        status: { $ref: '#/components/schemas/BatchStatus' }
+        approvalWorkflowId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # ---- E16 historical_leave_record ----
+    HistoricalRecordWrite:
+      type: object
+      required: [govSourceId, serviceNoRaw, leaveTypeCode, spellStart, spellEnd, daysCount]
+      properties:
+        govSourceId: { type: string, maxLength: 64 }
+        serviceNoRaw: { type: string, maxLength: 64 }
+        leaveTypeCode: { type: string, maxLength: 32 }
+        spellStart: { type: string, format: date }
+        spellEnd: { type: string, format: date }
+        daysCount: { type: number, format: float }
+        statutoryRuleRef: { type: [string, "null"], maxLength: 120 }
+    HistoricalRecord:
+      type: object
+      properties:
+        recordId: { type: string, format: uuid }
+        batchId: { type: string, format: uuid }
+        employeeId: { type: [string, "null"], format: uuid }
+        leaveSpellLineageId: { type: [string, "null"], format: uuid }
+        govSourceId: { type: string }
+        serviceNoRaw: { type: string }
+        leaveTypeCode: { type: string }
+        spellStart: { type: string, format: date }
+        spellEnd: { type: string, format: date }
+        daysCount: { type: number, format: float }
+        qualifyingFlag:
+          anyOf:
+            - $ref: '#/components/schemas/QualifyingServiceRule'
+            - type: "null"
+        statutoryRuleRef: { type: [string, "null"] }
+        confidence: { $ref: '#/components/schemas/HistConfidence' }
+        adjudicationState: { $ref: '#/components/schemas/HistAdjudicationState' }
+        validationState: { $ref: '#/components/schemas/HistValidationState' }
+        rejectReason: { type: [string, "null"] }
+        postedSrEventId: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+
+    # ---- E17 integration_config ----
+    IntegrationConfigWrite:
+      type: object
+      required: [key, value, effectiveFrom]
+      properties:
+        key:
+          type: string
+          enum:
+            - max_retries
+            - backoff_base_ms
+            - lease_timeout_ms
+            - reaper_interval_ms
+            - posting_sla_minutes
+            - x3_breaker_threshold
+            - live_posting_gate
+        value:
+          description: JSON value appropriate to the key.
+          oneOf:
+            - type: string
+            - type: integer
+            - type: boolean
+            - type: object
+              additionalProperties: true
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: [string, "null"], format: date-time }
+    IntegrationConfig:
+      allOf:
+        - $ref: '#/components/schemas/IntegrationConfigWrite'
+        - type: object
+          properties:
+            configId: { type: string, format: uuid }
+            updatedBy: { type: string }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+
+    RelayState:
+      type: object
+      properties:
+        state: { type: string, enum: [RUNNING, PAUSED] }
+        reason: { type: [string, "null"] }
+        changedBy: { type: string }
+        changedAt: { type: string, format: date-time }
+
+    # ---- E19 port_conformance_run ----
+    ConformanceRun:
+      type: object
+      properties:
+        conformanceId: { type: string, format: uuid }
+        contractVersion: { type: string }
+        dedupeRetentionDays:
+          type: integer
+          description: Must be >= 2557 (~7y) to PASS the gate.
+        indexesVerified:
+          type: object
+          additionalProperties: { type: boolean }
+        appendOnlyVerified: { type: boolean }
+        dedupeReplayVerified: { type: boolean }
+        result: { $ref: '#/components/schemas/ConformanceResult' }
+        blocking: { type: [string, "null"] }
+        evidenceChecksum: { type: string }
+        runAt: { type: string, format: date-time }
+        runBy: { type: string }
+
+    # ---- E20 capture_integrity_finding ----
+    IntegrityFinding:
+      type: object
+      properties:
+        integrityId: { type: string, format: uuid }
+        runId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        leaveLedgerEntryId: { type: [string, "null"], format: uuid }
+        leaveSpellLineageId: { type: [string, "null"], format: uuid }
+        findingType: { $ref: '#/components/schemas/IntegrityFindingType' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        state: { $ref: '#/components/schemas/IntegrityState' }
+        detail:
+          type: [object, "null"]
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # ---- E21 prepension_certificate ----
+    PrepensionCertificate:
+      type: object
+      properties:
+        certificateId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        runId: { type: string, format: uuid }
+        openHighCriticalFindings: { type: integer }
+        totalNonQualifyingDays: { type: number, format: float }
+        lineageComplete: { type: boolean }
+        provisionalEntriesRemaining: { type: integer }
+        result: { $ref: '#/components/schemas/ConformanceResult' }
+        checksum: { type: string }
+        signedBy: { type: [string, "null"], format: uuid }
+        signedAt: { type: [string, "null"], format: date-time }
+        consumedByG11At: { type: [string, "null"], format: date-time }
+
+    # ---- FR-09 qualifying impact ----
+    QualifyingImpact:
+      type: object
+      properties:
+        employeeId: { type: string, format: uuid }
+        totalNonQualifyingDays: { type: number, format: float }
+        spells:
+          type: array
+          items:
+            type: object
+            properties:
+              leaveSpellLineageId: { type: string, format: uuid }
+              leaveTypeCode: { type: string }
+              qualifyingServiceRule: { $ref: '#/components/schemas/QualifyingServiceRule' }
+              nonQualifyingDays: { type: number, format: float }
+              statutoryRuleRef: { type: [string, "null"] }
+              spell: { $ref: '#/components/schemas/SpellWindow' }
+
+    # ---- FR-10 annotations ----
+    StatutoryAnnotation:
+      type: object
+      properties:
+        annotationId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        leaveSpellLineageId: { type: string, format: uuid }
+        srEventId: { type: string }
+        annotationType:
+          type: string
+          enum: [INCREMENT_DEFERRAL, SENIORITY_EFFECT, PROBATION_EXTENSION]
+        text: { type: string }
+        statutoryRuleRef: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+
+    # ---- FR-12 replay/backfill ----
+    ReplayRequest:
+      type: object
+      properties:
+        dryRun: { type: boolean, default: true }
+        scope: { $ref: '#/components/schemas/ReconScope' }
+        leaveSpellLineageId: { type: string, format: uuid }
+    ReplayResult:
+      type: object
+      properties:
+        replayId: { type: string, format: uuid }
+        dryRun: { type: boolean }
+        candidateCount: { type: integer }
+        status: { type: string, enum: [PLANNED, ACCEPTED, RUNNING, COMPLETED] }
+
+    # ---- FR-13 monitoring ----
+    DashboardSummary:
+      type: object
+      properties:
+        p95PostingLagSeconds: { type: number, format: float }
+        outboxPending: { type: integer }
+        inFlight: { type: integer }
+        strandedInFlight: { type: integer }
+        dlqDepth: { type: integer }
+        openReconFindings: { type: integer }
+        openHighCriticalFindings: { type: integer }
+        breakerState: { type: string, enum: [CLOSED, OPEN, HALF_OPEN] }
+        livePostingGate: { type: string, enum: [open, closed] }
+        latestConformanceResult: { $ref: '#/components/schemas/ConformanceResult' }
+    MetricSeries:
+      type: object
+      properties:
+        metric: { type: string }
+        points:
+          type: array
+          items:
+            type: object
+            properties:
+              t: { type: string, format: date-time }
+              v: { type: number, format: float }
+    AlertAck:
+      type: object
+      properties:
+        alertId: { type: string, format: uuid }
+        acknowledgedBy: { type: string, format: uuid }
+        acknowledgedAt: { type: string, format: date-time }
+
+    # ---- FR-14 audit ----
+    AuditChainNode:
+      type: object
+      properties:
+        leaveSpellLineageId: { type: string, format: uuid }
+        eventSequence: { type: integer }
+        stage: { type: string, enum: [CAPTURE, POST, CORRECTION, RECON, MIGRATION] }
+        srEventId: { type: [string, "null"] }
+        correlationId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        detail:
+          type: [object, "null"]
+          additionalProperties: true
+    EvidencePack:
+      type: object
+      properties:
+        exportId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        checksum: { type: string }
+        status: { type: string, enum: [ACCEPTED, GENERATING, READY] }
+        documentRef: { type: [string, "null"] }
+
+    # ---- Workflow start (P01) ----
+    WorkflowStarted:
+      type: object
+      properties:
+        instanceId: { type: string, format: uuid }
+        firstStage: { type: string }
+        assignees:
+          type: array
+          items: { type: string, format: uuid }
+        status: { type: string, enum: [STARTED, IN_PROGRESS] }

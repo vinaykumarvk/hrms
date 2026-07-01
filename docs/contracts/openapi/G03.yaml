@@ -1,0 +1,3036 @@
+openapi: 3.1.0
+info:
+  title: G03 — Attendance and Leave Management API
+  version: 3.0.0
+  description: >
+    OpenAPI contract for Government HRMS module **G03 — Attendance and Leave
+    Management** (alias GOV-M03; EXTEND/REUSE of PrimeSoft M04 Leave + M05
+    Attendance). Grounded in `docs/brd/v3/G03-attendance-and-leave-management.md`
+    §5–§8, `docs/contracts/error-taxonomy.yaml`, and `PLATFORM_FOUNDATION.md` §4.
+
+
+    Platform conventions adopted verbatim: base path `/api/v1` (module routes
+    under `/atl/*`); global bearer JWT carrying resolved roles + tenant/entity
+    scope (P02 `Authorization.check`); `Idempotency-Key` header on all
+    workflow-initiating POSTs (24h replay → original result); cursor pagination
+    only (`limit` default 25 / max 100 + `cursor` → `next_cursor`);
+    `X-Correlation-Id` echoed on every response and written to every P05 audit
+    line; canonical error envelope `{ error: { code, message, field, details } }`
+    with the 8-code platform status table.
+
+
+    G03 is **not** an SR writer: approved leave carries a stable
+    `leave_spell_lineage_id` (minted by G03, constant across
+    approve→amend→cancel) that is exposed on the signed approved-leave event
+    consumed by **G04**, which posts to the **G12-SR** ledger. G03 never calls
+    `POST /api/v1/sr/ingest`.
+  contact:
+    name: API Architecture / Platform Foundation
+  license:
+    name: Proprietary — Government HRMS Programme
+
+servers:
+  - url: /api/v1
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Shifts & Rosters
+    description: Shift definitions and employee-to-shift roster assignment (FR-01, EXTEND M05).
+  - name: Holidays
+    description: Holiday calendars, holidays, and restricted-holiday elections (FR-02, EXTEND M05).
+  - name: Punches
+    description: Biometric/RFID/mobile-geo punch ingestion and capture governance (FR-03, EXTEND M05).
+  - name: Attendance
+    description: Daily attendance processing, sub-day allocation, and status rollup (FR-04, EXTEND M05).
+  - name: Regularisation
+    description: Missed-punch and status-correction regularisation (FR-05, P01 flow).
+  - name: Overtime
+    description: Overtime claim, approval, and payable/comp-off treatment (FR-06).
+  - name: Attendance Exceptions
+    description: Work-from-home, on-duty and tour records (FR-07/FR-08, P01 flow).
+  - name: Comp-off
+    description: Compensatory-off balance and redemption (FR-09, EXTEND M04/M05).
+  - name: Leave Configuration
+    description: Leave-type catalog and accrual-policy configuration (FR-10, EXTEND M04).
+  - name: Leave Balances & Ledger
+    description: Accrual, immutable balance ledger, adjustments and balances (FR-11).
+  - name: Leave Applications
+    description: Apply, approve, cancel, withdraw, conflicts and return-to-work (FR-12/13/14/23, P01 flow).
+  - name: Team Calendar
+    description: Manager team calendar and conflict detection (FR-14, My Team workspace).
+  - name: Year Close
+    description: Leave-year close, carry-forward, lapse and conversion (FR-15).
+  - name: Encashment
+    description: In-service, LTC and retirement leave encashment (FR-16).
+  - name: Payroll Feed
+    description: Attendance & leave → payroll (LWP/OT) feed and locked-period adjustments (FR-17).
+  - name: Self-service
+    description: Me / My Team self-service summary, approvals inbox and notifications (FR-18).
+  - name: Delegations
+    description: Approval delegation and out-of-office routing (FR-19, P01 delegate).
+  - name: Anomaly Review
+    description: Punch anomaly / time-fraud detection and review (FR-20, P01 flow).
+  - name: Consent & Retention
+    description: DPDP biometric/geo consent, lawful basis, fallback and retention purge (FR-21).
+  - name: Entitlements
+    description: Career/event entitlement counters for sanction-based leave (FR-22).
+  - name: Absence Programs
+    description: Balance forecast and mass-leave / shutdown programs (FR-23).
+
+paths:
+
+  # ---------------------------------------------------------------------------
+  # FR-01 Shifts & Rosters
+  # ---------------------------------------------------------------------------
+  /atl/shifts:
+    post:
+      tags: [Shifts & Rosters]
+      summary: Create a shift definition
+      operationId: createShift
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShiftCreate' }
+      responses:
+        '201':
+          description: Shift created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shift' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/rosters:
+    post:
+      tags: [Shifts & Rosters]
+      summary: Assign an employee to a shift over a date range
+      operationId: createRoster
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RosterCreate' }
+      responses:
+        '201':
+          description: Roster assignment created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Roster' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Shifts & Rosters]
+      summary: List rosters for an employee (cursor paginated)
+      operationId: listRosters
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of rosters.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Roster' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-02 Holidays & RH elections
+  # ---------------------------------------------------------------------------
+  /atl/holiday-calendars:
+    post:
+      tags: [Holidays]
+      summary: Create a holiday calendar
+      operationId: createHolidayCalendar
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HolidayCalendarCreate' }
+      responses:
+        '201':
+          description: Holiday calendar created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HolidayCalendar' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/holiday-calendars/{id}/holidays:
+    post:
+      tags: [Holidays]
+      summary: Add a holiday to a calendar
+      operationId: addHoliday
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HolidayCreate' }
+      responses:
+        '201':
+          description: Holiday added.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Holiday' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Duplicate holiday date (VAL-G03-HOLIDAY-DUP).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/holidays:
+    get:
+      tags: [Holidays]
+      summary: List effective holidays by date and org unit
+      operationId: listHolidays
+      parameters:
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+        - name: orgUnitId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of holidays.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Holiday' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/rh-elections:
+    post:
+      tags: [Holidays]
+      summary: Elect a restricted holiday (RH)
+      operationId: electRestrictedHoliday
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RhElectionCreate' }
+      responses:
+        '201':
+          description: RH election recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RhElection' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: RH cap exceeded (RH_CAP_EXCEEDED / VAL-G03-RHCAP).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-03 Punches
+  # ---------------------------------------------------------------------------
+  /atl/punches/ingest:
+    post:
+      tags: [Punches]
+      summary: Ingest a device batch of punches (idempotent)
+      description: >
+        Device-batch ingestion. Idempotent by `Idempotency-Key` and per-punch
+        `(device_id, source_ref)`. Punches may be ACCEPTED, DUPLICATE, REJECTED
+        or FLAGGED_FOR_REVIEW.
+      operationId: ingestPunchBatch
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PunchBatchIngest' }
+      responses:
+        '200':
+          description: Batch processed; per-punch ingestion outcomes returned.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PunchBatchResult' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Device not authorized / consent required (DEVICE_NOT_AUTHORIZED, CONSENT_REQUIRED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/punches/mobile:
+    post:
+      tags: [Punches]
+      summary: Submit a mobile geo punch
+      description: >
+        Self-service mobile geo punch. `201` ACCEPTED, `202` FLAGGED_FOR_REVIEW,
+        or `403` CONSENT_REQUIRED / GEOFENCE_VIOLATION per capture governance.
+      operationId: mobilePunch
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MobilePunchCreate' }
+      responses:
+        '201':
+          description: Punch ACCEPTED.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Punch' }
+        '202':
+          description: Punch FLAGGED_FOR_REVIEW (anomaly detected).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Punch' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Consent required or geofence violation (CONSENT_REQUIRED, GEOFENCE_VIOLATION).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-04 Daily attendance
+  # ---------------------------------------------------------------------------
+  /atl/attendance/process:
+    post:
+      tags: [Attendance]
+      summary: Trigger daily attendance processing (sole writer of attendance_daily)
+      operationId: processAttendance
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendanceProcessRequest' }
+      responses:
+        '202':
+          description: Processing run queued (JOB-M05-CLOSE extended).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceProcessingRun' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/attendance/daily:
+    get:
+      tags: [Attendance]
+      summary: List daily attendance rollups for an employee over a range
+      operationId: listDailyAttendance
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of daily attendance rows with sub-day allocations.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/AttendanceDaily' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-05 Regularisation
+  # ---------------------------------------------------------------------------
+  /atl/regularisations:
+    post:
+      tags: [Regularisation]
+      summary: Raise a missed-punch / status-correction regularisation
+      operationId: createRegularisation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegularisationCreate' }
+      responses:
+        '201':
+          description: Regularisation submitted to P01.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Regularisation' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/regularisations/{id}/decision:
+    post:
+      tags: [Regularisation]
+      summary: Approve or reject a regularisation (P01)
+      operationId: decideRegularisation
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowDecision' }
+      responses:
+        '200':
+          description: Decision applied.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Regularisation' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-06 Overtime
+  # ---------------------------------------------------------------------------
+  /atl/overtime:
+    post:
+      tags: [Overtime]
+      summary: Submit an overtime claim
+      operationId: createOvertime
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OvertimeCreate' }
+      responses:
+        '201':
+          description: Overtime submitted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Overtime' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/overtime/{id}/decision:
+    post:
+      tags: [Overtime]
+      summary: Approve (PAID / COMP_OFF) or reject an overtime claim (P01)
+      operationId: decideOvertime
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OvertimeDecision' }
+      responses:
+        '200':
+          description: Decision applied.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Overtime' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-07 / FR-08 Attendance exceptions (WFH / ON_DUTY / TOUR)
+  # ---------------------------------------------------------------------------
+  /atl/exceptions:
+    post:
+      tags: [Attendance Exceptions]
+      summary: Apply a WFH / On-Duty / Tour exception
+      operationId: createException
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendanceExceptionCreate' }
+      responses:
+        '201':
+          description: Exception submitted to P01.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceException' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/exceptions/{id}/decision:
+    post:
+      tags: [Attendance Exceptions]
+      summary: Approve or reject a WFH / OD / Tour exception (P01)
+      operationId: decideException
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowDecision' }
+      responses:
+        '200':
+          description: Decision applied.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceException' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-09 Comp-off
+  # ---------------------------------------------------------------------------
+  /atl/comp-off/balance:
+    get:
+      tags: [Comp-off]
+      summary: Get comp-off balance for an employee
+      operationId: getCompOffBalance
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Comp-off balance derived from comp_off_ledger.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompOffBalance' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/comp-off/redeem:
+    post:
+      tags: [Comp-off]
+      summary: Redeem comp-off days
+      operationId: redeemCompOff
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompOffRedeem' }
+      responses:
+        '201':
+          description: Comp-off redemption ledger entry created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompOffLedgerEntry' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Insufficient / expired comp-off (COMP_OFF_INSUFFICIENT, COMP_OFF_EXPIRED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-10 Leave configuration
+  # ---------------------------------------------------------------------------
+  /atl/leave-types:
+    post:
+      tags: [Leave Configuration]
+      summary: Create a leave type
+      operationId: createLeaveType
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveTypeCreate' }
+      responses:
+        '201':
+          description: Leave type created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveType' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-policies:
+    post:
+      tags: [Leave Configuration]
+      summary: Create a leave accrual policy
+      operationId: createLeavePolicy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveAccrualPolicyCreate' }
+      responses:
+        '201':
+          description: Accrual policy created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveAccrualPolicy' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Overlapping policy version (POLICY_OVERLAP).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Leave Configuration]
+      summary: List accrual policies for a leave type
+      operationId: listLeavePolicies
+      parameters:
+        - name: leaveTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of accrual policies.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/LeaveAccrualPolicy' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-11 Accrual / ledger / balances
+  # ---------------------------------------------------------------------------
+  /atl/accrual/run:
+    post:
+      tags: [Leave Balances & Ledger]
+      summary: Trigger the leave accrual job (JOB-M04-ACCRUAL)
+      operationId: runAccrual
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccrualRunRequest' }
+      responses:
+        '202':
+          description: Accrual run queued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobRunAck' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Accrual already run for the period (ACCRUAL_ALREADY_RUN).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-balances:
+    get:
+      tags: [Leave Balances & Ledger]
+      summary: List leave balances for an employee
+      operationId: listLeaveBalances
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: leaveTypeId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: leaveYear
+          in: query
+          schema: { type: integer }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of leave balances (current, reserved and available).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/LeaveBalance' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-ledger:
+    get:
+      tags: [Leave Balances & Ledger]
+      summary: List the immutable leave balance ledger for an employee/type
+      operationId: listLeaveLedger
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: leaveTypeId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: leaveYear
+          in: query
+          schema: { type: integer }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of ledger entries (append-only single source of truth).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/LeaveLedgerEntry' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-ledger/adjust:
+    post:
+      tags: [Leave Balances & Ledger]
+      summary: Raise a manual ledger adjustment (maker; P01 maker-checker)
+      operationId: adjustLeaveLedger
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveLedgerAdjustCreate' }
+      responses:
+        '201':
+          description: Adjustment raised (pending checker approval via P01).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveLedgerEntry' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-12 / FR-13 / FR-14 / FR-23 Leave applications
+  # ---------------------------------------------------------------------------
+  /atl/leave-applications:
+    post:
+      tags: [Leave Applications]
+      summary: Apply for leave (creates soft-reserve; P01 flow)
+      description: >
+        Creates a leave application, a `leave_reservations` soft-hold and a P01
+        workflow instance. Response echoes `balancePreview` and the minted
+        `leaveSpellLineageId`.
+      operationId: applyLeave
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveApplicationCreate' }
+      responses:
+        '201':
+          description: Leave application submitted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveApplication' }
+        '422':
+          description: Validation failure (e.g. DAY_UNITS_MISMATCH, COMMUTED_REQUIRES_HPL).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: >
+            State/precondition conflict (INSUFFICIENT_BALANCE, LEAVE_OVERLAP,
+            BLACKOUT_PERIOD, ENTITLEMENT_EXCEEDED, ERR-DUP-INSTANCE).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Leave Applications]
+      summary: List leave applications (cursor paginated)
+      operationId: listLeaveApplications
+      parameters:
+        - name: employeeId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/LeaveApplicationStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of leave applications.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/LeaveApplication' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-applications/{id}/decision:
+    post:
+      tags: [Leave Applications]
+      summary: Approve / reject / recommend / send-back a leave application (P01, version-checked)
+      description: >
+        Atomic, version-checked decision. Approve consumes the reservation,
+        writes the ledger debit, updates the balance under optimistic lock,
+        enqueues recompute and the G04 SR event. Stale `expectedVersion` →
+        409 OPTIMISTIC_LOCK_CONFLICT.
+      operationId: decideLeaveApplication
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveDecision' }
+      responses:
+        '200':
+          description: Decision applied.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveApplication' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Optimistic-lock or state conflict (OPTIMISTIC_LOCK_CONFLICT).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-applications/{id}/withdraw:
+    post:
+      tags: [Leave Applications]
+      summary: Withdraw a submitted leave application (releases reservation)
+      operationId: withdrawLeaveApplication
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Application withdrawn.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveApplication' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-applications/{id}/cancel:
+    post:
+      tags: [Leave Applications]
+      summary: Cancel an approved (future) leave application
+      description: >
+        Cancels approved future-dated leave: emits AVAIL_REVERSAL ledger entry,
+        a G04 SR reversal event on the same `leave_spell_lineage_id`, and a
+        payroll feed adjustment if the period is locked.
+      operationId: cancelLeaveApplication
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Application cancelled; reversal enqueued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveApplication' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Cannot cancel past leave (CANNOT_CANCEL_PAST).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-applications/{id}/return-to-work:
+    post:
+      tags: [Leave Applications]
+      summary: Record return-to-work clearance after long medical leave (FR-23)
+      operationId: returnToWork
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReturnToWorkRequest' }
+      responses:
+        '200':
+          description: Return-to-work recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveApplication' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412':
+          description: Return-to-work still pending / fitness cert absent (RETURN_TO_WORK_PENDING).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-applications/conflicts:
+    get:
+      tags: [Team Calendar]
+      summary: Detect overlapping-leave conflicts across a team/org unit
+      operationId: listLeaveConflicts
+      parameters:
+        - name: orgUnitId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: range
+          in: query
+          description: Date range as `from..to` (ISO dates).
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of leave conflicts.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/LeaveConflict' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/team-calendar:
+    get:
+      tags: [Team Calendar]
+      summary: Get a manager's team leave/attendance calendar for a month
+      operationId: getTeamCalendar
+      parameters:
+        - name: managerId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: month
+          in: query
+          required: true
+          description: Month in `YYYY-MM`.
+          schema: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+      responses:
+        '200':
+          description: Team calendar view.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamCalendar' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-15 Year close
+  # ---------------------------------------------------------------------------
+  /atl/year-close/simulate:
+    post:
+      tags: [Year Close]
+      summary: Simulate a leave-year close (dry run, no writes)
+      operationId: simulateYearClose
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/YearCloseRequest' }
+      responses:
+        '200':
+          description: Simulation report produced.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/YearCloseRun' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/year-close/commit:
+    post:
+      tags: [Year Close]
+      summary: Commit a leave-year close (carry-forward / lapse / conversion)
+      operationId: commitYearClose
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/YearCloseCommit' }
+      responses:
+        '202':
+          description: Year-close commit queued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/YearCloseRun' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Year already closed or pending leave blocks close (YEAR_ALREADY_CLOSED, PENDING_LEAVE_BLOCKS_CLOSE).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/year-close/{runId}:
+    get:
+      tags: [Year Close]
+      summary: Get a leave-year close run
+      operationId: getYearCloseRun
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Year-close run.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/YearCloseRun' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-16 Encashment
+  # ---------------------------------------------------------------------------
+  /atl/encashments:
+    post:
+      tags: [Encashment]
+      summary: Request leave encashment (in-service / LTC / retirement)
+      operationId: createEncashment
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EncashmentCreate' }
+      responses:
+        '201':
+          description: Encashment requested (P01 flow).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Encashment' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Cap / block exhausted (ENCASHMENT_CAP_EXCEEDED, LTC_BLOCK_EXHAUSTED, NOT_ENCASHABLE).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/encashments/{id}/decision:
+    post:
+      tags: [Encashment]
+      summary: Approve or reject an encashment request (P01; HR-Admin authorises)
+      operationId: decideEncashment
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowDecision' }
+      responses:
+        '200':
+          description: Decision applied.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Encashment' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-17 Payroll feed
+  # ---------------------------------------------------------------------------
+  /atl/payroll-feed/generate:
+    post:
+      tags: [Payroll Feed]
+      summary: Generate the attendance & leave payroll feed for a pay period
+      operationId: generatePayrollFeed
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PayrollFeedGenerate' }
+      responses:
+        '202':
+          description: Feed generation queued (JOB-M04-LOP / JOB-M05-LOP).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobRunAck' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Period already locked (PERIOD_LOCKED / PERIOD_ALREADY_LOCKED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/payroll-feed:
+    get:
+      tags: [Payroll Feed]
+      summary: List payroll feed rows for a pay period
+      operationId: listPayrollFeed
+      parameters:
+        - name: payPeriod
+          in: query
+          required: true
+          description: Pay period in `YYYY-MM`.
+          schema: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of payroll feed rows.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/PayrollFeedRow' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/payroll-feed/adjustments:
+    get:
+      tags: [Payroll Feed]
+      summary: List next-period feed adjustments for a pay period
+      operationId: listPayrollFeedAdjustments
+      parameters:
+        - name: payPeriod
+          in: query
+          required: true
+          schema: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of feed adjustments (locked-period corrections).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/PayrollFeedAdjustment' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/payroll-feed/{id}/ack:
+    post:
+      tags: [Payroll Feed]
+      summary: Acknowledge a payroll feed batch from G10
+      operationId: ackPayrollFeed
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PayrollFeedAck' }
+      responses:
+        '200':
+          description: Feed acknowledged.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PayrollFeedRow' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-18 Self-service
+  # ---------------------------------------------------------------------------
+  /atl/self-service/summary:
+    get:
+      tags: [Self-service]
+      summary: Get the Me-workspace self-service summary
+      operationId: getSelfServiceSummary
+      responses:
+        '200':
+          description: Self-service summary for the authenticated employee.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SelfServiceSummary' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/approvals/inbox:
+    get:
+      tags: [Self-service]
+      summary: List pending approvals for the authenticated approver
+      operationId: getApprovalsInbox
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of approval tasks.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/ApprovalTask' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/notifications:
+    get:
+      tags: [Self-service]
+      summary: List the authenticated user's notifications
+      operationId: listNotifications
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [UNREAD, READ, ALL]
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of notifications.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Notification' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-19 Delegations
+  # ---------------------------------------------------------------------------
+  /atl/delegations:
+    post:
+      tags: [Delegations]
+      summary: Create an approval delegation (out-of-office)
+      operationId: createDelegation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DelegationCreate' }
+      responses:
+        '201':
+          description: Delegation created (feeds P01 delegate).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Delegation' }
+        '422':
+          description: Validation failure (e.g. DELEGATE_IS_APPLICANT).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Delegations]
+      summary: List delegations for a delegator
+      operationId: listDelegations
+      parameters:
+        - name: delegatorId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of delegations.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Delegation' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/delegations/{id}/revoke:
+    post:
+      tags: [Delegations]
+      summary: Revoke a delegation
+      operationId: revokeDelegation
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Delegation revoked.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Delegation' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-20 Anomaly review
+  # ---------------------------------------------------------------------------
+  /atl/anomalies:
+    get:
+      tags: [Anomaly Review]
+      summary: List flagged punch anomalies
+      operationId: listAnomalies
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AnomalyStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of anomaly reviews.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/AnomalyReview' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/anomalies/{id}/decision:
+    post:
+      tags: [Anomaly Review]
+      summary: Resolve a punch anomaly (confirm valid / fraud / escalate; P01, SoD)
+      operationId: decideAnomaly
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnomalyDecision' }
+      responses:
+        '200':
+          description: Anomaly resolved.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnomalyReview' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Reviewer is the punch owner (SoD violation).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-21 Consent & retention
+  # ---------------------------------------------------------------------------
+  /atl/consents:
+    post:
+      tags: [Consent & Retention]
+      summary: Record biometric/geo consent and lawful basis (DPDP)
+      operationId: createConsent
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConsentCreate' }
+      responses:
+        '201':
+          description: Consent recorded (links P05 consent_records).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Consent' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Consent & Retention]
+      summary: List consents for an employee
+      operationId: listConsents
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of consent records.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Consent' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/consents/{id}/withdraw:
+    post:
+      tags: [Consent & Retention]
+      summary: Withdraw a consent (engages fallback method)
+      operationId: withdrawConsent
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConsentWithdraw' }
+      responses:
+        '200':
+          description: Consent withdrawn.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Consent' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: No non-biometric fallback available (FALLBACK_UNAVAILABLE).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/retention/purge-run:
+    post:
+      tags: [Consent & Retention]
+      summary: Trigger a DPDP biometric/geo retention purge run
+      operationId: runRetentionPurge
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetentionPurgeRequest' }
+      responses:
+        '202':
+          description: Purge run queued (JOB-G03-RETENTION-PURGE).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobRunAck' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Purge blocked by legal hold (PURGE_BLOCKED_LEGAL_HOLD).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-22 Entitlements
+  # ---------------------------------------------------------------------------
+  /atl/entitlements:
+    get:
+      tags: [Entitlements]
+      summary: List sanction-leave entitlement counters for an employee
+      operationId: listEntitlements
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of entitlement counters.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Entitlement' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/entitlements/adjust:
+    post:
+      tags: [Entitlements]
+      summary: Adjust a sanction-leave entitlement counter
+      operationId: adjustEntitlement
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EntitlementAdjust' }
+      responses:
+        '200':
+          description: Entitlement adjusted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Entitlement' }
+        '422':
+          description: Validation failure (e.g. ENTITLEMENT_EXCEEDED, INELIGIBLE_DEPENDENT).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ---------------------------------------------------------------------------
+  # FR-23 Absence programs
+  # ---------------------------------------------------------------------------
+  /atl/leave-balances/forecast:
+    get:
+      tags: [Absence Programs]
+      summary: Forecast leave balance as of a future date (what-if)
+      operationId: forecastLeaveBalance
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: asOf
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: leaveTypeId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Projected balance including scheduled accrual and reservations.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BalanceForecast' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/mass-leave:
+    post:
+      tags: [Absence Programs]
+      summary: Apply a mass-leave / office-shutdown program
+      operationId: createMassLeave
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MassLeaveRequest' }
+      responses:
+        '202':
+          description: Mass-leave program queued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobRunAck' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Falls in a blackout window (BLACKOUT_PERIOD).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Bearer JWT carrying the session's resolved roles and tenant/entity
+        scope. Endpoints never re-implement permission logic; they call P02
+        `Authorization.check`.
+
+  headers:
+    XCorrelationId:
+      description: >
+        Correlation id echoed on every response and written to every P05 audit
+        and log line for the request.
+      schema: { type: string }
+
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >
+        Required on workflow-initiating / unsafe POSTs. A repeat within 24h
+        returns the original result rather than creating a duplicate.
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      description: Page size (default 25, max 100).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor from the previous page's `next_cursor`.
+      schema: { type: string }
+    Sort:
+      name: sort
+      in: query
+      description: Sort spec, e.g. `created_at:desc`.
+      schema:
+        type: string
+        pattern: '^[a-zA-Z_]+:(asc|desc)$'
+
+  responses:
+    ValidationFailed:
+      description: Input failed a VAL-* / VAL-G03-* rule (VALIDATION_FAILED).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: No, invalid, expired or revoked session/token (UNAUTHENTICATED).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Authenticated but not permitted; never leaks out-of-scope existence (FORBIDDEN).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource absent or out of the caller's scope (NOT_FOUND).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Idempotency replay, duplicate workflow start, or state/uniqueness/version conflict (CONFLICT).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PreconditionFailed:
+      description: A required precondition is not met, incl. retryable upstream unavailability (PRECONDITION_FAILED).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Rate limit or brute-force lockout exceeded (RATE_LIMITED).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Internal:
+      description: Unexpected server error or non-retryable upstream failure (INTERNAL).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    # --- Core envelope & shared -------------------------------------------
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: >
+                One of the 8 platform wire codes (VALIDATION_FAILED,
+                UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT,
+                PRECONDITION_FAILED, RATE_LIMITED, INTERNAL) OR a G03 domain
+                reason / ERR-G03-* message id carried in this field.
+              examples: [INSUFFICIENT_BALANCE, OPTIMISTIC_LOCK_CONFLICT, ERR-G03-COMMUTED-HPL]
+            message:
+              type: string
+              description: Human-readable copy resolved from an ERR-*/MSG-* id.
+            field:
+              type: [string, 'null']
+              description: Offending field for validation errors.
+            details:
+              type: [object, 'null']
+              description: 'Structured discriminators, e.g. { reason: <REASON> }.'
+              additionalProperties: true
+      examples:
+        - error:
+            code: INSUFFICIENT_BALANCE
+            message: Available EL balance 1.5 (after reservations) is less than requested 2.5.
+            field: days
+            details: { reason: INSUFFICIENT_BALANCE }
+
+    Page:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: {}
+        next_cursor:
+          type: [string, 'null']
+          description: Cursor for the next page; null when no further pages.
+
+    ReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: Justification (VAL-COMMENT / ERR-REASON-REQ).
+
+    WorkflowDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, REJECT, SEND_BACK]
+        comment:
+          type: string
+        expectedVersion:
+          type: integer
+          description: Optimistic-lock version the caller last observed.
+
+    JobRunAck:
+      type: object
+      required: [runId, status]
+      properties:
+        runId: { type: string, format: uuid }
+        jobId: { type: string, examples: [JOB-M04-ACCRUAL] }
+        status:
+          type: string
+          enum: [QUEUED, RUNNING, COMPLETED, PARTIAL, FAILED]
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid }
+
+    # --- Enums -------------------------------------------------------------
+    LeaveApplicationStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, RECOMMENDED, APPROVED, REJECTED, CANCELLED, WITHDRAWN]
+
+    SrPostingStatus:
+      type: string
+      enum: [NOT_REQUIRED, PENDING, POSTED, FAILED]
+
+    AnomalyStatus:
+      type: string
+      enum: [OPEN, CONFIRMED_VALID, CONFIRMED_FRAUD, ESCALATED]
+
+    # --- Shifts & rosters --------------------------------------------------
+    ShiftCreate:
+      type: object
+      required: [shiftCode, name, startTime, endTime, halfDayThresholdMinutes, fullDayThresholdMinutes]
+      properties:
+        shiftCode: { type: string, maxLength: 20 }
+        name: { type: string, maxLength: 100 }
+        startTime: { type: string, examples: ['09:30'] }
+        endTime: { type: string, examples: ['17:30'] }
+        graceMinutes: { type: integer, default: 10 }
+        halfDayThresholdMinutes: { type: integer }
+        fullDayThresholdMinutes: { type: integer }
+        breakMinutes: { type: integer, default: 0 }
+        isNightShift: { type: boolean, default: false }
+        dateAnchorRule:
+          type: string
+          enum: [SHIFT_START_LOCAL_DATE, PUNCH_LOCAL_DATE]
+          default: SHIFT_START_LOCAL_DATE
+        displayTimezone: { type: string, default: Asia/Kolkata }
+        orgUnitScopeId: { type: [string, 'null'], format: uuid }
+    Shift:
+      allOf:
+        - $ref: '#/components/schemas/ShiftCreate'
+        - type: object
+          required: [shiftId, status]
+          properties:
+            shiftId: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, INACTIVE] }
+            tenantId: { type: string, format: uuid }
+            entityId: { type: string, format: uuid }
+
+    RosterCreate:
+      type: object
+      required: [employeeId, shiftId, effectiveFrom, weeklyOffPattern]
+      properties:
+        employeeId: { type: string, format: uuid }
+        shiftId: { type: string, format: uuid }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: [string, 'null'], format: date }
+        weeklyOffPattern:
+          type: array
+          items: { type: string }
+          examples: [[SUN, SAT2, SAT4]]
+    Roster:
+      allOf:
+        - $ref: '#/components/schemas/RosterCreate'
+        - type: object
+          required: [rosterId, status]
+          properties:
+            rosterId: { type: string, format: uuid }
+            status: { type: string, enum: [DRAFT, PUBLISHED, SUPERSEDED] }
+
+    # --- Holidays ----------------------------------------------------------
+    HolidayCalendarCreate:
+      type: object
+      required: [calendarCode, name, year]
+      properties:
+        calendarCode: { type: string, maxLength: 30 }
+        name: { type: string, maxLength: 120 }
+        year: { type: integer }
+        locationScopeId: { type: [string, 'null'], format: uuid }
+        rhCap: { type: integer, default: 2 }
+    HolidayCalendar:
+      allOf:
+        - $ref: '#/components/schemas/HolidayCalendarCreate'
+        - type: object
+          required: [calendarId, status]
+          properties:
+            calendarId: { type: string, format: uuid }
+            status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+
+    HolidayCreate:
+      type: object
+      required: [holidayDate, name, holidayType]
+      properties:
+        holidayDate: { type: string, format: date }
+        name: { type: string, maxLength: 120 }
+        holidayType:
+          type: string
+          enum: [GAZETTED, RESTRICTED, SECTIONAL, OPTIONAL]
+        isRestrictedOptional: { type: boolean, default: false }
+    Holiday:
+      allOf:
+        - $ref: '#/components/schemas/HolidayCreate'
+        - type: object
+          required: [holidayId, calendarId]
+          properties:
+            holidayId: { type: string, format: uuid }
+            calendarId: { type: string, format: uuid }
+
+    RhElectionCreate:
+      type: object
+      required: [employeeId, calendarId, holidayId, leaveYear]
+      properties:
+        employeeId: { type: string, format: uuid }
+        calendarId: { type: string, format: uuid }
+        holidayId: { type: string, format: uuid }
+        leaveYear: { type: integer }
+    RhElection:
+      allOf:
+        - $ref: '#/components/schemas/RhElectionCreate'
+        - type: object
+          required: [electionId, status]
+          properties:
+            electionId: { type: string, format: uuid }
+            status: { type: string, enum: [ELECTED, CANCELLED] }
+
+    # --- Punches -----------------------------------------------------------
+    PunchInput:
+      type: object
+      required: [employeeId, punchTime, captureMethod]
+      properties:
+        employeeId: { type: string, format: uuid }
+        deviceId: { type: [string, 'null'], format: uuid }
+        punchTime: { type: string, format: date-time }
+        punchDirection: { type: string, enum: [IN, OUT, AUTO] }
+        captureMethod:
+          type: string
+          enum: [BIOMETRIC, RFID, MOBILE_GEO, WEB, MANUAL, OTP_FALLBACK]
+        geoLat: { type: [number, 'null'] }
+        geoLong: { type: [number, 'null'] }
+        livenessScore: { type: [number, 'null'] }
+        photoDocumentId: { type: [string, 'null'], format: uuid }
+        sourceRef:
+          type: [string, 'null']
+          description: Device-side raw event id used for idempotent ingestion.
+    PunchBatchIngest:
+      type: object
+      required: [deviceId, punches]
+      properties:
+        deviceId: { type: string, format: uuid }
+        punches:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/PunchInput' }
+    Punch:
+      allOf:
+        - $ref: '#/components/schemas/PunchInput'
+        - type: object
+          required: [punchId, attendanceDate, ingestionStatus]
+          properties:
+            punchId: { type: string, format: uuid }
+            attendanceDate: { type: string, format: date }
+            consentId: { type: [string, 'null'], format: uuid }
+            ingestionStatus:
+              type: string
+              enum: [ACCEPTED, DUPLICATE, REJECTED, FLAGGED_FOR_REVIEW]
+            anomalyFlags:
+              type: [array, 'null']
+              items: { type: string }
+    PunchBatchResult:
+      type: object
+      required: [accepted, duplicate, rejected, flagged, results]
+      properties:
+        accepted: { type: integer }
+        duplicate: { type: integer }
+        rejected: { type: integer }
+        flagged: { type: integer }
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/Punch' }
+    MobilePunchCreate:
+      allOf:
+        - $ref: '#/components/schemas/PunchInput'
+        - type: object
+          properties:
+            consentId: { type: [string, 'null'], format: uuid }
+
+    # --- Attendance --------------------------------------------------------
+    AttendanceProcessRequest:
+      type: object
+      required: [dateFrom, dateTo]
+      properties:
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid }
+        employeeId: { type: [string, 'null'], format: uuid }
+        dateFrom: { type: string, format: date }
+        dateTo: { type: string, format: date }
+        triggerType:
+          type: string
+          enum: [SCHEDULED, ON_DEMAND, RECOMPUTE_ENQUEUED]
+          default: ON_DEMAND
+    AttendanceProcessingRun:
+      type: object
+      required: [runId, status, dateFrom, dateTo]
+      properties:
+        runId: { type: string, format: uuid }
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid }
+        dateFrom: { type: string, format: date }
+        dateTo: { type: string, format: date }
+        triggerType:
+          type: string
+          enum: [SCHEDULED, ON_DEMAND, RECOMPUTE_ENQUEUED]
+        status:
+          type: string
+          enum: [QUEUED, RUNNING, COMPLETED, PARTIAL, FAILED]
+        employeesProcessed: { type: integer, default: 0 }
+        employeesFailed: { type: integer, default: 0 }
+    AttendanceDayAllocation:
+      type: object
+      required: [allocationId, segmentStatus, dayFraction, countsAsPresent]
+      properties:
+        allocationId: { type: string, format: uuid }
+        segmentStatus:
+          type: string
+          enum: [PRESENT, ON_LEAVE, WFH, ON_DUTY, HOLIDAY, WEEKLY_OFF, ABSENT, HALF_DAY, MISSING_PUNCH]
+        dayFraction: { type: number, minimum: 0, maximum: 1 }
+        countsAsPresent: { type: boolean }
+        sourceRefType:
+          type: [string, 'null']
+          enum: [LEAVE_APPLICATION, EXCEPTION, PUNCH, HOLIDAY, SYSTEM, null]
+        sourceRefId: { type: [string, 'null'], format: uuid }
+    AttendanceDaily:
+      type: object
+      required: [attendanceDailyId, employeeId, attendanceDate, status, presentUnits]
+      properties:
+        attendanceDailyId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        attendanceDate: { type: string, format: date }
+        rosterId: { type: [string, 'null'], format: uuid }
+        firstIn: { type: [string, 'null'], format: date-time }
+        lastOut: { type: [string, 'null'], format: date-time }
+        workedMinutes: { type: integer, default: 0 }
+        status: { type: string }
+        presentUnits: { type: number, default: 0 }
+        lateMinutes: { type: integer, default: 0 }
+        earlyExitMinutes: { type: integer, default: 0 }
+        isRegularised: { type: boolean, default: false }
+        leaveApplicationId: { type: [string, 'null'], format: uuid }
+        allocations:
+          type: array
+          items: { $ref: '#/components/schemas/AttendanceDayAllocation' }
+
+    # --- Regularisation ----------------------------------------------------
+    RegularisationCreate:
+      type: object
+      required: [attendanceDailyId, employeeId, requestedStatus, reason]
+      properties:
+        attendanceDailyId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        requestedStatus: { type: string }
+        proposedFirstIn: { type: [string, 'null'], format: date-time }
+        proposedLastOut: { type: [string, 'null'], format: date-time }
+        reason: { type: string }
+        supportingDocumentId: { type: [string, 'null'], format: uuid }
+    Regularisation:
+      allOf:
+        - $ref: '#/components/schemas/RegularisationCreate'
+        - type: object
+          required: [regularisationId, status]
+          properties:
+            regularisationId: { type: string, format: uuid }
+            workflowInstanceId: { type: [string, 'null'], format: uuid }
+            status:
+              type: string
+              enum: [DRAFT, SUBMITTED, APPROVED, REJECTED, CANCELLED]
+
+    # --- Overtime ----------------------------------------------------------
+    OvertimeCreate:
+      type: object
+      required: [employeeId, attendanceDate, otMinutes, otTreatment]
+      properties:
+        employeeId: { type: string, format: uuid }
+        attendanceDate: { type: string, format: date }
+        otMinutes: { type: integer }
+        otTreatment: { type: string, enum: [PAID, COMP_OFF] }
+        rateMultiplier: { type: [number, 'null'] }
+    OvertimeDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [APPROVE, REJECT] }
+        otTreatment: { type: string, enum: [PAID, COMP_OFF] }
+        comment: { type: string }
+    Overtime:
+      allOf:
+        - $ref: '#/components/schemas/OvertimeCreate'
+        - type: object
+          required: [overtimeId, status]
+          properties:
+            overtimeId: { type: string, format: uuid }
+            workflowInstanceId: { type: [string, 'null'], format: uuid }
+            status:
+              type: string
+              enum: [SUBMITTED, APPROVED, REJECTED, PAID, CONVERTED_TO_COMPOFF]
+
+    # --- Attendance exceptions --------------------------------------------
+    AttendanceExceptionCreate:
+      type: object
+      required: [employeeId, exceptionType, startDate, endDate, reason]
+      properties:
+        employeeId: { type: string, format: uuid }
+        exceptionType: { type: string, enum: [WFH, ON_DUTY, TOUR] }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        dayPortion:
+          type: string
+          enum: [FULL, FIRST_HALF, SECOND_HALF]
+          default: FULL
+        locationText: { type: [string, 'null'] }
+        reason: { type: string }
+        supportingDocumentId: { type: [string, 'null'], format: uuid }
+    AttendanceException:
+      allOf:
+        - $ref: '#/components/schemas/AttendanceExceptionCreate'
+        - type: object
+          required: [exceptionId, status]
+          properties:
+            exceptionId: { type: string, format: uuid }
+            workflowInstanceId: { type: [string, 'null'], format: uuid }
+            status:
+              type: string
+              enum: [SUBMITTED, APPROVED, REJECTED, CANCELLED]
+
+    # --- Comp-off ----------------------------------------------------------
+    CompOffBalance:
+      type: object
+      required: [employeeId, balance]
+      properties:
+        employeeId: { type: string, format: uuid }
+        balance: { type: number }
+        expiringSoon: { type: number }
+    CompOffRedeem:
+      type: object
+      required: [employeeId, days]
+      properties:
+        employeeId: { type: string, format: uuid }
+        days: { type: number }
+        againstDate: { type: [string, 'null'], format: date }
+        remarks: { type: [string, 'null'] }
+    CompOffLedgerEntry:
+      type: object
+      required: [compOffEntryId, employeeId, entryType, days, balanceAfter]
+      properties:
+        compOffEntryId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        entryType: { type: string, enum: [EARN, REDEEM, EXPIRE, ADJUST] }
+        days: { type: number }
+        sourceRefType:
+          type: [string, 'null']
+          enum: [OVERTIME, HOLIDAY_WORK, LEAVE_APPLICATION, MANUAL, null]
+        sourceRefId: { type: [string, 'null'], format: uuid }
+        earnedOn: { type: [string, 'null'], format: date }
+        expiresOn: { type: [string, 'null'], format: date }
+        balanceAfter: { type: number }
+        remarks: { type: [string, 'null'] }
+
+    # --- Leave configuration ----------------------------------------------
+    LeaveTypeCreate:
+      type: object
+      required: [leaveCode, name, category, isAccruable, isEncashable, affectsPay, genderEligibility, requiresDocument]
+      properties:
+        leaveCode: { type: string, maxLength: 20, examples: [EL, HPL, COMMUTED, CCL, MAT] }
+        name: { type: string, maxLength: 120 }
+        category: { type: string, enum: [PAID, HALF_PAY, UNPAID, SPECIAL] }
+        isAccruable: { type: boolean }
+        isSanctionBased: { type: boolean, default: false }
+        isEncashable: { type: boolean }
+        isEncashableOnRetirement: { type: boolean, default: false }
+        affectsPay: { type: boolean }
+        genderEligibility: { type: string, enum: [ALL, FEMALE, MALE] }
+        requiresDocument: { type: boolean }
+        debitRatio: { type: number, default: 1.0, description: Units per availed day (COMMUTED = 2.00). }
+        debitsAgainstLeaveTypeId:
+          type: [string, 'null']
+          format: uuid
+          description: Pot debited (COMMUTED → HPL).
+        yearBasis:
+          type: string
+          enum: [CALENDAR, FINANCIAL, CAREER, EVENT]
+          default: CALENDAR
+        sandwichRule:
+          type: string
+          enum: [EXCLUDE, INCLUDE_IF_SANDWICHED, ALWAYS_INCLUDE]
+          default: EXCLUDE
+        requiresReturnToWorkCert: { type: boolean, default: false }
+        maxContinuousDays: { type: [integer, 'null'] }
+    LeaveType:
+      allOf:
+        - $ref: '#/components/schemas/LeaveTypeCreate'
+        - type: object
+          required: [leaveTypeId, status]
+          properties:
+            leaveTypeId: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, INACTIVE] }
+
+    LeaveAccrualPolicyCreate:
+      type: object
+      required: [leaveTypeId, effectiveFrom]
+      properties:
+        leaveTypeId: { type: string, format: uuid }
+        accrualRatePerPeriod: { type: [number, 'null'] }
+        accrualFrequency:
+          type: [string, 'null']
+          enum: [MONTHLY, QUARTERLY, HALF_YEARLY, YEARLY, null]
+        roundingMode:
+          type: [string, 'null']
+          enum: [NONE, UP, DOWN, NEAREST, null]
+        prorationMethod: { type: [string, 'null'] }
+        carryForwardCap: { type: [number, 'null'] }
+        maxBalanceCap: { type: [number, 'null'] }
+        advanceAllowed: { type: boolean, default: false }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: [string, 'null'], format: date }
+    LeaveAccrualPolicy:
+      allOf:
+        - $ref: '#/components/schemas/LeaveAccrualPolicyCreate'
+        - type: object
+          required: [policyId, status]
+          properties:
+            policyId: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, SUPERSEDED, DRAFT] }
+
+    # --- Balances & ledger -------------------------------------------------
+    AccrualRunRequest:
+      type: object
+      required: [leaveYear]
+      properties:
+        leaveYear: { type: integer }
+        leaveTypeId: { type: [string, 'null'], format: uuid }
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid }
+        asOfDate: { type: [string, 'null'], format: date }
+    LeaveBalance:
+      type: object
+      required: [balanceId, employeeId, leaveTypeId, leaveYear, currentBalance, availableBalance, version]
+      properties:
+        balanceId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        leaveTypeId: { type: string, format: uuid }
+        leaveYear: { type: integer }
+        openingBalance: { type: number, default: 0 }
+        accrued: { type: number, default: 0 }
+        availed: { type: number, default: 0 }
+        encashed: { type: number, default: 0 }
+        lapsed: { type: number, default: 0 }
+        reserved: { type: number, default: 0 }
+        currentBalance: { type: number }
+        availableBalance:
+          type: number
+          description: currentBalance − reserved.
+        version: { type: integer, description: Optimistic-lock version. }
+    LeaveLedgerEntry:
+      type: object
+      required: [ledgerEntryId, employeeId, leaveTypeId, leaveYear, entryType, amount, balanceAfter, effectiveDate]
+      properties:
+        ledgerEntryId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        leaveTypeId: { type: string, format: uuid }
+        leaveYear: { type: integer }
+        entryType:
+          type: string
+          enum: [ACCRUAL, OPENING, AVAIL, AVAIL_REVERSAL, ENCASHMENT, LAPSE, CARRY_FORWARD, ADJUSTMENT, HPL_CONVERSION, CLAWBACK]
+        amount: { type: number, description: Signed (+credit / −debit). }
+        balanceAfter: { type: number }
+        sourceRefType:
+          type: [string, 'null']
+          enum: [LEAVE_APPLICATION, ACCRUAL_RUN, YEAR_CLOSE, ENCASHMENT, MANUAL, EXIT_CLAWBACK, null]
+        sourceRefId: { type: [string, 'null'], format: uuid }
+        effectiveDate: { type: string, format: date }
+        remarks: { type: [string, 'null'] }
+    LeaveLedgerAdjustCreate:
+      type: object
+      required: [employeeId, leaveTypeId, leaveYear, amount, reason]
+      properties:
+        employeeId: { type: string, format: uuid }
+        leaveTypeId: { type: string, format: uuid }
+        leaveYear: { type: integer }
+        amount: { type: number, description: Signed adjustment (maker proposes; checker approves via P01). }
+        effectiveDate: { type: [string, 'null'], format: date }
+        reason: { type: string }
+
+    # --- Leave applications ------------------------------------------------
+    LeaveApplicationDay:
+      type: object
+      required: [leaveDate, dayPortion, dayUnits]
+      properties:
+        leaveDate: { type: string, format: date }
+        dayPortion: { type: string, enum: [FULL, FIRST_HALF, SECOND_HALF] }
+        dayUnits: { type: number, enum: [0.5, 1.0] }
+        isNonWorking: { type: boolean, default: false }
+    LeaveApplicationCreate:
+      type: object
+      required: [employeeId, leaveTypeId, startDate, endDate, reason, days]
+      properties:
+        employeeId: { type: string, format: uuid }
+        leaveTypeId: { type: string, format: uuid }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        reason: { type: string }
+        isBackdated: { type: boolean, default: false }
+        contactDuringLeave: { type: [string, 'null'] }
+        supportingDocumentId: { type: [string, 'null'], format: uuid }
+        appliedOnBehalfBy: { type: [string, 'null'], format: uuid }
+        days:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/LeaveApplicationDay' }
+    BalancePreview:
+      type: object
+      properties:
+        before: { type: number }
+        reserved: { type: number }
+        available: { type: number }
+        sandwichCountedDays: { type: number }
+    LeaveApplication:
+      type: object
+      required: [applicationId, applicationNo, employeeId, leaveTypeId, startDate, endDate, totalDays, ledgerDebitUnits, status, srPostingStatus, leaveSpellLineageId]
+      properties:
+        applicationId: { type: string, format: uuid }
+        applicationNo: { type: string, maxLength: 30 }
+        employeeId: { type: string, format: uuid }
+        leaveTypeId: { type: string, format: uuid }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        totalDays: { type: number }
+        ledgerDebitUnits: { type: number, description: totalDays × debitRatio. }
+        reason: { type: string }
+        isBackdated: { type: boolean, default: false }
+        contactDuringLeave: { type: [string, 'null'] }
+        supportingDocumentId: { type: [string, 'null'], format: uuid }
+        reservationId: { type: [string, 'null'], format: uuid }
+        workflowInstanceId: { type: [string, 'null'], format: uuid }
+        status: { $ref: '#/components/schemas/LeaveApplicationStatus' }
+        srPostingStatus: { $ref: '#/components/schemas/SrPostingStatus' }
+        leaveSpellLineageId:
+          type: string
+          format: uuid
+          description: >
+            Stable correlation key for the leave spell, constant across
+            approve→amend→cancel. Minted by G03 and exposed on the signed
+            approved-leave event consumed by G04 (dedupe by
+            `leave_spell_lineage_id + event_sequence`). G03 never writes the SR
+            ledger.
+        returnToWorkStatus:
+          type: [string, 'null']
+          enum: [NOT_REQUIRED, PENDING, CLEARED, null]
+        appliedOnBehalfBy: { type: [string, 'null'], format: uuid }
+        balancePreview: { $ref: '#/components/schemas/BalancePreview' }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/LeaveApplicationDay' }
+    LeaveDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, REJECT, RECOMMEND, SEND_BACK]
+        comment: { type: string }
+        expectedVersion:
+          type: integer
+          description: Balance version the approver last observed; stale → 409 OPTIMISTIC_LOCK_CONFLICT.
+    ReturnToWorkRequest:
+      type: object
+      required: [fitnessCertificateDocumentId]
+      properties:
+        fitnessCertificateDocumentId: { type: string, format: uuid }
+        actualReturnDate: { type: string, format: date }
+        remarks: { type: [string, 'null'] }
+    LeaveConflict:
+      type: object
+      required: [date, employeeIds, conflictCount]
+      properties:
+        date: { type: string, format: date }
+        orgUnitId: { type: string, format: uuid }
+        employeeIds:
+          type: array
+          items: { type: string, format: uuid }
+        conflictCount: { type: integer }
+        thresholdBreached: { type: boolean }
+    TeamCalendarEntry:
+      type: object
+      properties:
+        employeeId: { type: string, format: uuid }
+        date: { type: string, format: date }
+        status: { type: string }
+        leaveTypeCode: { type: [string, 'null'] }
+    TeamCalendar:
+      type: object
+      required: [managerId, month, entries]
+      properties:
+        managerId: { type: string, format: uuid }
+        month: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/TeamCalendarEntry' }
+
+    # --- Year close --------------------------------------------------------
+    YearCloseRequest:
+      type: object
+      required: [leaveYear]
+      properties:
+        leaveYear: { type: integer }
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid }
+    YearCloseCommit:
+      allOf:
+        - $ref: '#/components/schemas/YearCloseRequest'
+        - type: object
+          required: [simulationRunId]
+          properties:
+            simulationRunId:
+              type: string
+              format: uuid
+              description: The prior SIMULATED run being committed.
+    YearCloseRun:
+      type: object
+      required: [closeRunId, leaveYear, runStatus]
+      properties:
+        closeRunId: { type: string, format: uuid }
+        leaveYear: { type: integer }
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid }
+        runStatus: { type: string, enum: [DRAFT, SIMULATED, COMMITTED, FAILED] }
+        employeesProcessed: { type: integer, default: 0 }
+        totalCarried: { type: number, default: 0 }
+        totalLapsed: { type: number, default: 0 }
+        totalConverted: { type: number, default: 0 }
+        simulationReportDocId: { type: [string, 'null'], format: uuid }
+
+    # --- Encashment --------------------------------------------------------
+    EncashmentCreate:
+      type: object
+      required: [employeeId, leaveTypeId, encashmentType, daysRequested, effectiveDate]
+      properties:
+        employeeId: { type: string, format: uuid }
+        leaveTypeId: { type: string, format: uuid }
+        encashmentType: { type: string, enum: [IN_SERVICE, RETIREMENT, LTC] }
+        daysRequested: { type: number }
+        elDaysComponent: { type: [number, 'null'] }
+        hplDaysComponent: { type: [number, 'null'] }
+        ltcBlockRef: { type: [string, 'null'] }
+        effectiveDate: { type: string, format: date }
+    Encashment:
+      allOf:
+        - $ref: '#/components/schemas/EncashmentCreate'
+        - type: object
+          required: [encashmentId, status]
+          properties:
+            encashmentId: { type: string, format: uuid }
+            daysApproved: { type: [number, 'null'] }
+            amountEstimated: { type: [number, 'null'] }
+            workflowInstanceId: { type: [string, 'null'], format: uuid }
+            payrollFeedId: { type: [string, 'null'], format: uuid }
+            status:
+              type: string
+              enum: [SUBMITTED, APPROVED, REJECTED, SETTLED, CANCELLED]
+
+    # --- Payroll feed ------------------------------------------------------
+    PayrollFeedGenerate:
+      type: object
+      required: [payPeriod]
+      properties:
+        payPeriod: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid }
+    PayrollFeedRow:
+      type: object
+      required: [feedId, payPeriod, employeeId, exportStatus]
+      properties:
+        feedId: { type: string, format: uuid }
+        payPeriod: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+        employeeId: { type: string, format: uuid }
+        lwpDays: { type: number, default: 0 }
+        halfPayDays: { type: number, default: 0 }
+        paidOtMinutes: { type: integer, default: 0 }
+        presentUnits: { type: number }
+        encashmentAmount: { type: number, default: 0 }
+        exportStatus: { type: string, enum: [PENDING, EXPORTED, ACKED, FAILED] }
+        isLocked: { type: boolean, default: false }
+        exportedAt: { type: [string, 'null'], format: date-time }
+        g10BatchRef: { type: [string, 'null'] }
+    PayrollFeedAdjustment:
+      type: object
+      required: [adjustmentId, originalFeedId, appliedInPayPeriod, employeeId, adjustmentType, deltaValue, reason, status]
+      properties:
+        adjustmentId: { type: string, format: uuid }
+        originalFeedId: { type: string, format: uuid }
+        appliedInPayPeriod: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+        employeeId: { type: string, format: uuid }
+        adjustmentType:
+          type: string
+          enum: [LWP_DELTA, HALF_PAY_DELTA, OT_DELTA, PRESENT_DELTA, ENCASHMENT_DELTA]
+        deltaValue: { type: number }
+        reason: { type: string }
+        sourceRefType:
+          type: string
+          enum: [REGULARISATION, ROSTER_EDIT, HOLIDAY_EDIT, LEAVE_CANCEL, MANUAL]
+        sourceRefId: { type: [string, 'null'], format: uuid }
+        status: { type: string, enum: [PENDING, EXPORTED, ACKED] }
+    PayrollFeedAck:
+      type: object
+      required: [g10BatchRef]
+      properties:
+        g10BatchRef: { type: string }
+        acceptedCount: { type: [integer, 'null'] }
+
+    # --- Self-service ------------------------------------------------------
+    SelfServiceSummary:
+      type: object
+      properties:
+        employeeId: { type: string, format: uuid }
+        balances:
+          type: array
+          items: { $ref: '#/components/schemas/LeaveBalance' }
+        pendingApplications: { type: integer }
+        upcomingLeaveDays: { type: integer }
+        compOffBalance: { type: number }
+    ApprovalTask:
+      type: object
+      required: [workflowInstanceId, subjectType, subjectRef, stage]
+      properties:
+        workflowInstanceId: { type: string, format: uuid }
+        subjectType:
+          type: string
+          enum: [LEAVE, REGULARISATION, OVERTIME, EXCEPTION, ENCASHMENT, ANOMALY, RETURN_TO_WORK]
+        subjectRef: { type: string, format: uuid }
+        stage: { type: string }
+        employeeId: { type: string, format: uuid }
+        slaDueAt: { type: [string, 'null'], format: date-time }
+    Notification:
+      type: object
+      required: [notificationId, messageId, status]
+      properties:
+        notificationId: { type: string, format: uuid }
+        messageId: { type: string, examples: [MSG-G03-LEAVE-SUBMITTED] }
+        status: { type: string, enum: [UNREAD, READ] }
+        createdAt: { type: string, format: date-time }
+        deepLink: { type: [string, 'null'] }
+
+    # --- Delegations -------------------------------------------------------
+    DelegationCreate:
+      type: object
+      required: [delegatorUserId, delegateUserId, fromDate, toDate]
+      properties:
+        delegatorUserId: { type: string, format: uuid }
+        delegateUserId: { type: string, format: uuid }
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid }
+        requestTypes:
+          type: [array, 'null']
+          items: { type: string, enum: [LEAVE, REGULARISATION, OT, WFH, OD, ENCASHMENT] }
+        fromDate: { type: string, format: date }
+        toDate: { type: string, format: date }
+        autoOnSlaBreach: { type: boolean, default: true }
+    Delegation:
+      allOf:
+        - $ref: '#/components/schemas/DelegationCreate'
+        - type: object
+          required: [delegationId, status]
+          properties:
+            delegationId: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, EXPIRED, REVOKED] }
+
+    # --- Anomaly review ----------------------------------------------------
+    AnomalyReview:
+      type: object
+      required: [reviewId, punchId, employeeId, anomalyType, detectedAt, status]
+      properties:
+        reviewId: { type: string, format: uuid }
+        punchId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        anomalyType:
+          type: string
+          enum: [IMPOSSIBLE_TRAVEL, DUPLICATE_SECOND, GEO_MISMATCH, LOW_LIVENESS, DEVICE_BINDING_MISMATCH]
+        detectedAt: { type: string, format: date-time }
+        reviewerUserId: { type: [string, 'null'], format: uuid }
+        workflowInstanceId: { type: [string, 'null'], format: uuid }
+        status: { $ref: '#/components/schemas/AnomalyStatus' }
+        resolutionNotes: { type: [string, 'null'] }
+    AnomalyDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [CONFIRM_VALID, CONFIRM_FRAUD, ESCALATE]
+        resolutionNotes: { type: [string, 'null'] }
+
+    # --- Consent -----------------------------------------------------------
+    ConsentCreate:
+      type: object
+      required: [employeeId, lawfulBasis, captureTypes, consentStatus]
+      properties:
+        employeeId: { type: string, format: uuid }
+        lawfulBasis:
+          type: string
+          enum: [STATUTORY_DUTY, CONSENT, EMPLOYMENT_CONTRACT]
+        captureTypes:
+          type: array
+          items: { type: string, enum: [BIOMETRIC, GEO, PHOTO] }
+        consentStatus: { type: string, enum: [GRANTED, WITHDRAWN, NOT_REQUIRED] }
+        fallbackMethod:
+          type: [string, 'null']
+          enum: [RFID, MANUAL, OTP, null]
+        consentDocumentId: { type: [string, 'null'], format: uuid }
+        retentionUntil: { type: [string, 'null'], format: date }
+    Consent:
+      allOf:
+        - $ref: '#/components/schemas/ConsentCreate'
+        - type: object
+          required: [consentId]
+          properties:
+            consentId: { type: string, format: uuid }
+            grantedAt: { type: [string, 'null'], format: date-time }
+            withdrawnAt: { type: [string, 'null'], format: date-time }
+    ConsentWithdraw:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+        fallbackMethod:
+          type: [string, 'null']
+          enum: [RFID, MANUAL, OTP, null]
+
+    RetentionPurgeRequest:
+      type: object
+      required: [asOfDate]
+      properties:
+        asOfDate:
+          type: string
+          format: date
+          description: Purge biometric/geo data whose retention_until is on or before this date.
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid }
+        dryRun: { type: boolean, default: false }
+
+    # --- Entitlements ------------------------------------------------------
+    Entitlement:
+      type: object
+      required: [entitlementId, employeeId, leaveTypeId, quotaBasis, totalQuotaDays, consumedDays, remainingDays]
+      properties:
+        entitlementId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        leaveTypeId: { type: string, format: uuid }
+        quotaBasis: { type: string, enum: [CAREER, EVENT, ANNUAL] }
+        totalQuotaDays: { type: number }
+        consumedDays: { type: number, default: 0 }
+        remainingDays: { type: number }
+        eligibilityPredicate:
+          type: [object, 'null']
+          additionalProperties: true
+        validFrom: { type: [string, 'null'], format: date }
+        validTo: { type: [string, 'null'], format: date }
+    EntitlementAdjust:
+      type: object
+      required: [entitlementId, deltaDays, reason]
+      properties:
+        entitlementId: { type: string, format: uuid }
+        deltaDays: { type: number }
+        reason: { type: string }
+
+    # --- Absence programs --------------------------------------------------
+    BalanceForecast:
+      type: object
+      required: [employeeId, asOf, projectedAvailable]
+      properties:
+        employeeId: { type: string, format: uuid }
+        leaveTypeId: { type: [string, 'null'], format: uuid }
+        asOf: { type: string, format: date }
+        currentAvailable: { type: number }
+        scheduledAccrual: { type: number }
+        reservedDeductions: { type: number }
+        projectedAvailable: { type: number }
+    MassLeaveRequest:
+      type: object
+      required: [leaveTypeId, startDate, endDate, scopeOrgUnitId, reason]
+      properties:
+        leaveTypeId: { type: string, format: uuid }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        scopeOrgUnitId: { type: string, format: uuid }
+        reason: { type: string }
+        dayPortion:
+          type: string
+          enum: [FULL, FIRST_HALF, SECOND_HALF]
+          default: FULL

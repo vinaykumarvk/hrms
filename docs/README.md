@@ -81,6 +81,15 @@ docs/
 └── tools/md2docx.py                    ← Markdown → styled .docx converter
 ```
 
+### Downstream build-pipeline artefacts (Phase 4)
+- `architecture.md` — system architecture + 11 ADRs (build-on-PrimeSoft, SR-on-P05, RLS-as-P02, …).
+- `contracts/` — machine-readable contracts: **OpenAPI 3.1** (`openapi/G01–G14.yaml`, 1,182 operations),
+  `auth-matrix.yaml`, `error-taxonomy.yaml` (311 codes), `state-machines.yaml` (73 machines),
+  `dependency-register.yaml`. See `contracts/README.md`.
+- `data-model/` — validated 403-table PostgreSQL schema (core + 14 modules). See `data-model/README.md`.
+- `phased-plan.md` — dependency-ordered build plan (Phase 0 core → G01/G12/G13 → G02/G03 → SR writers → G10/G11 → G14).
+- `review/` — cross-module consistency review + remediation.
+
 **Authoritative set for build:** `docs/brd/v3/` (codes `G01–G14`), read together with
 `docs/brd/PLATFORM_FOUNDATION.md` and `docs/brd/MODULE_RECONCILIATION.md`. The full decision trail for any
 module = its v3 `Alignment with PrimeSoft Platform` + `Amendments (v2 → v3)` sections → its v2

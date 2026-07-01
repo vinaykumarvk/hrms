@@ -1,0 +1,1184 @@
+# =============================================================================
+# HRMS — Consolidated State-Machines Contract (machine-readable)
+# =============================================================================
+# Source of truth: each module's v3 BRD Section "Workflow & State Diagrams"
+#   (G01 §10, G02 §10, G03 §10, G04 §10, G05 §10, G06 §11, G07 §11, G08 §10,
+#    G09 §12, G10 §10, G11 §10, G12 §10, G13 §12, G14 §10)
+# Platform reference: docs/brd/PLATFORM_FOUNDATION.md (P01 workflow engine).
+#
+# runtime values:
+#   P01            -> the transition is a P01 workflow-engine action
+#                     (approve/reject/sendBack/advance/delegate/cancel), each
+#                     idempotent, writing one `workflow_actions` row + P05 audit.
+#                     In-flight instances pin the W.1 definition version they
+#                     started on (Platform §0.3 / §P01).
+#   MODULE_INTERNAL-> the machine is owned/executed by the module (jobs,
+#                     services, saga/outbox), not gated by a P01 approval flow.
+#   HYBRID         -> module owns the domain status; specific transitions are
+#                     P01-gated approvals (called out per-transition).
+#
+# p01_pattern (Platform Appendix D), set only on P01 stages:
+#   SEQUENTIAL | PARALLEL_ALL_OF | PARALLEL_ANY_OF | CONDITIONAL | DYNAMIC_APPROVER
+#
+# side_effects encode: audit (P05), notification (X.2), SR-post (G12 ledger),
+#   and downstream workflow/enqueue effects, grounded in the BRD tables.
+# =============================================================================
+
+meta:
+  version: "v3-consolidated-1"
+  modules_covered: [G01, G02, G03, G04, G05, G06, G07, G08, G09, G10, G11, G12, G13, G14]
+  p01_patterns: [SEQUENTIAL, PARALLEL_ALL_OF, PARALLEL_ANY_OF, CONDITIONAL, DYNAMIC_APPROVER]
+  invariants:
+    - "In-flight P01 instances continue on the workflow definition version they started on; new versions affect only new instances (deprecation, not deletion)."
+    - "Every P01 transition writes one workflow_actions row and a P05 audit row; terminal actions are immutable."
+    - "SoD (maker != checker; reviewer != owner; delegate != applicant) enforced by P01/P02 on all approval transitions."
+    - "G12 service register is append-only: correction/reversal SUPERSEDES; deletion is forbidden (SR_DELETION_FORBIDDEN)."
+
+modules:
+
+  # ===========================================================================
+  # G01 — Employee Profile Management (BRD §10)
+  # ===========================================================================
+  G01:
+    machines:
+      - entity: employee_record
+        description: "employment_status x record_state lifecycle; driven by cross-module events (G03/G05/G09/retirement)."
+        runtime: HYBRID
+        states: [ACTIVE, PROVISIONAL, ON_LEAVE, SUSPENDED, TRANSFERRED, RETIRED, RESIGNED, TERMINATED, DECEASED, ARCHIVED, PURGE_PENDING]
+        initial: [ACTIVE, PROVISIONAL]
+        terminal: [TERMINATED, DECEASED, PURGE_PENDING]
+        transitions:
+          - {from: null, action: "create on hire (STRICT)", to: ACTIVE, trigger: HR, guard: "FR-001 validations pass", side_effects: "record_state=ACTIVE; P05 audit"}
+          - {from: null, action: "create via migration", to: PROVISIONAL, trigger: SYSTEM, guard: "FR-017 MIGRATION profile", side_effects: "record_state=PROVISIONAL; login disabled"}
+          - {from: PROVISIONAL, action: "remediate & promote", to: ACTIVE, trigger: HR, guard: "FR-017 STRICT re-validation passes", side_effects: "record_state=ACTIVE"}
+          - {from: ACTIVE, action: "leave sanctioned (G03)", to: ON_LEAVE, trigger: SYSTEM, guard: "approved long leave", side_effects: "cross-module event from G03"}
+          - {from: ON_LEAVE, action: "rejoin", to: ACTIVE, trigger: SYSTEM, guard: "leave ended", side_effects: ""}
+          - {from: ACTIVE, action: "suspension (G09)", to: SUSPENDED, trigger: SYSTEM, guard: "disciplinary order", side_effects: "from G09"}
+          - {from: SUSPENDED, action: "revoke / reinstate", to: ACTIVE, trigger: SYSTEM, guard: "order revoked", side_effects: ""}
+          - {from: [ACTIVE, ON_LEAVE], action: "transfer out (G05)", to: TRANSFERRED, trigger: SYSTEM, guard: "relieving complete", side_effects: "from G05"}
+          - {from: TRANSFERRED, action: "join at destination", to: ACTIVE, trigger: SYSTEM, guard: "joining recorded", side_effects: ""}
+          - {from: [ACTIVE, SUSPENDED], action: "separate (retire)", to: RETIRED, trigger: SYSTEM, guard: "FR-018 approved (G11)", side_effects: ""}
+          - {from: ACTIVE, action: "separate (resign)", to: RESIGNED, trigger: SYSTEM, guard: "FR-018 approved", side_effects: ""}
+          - {from: [ACTIVE, SUSPENDED], action: "terminate", to: TERMINATED, trigger: SYSTEM, guard: "FR-018 + disciplinary", side_effects: "no reactivation (policy-gated)"}
+          - {from: any, action: "death recorded", to: DECEASED, trigger: HR, guard: "FR-018 + FR-024 succession", side_effects: "locks self-service"}
+          - {from: [RETIRED, RESIGNED], action: "rehire", to: ACTIVE, trigger: HR, guard: "reactivation policy permits", side_effects: ""}
+          - {from: [RETIRED, RESIGNED, TERMINATED, DECEASED], action: "retention horizon reached", to: ARCHIVED, trigger: SYSTEM, guard: "FR-021", side_effects: "record_state=ARCHIVED"}
+          - {from: ARCHIVED, action: "purge approved", to: PURGE_PENDING, trigger: DPO, guard: "no ACTIVE legal_holds + DPO sign-off (FR-021)", side_effects: "record_state=PURGE_PENDING"}
+
+      - entity: bank_account
+        description: "4-eyes maker-checker for bank account details."
+        runtime: P01
+        states: [PENDING_APPROVAL, ACTIVE, REJECTED]
+        initial: [PENDING_APPROVAL]
+        terminal: [REJECTED]
+        transitions:
+          - {from: null, action: "create (maker submits)", to: PENDING_APPROVAL, trigger: MAKER, guard: "", side_effects: "P05 audit", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_APPROVAL, action: "approve", to: ACTIVE, trigger: CHECKER, guard: "checker != maker", side_effects: "activate account", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_APPROVAL, action: "reject", to: REJECTED, trigger: CHECKER, guard: "checker decision", side_effects: "notify", p01_pattern: SEQUENTIAL}
+          - {from: ACTIVE, action: "verify (penny-drop/manual)", to: ACTIVE, trigger: SYSTEM, guard: "", side_effects: "verified=true"}
+          - {from: ACTIVE, action: "replace (new primary approved)", to: ACTIVE, trigger: SYSTEM, guard: "new primary approved", side_effects: "prior demoted"}
+
+      - entity: governed_field_change
+        description: "Governed-attribute change with proof (FR-022), 4-eyes."
+        runtime: P01
+        states: [SUBMITTED, UNDER_REVIEW, APPROVED, APPLIED, REJECTED]
+        initial: [SUBMITTED]
+        terminal: [APPLIED, REJECTED]
+        transitions:
+          - {from: null, action: "submit with proof", to: SUBMITTED, trigger: EMPLOYEE, guard: "proof attached", side_effects: "-> UNDER_REVIEW", p01_pattern: SEQUENTIAL}
+          - {from: UNDER_REVIEW, action: "approve (4-eyes)", to: APPROVED, trigger: CHECKER, guard: "checker != maker", side_effects: "-> APPLIED; writes attribute_history", p01_pattern: SEQUENTIAL}
+          - {from: APPROVED, action: "apply", to: APPLIED, trigger: SYSTEM, guard: "", side_effects: "attribute_history written; P05 audit"}
+          - {from: UNDER_REVIEW, action: "reject", to: REJECTED, trigger: CHECKER, guard: "", side_effects: "", p01_pattern: SEQUENTIAL}
+
+      - entity: data_principal_request
+        description: "DPDP data-principal request + legal-hold overlay (FR-020/021)."
+        runtime: MODULE_INTERNAL
+        states: [RECEIVED, IN_REVIEW, ACTIONED, CLOSED, REJECTED, ESCALATED]
+        initial: [RECEIVED]
+        terminal: [CLOSED, REJECTED]
+        transitions:
+          - {from: null, action: "receive", to: RECEIVED, trigger: DPO, guard: "", side_effects: "-> IN_REVIEW; clock starts"}
+          - {from: IN_REVIEW, action: "action (no hold/retention)", to: ACTIONED, trigger: DPO, guard: "no active hold", side_effects: "-> CLOSED"}
+          - {from: IN_REVIEW, action: "erasure blocked by hold/retention", to: REJECTED, trigger: DPO, guard: "active legal_hold or retention", side_effects: "precedence recorded"}
+          - {from: IN_REVIEW, action: "SLA breached", to: ESCALATED, trigger: SYSTEM, guard: "SLA exceeded", side_effects: "escalation notify"}
+
+      - entity: import_batch
+        description: "Bulk import batch (STRICT/MIGRATION) with PROVISIONAL rows."
+        runtime: MODULE_INTERNAL
+        states: [UPLOADED, VALIDATING, VALIDATED, COMMITTING, COMMITTED, ROLLED_BACK, FAILED]
+        initial: [UPLOADED]
+        terminal: [ROLLED_BACK, FAILED]
+        transitions:
+          - {from: null, action: "create (STRICT/MIGRATION)", to: UPLOADED, trigger: HR, guard: "", side_effects: ""}
+          - {from: UPLOADED, action: "validate", to: VALIDATED, trigger: SYSTEM, guard: "", side_effects: "rows: VALID/PROVISIONAL/ERROR"}
+          - {from: VALIDATED, action: "commit", to: COMMITTED, trigger: HR, guard: "", side_effects: "PROVISIONAL rows login-disabled, queued"}
+          - {from: any, action: "error", to: FAILED, trigger: SYSTEM, guard: "", side_effects: "alert"}
+          - {from: COMMITTED, action: "rollback (in window)", to: ROLLED_BACK, trigger: HR, guard: "within rollback window", side_effects: ""}
+
+  # ===========================================================================
+  # G02 — Personal-Details Modification Workflow (BRD §10)
+  # ===========================================================================
+  G02:
+    machines:
+      - entity: change_request
+        description: "Personal-details change request lifecycle, driven by P01."
+        runtime: P01
+        states: [DRAFT, PENDING_DOCS, NOTICE_HOLD, OBJECTED, SUBMITTED, IN_REVIEW, RETURNED, APPROVED, REJECTED, WITHDRAWN, COMMITTED, COMMIT_FAILED, PARTIALLY_COMMITTED, REVERSED]
+        initial: [DRAFT]
+        terminal: [REJECTED, WITHDRAWN, REVERSED]
+        transitions:
+          - {from: null, action: "create draft", to: DRAFT, trigger: REQUESTER, guard: "P02-authorized; status-gate ALLOW/ELEVATE", side_effects: ""}
+          - {from: DRAFT, action: "submit (sensitive self-service)", to: SUBMITTED, trigger: REQUESTER, guard: "valid step-up (FR-023)", side_effects: "P01 startInstance", p01_pattern: SEQUENTIAL}
+          - {from: DRAFT, action: "submit (HR_ON_BEHALF/BULK)", to: NOTICE_HOLD, trigger: HR, guard: "data-subject notice dispatched (FR-017)", side_effects: "X.2 notice"}
+          - {from: DRAFT, action: "submit (docs/portal needed)", to: PENDING_DOCS, trigger: REQUESTER, guard: "required docs not yet verified", side_effects: ""}
+          - {from: NOTICE_HOLD, action: "window elapsed / confirmed", to: SUBMITTED, trigger: SYSTEM, guard: "notice resolved, no objection", side_effects: ""}
+          - {from: NOTICE_HOLD, action: "data subject objects", to: OBJECTED, trigger: DATA_SUBJECT, guard: "objection raised (FR-021)", side_effects: ""}
+          - {from: PENDING_DOCS, action: "all docs+portal verified", to: IN_REVIEW, trigger: SYSTEM, guard: "VERIFIED+CLEAN", side_effects: ""}
+          - {from: SUBMITTED, action: "first P01 stage opened", to: IN_REVIEW, trigger: SYSTEM, guard: "route has stages", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: SUBMITTED, action: "auto-apply (LOW, non-auth-bearing)", to: APPROVED, trigger: SYSTEM, guard: "auto_apply_on_low; not auth-bearing", side_effects: "", p01_pattern: CONDITIONAL}
+          - {from: IN_REVIEW, action: "approve (all stages)", to: APPROVED, trigger: APPROVER, guard: "route complete + e-sign + fraud cleared", side_effects: "P05 audit", p01_pattern: SEQUENTIAL}
+          - {from: [IN_REVIEW, PENDING_DOCS, NOTICE_HOLD], action: "sendBack", to: RETURNED, trigger: APPROVER, guard: "comment required", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: [IN_REVIEW, PENDING_DOCS], action: "reject", to: REJECTED, trigger: APPROVER, guard: "comment required", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: any, action: "fraud confirmed", to: REJECTED, trigger: SYSTEM, guard: "CONFIRMED_FRAUD (FR-019)", side_effects: ""}
+          - {from: OBJECTED, action: "objection dismissed", to: IN_REVIEW, trigger: GRIEVANCE_OFFICER, guard: "dismissal (FR-021)", side_effects: ""}
+          - {from: OBJECTED, action: "objection upheld (in-flight)", to: REJECTED, trigger: GRIEVANCE_OFFICER, guard: "per resolution", side_effects: ""}
+          - {from: RETURNED, action: "resubmit", to: SUBMITTED, trigger: REQUESTER, guard: "re-gate + re-route", side_effects: "P01 re-trigger", p01_pattern: SEQUENTIAL}
+          - {from: any, action: "withdraw", to: WITHDRAWN, trigger: REQUESTER, guard: "requester owns", side_effects: "P01 cancel"}
+          - {from: APPROVED, action: "commit success (effective-dated)", to: COMMITTED, trigger: SYSTEM, guard: "hashes valid; G01/M01 applied", side_effects: "outbox saga; G01 posts SR + retro enqueued"}
+          - {from: APPROVED, action: "commit fail (G01 down)", to: COMMIT_FAILED, trigger: SYSTEM, guard: "upstream error", side_effects: "alert; X.1 retry"}
+          - {from: APPROVED, action: "stale at commit", to: RETURNED, trigger: SYSTEM, guard: "hash mismatch (ERR-G02-STALE)", side_effects: ""}
+          - {from: COMMIT_FAILED, action: "retry success", to: COMMITTED, trigger: SYSTEM, guard: "G01/M01 available", side_effects: ""}
+          - {from: COMMITTED, action: "partial (some items failed)", to: PARTIALLY_COMMITTED, trigger: SYSTEM, guard: "some items FAILED", side_effects: ""}
+          - {from: COMMITTED, action: "break-glass reversal executed", to: REVERSED, trigger: DUAL_AUTH, guard: "dual-auth reversal (FR-020); auth2 != maker, P02 SoD", side_effects: "reversing G12 SR + reversing retro (G10/G11/G06); P05 security_audit_log"}
+
+      - entity: p01_stage
+        description: "Generic P01 approval stage state (shared runtime overlay)."
+        runtime: P01
+        states: [PENDING, APPROVED, REJECTED, RETURNED, SKIPPED]
+        initial: [PENDING]
+        terminal: [APPROVED, REJECTED, RETURNED, SKIPPED]
+        transitions:
+          - {from: PENDING, action: "approve", to: APPROVED, trigger: APPROVER, guard: "idempotent advance", side_effects: "workflow_actions row; P05", p01_pattern: SEQUENTIAL}
+          - {from: PENDING, action: "reject", to: REJECTED, trigger: APPROVER, guard: "", side_effects: "workflow_actions row"}
+          - {from: PENDING, action: "sendBack", to: RETURNED, trigger: APPROVER, guard: "", side_effects: "workflow_actions row"}
+          - {from: PENDING, action: "loser / escalation skip", to: SKIPPED, trigger: SYSTEM, guard: "PARALLEL_ANY_OF loser or escalation", side_effects: "", p01_pattern: PARALLEL_ANY_OF}
+
+  # ===========================================================================
+  # G03 — Attendance & Leave Management (BRD §10, runs on P01)
+  # ===========================================================================
+  G03:
+    machines:
+      - entity: leave_application
+        description: "Leave application; approval on P01 with reporting-chain routing."
+        runtime: P01
+        states: [DRAFT, SUBMITTED, RECOMMENDED, APPROVED, REJECTED, WITHDRAWN, CANCELLED]
+        initial: [DRAFT]
+        terminal: [REJECTED, WITHDRAWN, CANCELLED]
+        transitions:
+          - {from: null, action: "save draft", to: DRAFT, trigger: EMPLOYEE, guard: "", side_effects: ""}
+          - {from: DRAFT, action: "submit (P01 startInstance)", to: SUBMITTED, trigger: EMPLOYEE, guard: "", side_effects: "create leave_reservations hold; reserved netted; X.2 notify approver", p01_pattern: SEQUENTIAL}
+          - {from: SUBMITTED, action: "recommend (P01 advance)", to: RECOMMENDED, trigger: MANAGER, guard: "multi-step; delegate-aware", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: [SUBMITTED, RECOMMENDED], action: "approve (P01)", to: APPROVED, trigger: SANCTIONING_AUTHORITY, guard: "balance lock (FOR UPDATE+version)", side_effects: "consume reservation -> ledger debit -> recompute enqueue -> G04 SR enqueue -> X.2 notify", p01_pattern: SEQUENTIAL}
+          - {from: [SUBMITTED, RECOMMENDED], action: "reject (P01)", to: REJECTED, trigger: APPROVER, guard: "", side_effects: "release reservation; notify", p01_pattern: SEQUENTIAL}
+          - {from: SUBMITTED, action: "withdraw", to: WITHDRAWN, trigger: EMPLOYEE, guard: "", side_effects: "release reservation"}
+          - {from: SUBMITTED, action: "reservation TTL expiry (JOB-G03-RESERVATION-TTL)", to: DRAFT, trigger: SYSTEM, guard: "", side_effects: "auto-release (R1)"}
+          - {from: APPROVED, action: "cancel (future)", to: CANCELLED, trigger: EMPLOYEE, guard: "", side_effects: "AVAIL_REVERSAL; G04 SR reversal; recompute enqueue; feed adjustment if locked"}
+
+      - entity: regularisation
+        description: "Attendance regularisation request; P01-approved."
+        runtime: P01
+        states: [DRAFT, SUBMITTED, APPROVED, REJECTED, CANCELLED]
+        initial: [DRAFT]
+        terminal: [APPROVED, REJECTED, CANCELLED]
+        transitions:
+          - {from: DRAFT, action: "submit", to: SUBMITTED, trigger: EMPLOYEE, guard: "", side_effects: "X.2 notify manager/delegate", p01_pattern: SEQUENTIAL}
+          - {from: SUBMITTED, action: "approve (P01)", to: APPROVED, trigger: MANAGER, guard: "", side_effects: "enqueue recompute (is_regularised=true); feed adjustment if locked", p01_pattern: SEQUENTIAL}
+          - {from: SUBMITTED, action: "reject (P01)", to: REJECTED, trigger: MANAGER, guard: "", side_effects: "reason logged (P05)", p01_pattern: SEQUENTIAL}
+          - {from: SUBMITTED, action: "cancel", to: CANCELLED, trigger: EMPLOYEE, guard: "", side_effects: ""}
+
+      - entity: overtime
+        description: "Overtime request; paid or converted to comp-off."
+        runtime: P01
+        states: [SUBMITTED, APPROVED_PAID, CONVERTED_TO_COMPOFF, REJECTED]
+        initial: [SUBMITTED]
+        terminal: [APPROVED_PAID, CONVERTED_TO_COMPOFF, REJECTED]
+        transitions:
+          - {from: SUBMITTED, action: "approve(PAID)", to: APPROVED_PAID, trigger: MANAGER, guard: "", side_effects: "feed paid_ot_minutes", p01_pattern: SEQUENTIAL}
+          - {from: SUBMITTED, action: "approve(COMP_OFF)", to: CONVERTED_TO_COMPOFF, trigger: MANAGER, guard: "", side_effects: "comp_off_ledger EARN", p01_pattern: SEQUENTIAL}
+          - {from: SUBMITTED, action: "reject", to: REJECTED, trigger: MANAGER, guard: "", side_effects: ""}
+
+      - entity: punch_anomaly_review
+        description: "Anomalous-punch review case (R10); reviewer != owner."
+        runtime: MODULE_INTERNAL
+        states: [OPEN, CONFIRMED_VALID, CONFIRMED_FRAUD, ESCALATED]
+        initial: [OPEN]
+        terminal: [CONFIRMED_VALID, CONFIRMED_FRAUD]
+        transitions:
+          - {from: null, action: "open (flagged)", to: OPEN, trigger: SYSTEM, guard: "", side_effects: "punch excluded pending review"}
+          - {from: OPEN, action: "confirm valid", to: CONFIRMED_VALID, trigger: ANOMALY_REVIEWER, guard: "reviewer != owner (P02 SoD)", side_effects: "release punch to recompute"}
+          - {from: OPEN, action: "confirm fraud", to: CONFIRMED_FRAUD, trigger: ANOMALY_REVIEWER, guard: "reviewer != owner", side_effects: "exclude punch; X.2 notify HR/Security"}
+          - {from: OPEN, action: "escalate", to: ESCALATED, trigger: ANOMALY_REVIEWER, guard: "", side_effects: "route to HR/Security"}
+
+      - entity: consent_record
+        description: "Biometric/geo consent basis (R9; <-> P05 consent_records)."
+        runtime: MODULE_INTERNAL
+        states: [GRANTED, NOT_REQUIRED, WITHDRAWN, PURGED]
+        initial: [GRANTED, NOT_REQUIRED]
+        terminal: [PURGED]
+        transitions:
+          - {from: null, action: "record basis/consent", to: GRANTED, trigger: EMPLOYEE, guard: "", side_effects: "enable biometric/geo capture"}
+          - {from: GRANTED, action: "withdraw", to: WITHDRAWN, trigger: EMPLOYEE, guard: "", side_effects: "engage fallback_method for future punches"}
+          - {from: any, action: "retention expiry (JOB-G03-RETENTION-PURGE)", to: PURGED, trigger: SYSTEM, guard: "", side_effects: "biometric/geo anonymised/deleted"}
+
+      - entity: year_close_run
+        description: "Leave year-close batch (internal simulate/commit)."
+        runtime: MODULE_INTERNAL
+        states: [DRAFT, SIMULATED, COMMITTED, FAILED]
+        initial: [DRAFT]
+        terminal: [COMMITTED, FAILED]
+        transitions:
+          - {from: DRAFT, action: "simulate", to: SIMULATED, trigger: HR, guard: "", side_effects: "report, no writes"}
+          - {from: SIMULATED, action: "commit", to: COMMITTED, trigger: HR, guard: "", side_effects: "ledger CF/LAPSE/CONVERSION/OPENING + new balances (ordered)"}
+          - {from: [DRAFT, SIMULATED], action: "error", to: FAILED, trigger: SYSTEM, guard: "", side_effects: "rollback; alert"}
+
+  # ===========================================================================
+  # G04 — Leave-SR Integration (BRD §10)
+  # ===========================================================================
+  G04:
+    machines:
+      - entity: sr_outbox_event
+        description: "SR-affecting event relay (lease/reaper; ordering guard)."
+        runtime: MODULE_INTERNAL
+        states: [PENDING, EXCLUDED, BLOCKED_AWAITING_ORIGINAL, IN_FLIGHT, POSTED, FAILED, DEAD_LETTERED]
+        initial: [PENDING, EXCLUDED, BLOCKED_AWAITING_ORIGINAL]
+        terminal: [POSTED, EXCLUDED]
+        transitions:
+          - {from: null, action: "SR-affecting leave approved/cancelled/amended (G03)", to: PENDING, trigger: SYSTEM, guard: "", side_effects: "signed outbox row in tx (FR-01); P05 capture"}
+          - {from: null, action: "non-SR leave (EXCLUDED_NON_SR)", to: EXCLUDED, trigger: SYSTEM, guard: "", side_effects: "deliberate no-op; never DLQ'd (R8)"}
+          - {from: null, action: "correction whose original not POSTED", to: BLOCKED_AWAITING_ORIGINAL, trigger: SYSTEM, guard: "ordering guard (R5)", side_effects: ""}
+          - {from: BLOCKED_AWAITING_ORIGINAL, action: "original reaches POSTED", to: PENDING, trigger: SYSTEM, guard: "posting-eligible", side_effects: ""}
+          - {from: PENDING, action: "JOB-G04-RELAY claims (in-order)", to: IN_FLIGHT, trigger: SYSTEM, guard: "next_attempt due", side_effects: "partition lease; mapping pinned"}
+          - {from: IN_FLIGHT, action: "G12 success (X.3)", to: POSTED, trigger: SYSTEM, guard: "G12 ack", side_effects: "sr_event_id stored; posting_log SUCCESS"}
+          - {from: IN_FLIGHT, action: "retryable failure", to: FAILED, trigger: SYSTEM, guard: "", side_effects: "attempt++; available_at=backoff"}
+          - {from: IN_FLIGHT, action: "lease expired (JOB-G04-REAPER, FR-15)", to: FAILED, trigger: SYSTEM, guard: "", side_effects: "attempt++; lease released; X.2 alert (R1)"}
+          - {from: FAILED, action: "available_at reached", to: IN_FLIGHT, trigger: SYSTEM, guard: "", side_effects: "re-claim"}
+          - {from: IN_FLIGHT, action: "permanent failure", to: DEAD_LETTERED, trigger: SYSTEM, guard: "", side_effects: "DLQ row created"}
+          - {from: FAILED, action: "attempt_count > max_retries", to: DEAD_LETTERED, trigger: SYSTEM, guard: "", side_effects: "DLQ row created"}
+          - {from: DEAD_LETTERED, action: "replay (resolved, P01)", to: PENDING, trigger: OPERATOR, guard: "same lineage dedupe key (FR-05/12)", side_effects: "", p01_pattern: SEQUENTIAL}
+
+      - entity: dlq_item
+        description: "Dead-letter queue item review (maker-checker)."
+        runtime: P01
+        states: [OPEN, IN_REVIEW, RESOLVED_REPLAYED, RESOLVED_DISCARDED]
+        initial: [OPEN]
+        terminal: [RESOLVED_REPLAYED, RESOLVED_DISCARDED]
+        transitions:
+          - {from: OPEN, action: "assign", to: IN_REVIEW, trigger: OPERATOR, guard: "", side_effects: ""}
+          - {from: IN_REVIEW, action: "replay (P01 approved)", to: RESOLVED_REPLAYED, trigger: CHECKER, guard: "mapping coverage / re-sign present", side_effects: "closed after POSTED", p01_pattern: SEQUENTIAL}
+          - {from: IN_REVIEW, action: "discard (P01 approved)", to: RESOLVED_DISCARDED, trigger: CHECKER, guard: "justification required", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: IN_REVIEW, action: "checker rejects", to: IN_REVIEW, trigger: CHECKER, guard: "", side_effects: "rejection note", p01_pattern: SEQUENTIAL}
+
+      - entity: reconciliation_finding
+        description: "SR reconciliation finding remediation (maker-checker)."
+        runtime: P01
+        states: [OPEN, REMEDIATION_PROPOSED, APPROVED, APPLIED, WAIVED]
+        initial: [OPEN]
+        terminal: [APPLIED, WAIVED]
+        transitions:
+          - {from: OPEN, action: "propose remediation", to: REMEDIATION_PROPOSED, trigger: MAKER, guard: "", side_effects: "-> P01", p01_pattern: SEQUENTIAL}
+          - {from: REMEDIATION_PROPOSED, action: "checker approves", to: APPROVED, trigger: CHECKER, guard: "maker != checker", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: APPROVED, action: "apply succeeds + re-check clean", to: APPLIED, trigger: SYSTEM, guard: "", side_effects: "correction appended / link reconstructed"}
+          - {from: APPROVED, action: "apply fails", to: OPEN, trigger: SYSTEM, guard: "", side_effects: "error surfaced"}
+          - {from: [OPEN, REMEDIATION_PROPOSED], action: "waive", to: WAIVED, trigger: CHECKER, guard: "justification required", side_effects: ""}
+
+      - entity: historical_batch
+        description: "Historical leave batch adjudication (P06 provisional)."
+        runtime: HYBRID
+        states: [STAGED, VALIDATED, APPROVED, POSTED, PARTIALLY_POSTED, REJECTED]
+        initial: [STAGED]
+        terminal: [POSTED, PARTIALLY_POSTED, REJECTED]
+        transitions:
+          - {from: STAGED, action: "validate (P06)", to: VALIDATED, trigger: SYSTEM, guard: "dry-run gate", side_effects: "records classified + confidence assigned"}
+          - {from: VALIDATED, action: "checker approves (P01)", to: APPROVED, trigger: CHECKER, guard: "maker != checker", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: APPROVED, action: "post (all valid succeed)", to: POSTED, trigger: SYSTEM, guard: "idempotent (deterministic lineage)", side_effects: "low-confidence -> PROVISIONAL records"}
+          - {from: APPROVED, action: "post (some fail)", to: PARTIALLY_POSTED, trigger: SYSTEM, guard: "", side_effects: "failed retained (P06 source-row log)"}
+          - {from: [STAGED, VALIDATED], action: "reject batch", to: REJECTED, trigger: CHECKER, guard: "justification", side_effects: ""}
+
+  # ===========================================================================
+  # G05 — Transfer / Relieving / Joining (BRD §10)
+  # ===========================================================================
+  G05:
+    machines:
+      - entity: transfer_order
+        description: "Transfer order lifecycle; approval on P01; clearance is a PARALLEL_ALL_OF instance."
+        runtime: P01
+        states: [DRAFT, PENDING_APPROVAL, APPROVED, PUBLISHED, SERVED, RELIEVING_IN_PROGRESS, STAY_HOLD, RELIEVED, IN_TRANSIT, JOINED, LATE_JOINING_REVIEW, REVERTED_TO_SOURCE, ABANDONED, AMENDED, CANCELLED, REVOKED]
+        initial: [DRAFT]
+        terminal: [JOINED, REVERTED_TO_SOURCE, ABANDONED, CANCELLED, REVOKED]
+        transitions:
+          - {from: DRAFT, action: "submit-for-approval", to: PENDING_APPROVAL, trigger: HR, guard: "eligibility != hard-block", side_effects: "P01 instance opened", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_APPROVAL, action: "approve", to: APPROVED, trigger: CHECKER, guard: "maker != checker; re-eligibility pass", side_effects: "gapless order_no; PDF (G13)", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_APPROVAL, action: "reject", to: CANCELLED, trigger: CHECKER, guard: "", side_effects: "notify (X.2)", p01_pattern: SEQUENTIAL}
+          - {from: APPROVED, action: "publish", to: PUBLISHED, trigger: HR, guard: "PDF present", side_effects: "SR TRANSFER (/sr/ingest); clearance PARALLEL_ALL_OF created; service initiated"}
+          - {from: PUBLISHED, action: "serve/acknowledge", to: SERVED, trigger: SYSTEM, guard: "", side_effects: "served_on_date; relieve_by from served date"}
+          - {from: SERVED, action: "start-relieving", to: RELIEVING_IN_PROGRESS, trigger: HR, guard: "served/deemed-served present", side_effects: ""}
+          - {from: any, action: "hold (representation/stay)", to: STAY_HOLD, trigger: AUTHORITY, guard: "representation upheld / court stay", side_effects: "hold_active=true; blocks transitions"}
+          - {from: STAY_HOLD, action: "vacate", to: SERVED, trigger: AUTHORITY, guard: "stay vacated/expired", side_effects: "hold_active=false; returns to prior status"}
+          - {from: RELIEVING_IN_PROGRESS, action: "issue-relieving / deemed-relief", to: RELIEVED, trigger: HR, guard: "clearance cleared/deemed (ALL_OF join) + handover accepted", side_effects: "relieving order; pay-continuity (G10); LPC; SR RELIEVING; custody set; reservation VACATED_ON_RELIEF", p01_pattern: PARALLEL_ALL_OF}
+          - {from: RELIEVED, action: "enter-transit", to: IN_TRANSIT, trigger: SYSTEM, guard: "", side_effects: "transit counter; custodian owns headcount"}
+          - {from: IN_TRANSIT, action: "confirm-joining", to: JOINED, trigger: HR, guard: "reservation re-check; mutual pair ok", side_effects: "joining report; pay-continuity resume; G01 posting update; SR JOINING; reservation FILLED_ON_JOIN"}
+          - {from: IN_TRANSIT, action: "late-joining review", to: LATE_JOINING_REVIEW, trigger: SYSTEM, guard: "transit > admissible+grace", side_effects: "review queue"}
+          - {from: LATE_JOINING_REVIEW, action: "revert", to: REVERTED_TO_SOURCE, trigger: AUTHORITY, guard: "authority decide (P01)", side_effects: "restore source posting/custody (G01)", p01_pattern: SEQUENTIAL}
+          - {from: LATE_JOINING_REVIEW, action: "abandon", to: ABANDONED, trigger: AUTHORITY, guard: "authority decide (P01)", side_effects: "continuity break; G09 trigger; pay status", p01_pattern: SEQUENTIAL}
+          - {from: [PUBLISHED, SERVED, RELIEVING_IN_PROGRESS], action: "amend", to: AMENDED, trigger: HR, guard: "pre-relief", side_effects: "supersede; new revision; SR reversal (*_CANCELLED, is_reversal=true)"}
+          - {from: [PUBLISHED, SERVED, RELIEVING_IN_PROGRESS], action: "cancel", to: CANCELLED, trigger: HR, guard: "pre-relief", side_effects: "reverse clearance/handover; release reservation"}
+          - {from: [RELIEVED, IN_TRANSIT, JOINED], action: "revoke", to: REVOKED, trigger: AUTHORITY, guard: "authority approve (P01)", side_effects: "SR reversal; pay/G01 reversal", p01_pattern: SEQUENTIAL}
+
+      - entity: clearance_checklist
+        description: "No-dues clearance checklist (P01 PARALLEL_ALL_OF; SLA/deemed)."
+        runtime: P01
+        states: [OPEN, IN_PROGRESS, BLOCKED, CLEARED, CLEARED_WITH_DUES, CLEARED_WITH_DEEMED, CANCELLED]
+        initial: [OPEN]
+        terminal: [CLEARED, CLEARED_WITH_DUES, CLEARED_WITH_DEEMED, CANCELLED]
+        p01_pattern: PARALLEL_ALL_OF
+        transitions:
+          - {from: OPEN, action: "first branch updated", to: IN_PROGRESS, trigger: DEPT, guard: "", side_effects: "", p01_pattern: PARALLEL_ALL_OF}
+          - {from: IN_PROGRESS, action: "branch dues outstanding", to: BLOCKED, trigger: DEPT, guard: "", side_effects: ""}
+          - {from: IN_PROGRESS, action: "all branches cleared (ALL_OF join)", to: CLEARED, trigger: SYSTEM, guard: "no dues", side_effects: "", p01_pattern: PARALLEL_ALL_OF}
+          - {from: BLOCKED, action: "dues recovery linked", to: CLEARED_WITH_DUES, trigger: HR, guard: "recovery_ref set", side_effects: ""}
+          - {from: IN_PROGRESS, action: "all branches cleared/deemed (ALL_OF join)", to: CLEARED_WITH_DEEMED, trigger: AUTHORITY, guard: ">=1 deemed after SLA+escalation exhausted", side_effects: "", p01_pattern: PARALLEL_ALL_OF}
+          - {from: any, action: "order cancelled", to: CANCELLED, trigger: SYSTEM, guard: "", side_effects: ""}
+
+      - entity: joining_report
+        description: "Joining report verification at destination."
+        runtime: HYBRID
+        states: [DRAFT, SUBMITTED, UNDER_VERIFICATION, JOINED_CONFIRMED, LATE_JOINING_REVIEW, ABANDONED]
+        initial: [DRAFT]
+        terminal: [JOINED_CONFIRMED, ABANDONED]
+        transitions:
+          - {from: DRAFT, action: "submit", to: SUBMITTED, trigger: EMPLOYEE, guard: "order IN_TRANSIT", side_effects: ""}
+          - {from: SUBMITTED, action: "HR verify", to: UNDER_VERIFICATION, trigger: HR, guard: "", side_effects: ""}
+          - {from: UNDER_VERIFICATION, action: "confirm", to: JOINED_CONFIRMED, trigger: HR, guard: "transit within admissible OR authority review done; reservation re-check ok", side_effects: ""}
+          - {from: UNDER_VERIFICATION, action: "flag late", to: LATE_JOINING_REVIEW, trigger: HR, guard: "transit > admissible+grace", side_effects: ""}
+          - {from: LATE_JOINING_REVIEW, action: "authority confirm", to: JOINED_CONFIRMED, trigger: AUTHORITY, guard: "accepted", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: LATE_JOINING_REVIEW, action: "abandon", to: ABANDONED, trigger: AUTHORITY, guard: "authority decide", side_effects: "", p01_pattern: SEQUENTIAL}
+
+      - entity: vacancy_reservation
+        description: "Vacancy reservation for transfer chain."
+        runtime: MODULE_INTERNAL
+        states: [RESERVED, VACATED_ON_RELIEF, FILLED_ON_JOIN, RELEASED, EXPIRED]
+        initial: [RESERVED]
+        terminal: [FILLED_ON_JOIN, RELEASED, EXPIRED]
+        transitions:
+          - {from: null, action: "allot/choose", to: RESERVED, trigger: HR, guard: "vacant_count > 0", side_effects: ""}
+          - {from: RESERVED, action: "source relieved", to: VACATED_ON_RELIEF, trigger: SYSTEM, guard: "relieving issued", side_effects: ""}
+          - {from: VACATED_ON_RELIEF, action: "destination joined", to: FILLED_ON_JOIN, trigger: SYSTEM, guard: "reservation re-check", side_effects: ""}
+          - {from: RESERVED, action: "candidate withdraws/cancel", to: RELEASED, trigger: HR, guard: "", side_effects: ""}
+          - {from: RESERVED, action: "window/grace lapses", to: EXPIRED, trigger: SYSTEM, guard: "", side_effects: ""}
+
+      - entity: sr_outbox
+        description: "G05 SR outbox delivery (backoff + DLQ)."
+        runtime: MODULE_INTERNAL
+        states: [PENDING, IN_FLIGHT, DELIVERED, FAILED, DEAD_LETTERED]
+        initial: [PENDING]
+        terminal: [DELIVERED, DEAD_LETTERED]
+        transitions:
+          - {from: PENDING, action: "dispatch (JOB-G05-OUTBOX)", to: IN_FLIGHT, trigger: SYSTEM, guard: "next_attempt_at <= now", side_effects: ""}
+          - {from: IN_FLIGHT, action: "success", to: DELIVERED, trigger: SYSTEM, guard: "target ack (X.3)", side_effects: ""}
+          - {from: IN_FLIGHT, action: "failure", to: FAILED, trigger: SYSTEM, guard: "attempt_count < max", side_effects: "re-PENDING w/ backoff"}
+          - {from: FAILED, action: "exhausted", to: DEAD_LETTERED, trigger: SYSTEM, guard: "attempt_count = max", side_effects: ""}
+
+  # ===========================================================================
+  # G06 — Promotion / Posting / Progression (BRD §11)
+  # ===========================================================================
+  G06:
+    machines:
+      - entity: seniority_list
+        description: "Seniority list lifecycle; publish/finalise on P01."
+        runtime: P01
+        states: [DRAFT, PUBLISHED_TENTATIVE, OBJECTIONS_OPEN, OBJECTIONS_CLOSED, FINALISED, UNDER_CORRECTION, INTERIM_STAYED, SUPERSEDED]
+        initial: [DRAFT]
+        terminal: [SUPERSEDED]
+        transitions:
+          - {from: null, action: "create", to: DRAFT, trigger: HR, guard: "scope valid", side_effects: "entries generated (multi-stream FR-020)"}
+          - {from: DRAFT, action: "publish (P01 checker)", to: PUBLISHED_TENTATIVE, trigger: CHECKER, guard: "ranks contiguous; not sub-judice", side_effects: "baseline frozen", p01_pattern: DYNAMIC_APPROVER}
+          - {from: PUBLISHED_TENTATIVE, action: "open window", to: OBJECTIONS_OPEN, trigger: HR, guard: "window dates set", side_effects: "notify scope (X.2)"}
+          - {from: OBJECTIONS_OPEN, action: "window close", to: OBJECTIONS_CLOSED, trigger: SYSTEM, guard: "date passed", side_effects: ""}
+          - {from: OBJECTIONS_CLOSED, action: "finalise", to: FINALISED, trigger: HR, guard: "no open objections; not sub-judice", side_effects: "supersede prior; PDF (G13); notify"}
+          - {from: FINALISED, action: "correction (FR-018)", to: UNDER_CORRECTION, trigger: CHECKER, guard: "correction event approved (P01)", side_effects: "re-rank cascade (X.1)", p01_pattern: SEQUENTIAL}
+          - {from: UNDER_CORRECTION, action: "cascade complete", to: FINALISED, trigger: SYSTEM, guard: "cascade COMPLETED", side_effects: "SR correction (G12); pay-anomaly signal (G10)"}
+          - {from: any, action: "interim stay (FR-017)", to: INTERIM_STAYED, trigger: LEGAL, guard: "stay active", side_effects: "effecting blocked"}
+          - {from: FINALISED, action: "supersede", to: SUPERSEDED, trigger: HR, guard: "new final issued", side_effects: ""}
+
+      - entity: promotion_case
+        description: "Promotion case / DPC lifecycle; panel verdicts PARALLEL_ALL_OF."
+        runtime: P01
+        states: [DRAFT, FIELD_ASSEMBLED, ELIGIBILITY_DONE, PANEL_CONSTITUTED, DPC_HELD, SELECT_LIST_APPROVED, ORDERS_ISSUED, INTERIM_STAYED, CLOSED, CANCELLED]
+        initial: [DRAFT]
+        terminal: [CLOSED, CANCELLED]
+        transitions:
+          - {from: DRAFT, action: "assemble field", to: FIELD_ASSEMBLED, trigger: HR, guard: "final list exists; vacancy reconciled (FR-015)", side_effects: "candidates created"}
+          - {from: FIELD_ASSEMBLED, action: "compute eligibility", to: ELIGIBILITY_DONE, trigger: SYSTEM, guard: "rule active; QSL cited", side_effects: "assessments"}
+          - {from: ELIGIBILITY_DONE, action: "constitute panel", to: PANEL_CONSTITUTED, trigger: HR, guard: "quorum config; validity set", side_effects: "P01 instance started"}
+          - {from: PANEL_CONSTITUTED, action: "hold DPC", to: DPC_HELD, trigger: PANEL, guard: "quorum met; panel current", side_effects: "verdicts (PARALLEL_ALL_OF); eligibility frozen", p01_pattern: PARALLEL_ALL_OF}
+          - {from: DPC_HELD, action: "approve select list", to: SELECT_LIST_APPROVED, trigger: CHECKER, guard: "count <= vacancies; roster ok (own-merit)", side_effects: "roster points tagged", p01_pattern: DYNAMIC_APPROVER}
+          - {from: SELECT_LIST_APPROVED, action: "issue orders", to: ORDERS_ISSUED, trigger: HR, guard: "candidates FIT; panel not expired", side_effects: "orders + SR (G12)"}
+          - {from: any, action: "interim stay", to: INTERIM_STAYED, trigger: LEGAL, guard: "stay active (FR-017)", side_effects: "effecting blocked"}
+          - {from: ORDERS_ISSUED, action: "close", to: CLOSED, trigger: HR, guard: "all effected/declined", side_effects: ""}
+          - {from: any, action: "cancel (pre-orders)", to: CANCELLED, trigger: AUTHORITY, guard: "", side_effects: "audit"}
+
+      - entity: promotion_order
+        description: "Individual promotion order; issue on P01."
+        runtime: P01
+        states: [DRAFT, ISSUED, ACCEPTED, DEEMED_ACCEPTED, DECLINED, EFFECTED, INTERIM_STAYED, SUPERSEDED]
+        initial: [DRAFT]
+        terminal: [DECLINED, SUPERSEDED]
+        transitions:
+          - {from: DRAFT, action: "issue (P01 checker)", to: ISSUED, trigger: CHECKER, guard: "candidate FIT; panel current", side_effects: "document (G13)", p01_pattern: DYNAMIC_APPROVER}
+          - {from: ISSUED, action: "accept", to: ACCEPTED, trigger: EMPLOYEE, guard: "within window", side_effects: ""}
+          - {from: ISSUED, action: "no response", to: DEEMED_ACCEPTED, trigger: SYSTEM, guard: "window lapsed", side_effects: ""}
+          - {from: ISSUED, action: "decline", to: DECLINED, trigger: EMPLOYEE, guard: "", side_effects: "refusal created (FR-019); reserve consideration"}
+          - {from: [ACCEPTED, DEEMED_ACCEPTED], action: "effect", to: EFFECTED, trigger: HR, guard: "SR available; no active stay", side_effects: "SR post (G12); G01 signal; probation create"}
+          - {from: [ISSUED, EFFECTED], action: "interim stay (FR-017)", to: INTERIM_STAYED, trigger: LEGAL, guard: "stay active", side_effects: "effecting blocked"}
+          - {from: EFFECTED, action: "supersede/correct", to: SUPERSEDED, trigger: AUTHORITY, guard: "reversion/error/court (FR-018)", side_effects: "SR correction (G12); possible pay-anomaly signal (G10)"}
+
+      - entity: financial_upgradation
+        description: "MACP / financial up-gradation lifecycle."
+        runtime: P01
+        states: [DUE, UNDER_SCREENING, SANCTIONED, EFFECTED, DEFERRED, REJECTED]
+        initial: [DUE]
+        terminal: [EFFECTED, REJECTED]
+        transitions:
+          - {from: null, action: "due detected (JOB-G06-MACP-DUE)", to: DUE, trigger: SYSTEM, guard: "QSL net service met; cap < 3; refusal effect applied", side_effects: "alert (X.2)"}
+          - {from: DUE, action: "screen", to: UNDER_SCREENING, trigger: COMMITTEE, guard: "committee (P01)", side_effects: "assessment", p01_pattern: SEQUENTIAL}
+          - {from: UNDER_SCREENING, action: "sanction", to: SANCTIONED, trigger: AUTHORITY, guard: "benchmark met; cap ok; no penalty", side_effects: "order", p01_pattern: SEQUENTIAL}
+          - {from: SANCTIONED, action: "effect", to: EFFECTED, trigger: HR, guard: "", side_effects: "SR (G12) + G10 pay event"}
+          - {from: [DUE, UNDER_SCREENING], action: "defer", to: DEFERRED, trigger: AUTHORITY, guard: "penalty current / refusal STOP", side_effects: "re-eval on expiry"}
+          - {from: UNDER_SCREENING, action: "reject", to: REJECTED, trigger: AUTHORITY, guard: "benchmark fail", side_effects: "audit"}
+
+      - entity: probation
+        description: "Probation lifecycle post-order-effect."
+        runtime: MODULE_INTERNAL
+        states: [ON_PROBATION, EXTENDED, DECLARED_SATISFACTORY, REVERTED]
+        initial: [ON_PROBATION]
+        terminal: [DECLARED_SATISFACTORY, REVERTED]
+        transitions:
+          - {from: null, action: "order effected (probation)", to: ON_PROBATION, trigger: SYSTEM, guard: "period configured", side_effects: "scheduled_end set"}
+          - {from: ON_PROBATION, action: "extend", to: EXTENDED, trigger: AUTHORITY, guard: "within cap", side_effects: "reason"}
+          - {from: [ON_PROBATION, EXTENDED], action: "declare", to: DECLARED_SATISFACTORY, trigger: AUTHORITY, guard: "period elapsed", side_effects: "confirmation SR (G12)"}
+          - {from: [ON_PROBATION, EXTENDED], action: "revert", to: REVERTED, trigger: AUTHORITY, guard: "", side_effects: "order superseded; SR"}
+
+      - entity: refusal
+        description: "Promotion refusal / debarment (FR-019)."
+        runtime: MODULE_INTERNAL
+        states: [ACTIVE, EXPIRED, WAIVED]
+        initial: [ACTIVE]
+        terminal: [EXPIRED, WAIVED]
+        transitions:
+          - {from: null, action: "order declined", to: ACTIVE, trigger: SYSTEM, guard: "decline recorded (FR-007)", side_effects: "debarment_until set; MACP-clock effect applied"}
+          - {from: ACTIVE, action: "debarment expiry", to: EXPIRED, trigger: SYSTEM, guard: "date passed", side_effects: "re-consideration allowed"}
+          - {from: ACTIVE, action: "waive", to: WAIVED, trigger: AUTHORITY, guard: "authority + justification (P01)", side_effects: "debarment lifted", p01_pattern: SEQUENTIAL}
+
+  # ===========================================================================
+  # G07 — Training & Skill Development (BRD §11)
+  # ===========================================================================
+  G07:
+    machines:
+      - entity: nomination
+        description: "Training nomination; multi-step P01 approval with waitlist."
+        runtime: P01
+        states: [DRAFT, PENDING_L1, PENDING_L2, APPROVED, WAITLISTED, WITHDRAWN, REJECTED, COMPLETED, NO_SHOW]
+        initial: [DRAFT]
+        terminal: [WITHDRAWN, REJECTED, COMPLETED, NO_SHOW]
+        transitions:
+          - {from: DRAFT, action: "submit (P01 startInstance)", to: PENDING_L1, trigger: EMPLOYEE, guard: "maker != approver; need linked", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_L1, action: "manager approve (P01)", to: PENDING_L2, trigger: MANAGER, guard: "SoD (P02)", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_L1, action: "reject", to: REJECTED, trigger: MANAGER, guard: "reason required (VAL-COMMENT)", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_L2, action: "L&D approve (P01)", to: APPROVED, trigger: LD_MANAGER, guard: "capacity+budget check", side_effects: "commit budget; decrement capacity", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_L2, action: "approve when full", to: WAITLISTED, trigger: LD_MANAGER, guard: "capacity full", side_effects: "waitlist_position=max+1 (FIFO); P05 audit", p01_pattern: SEQUENTIAL}
+          - {from: WAITLISTED, action: "seat frees", to: APPROVED, trigger: SYSTEM, guard: "FIFO by waitlist_position", side_effects: "P05 audit"}
+          - {from: APPROVED, action: "withdraw (before deadline)", to: WITHDRAWN, trigger: EMPLOYEE, guard: "not mandatory/campaign", side_effects: "free seat -> promote waitlist head; release commitment"}
+          - {from: APPROVED, action: "session completes (attended+pass)", to: COMPLETED, trigger: SYSTEM, guard: "", side_effects: "issue cert eligibility"}
+          - {from: APPROVED, action: "session completes (fully absent)", to: NO_SHOW, trigger: SYSTEM, guard: "", side_effects: "mark; notify (X.2)"}
+
+      - entity: training_session
+        description: "Training session lifecycle."
+        runtime: MODULE_INTERNAL
+        states: [DRAFT, OPEN, FULL, RUNNING, COMPLETED, CANCELLED]
+        initial: [DRAFT]
+        terminal: [COMPLETED, CANCELLED]
+        transitions:
+          - {from: DRAFT, action: "open nominations", to: OPEN, trigger: LD, guard: "program PUBLISHED", side_effects: ""}
+          - {from: OPEN, action: "capacity reached", to: FULL, trigger: SYSTEM, guard: "enrolled = capacity", side_effects: ""}
+          - {from: [OPEN, FULL], action: "start date reached", to: RUNNING, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: RUNNING, action: "end + closeout", to: COMPLETED, trigger: LD, guard: "attendance/assessment finalised", side_effects: ""}
+          - {from: any, action: "cancel", to: CANCELLED, trigger: LD, guard: "pre-completion", side_effects: "cascade nominations + X.2"}
+
+      - entity: certification
+        description: "Employee certification lifecycle with expiry/renewal."
+        runtime: HYBRID
+        states: [ACTIVE, EXPIRED, SUPERSEDED, REVOKED]
+        initial: [ACTIVE]
+        terminal: [SUPERSEDED, REVOKED]
+        transitions:
+          - {from: null, action: "issue", to: ACTIVE, trigger: SYSTEM, guard: "eligibility met", side_effects: "cert_no generated; PDF->G13"}
+          - {from: ACTIVE, action: "valid_until passed (JOB-G07-CERTEXPIRY)", to: EXPIRED, trigger: SYSTEM, guard: "", side_effects: "notify; if mandatory: lapsed_mandatory, renewal need, enroll campaign"}
+          - {from: ACTIVE, action: "renewal issued", to: SUPERSEDED, trigger: SYSTEM, guard: "", side_effects: "new cert ACTIVE; clear lapsed flag"}
+          - {from: [ACTIVE, EXPIRED], action: "revoke (P01)", to: REVOKED, trigger: LD_MANAGER, guard: "ld_manager approval", side_effects: "G12 SR correction if posted", p01_pattern: SEQUENTIAL}
+
+      - entity: sponsorship_bond
+        description: "Sponsorship / service-bond lifecycle."
+        runtime: P01
+        states: [PROPOSED, SANCTIONED, ACTIVE, FULFILLED, BREACHED, RECOVERED, WAIVED]
+        initial: [PROPOSED]
+        terminal: [FULFILLED, RECOVERED, WAIVED]
+        transitions:
+          - {from: PROPOSED, action: "recommend+sanction (P01)", to: SANCTIONED, trigger: DEPT_HEAD, guard: "Dept Head approval", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: SANCTIONED, action: "training starts", to: ACTIVE, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: ACTIVE, action: "bond term fulfilled", to: FULFILLED, trigger: SYSTEM, guard: "bond_end_date passed in service", side_effects: ""}
+          - {from: ACTIVE, action: "early exit/breach", to: BREACHED, trigger: SYSTEM, guard: "", side_effects: "compute recovery (G05 relieving may trigger)"}
+          - {from: BREACHED, action: "recovery emitted", to: RECOVERED, trigger: SYSTEM, guard: "BOND_RECOVERY cost to G10 (VAL-G07-BOND)", side_effects: ""}
+          - {from: [ACTIVE, BREACHED], action: "authority waiver (P01)", to: WAIVED, trigger: AUTHORITY, guard: "approval + P05 audit", side_effects: "", p01_pattern: SEQUENTIAL}
+
+      - entity: sr_posting
+        description: "G07 SR posting to G12 via X.3."
+        runtime: MODULE_INTERNAL
+        states: [NOT_REQUIRED, PENDING, POSTED, FAILED]
+        initial: [NOT_REQUIRED]
+        terminal: [POSTED]
+        transitions:
+          - {from: NOT_REQUIRED, action: "is_significant rule matches", to: PENDING, trigger: SYSTEM, guard: "VAL-G07-SIGNIF resolver", side_effects: ""}
+          - {from: PENDING, action: "post success", to: POSTED, trigger: SYSTEM, guard: "G12 ack (pinned contract)", side_effects: "store service_register_event_id"}
+          - {from: PENDING, action: "post failure", to: FAILED, trigger: SYSTEM, guard: "", side_effects: "X.3 retry scheduled"}
+          - {from: FAILED, action: "retry success", to: POSTED, trigger: SYSTEM, guard: "within X.3 retry budget", side_effects: ""}
+          - {from: FAILED, action: "retries exhausted", to: FAILED, trigger: SYSTEM, guard: "", side_effects: "alert L&D + SR Custodian (MSG-G07-SR-FAILED)"}
+
+  # ===========================================================================
+  # G08 — Performance Appraisal (APAR) Management (BRD §10, P01 flow defs)
+  # ===========================================================================
+  G08:
+    machines:
+      - entity: appraisal_form
+        description: "APAR form lifecycle; P01 flow definition; SEQUENTIAL author chain."
+        runtime: P01
+        states: [DRAFT, GOALS_PENDING, GOALS_APPROVED, SELF_APPRAISAL, RO_ASSESSMENT, RVO_REVIEW, AA_ACCEPTANCE, DISCLOSURE, DISCLOSED, REPRESENTATION, FINALISED, POSTED, SEALED_COVER, WITHDRAWN, EXPUNGED]
+        initial: [DRAFT]
+        terminal: [POSTED, WITHDRAWN, EXPUNGED]
+        transitions:
+          - {from: DRAFT, action: "cycle open (eligible)", to: GOALS_PENDING, trigger: SYSTEM, guard: "eligible, not under charge", side_effects: "notify appraisee/RO"}
+          - {from: DRAFT, action: "cycle open (under G09 charge)", to: SEALED_COVER, trigger: SYSTEM, guard: "under G09 charge", side_effects: "seal + log"}
+          - {from: GOALS_PENDING, action: "goals lock", to: GOALS_APPROVED, trigger: RO, guard: "VAL-WEIGHTAGE/WSUM=100, all approved", side_effects: "write snapshots (E20); notify"}
+          - {from: GOALS_APPROVED, action: "self window open", to: SELF_APPRAISAL, trigger: SYSTEM, guard: "", side_effects: "notify appraisee"}
+          - {from: SELF_APPRAISAL, action: "self submit", to: RO_ASSESSMENT, trigger: APPRAISEE, guard: "narrative present", side_effects: "notify RO(s)", p01_pattern: SEQUENTIAL}
+          - {from: RO_ASSESSMENT, action: "all periods submitted", to: RVO_REVIEW, trigger: RO, guard: "integrity+penpicture+grade+DSC valid; adverse evidence present", side_effects: "aggregate provisional; notify RvO", p01_pattern: SEQUENTIAL}
+          - {from: RO_ASSESSMENT, action: "RO return self", to: SELF_APPRAISAL, trigger: RO, guard: "", side_effects: "notify appraisee"}
+          - {from: RVO_REVIEW, action: "RvO submit", to: AA_ACCEPTANCE, trigger: RVO, guard: "concur/variance valid + DSC; no COI", side_effects: "notify AA", p01_pattern: SEQUENTIAL}
+          - {from: RVO_REVIEW, action: "RvO return", to: RO_ASSESSMENT, trigger: RVO, guard: "", side_effects: "notify RO"}
+          - {from: AA_ACCEPTANCE, action: "certify", to: DISCLOSURE, trigger: AA, guard: "step-up + DSC; grade valid; not sealed", side_effects: "derive flags; sign", p01_pattern: SEQUENTIAL}
+          - {from: AA_ACCEPTANCE, action: "certify (sealed)", to: SEALED_COVER, trigger: AA, guard: "sealed_cover=true", side_effects: "hold; log"}
+          - {from: any, action: "G09 charge raised (pre-final)", to: SEALED_COVER, trigger: SYSTEM, guard: "", side_effects: "seal; suppress feed"}
+          - {from: SEALED_COVER, action: "release", to: DISCLOSURE, trigger: AUTHORITY, guard: "G09 concluded + signed release", side_effects: "unseal; log; resume prior status"}
+          - {from: DISCLOSURE, action: "disclose (mandatory, full)", to: DISCLOSED, trigger: SYSTEM, guard: "", side_effects: "dispatch+log; notify; start clock"}
+          - {from: DISCLOSED, action: "deemed-disclosure (JOB-M09-AUTOACK)", to: DISCLOSED, trigger: SYSTEM, guard: "non-ack after configured days", side_effects: "window opens (R8)"}
+          - {from: DISCLOSED, action: "file representation", to: REPRESENTATION, trigger: APPRAISEE, guard: "within window", side_effects: "notify authority"}
+          - {from: DISCLOSED, action: "window expires (no rep)", to: FINALISED, trigger: SYSTEM, guard: "no rep", side_effects: ""}
+          - {from: REPRESENTATION, action: "decide", to: FINALISED, trigger: AUTHORITY, guard: "authority valid + DSC; no COI", side_effects: "recompute grade if modified/expunged", p01_pattern: SEQUENTIAL}
+          - {from: FINALISED, action: "post to SR", to: POSTED, trigger: SYSTEM, guard: "rep resolved, not sealed", side_effects: "G12 + G06 events (G06 suppressed if sealed)"}
+          - {from: any, action: "withdraw (admin, pre-POSTED)", to: WITHDRAWN, trigger: ADMIN, guard: "reason", side_effects: "log"}
+          - {from: [FINALISED, POSTED], action: "expunge (statutory)", to: EXPUNGED, trigger: AUTHORITY, guard: "authority + DSC", side_effects: "corrective SR event"}
+
+      - entity: goal
+        description: "APAR goal state (employee x period)."
+        runtime: MODULE_INTERNAL
+        states: [DRAFT, PROPOSED, APPROVED, REVISED, ACHIEVED, NOT_ACHIEVED, DROPPED]
+        initial: [DRAFT]
+        terminal: [ACHIEVED, NOT_ACHIEVED, DROPPED]
+        transitions:
+          - {from: DRAFT, action: "propose", to: PROPOSED, trigger: APPRAISEE, guard: "weightage set", side_effects: ""}
+          - {from: PROPOSED, action: "RO approve", to: APPROVED, trigger: RO, guard: "RO role", side_effects: ""}
+          - {from: PROPOSED, action: "RO return", to: DRAFT, trigger: RO, guard: "", side_effects: ""}
+          - {from: APPROVED, action: "lock (snapshot)", to: APPROVED, trigger: SYSTEM, guard: "form lock", side_effects: "snapshotted=true, E20 written"}
+          - {from: APPROVED, action: "revise", to: REVISED, trigger: RO, guard: "window open + RO approve", side_effects: ""}
+          - {from: [APPROVED, REVISED], action: "mark achieved", to: ACHIEVED, trigger: RO, guard: "cycle end", side_effects: ""}
+          - {from: any, action: "drop", to: DROPPED, trigger: RO, guard: "reason", side_effects: ""}
+
+      - entity: representation
+        description: "APAR representation with escalation ladder."
+        runtime: P01
+        states: [FILED, UNDER_REVIEW, DECIDED, ESCALATED, CLOSED]
+        initial: [FILED]
+        terminal: [CLOSED]
+        transitions:
+          - {from: FILED, action: "take up", to: UNDER_REVIEW, trigger: AUTHORITY, guard: "authority assigned, no COI", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: FILED, action: "condone", to: UNDER_REVIEW, trigger: AUTHORITY, guard: "late + condonation authority", side_effects: ""}
+          - {from: UNDER_REVIEW, action: "decide", to: DECIDED, trigger: AUTHORITY, guard: "reason recorded + DSC", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: DECIDED, action: "escalate", to: ESCALATED, trigger: AUTHORITY, guard: "rejected + external ref", side_effects: ""}
+          - {from: DECIDED, action: "close", to: CLOSED, trigger: AUTHORITY, guard: "grade applied", side_effects: ""}
+          - {from: ESCALATED, action: "external disposal", to: CLOSED, trigger: TRIBUNAL, guard: "tribunal outcome recorded", side_effects: ""}
+
+      - entity: pip
+        description: "Performance Improvement Plan lifecycle."
+        runtime: P01
+        states: [DRAFT, ACTIVE, UNDER_REVIEW, CLOSED]
+        initial: [DRAFT]
+        terminal: [CLOSED]
+        transitions:
+          - {from: DRAFT, action: "RvO concur + activate", to: ACTIVE, trigger: RVO, guard: "concurrence (P01)", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: ACTIVE, action: "review", to: UNDER_REVIEW, trigger: RO, guard: "period checkpoint", side_effects: ""}
+          - {from: UNDER_REVIEW, action: "close", to: CLOSED, trigger: AUTHORITY, guard: "outcome set", side_effects: ""}
+          - {from: UNDER_REVIEW, action: "extend", to: ACTIVE, trigger: AUTHORITY, guard: "approval", side_effects: "successor ACTIVE"}
+
+  # ===========================================================================
+  # G09 — Disciplinary Cases & Punishment (BRD §12)
+  # ===========================================================================
+  G09:
+    machines:
+      - entity: disciplinary_case
+        description: "Case lifecycle (case_status x case_stage); suspension is a parallel track (§12.7)."
+        runtime: P01
+        states: [INTAKE, PRELIMINARY_INQUIRY, CHARGE, DEFENCE, INQUIRY_SETUP, INQUIRY, INQUIRY_REPORT, DA_CONSIDERATION, CONSULTATION, SHOW_CAUSE, ORDER, SR_POSTING, CLOSED, APPEAL, ABATED]
+        initial: [INTAKE]
+        terminal: [CLOSED, ABATED]
+        transitions:
+          - {from: INTAKE, action: "triage FILE_CASE / order PI", to: PRELIMINARY_INQUIRY, trigger: DA, guard: "competent DA resolved (DI-13); DA != complainant (DI-2)", side_effects: "template pinned"}
+          - {from: PRELIMINARY_INQUIRY, action: "PI recommends proceed", to: CHARGE, trigger: DA, guard: "recommendation in {PROCEED_MAJOR, PROCEED_MINOR}", side_effects: ""}
+          - {from: PRELIMINARY_INQUIRY, action: "PI recommends drop", to: CLOSED, trigger: DA, guard: "DA approval", side_effects: "CLOSED (DROPPED)"}
+          - {from: CHARGE, action: "charge-sheet validly served (DI-15) + signed (DI-28)", to: DEFENCE, trigger: DA, guard: "legal_service valid; signature present", side_effects: ""}
+          - {from: DEFENCE, action: "defence submitted / window lapse", to: INQUIRY_SETUP, trigger: SYSTEM, guard: "major path", side_effects: "minor admit -> ORDER; dispensed -> ORDER (DI-23)"}
+          - {from: INQUIRY_SETUP, action: "IO/PO appointed or ICC constituted", to: INQUIRY, trigger: DA, guard: "distinct actors (DI-2); ICC composition (AI-16)", side_effects: ""}
+          - {from: INQUIRY, action: "inspection afforded -> report submitted", to: INQUIRY_REPORT, trigger: IO, guard: "DI-24; all findings (DI-25)", side_effects: ""}
+          - {from: INQUIRY, action: "criminal parallel", to: INQUIRY, trigger: SYSTEM, guard: "stay + SLA pause (DI-18)", side_effects: "inquiry STAYED"}
+          - {from: INQUIRY_REPORT, action: "served + DA reviews", to: DA_CONSIDERATION, trigger: DA, guard: "report served (DI-15)", side_effects: ""}
+          - {from: DA_CONSIDERATION, action: "mandatory consultation outstanding", to: CONSULTATION, trigger: DA, guard: "template-required consultations (DI-14)", side_effects: ""}
+          - {from: [DA_CONSIDERATION, CONSULTATION], action: "disagreement / accept", to: SHOW_CAUSE, trigger: DA, guard: "natural-justice + consultations closed", side_effects: "or -> ORDER"}
+          - {from: SHOW_CAUSE, action: "representation / lapse / personal hearing", to: ORDER, trigger: DA, guard: "major track; DI-29", side_effects: ""}
+          - {from: ORDER, action: "order finalised", to: SR_POSTING, trigger: DA, guard: "DI-3/4/13/14/20/22/28 satisfied", side_effects: ""}
+          - {from: SR_POSTING, action: "propagation done (idempotent)", to: CLOSED, trigger: SYSTEM, guard: "", side_effects: "SR appended (DI-10/DI-19)"}
+          - {from: CLOSED, action: "appeal filed", to: APPEAL, trigger: EMPLOYEE, guard: "within limitation/condoned (DI-5)", side_effects: ""}
+          - {from: APPEAL, action: "decision", to: CLOSED, trigger: APPELLATE, guard: "authority != DA + competent (DI-13)", side_effects: ""}
+          - {from: any, action: "charged officer dies", to: ABATED, trigger: SYSTEM, guard: "death proof (DI-26)", side_effects: ""}
+
+      - entity: charge_sheet
+        description: "Charge-sheet document state; requires valid legal service."
+        runtime: MODULE_INTERNAL
+        states: [DRAFT, ISSUED, SERVED, RESPONDED, WITHDRAWN]
+        initial: [DRAFT]
+        terminal: [RESPONDED, WITHDRAWN]
+        transitions:
+          - {from: DRAFT, action: "issue (sign)", to: ISSUED, trigger: DA, guard: ">=1 article; PDF rendered; DSC/eSign (DI-28)", side_effects: ""}
+          - {from: ISSUED, action: "serve", to: SERVED, trigger: SYSTEM, guard: "valid legal service (DI-15)", side_effects: ""}
+          - {from: SERVED, action: "defence submitted", to: RESPONDED, trigger: EMPLOYEE, guard: "within/after window", side_effects: ""}
+          - {from: [DRAFT, ISSUED], action: "withdraw", to: WITHDRAWN, trigger: DA, guard: "reason", side_effects: ""}
+
+      - entity: inquiry
+        description: "Inquiry proceeding with STAYED overlay."
+        runtime: MODULE_INTERNAL
+        states: [NOT_STARTED, IN_PROGRESS, EX_PARTE, STAYED, CONCLUDED, DE_NOVO]
+        initial: [NOT_STARTED]
+        terminal: [CONCLUDED]
+        transitions:
+          - {from: NOT_STARTED, action: "inspection afforded + first hearing", to: IN_PROGRESS, trigger: IO, guard: "IO/ICC appointed; DI-24", side_effects: ""}
+          - {from: IN_PROGRESS, action: "no-show threshold + notice", to: EX_PARTE, trigger: IO, guard: "proof of notice", side_effects: ""}
+          - {from: IN_PROGRESS, action: "criminal parallel active", to: STAYED, trigger: SYSTEM, guard: "stay reason + SLA pause (DI-18)", side_effects: ""}
+          - {from: STAYED, action: "criminal disposed / prejudice gone", to: IN_PROGRESS, trigger: DA, guard: "recompute SLA", side_effects: ""}
+          - {from: [IN_PROGRESS, EX_PARTE], action: "report submitted (signed)", to: CONCLUDED, trigger: IO, guard: "all findings/respondents (DI-25); DI-28", side_effects: ""}
+          - {from: CONCLUDED, action: "DA remit", to: DE_NOVO, trigger: DA, guard: "DA reasons", side_effects: "SLA pause REMIT"}
+
+      - entity: penalty_order
+        description: "Disciplinary order/penalty state; competence/consultation/signing."
+        runtime: MODULE_INTERNAL
+        states: [DRAFT, DRAFT_SIGNED, FINALISED, SERVED, SET_ASIDE, MODIFIED, STAYED, ABATED]
+        initial: [DRAFT]
+        terminal: [SET_ASIDE, MODIFIED, ABATED]
+        transitions:
+          - {from: DRAFT, action: "sign", to: DRAFT_SIGNED, trigger: DA, guard: "DSC/eSign (DI-28)", side_effects: ""}
+          - {from: DRAFT_SIGNED, action: "finalise", to: FINALISED, trigger: DA, guard: "DI-3/4/13/14/20/22; speaking order; MFA", side_effects: ""}
+          - {from: FINALISED, action: "serve", to: SERVED, trigger: SYSTEM, guard: "valid legal service (DI-15)", side_effects: ""}
+          - {from: SERVED, action: "appeal set-aside", to: SET_ASIDE, trigger: APPELLATE, guard: "appeal decision", side_effects: ""}
+          - {from: SERVED, action: "appeal modify", to: MODIFIED, trigger: APPELLATE, guard: "", side_effects: "revised order created"}
+          - {from: [FINALISED, SERVED], action: "court/appellate stay", to: STAYED, trigger: LEGAL, guard: "stay order recorded", side_effects: "SLA pause"}
+          - {from: any, action: "charged officer dies", to: ABATED, trigger: SYSTEM, guard: "DI-26", side_effects: "order_type ABATED"}
+
+      - entity: appeal
+        description: "Disciplinary appeal state."
+        runtime: P01
+        states: [FILED, ADMITTED, REJECTED, UNDER_REVIEW, DECIDED]
+        initial: [FILED]
+        terminal: [REJECTED, DECIDED]
+        transitions:
+          - {from: FILED, action: "admit", to: ADMITTED, trigger: APPELLATE, guard: "within limitation or condoned (DI-5)", side_effects: "condonation -> SLA pause"}
+          - {from: FILED, action: "reject (time-barred)", to: REJECTED, trigger: APPELLATE, guard: "no condonation", side_effects: ""}
+          - {from: ADMITTED, action: "review", to: UNDER_REVIEW, trigger: APPELLATE, guard: "authority != DA + competent (DI-13)", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: UNDER_REVIEW, action: "decide", to: DECIDED, trigger: APPELLATE, guard: "reasoning recorded", side_effects: "enhancement -> fresh show-cause", p01_pattern: SEQUENTIAL}
+
+      - entity: suspension
+        description: "Suspension — orthogonal parallel-track flag (is_under_suspension), NOT a case_stage node (§12.7)."
+        runtime: MODULE_INTERNAL
+        states: [ACTIVE, EXTENDED, REVOKED, DEEMED_REVOKED]
+        initial: [ACTIVE]
+        terminal: [REVOKED, DEEMED_REVOKED]
+        transitions:
+          - {from: ACTIVE, action: "NEC received", to: ACTIVE, trigger: DA, guard: "", side_effects: "subsistence event emitted only post-NEC (DI-16)"}
+          - {from: ACTIVE, action: "charge-memo not served in 90 days", to: ACTIVE, trigger: SYSTEM, guard: "deemed_review", side_effects: "deemed_review_flag=true + escalation (DI-16)"}
+          - {from: ACTIVE, action: "extend", to: EXTENDED, trigger: DA, guard: "documented extension", side_effects: ""}
+          - {from: ACTIVE, action: "revoke", to: REVOKED, trigger: DA, guard: "reason", side_effects: "events emitted; clears is_under_suspension flag"}
+          - {from: ACTIVE, action: "deemed revoke (detention quashed)", to: DEEMED_REVOKED, trigger: SYSTEM, guard: "proof", side_effects: ""}
+
+  # ===========================================================================
+  # G10 — Payroll & Benefits (BRD §10)
+  # ===========================================================================
+  G10:
+    machines:
+      - entity: payroll_run
+        description: "Payroll cycle/run; approval on P01; module owns domain state."
+        runtime: HYBRID
+        states: [OPEN, INPUT_LOCKED, COMPUTING, COMPUTED, RECONCILED, APPROVED, LOCKED, DISBURSED, CLOSED, REOPENED]
+        initial: [OPEN]
+        terminal: [CLOSED]
+        transitions:
+          - {from: OPEN, action: "freeze inputs + snapshot (X.1)", to: INPUT_LOCKED, trigger: SYSTEM, guard: "after cutoff; snapshot frozen", side_effects: ""}
+          - {from: INPUT_LOCKED, action: "start FINAL run", to: COMPUTING, trigger: PAYROLL_OFFICER, guard: "no in-flight run", side_effects: ""}
+          - {from: COMPUTING, action: "compute success", to: COMPUTED, trigger: SYSTEM, guard: "totals tie (incl. rounding)", side_effects: ""}
+          - {from: COMPUTING, action: "engine fault", to: OPEN, trigger: SYSTEM, guard: "", side_effects: "run FAILED; no commit; lock released"}
+          - {from: COMPUTED, action: "reconcile sign-off", to: RECONCILED, trigger: PAYROLL_OFFICER, guard: "recon SIGNED_OFF; disbursed+held+failed=net", side_effects: ""}
+          - {from: RECONCILED, action: "approve (P01)", to: APPROVED, trigger: CHECKER, guard: "checker != creator", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: APPROVED, action: "lock", to: LOCKED, trigger: SYSTEM, guard: "", side_effects: "payslips frozen"}
+          - {from: LOCKED, action: "publish & disburse (X.3)", to: DISBURSED, trigger: DISBURSER, guard: "bank ack / positive-pay confirmed", side_effects: ""}
+          - {from: DISBURSED, action: "remit & post", to: CLOSED, trigger: SYSTEM, guard: "remittances MATCHED; GL ACKNOWLEDGED", side_effects: ""}
+          - {from: LOCKED, action: "reopen (justified, versioned, P01)", to: REOPENED, trigger: APPROVER, guard: "pre-transmission only; no in-flight run", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: REOPENED, action: "re-run (successor)", to: COMPUTING, trigger: APPROVER, guard: "Approver authority", side_effects: "originals SUPERSEDED"}
+
+      - entity: bank_disbursement
+        description: "Bank disbursement batch; positive-pay for ambiguous acks."
+        runtime: MODULE_INTERNAL
+        states: [DRAFT, VALIDATED, SIGNED, TRANSMITTED, RECONCILED, SUSPECTED_PROCESSED, REJECTED]
+        initial: [DRAFT]
+        terminal: [RECONCILED, REJECTED]
+        transitions:
+          - {from: DRAFT, action: "validate (park excluded -> holds)", to: VALIDATED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: VALIDATED, action: "DSC/HSM sign", to: SIGNED, trigger: DISBURSER, guard: "", side_effects: ""}
+          - {from: SIGNED, action: "transmit via X.3 (unique batch ref)", to: TRANSMITTED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: TRANSMITTED, action: "ack success/partial", to: RECONCILED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: TRANSMITTED, action: "gateway timeout / ambiguous", to: SUSPECTED_PROCESSED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: SUSPECTED_PROCESSED, action: "positive-pay: non-debit confirmed", to: DRAFT, trigger: SYSTEM, guard: "", side_effects: "resend new batch ref"}
+          - {from: SUSPECTED_PROCESSED, action: "positive-pay: debit confirmed", to: RECONCILED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: TRANSMITTED, action: "ack failed", to: REJECTED, trigger: SYSTEM, guard: "", side_effects: "-> holds"}
+
+      - entity: loan
+        description: "Employee loan/advance lifecycle."
+        runtime: P01
+        states: [REQUESTED, SANCTIONED, DISBURSED, RECOVERING, ON_HOLD, FORECLOSED, CLOSED, REJECTED]
+        initial: [REQUESTED]
+        terminal: [FORECLOSED, CLOSED, REJECTED]
+        transitions:
+          - {from: REQUESTED, action: "sanction (P01)", to: SANCTIONED, trigger: CHECKER, guard: "", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: REQUESTED, action: "reject", to: REJECTED, trigger: CHECKER, guard: "", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: SANCTIONED, action: "disburse", to: DISBURSED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: DISBURSED, action: "first recovery", to: RECOVERING, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: RECOVERING, action: "hold", to: ON_HOLD, trigger: PAYROLL_OFFICER, guard: "", side_effects: ""}
+          - {from: ON_HOLD, action: "resume", to: RECOVERING, trigger: PAYROLL_OFFICER, guard: "", side_effects: ""}
+          - {from: RECOVERING, action: "foreclose", to: FORECLOSED, trigger: EMPLOYEE, guard: "", side_effects: ""}
+          - {from: RECOVERING, action: "final installment", to: CLOSED, trigger: SYSTEM, guard: "", side_effects: ""}
+
+      - entity: benefit_claim
+        description: "Benefit claim; recommend/approve on P01."
+        runtime: P01
+        states: [DRAFT, SUBMITTED, RECOMMENDED, APPROVED, REJECTED, PAID]
+        initial: [DRAFT]
+        terminal: [REJECTED, PAID]
+        transitions:
+          - {from: DRAFT, action: "submit", to: SUBMITTED, trigger: EMPLOYEE, guard: "", side_effects: ""}
+          - {from: SUBMITTED, action: "recommend (P01)", to: RECOMMENDED, trigger: MANAGER, guard: "", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: RECOMMENDED, action: "approve (P01)", to: APPROVED, trigger: CHECKER, guard: "", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: [SUBMITTED, RECOMMENDED], action: "reject", to: REJECTED, trigger: APPROVER, guard: "", side_effects: ""}
+          - {from: APPROVED, action: "pay", to: PAID, trigger: SYSTEM, guard: "", side_effects: ""}
+
+      - entity: fnf_settlement
+        description: "Full-and-final settlement; sanction on P01; G11 handoff."
+        runtime: P01
+        states: [INITIATED, COMPUTED, RECONCILED, APPROVED, PAID, RECOVERY_PENDING, CLOSED]
+        initial: [INITIATED]
+        terminal: [CLOSED]
+        transitions:
+          - {from: INITIATED, action: "compute", to: COMPUTED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: COMPUTED, action: "reconcile", to: RECONCILED, trigger: PAYROLL_OFFICER, guard: "", side_effects: ""}
+          - {from: RECONCILED, action: "sanction + approve (P01)", to: APPROVED, trigger: CHECKER, guard: "approver != creator", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: APPROVED, action: "pay (positive net)", to: PAID, trigger: SYSTEM, guard: "positive net", side_effects: ""}
+          - {from: APPROVED, action: "negative net", to: RECOVERY_PENDING, trigger: SYSTEM, guard: "negative net", side_effects: ""}
+          - {from: [PAID, RECOVERY_PENDING], action: "settle & G11 handoff", to: CLOSED, trigger: SYSTEM, guard: "", side_effects: "G11 handoff"}
+
+  # ===========================================================================
+  # G11 — Retirement & Pension (BRD §10)
+  # ===========================================================================
+  G11:
+    machines:
+      - entity: separation_case
+        description: "Separation/pension case; FR-18 SR-verification gate; sanction on P01."
+        runtime: P01
+        states: [DRAFT, INITIATED, SR_VERIFICATION, NO_DUES, CALCULATION, PENDING_SANCTION, SANCTIONED, PPO_ISSUED, SETTLED, CLOSED, ON_HOLD, REJECTED]
+        initial: [DRAFT]
+        terminal: [CLOSED, REJECTED]
+        transitions:
+          - {from: DRAFT, action: "submit", to: INITIATED, trigger: PENSION_OFFICER, guard: "type-required inputs present", side_effects: ""}
+          - {from: INITIATED, action: "request SR verification", to: SR_VERIFICATION, trigger: PENSION_OFFICER, guard: "", side_effects: ""}
+          - {from: SR_VERIFICATION, action: "service verification signed off + SR certified", to: NO_DUES, trigger: SYSTEM, guard: "FR-18 record SIGNED_OFF/LOCKED (IR2a) & qsr.sr_verified=true", side_effects: ""}
+          - {from: NO_DUES, action: "no-dues cleared", to: CALCULATION, trigger: SYSTEM, guard: "no_dues CLEARED or anticipatory/provisional exception", side_effects: ""}
+          - {from: CALCULATION, action: "benefits computed", to: PENDING_SANCTION, trigger: SYSTEM, guard: "qsr LOCKED & calcs COMPUTED", side_effects: ""}
+          - {from: PENDING_SANCTION, action: "sanction (P01 approve)", to: SANCTIONED, trigger: CHECKER, guard: "checker != maker; if proceedings_pending only PROVISIONAL path (FR-22)", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: SANCTIONED, action: "issue PPO", to: PPO_ISSUED, trigger: PENSION_OFFICER, guard: "PPO authorised", side_effects: ""}
+          - {from: PPO_ISSUED, action: "settle terminal benefits", to: SETTLED, trigger: SYSTEM, guard: "settlement PAID (DCRG withheld if proceedings)", side_effects: ""}
+          - {from: SETTLED, action: "close", to: CLOSED, trigger: SYSTEM, guard: "", side_effects: "SR event appended (G12)"}
+          - {from: any, action: "hold", to: ON_HOLD, trigger: AUTHORITY, guard: "with reason", side_effects: ""}
+          - {from: ON_HOLD, action: "resume", to: INITIATED, trigger: AUTHORITY, guard: "", side_effects: "returns to prior state"}
+          - {from: any, action: "reject", to: REJECTED, trigger: AUTHORITY, guard: "with reason", side_effects: ""}
+
+      - entity: ppo
+        description: "Pension Payment Order lifecycle (supersede on revise)."
+        runtime: P01
+        states: [DRAFT, ISSUED, AUTHORISED_TO_PDA, ACTIVE, SUPERSEDED, CANCELLED]
+        initial: [DRAFT]
+        terminal: [SUPERSEDED, CANCELLED]
+        transitions:
+          - {from: DRAFT, action: "generate", to: ISSUED, trigger: PENSION_OFFICER, guard: "", side_effects: ""}
+          - {from: ISSUED, action: "authorise (P01)", to: AUTHORISED_TO_PDA, trigger: CHECKER, guard: "", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: AUTHORISED_TO_PDA, action: "PDA accepts / pensioner enrolled", to: ACTIVE, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: ACTIVE, action: "revise", to: SUPERSEDED, trigger: PENSION_OFFICER, guard: "", side_effects: "new REVISED PPO ACTIVE"}
+          - {from: ACTIVE, action: "final/regularised (from ANTICIPATORY/PROVISIONAL)", to: SUPERSEDED, trigger: SYSTEM, guard: "", side_effects: "final PPO ACTIVE"}
+          - {from: [ISSUED, ACTIVE], action: "cancel (error)", to: CANCELLED, trigger: AUTHORITY, guard: "", side_effects: ""}
+
+      - entity: pensioner_lifecycle
+        description: "Pensioner status with proactive death handling & life certificate."
+        runtime: MODULE_INTERNAL
+        states: [ACTIVE, SUSPENDED_NO_LC, DECEASED, CONVERTED_TO_FAMILY, CEASED]
+        initial: [ACTIVE]
+        terminal: [CEASED]
+        transitions:
+          - {from: ACTIVE, action: "LC overdue beyond grace (JOB-G11-LC-REMIND)", to: SUSPENDED_NO_LC, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: SUSPENDED_NO_LC, action: "LC submitted & verified", to: ACTIVE, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: ACTIVE, action: "report death (self) or FR-20 confirmed death", to: DECEASED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: DECEASED, action: "family-pension conversion (E26)", to: CONVERTED_TO_FAMILY, trigger: PENSION_OFFICER, guard: "", side_effects: ""}
+          - {from: DECEASED, action: "post-death drawal detected", to: DECEASED, trigger: SYSTEM, guard: "", side_effects: "open E38 overpayment recovery"}
+          - {from: [ACTIVE, CONVERTED_TO_FAMILY], action: "no eligible family member / cessation", to: CEASED, trigger: SYSTEM, guard: "", side_effects: ""}
+
+      - entity: service_verification
+        description: "Qualifying-service verification; three-point sign-off (P01 PARALLEL_ALL_OF)."
+        runtime: P01
+        states: [DRAFT, DISCREPANCIES_OPEN, ATTESTED, SIGNED_OFF, LOCKED]
+        initial: [DRAFT]
+        terminal: [LOCKED]
+        p01_pattern: PARALLEL_ALL_OF
+        transitions:
+          - {from: DRAFT, action: "build ledger", to: DISCREPANCIES_OPEN, trigger: PENSION_OFFICER, guard: "", side_effects: ""}
+          - {from: DISCREPANCIES_OPEN, action: "all discrepancies resolved & spells attested", to: ATTESTED, trigger: PENSION_OFFICER, guard: "", side_effects: ""}
+          - {from: ATTESTED, action: "three-point sign-off (P01 PARALLEL_ALL_OF)", to: SIGNED_OFF, trigger: AUTHORITIES, guard: "three distinct sign-offs", side_effects: "", p01_pattern: PARALLEL_ALL_OF}
+          - {from: SIGNED_OFF, action: "lock", to: LOCKED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: LOCKED, action: "new evidence", to: DRAFT, trigger: PENSION_OFFICER, guard: "", side_effects: "new version -> DRAFT"}
+
+      - entity: family_pension
+        description: "Family pension with enhanced-basis window."
+        runtime: P01
+        states: [DRAFT, COMPUTED, SANCTIONED, ACTIVE, TRANSFERRED, CEASED]
+        initial: [DRAFT]
+        terminal: [CEASED]
+        transitions:
+          - {from: DRAFT, action: "compute (enhanced_basis window)", to: COMPUTED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: COMPUTED, action: "sanction (P01)", to: SANCTIONED, trigger: CHECKER, guard: "", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: SANCTIONED, action: "begin payment", to: ACTIVE, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: ACTIVE, action: "enhanced window expiry", to: ACTIVE, trigger: SYSTEM, guard: "", side_effects: "auto step-down to normal"}
+          - {from: ACTIVE, action: "beneficiary cessation w/ next eligible (E26)", to: TRANSFERRED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: [ACTIVE, TRANSFERRED], action: "no eligible family member", to: CEASED, trigger: SYSTEM, guard: "", side_effects: ""}
+
+      - entity: provisional_pension
+        description: "Provisional pension when proceedings pending (DCRG withheld)."
+        runtime: MODULE_INTERNAL
+        states: [ACTIVE, CONCLUDED_REGULARISED, CONCLUDED_RECOVERY]
+        initial: [ACTIVE]
+        terminal: [CONCLUDED_REGULARISED, CONCLUDED_RECOVERY]
+        transitions:
+          - {from: null, action: "proceedings_pending", to: ACTIVE, trigger: SYSTEM, guard: "", side_effects: "provisional pension paid; DCRG withheld"}
+          - {from: ACTIVE, action: "conclusion: EXONERATED / PENALTY_NO_RECOVERY", to: CONCLUDED_REGULARISED, trigger: SYSTEM, guard: "", side_effects: "release DCRG; final PPO"}
+          - {from: ACTIVE, action: "conclusion: PENALTY_WITH_RECOVERY", to: CONCLUDED_RECOVERY, trigger: SYSTEM, guard: "", side_effects: "recover then release balance"}
+
+  # ===========================================================================
+  # G12 — Digital Service Register (BRD §10) — APPEND-ONLY / SUPERSEDE-NOT-DELETE
+  # ===========================================================================
+  G12:
+    machines:
+      - entity: sr_ledger_entry
+        description: "SR ledger entry (entry_status x attestation_status), projected from sr_status_events. Append-only, hash-chained; deletion FORBIDDEN, corrections supersede."
+        runtime: MODULE_INTERNAL
+        append_only: true
+        supersede_not_delete: true
+        states: [ACTIVE_UNATTESTED, ACTIVE_ATTESTED, ACTIVE_EMPLOYEE_VERIFIED, ACTIVE_DISPUTED, ACTIVE_ANNOTATED, SUPERSEDED]
+        initial: [ACTIVE_UNATTESTED]
+        terminal: [SUPERSEDED]
+        transitions:
+          - {from: null, action: "ingest valid event", to: ACTIVE_UNATTESTED, trigger: SYSTEM, guard: "", side_effects: "append + content hash-chain + RFC 3161 stamp (FR-03); status-chain genesis"}
+          - {from: ACTIVE_UNATTESTED, action: "custodian attest (qualified)", to: ACTIVE_ATTESTED, trigger: SR_CUSTODIAN, guard: "", side_effects: "attestation row + signed digest + timestamp (FR-07)"}
+          - {from: ACTIVE_ATTESTED, action: "employee/heir/assisted verify", to: ACTIVE_EMPLOYEE_VERIFIED, trigger: EMPLOYEE, guard: "", side_effects: "cycle confirmation (FR-08)"}
+          - {from: any, action: "employee/heir raises dispute", to: ACTIVE_DISPUTED, trigger: EMPLOYEE, guard: "", side_effects: "dispute record (FR-06); ATTESTATION_STATUS transition"}
+          - {from: ACTIVE_DISPUTED, action: "dispute resolved (upheld)", to: ACTIVE_ATTESTED, trigger: SR_CUSTODIAN, guard: "", side_effects: "resolution note; appeal now eligible (FR-21); returns to prior status"}
+          - {from: ACTIVE_DISPUTED, action: "dispute/appeal -> corrigendum", to: SUPERSEDED, trigger: SR_CUSTODIAN, guard: "", side_effects: "new ACTIVE corrigendum (FR-05); SUPERSESSION transition"}
+          - {from: any, action: "corrigendum / reversal / bulk corrigendum", to: SUPERSEDED, trigger: SR_CUSTODIAN, guard: "", side_effects: "superseded_by_event_id (via status chain); new ACTIVE entry"}
+          - {from: any, action: "annotation added", to: ACTIVE_ANNOTATED, trigger: SR_CUSTODIAN, guard: "", side_effects: "annotation record (FR-06); content unchanged"}
+          - {from: any, action: "delete attempt", to: null, trigger: any, guard: "REJECTED", side_effects: "SR_DELETION_FORBIDDEN + security alert"}
+
+      - entity: sr_correction
+        description: "Corrigendum decision; dual custodian co-sign (v2)."
+        runtime: P01
+        states: [PENDING, APPROVED, REJECTED]
+        initial: [PENDING]
+        terminal: [APPROVED, REJECTED]
+        transitions:
+          - {from: null, action: "maker submits corrigendum", to: PENDING, trigger: MAKER, guard: "reason + evidence (identity => dual sign-off)", side_effects: ""}
+          - {from: PENDING, action: "custodian approves + 2nd custodian co-signs", to: APPROVED, trigger: SR_CUSTODIAN, guard: "maker != checker != 2nd custodian", side_effects: "appends corrigendum; supersedes original", p01_pattern: PARALLEL_ALL_OF}
+          - {from: PENDING, action: "custodian rejects", to: REJECTED, trigger: SR_CUSTODIAN, guard: "", side_effects: "no ledger change"}
+
+      - entity: verification_cycle
+        description: "SR verification cycle (bulk/assisted/heir + gap gate)."
+        runtime: MODULE_INTERNAL
+        states: [OPEN, HEIR_PENDING, EMPLOYEE_REVIEW, BULK_REVIEW, ASSISTED, DISPUTED, CUSTODIAN_REVIEW, COMPLETED, OVERDUE]
+        initial: [OPEN, HEIR_PENDING]
+        terminal: [COMPLETED]
+        transitions:
+          - {from: null, action: "scheduler opens", to: OPEN, trigger: SYSTEM, guard: "period boundary / pre-retirement; DEATH => HEIR_PENDING", side_effects: ""}
+          - {from: OPEN, action: "employee starts review", to: EMPLOYEE_REVIEW, trigger: EMPLOYEE, guard: "", side_effects: "exceptions risk-surfaced"}
+          - {from: OPEN, action: "HR assists", to: ASSISTED, trigger: HR, guard: "consent captured", side_effects: ""}
+          - {from: HEIR_PENDING, action: "heir identity verified", to: EMPLOYEE_REVIEW, trigger: SR_CUSTODIAN, guard: "nominee/heir verified", side_effects: ""}
+          - {from: [EMPLOYEE_REVIEW, BULK_REVIEW], action: "dispute raised", to: DISPUTED, trigger: EMPLOYEE, guard: "", side_effects: "routes to FR-06"}
+          - {from: DISPUTED, action: "disputes resolved", to: CUSTODIAN_REVIEW, trigger: SR_CUSTODIAN, guard: "", side_effects: ""}
+          - {from: [EMPLOYEE_REVIEW, BULK_REVIEW, ASSISTED], action: "confirm (sign)", to: CUSTODIAN_REVIEW, trigger: EMPLOYEE, guard: "exceptions acknowledged", side_effects: ""}
+          - {from: CUSTODIAN_REVIEW, action: "custodian finalises (sign)", to: COMPLETED, trigger: SR_CUSTODIAN, guard: "no open disputes; all CRITICAL gaps EXPLAINED/CLOSED (FR-17)", side_effects: ""}
+          - {from: [OPEN, EMPLOYEE_REVIEW, DISPUTED], action: "past due_date", to: OVERDUE, trigger: SYSTEM, guard: "", side_effects: "escalation notifications"}
+
+      - entity: appeal
+        description: "SR appeal (post-uphold); OVERTURNED spawns corrigendum."
+        runtime: P01
+        states: [RAISED, UNDER_APPEAL, UPHELD, OVERTURNED, REMANDED, WITHDRAWN]
+        initial: [RAISED]
+        terminal: [UPHELD, OVERTURNED, WITHDRAWN]
+        transitions:
+          - {from: null, action: "appellant raises (post-uphold)", to: RAISED, trigger: APPELLANT, guard: "prior custodian UPHELD required", side_effects: ""}
+          - {from: RAISED, action: "authority assigned", to: UNDER_APPEAL, trigger: SYSTEM, guard: "independent of upholding custodian", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: UNDER_APPEAL, action: "authority decides (uphold)", to: UPHELD, trigger: APPEAL_AUTHORITY, guard: "", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: UNDER_APPEAL, action: "authority decides (overturn)", to: OVERTURNED, trigger: APPEAL_AUTHORITY, guard: "", side_effects: "spawn corrigendum (FR-05)"}
+          - {from: UNDER_APPEAL, action: "authority decides (remand)", to: REMANDED, trigger: APPEAL_AUTHORITY, guard: "", side_effects: "directions recorded"}
+          - {from: UNDER_APPEAL, action: "appellant withdraws", to: WITHDRAWN, trigger: APPELLANT, guard: "", side_effects: ""}
+          - {from: REMANDED, action: "custodian re-decides", to: RAISED, trigger: SR_CUSTODIAN, guard: "re-appealable", side_effects: ""}
+
+      - entity: bulk_corrigendum
+        description: "Bulk corrigendum with sampling approval (v2)."
+        runtime: P01
+        states: [DRAFT, PREVIEW, SAMPLING_APPROVAL, APPROVED, APPLYING, APPLIED, REJECTED]
+        initial: [DRAFT]
+        terminal: [APPLIED, REJECTED]
+        transitions:
+          - {from: null, action: "create + selector", to: DRAFT, trigger: MAKER, guard: "", side_effects: ""}
+          - {from: DRAFT, action: "preview impact", to: PREVIEW, trigger: MAKER, guard: "", side_effects: "count + sample computed"}
+          - {from: PREVIEW, action: "submit for sampling approval", to: SAMPLING_APPROVAL, trigger: MAKER, guard: "sample sized", side_effects: ""}
+          - {from: SAMPLING_APPROVAL, action: "2nd custodian approves sample", to: APPROVED, trigger: SR_CUSTODIAN, guard: "maker != approver; threshold met", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: SAMPLING_APPROVAL, action: "sample fails", to: REJECTED, trigger: SR_CUSTODIAN, guard: "", side_effects: "nothing applied"}
+          - {from: APPROVED, action: "apply", to: APPLIED, trigger: SYSTEM, guard: "", side_effects: "per-entry FR-05; failures logged, not aborting"}
+
+      - entity: legacy_digitisation_batch
+        description: "Legacy SR digitisation batch (confidence-flagged)."
+        runtime: HYBRID
+        states: [CREATED, SCANNING, DATA_ENTRY, DUAL_VERIFICATION, RECONCILIATION, READY_FOR_PROMOTION, PROMOTED, REJECTED]
+        initial: [CREATED]
+        terminal: [PROMOTED, REJECTED]
+        transitions:
+          - {from: CREATED, action: "scans linked", to: SCANNING, trigger: SYSTEM, guard: "G13 documents attached", side_effects: ""}
+          - {from: SCANNING, action: "transcription done", to: DATA_ENTRY, trigger: SYSTEM, guard: "", side_effects: "staged records created"}
+          - {from: DATA_ENTRY, action: "records entered + confidence set", to: DUAL_VERIFICATION, trigger: OPERATOR, guard: "", side_effects: ""}
+          - {from: DUAL_VERIFICATION, action: "all verified (maker != verifier)", to: RECONCILIATION, trigger: VERIFIER, guard: "maker != verifier", side_effects: ""}
+          - {from: RECONCILIATION, action: "facts reconciled", to: READY_FOR_PROMOTION, trigger: SYSTEM, guard: "VERIFIED discrepancy=0; flagged facts have provenance+note; matched to G01", side_effects: "semantic dedup clear"}
+          - {from: READY_FOR_PROMOTION, action: "custodian promotes (+ co-sign for flagged)", to: PROMOTED, trigger: SR_CUSTODIAN, guard: "maker-checker", side_effects: "bulk append (FR-03)", p01_pattern: SEQUENTIAL}
+          - {from: any, action: "custodian rejects", to: REJECTED, trigger: SR_CUSTODIAN, guard: "reason recorded", side_effects: ""}
+
+  # ===========================================================================
+  # G13 — Document Management & Secure Storage (BRD §12)
+  # ===========================================================================
+  G13:
+    machines:
+      - entity: document
+        description: "Document lifecycle; AV scan gate; legal-hold/disposition on P01."
+        runtime: HYBRID
+        states: [DRAFT, SCANNING, ACTIVE, QUARANTINED, CHECKED_OUT, ON_LEGAL_HOLD, ORPHANED, DISPOSITION_DUE, DISPOSED, ARCHIVED, DELETED]
+        initial: [DRAFT]
+        terminal: [DISPOSED, ARCHIVED, DELETED]
+        transitions:
+          - {from: null, action: "upload accepted", to: DRAFT, trigger: USER, guard: "VAL-FILE passed", side_effects: ""}
+          - {from: DRAFT, action: "scan starts", to: SCANNING, trigger: SYSTEM, guard: "", side_effects: "AV queued"}
+          - {from: SCANNING, action: "scan CLEAN", to: ACTIVE, trigger: SYSTEM, guard: "", side_effects: "sandboxed OCR/preview (X.1); P05 chained VERSION_ADD"}
+          - {from: SCANNING, action: "scan INFECTED", to: QUARANTINED, trigger: SYSTEM, guard: "", side_effects: "isolate + notify Security (X.2)"}
+          - {from: QUARANTINED, action: "released (Security)", to: ACTIVE, trigger: SECURITY, guard: "", side_effects: "override-with-reason audited"}
+          - {from: ACTIVE, action: "check-out (lockable types)", to: CHECKED_OUT, trigger: USER, guard: "", side_effects: "exclusive lock"}
+          - {from: CHECKED_OUT, action: "check-in", to: ACTIVE, trigger: USER, guard: "", side_effects: "new version; lock released"}
+          - {from: ACTIVE, action: "new version supersedes", to: ACTIVE, trigger: USER, guard: "", side_effects: "prior version -> SUPERSEDED"}
+          - {from: ACTIVE, action: "legal hold placed", to: ON_LEGAL_HOLD, trigger: LH_ADMIN, guard: "", side_effects: "disposition frozen"}
+          - {from: ON_LEGAL_HOLD, action: "hold released (P01 dual-control)", to: ACTIVE, trigger: LH_APPROVER, guard: "", side_effects: "recompute due date", p01_pattern: SEQUENTIAL}
+          - {from: ACTIVE, action: "last link detached (not WORM/held)", to: ORPHANED, trigger: SYSTEM, guard: "", side_effects: "default orphan class + review queue (R15)"}
+          - {from: ORPHANED, action: "re-home / re-link", to: ACTIVE, trigger: USER, guard: "", side_effects: ""}
+          - {from: ACTIVE, action: "disposition due", to: DISPOSITION_DUE, trigger: SYSTEM, guard: "no active hold; anchor confirmed (JOB-M11-RETENTION)", side_effects: ""}
+          - {from: DISPOSITION_DUE, action: "disposition executed", to: DISPOSED, trigger: SYSTEM, guard: "", side_effects: "certificate + tombstone; crypto-shred if unshared"}
+          - {from: ACTIVE, action: "soft delete", to: DELETED, trigger: USER, guard: "not WORM/hold", side_effects: ""}
+
+      - entity: legal_hold
+        description: "Legal-hold placement + release SoD on P01 (R10)."
+        runtime: P01
+        states: [PENDING_APPROVAL, ACTIVE, RELEASE_PROPOSED, RELEASED]
+        initial: [PENDING_APPROVAL, ACTIVE]
+        terminal: [RELEASED]
+        transitions:
+          - {from: null, action: "place (standard)", to: ACTIVE, trigger: LH_ADMIN, guard: "", side_effects: "legal_hold_count++; doc -> ON_LEGAL_HOLD"}
+          - {from: null, action: "place (high-value)", to: PENDING_APPROVAL, trigger: LH_ADMIN, guard: "proposes (P01)", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_APPROVAL, action: "approve placement", to: ACTIVE, trigger: LH_APPROVER, guard: "approver != placer (P01)", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: ACTIVE, action: "continuous-eval future match (JOB-G13-HOLDEVAL)", to: ACTIVE, trigger: SYSTEM, guard: "", side_effects: "auto-adds item + custodian notice (X.2)"}
+          - {from: ACTIVE, action: "propose release", to: RELEASE_PROPOSED, trigger: LH_ADMIN, guard: "reason", side_effects: "release_proposed_by set"}
+          - {from: RELEASE_PROPOSED, action: "approve release", to: RELEASED, trigger: LH_APPROVER, guard: "approver != proposer (P01)", side_effects: "legal_hold_count--; recompute due", p01_pattern: SEQUENTIAL}
+
+      - entity: disposition
+        description: "Retention disposition (maker-checker; hold-aware)."
+        runtime: P01
+        states: [PROPOSED, APPROVED, REJECTED, EXECUTED, BLOCKED_HOLD]
+        initial: [PROPOSED]
+        terminal: [EXECUTED, REJECTED]
+        transitions:
+          - {from: null, action: "propose", to: PROPOSED, trigger: LIBRARIAN, guard: "doc DISPOSITION_DUE", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: PROPOSED, action: "approve", to: APPROVED, trigger: RECORDS_MGR, guard: "maker != checker; no hold; anchor confirmed", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: PROPOSED, action: "reject", to: REJECTED, trigger: RECORDS_MGR, guard: "with reason", side_effects: ""}
+          - {from: APPROVED, action: "execute", to: EXECUTED, trigger: SYSTEM, guard: "no hold; confirmed anchor", side_effects: "JOB-M11-DISPOSAL purge/crypto-shred + certificate + tombstone"}
+          - {from: any, action: "hold present", to: BLOCKED_HOLD, trigger: SYSTEM, guard: "hold active", side_effects: "abort execution"}
+
+      - entity: signature_request
+        description: "E-signature request on document (DocumentGen / P01)."
+        runtime: P01
+        states: [DRAFT, SENT, IN_PROGRESS, COMPLETED, DECLINED, EXPIRED, CANCELLED]
+        initial: [DRAFT]
+        terminal: [COMPLETED, DECLINED, EXPIRED, CANCELLED]
+        transitions:
+          - {from: DRAFT, action: "send", to: SENT, trigger: ISSUER, guard: "", side_effects: ""}
+          - {from: SENT, action: "first sign", to: IN_PROGRESS, trigger: SIGNER, guard: "", side_effects: ""}
+          - {from: IN_PROGRESS, action: "all signed (+ timestamp + LTV for statutory)", to: COMPLETED, trigger: SIGNER, guard: "", side_effects: ""}
+          - {from: IN_PROGRESS, action: "decline", to: DECLINED, trigger: SIGNER, guard: "", side_effects: ""}
+          - {from: [SENT, IN_PROGRESS], action: "expiry", to: EXPIRED, trigger: SYSTEM, guard: "", side_effects: ""}
+          - {from: any, action: "cancel", to: CANCELLED, trigger: ISSUER, guard: "", side_effects: ""}
+
+      - entity: clearance
+        description: "Document classification/clearance (R3; P01 maker-checker)."
+        runtime: P01
+        states: [PENDING_APPROVAL, ACTIVE, SUSPENDED, EXPIRED, REVOKED]
+        initial: [PENDING_APPROVAL]
+        terminal: [EXPIRED, REVOKED]
+        transitions:
+          - {from: null, action: "propose", to: PENDING_APPROVAL, trigger: SECURITY, guard: "maker", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_APPROVAL, action: "approve", to: ACTIVE, trigger: RECORDS_MGR, guard: "approver != maker; TOP_SECRET needs 2 approvers", side_effects: "", p01_pattern: PARALLEL_ALL_OF}
+          - {from: ACTIVE, action: "recert overdue (JOB-G13-CLEARANCE-RECERT)", to: SUSPENDED, trigger: SYSTEM, guard: "", side_effects: "notify Security"}
+          - {from: ACTIVE, action: "valid_until passed", to: EXPIRED, trigger: SYSTEM, guard: "", side_effects: "auto -> effective INTERNAL"}
+          - {from: [ACTIVE, SUSPENDED], action: "revoke", to: REVOKED, trigger: SECURITY, guard: "with reason", side_effects: ""}
+
+      - entity: dsr
+        description: "Data-subject request lifecycle (DPDP erasure/exemption, R8)."
+        runtime: MODULE_INTERNAL
+        states: [RECEIVED, UNDER_REVIEW, EXEMPTED, PARTIALLY_FULFILLED, FULFILLED, REJECTED]
+        initial: [RECEIVED]
+        terminal: [EXEMPTED, PARTIALLY_FULFILLED, FULFILLED, REJECTED]
+        transitions:
+          - {from: null, action: "register", to: RECEIVED, trigger: DPO, guard: "", side_effects: "clock starts"}
+          - {from: RECEIVED, action: "DPO review", to: UNDER_REVIEW, trigger: DPO, guard: "", side_effects: ""}
+          - {from: UNDER_REVIEW, action: "all in-scope exempt", to: EXEMPTED, trigger: DPO, guard: "statutory/hold/WORM basis recorded", side_effects: ""}
+          - {from: UNDER_REVIEW, action: "mixed outcome", to: PARTIALLY_FULFILLED, trigger: DPO, guard: "", side_effects: "some erased (P05 redaction + JOB-M11-DISPOSAL), some exempt"}
+          - {from: UNDER_REVIEW, action: "all erasable", to: FULFILLED, trigger: DPO, guard: "", side_effects: "crypto-shred/purge (unshared)"}
+          - {from: UNDER_REVIEW, action: "not actionable", to: REJECTED, trigger: DPO, guard: "with reason", side_effects: ""}
+
+  # ===========================================================================
+  # G14 — Dashboard & Analytics (BRD §10)
+  # ===========================================================================
+  G14:
+    machines:
+      - entity: kpi_definition
+        description: "KPI definition lifecycle; activate via P01 checker (SoD)."
+        runtime: P01
+        states: [DRAFT, ACTIVE, RETIRED]
+        initial: [DRAFT]
+        terminal: [RETIRED]
+        transitions:
+          - {from: null, action: "create", to: DRAFT, trigger: ANALYST, guard: "expression validated; definition_hash computed", side_effects: ""}
+          - {from: DRAFT, action: "submit+activate (P01 checker)", to: ACTIVE, trigger: CHECKER, guard: "approved_by != created_by (SoD via P02)", side_effects: "prior ACTIVE -> RETIRED", p01_pattern: SEQUENTIAL}
+          - {from: ACTIVE, action: "new version activated", to: RETIRED, trigger: SYSTEM, guard: "", side_effects: "superseded; trends mark version change"}
+          - {from: [ACTIVE, DRAFT], action: "retire", to: RETIRED, trigger: ANALYST, guard: "not referenced by published surface (or auto-pauses dependents)", side_effects: ""}
+
+      - entity: dashboard
+        description: "Dashboard lifecycle; COMPLIANCE/EXEC publish via P01."
+        runtime: HYBRID
+        states: [DRAFT, PUBLISHED, ARCHIVED]
+        initial: [DRAFT]
+        terminal: [ARCHIVED]
+        transitions:
+          - {from: null, action: "create", to: DRAFT, trigger: ANALYST, guard: "bindings validated", side_effects: ""}
+          - {from: DRAFT, action: "publish", to: PUBLISHED, trigger: CHECKER, guard: "COMPLIANCE/EXEC require P01 checker; all bindings ACTIVE", side_effects: "", p01_pattern: SEQUENTIAL}
+          - {from: PUBLISHED, action: "edit (new draft)", to: DRAFT, trigger: ANALYST, guard: "", side_effects: "versioned edit"}
+          - {from: PUBLISHED, action: "archive", to: ARCHIVED, trigger: ANALYST, guard: "", side_effects: "saved_views preserved read-only"}
+
+      - entity: report_execution
+        description: "Report execution run (X.1/on-demand)."
+        runtime: MODULE_INTERNAL
+        states: [QUEUED, RUNNING, COMPLETED, FAILED, EXPIRED, REDACTED]
+        initial: [QUEUED]
+        terminal: [EXPIRED, REDACTED]
+        transitions:
+          - {from: null, action: "trigger (X.1/on-demand)", to: QUEUED, trigger: SYSTEM, guard: "recipients/scope validated (P02)", side_effects: ""}
+          - {from: QUEUED, action: "start", to: RUNNING, trigger: SYSTEM, guard: "mart available", side_effects: ""}
+          - {from: RUNNING, action: "success", to: COMPLETED, trigger: SYSTEM, guard: "", side_effects: "document created (G13); async access_log EXPORT (P05)"}
+          - {from: RUNNING, action: "error", to: FAILED, trigger: SYSTEM, guard: "", side_effects: "retry per X.1; alert on final fail"}
+          - {from: COMPLETED, action: "retention reached", to: EXPIRED, trigger: SYSTEM, guard: "", side_effects: "artefact purged"}
+          - {from: COMPLETED, action: "DPDP erasure (FR-20)", to: REDACTED, trigger: DPO, guard: "", side_effects: "artefact lawful basis revoked"}
+
+      - entity: alert_event
+        description: "Analytics alert event (threshold breach with hysteresis)."
+        runtime: MODULE_INTERNAL
+        states: [OPEN, SUPPRESSED, ACKNOWLEDGED, RESOLVED]
+        initial: [OPEN, SUPPRESSED]
+        terminal: [RESOLVED]
+        transitions:
+          - {from: null, action: "breach detected (period-correct threshold)", to: OPEN, trigger: SYSTEM, guard: "not within suppression/hysteresis", side_effects: "notify (X.2)"}
+          - {from: null, action: "breach within suppression/hysteresis", to: SUPPRESSED, trigger: SYSTEM, guard: "", side_effects: "de-duplicated; logged"}
+          - {from: OPEN, action: "acknowledge", to: ACKNOWLEDGED, trigger: USER, guard: "", side_effects: "acknowledged_by recorded"}
+          - {from: [ACKNOWLEDGED, OPEN], action: "value returns within bound", to: RESOLVED, trigger: SYSTEM, guard: "", side_effects: "auto-resolve on next clean evaluation"}
+
+      - entity: analytics_scope_policy
+        description: "Analytics scope policy (maker-checker via P01; enforced by P02)."
+        runtime: P01
+        states: [DRAFT, PENDING_APPROVAL, ACTIVE, REJECTED, SUPERSEDED]
+        initial: [DRAFT]
+        terminal: [REJECTED, SUPERSEDED]
+        transitions:
+          - {from: null, action: "create/update (maker)", to: DRAFT, trigger: MAKER, guard: "P02 dimensions validated", side_effects: ""}
+          - {from: DRAFT, action: "submit (with preview-as-role diff)", to: PENDING_APPROVAL, trigger: MAKER, guard: "", side_effects: "exposure diff captured"}
+          - {from: PENDING_APPROVAL, action: "approve (P01 checker != maker)", to: ACTIVE, trigger: CHECKER, guard: "checker != maker", side_effects: "prior version -> SUPERSEDED; security_audit_log", p01_pattern: SEQUENTIAL}
+          - {from: PENDING_APPROVAL, action: "reject", to: REJECTED, trigger: CHECKER, guard: "reason recorded", side_effects: ""}
+
+      - entity: prediction_model
+        description: "Prediction model; probabilistic requires fairness + DPO co-sign."
+        runtime: P01
+        states: [DRAFT, ACTIVE, RETIRED]
+        initial: [DRAFT]
+        terminal: [RETIRED]
+        transitions:
+          - {from: null, action: "register", to: DRAFT, trigger: ANALYST, guard: "methodology present; probabilistic: model card + exclusions", side_effects: ""}
+          - {from: DRAFT, action: "assess fairness (probabilistic only)", to: DRAFT, trigger: ANALYST, guard: "", side_effects: "adverse-impact test recorded; fairness_status PASSED/FAILED/WAIVED"}
+          - {from: DRAFT, action: "activate (P01 checker; probabilistic also DPO co-sign)", to: ACTIVE, trigger: CHECKER, guard: "approved_by != created_by; probabilistic requires fairness PASSED/WAIVED", side_effects: "", p01_pattern: PARALLEL_ALL_OF}
+          - {from: ACTIVE, action: "retire / drift detected", to: RETIRED, trigger: SYSTEM, guard: "", side_effects: "results frozen read-only; re-review required"}
+
+      - entity: data_subject_change
+        description: "DPDP data-subject change propagation across analytics."
+        runtime: MODULE_INTERNAL
+        states: [RECEIVED, PROPAGATING, COMPLETED, BLOCKED_RETENTION, FAILED]
+        initial: [RECEIVED]
+        terminal: [COMPLETED, BLOCKED_RETENTION]
+        transitions:
+          - {from: null, action: "receive change (G01/DPO/consent withdrawal)", to: RECEIVED, trigger: SYSTEM, guard: "", side_effects: "impact analysis queued"}
+          - {from: RECEIVED, action: "propagate", to: PROPAGATING, trigger: SYSTEM, guard: "", side_effects: "rectify snapshots / purge predictions / redact exports; P05 redaction marker"}
+          - {from: PROPAGATING, action: "complete", to: COMPLETED, trigger: SYSTEM, guard: "propagation verified", side_effects: "audited (P05)"}
+          - {from: PROPAGATING, action: "retention overrides erasure", to: BLOCKED_RETENTION, trigger: SYSTEM, guard: "legal basis recorded", side_effects: "data restricted not deleted"}
+          - {from: PROPAGATING, action: "step failure", to: FAILED, trigger: SYSTEM, guard: "", side_effects: "retry (X.1) + alert"}

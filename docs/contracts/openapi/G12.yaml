@@ -1,0 +1,3331 @@
+openapi: 3.1.0
+info:
+  title: G12 — Digital Employee Service Register (Digital SR) API
+  version: 3.1.0
+  description: >
+    OpenAPI 3.1 contract for government-HRMS module **G12 — Digital Employee Service
+    Register**, the net-new statutory system-of-record that owns the append-only,
+    hash-chained SR ledger (`service_register_events`) and its sub-ledgers.
+
+
+    G12 OWNS the canonical SR ingestion contract: `POST /api/v1/sr/ingest` is the
+    single, frozen write-port — the ONLY ledger write path. The canonical writer
+    set (G01, G04, G05, G06, G08, G09, G10, G11 — see FR-01.B; G03 is NOT a writer)
+    posts events through it; G11 (separation) also writes and G11/G14 consume the
+    register. All other write attempts (direct table INSERT, alternate URLs) are
+    prohibited by contract.
+
+
+    Conventions (PLATFORM_FOUNDATION §4, Foundation FS §1): all endpoints under
+    `/api/v1`; global `bearerAuth`; every response carries `X-Correlation-Id`;
+    unsafe POSTs carry `Idempotency-Key` (24h replay → original result; enables
+    exactly-once SR posting); cursor pagination (`limit` default 25 / max 100 +
+    `cursor` → `next_cursor`); canonical error envelope
+    `{ error: { code, message, field, details } }`. Domain error codes are the
+    `SR_*` machine codes aliased to `ERR-G12-*` and mapped onto the platform 8
+    standard HTTP statuses (422/401/403/404/409/412/429/500). See
+    docs/contracts/error-taxonomy.yaml (G12).
+  contact:
+    name: G12 Digital Service Register — API Architecture / Platform Foundation
+servers:
+  - url: /api/v1
+    description: Government HRMS platform, versioned base path
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: EventTypes
+    description: FR-01 — Governed, versioned SR event taxonomy (`sr_event_type`).
+  - name: Ingestion
+    description: FR-02 — The canonical SR write-port (idempotent, semantic-dedup, reversible).
+  - name: Timeline
+    description: FR-09 — SR timeline per employee and single-event read.
+  - name: Integrity
+    description: FR-04 — Content-chain + status-chain + mandatory external anchor verification.
+  - name: Corrections
+    description: FR-05 — Corrigendum / supersession (never delete) with maker-checker + second custodian.
+  - name: Annotations
+    description: FR-06 — Annotation, dispute, and appeal-hook entries.
+  - name: Attestation
+    description: FR-07 — Custodian attestation with qualified signature + RFC 3161 timestamp.
+  - name: Verification
+    description: FR-08 — Periodic employee verification (bulk / assisted / nominee-heir).
+  - name: Extracts
+    description: FR-10 / FR-18 — Certified true copy, purpose-driven redaction, dual custodian, §65B certificate.
+  - name: ExtractVerification
+    description: FR-11 — Offline / QR verification of certified extracts.
+  - name: AccessLog
+    description: FR-12 — Custody, access control, and access log.
+  - name: Subscriptions
+    description: FR-13 — Event subscriptions (single authenticated pull-feed at launch).
+  - name: Legacy
+    description: FR-14 — Bulk legacy digitisation with confidence-flagged lane.
+  - name: Retention
+    description: FR-15 — Retention, legal hold, cross-tenant continuity, DR anchor reconciliation.
+  - name: Forensics
+    description: FR-16 — Audit / forensics view & SR analytics.
+  - name: Gaps
+    description: FR-17 — Completeness assurance & gap register.
+  - name: LTV
+    description: FR-19 — Long-term validation (LTV) & evidence-record renewal.
+  - name: BulkCorrigendum
+    description: FR-20 — Bulk (cadre-wide / pay-commission) corrigendum workflow.
+  - name: Appeals
+    description: FR-21 — Grievance & appeal escalation.
+
+paths:
+
+  # ============================== FR-01 EVENT TYPES ==========================
+  /sr/event-types:
+    post:
+      tags: [EventTypes]
+      summary: Create a DRAFT SR event type (taxonomy)
+      operationId: createEventType
+      description: Create a DRAFT `sr_event_type` version (Sys Admin `sr.taxonomy.draft`).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventTypeCreate' }
+      responses:
+        '201':
+          description: DRAFT event type created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventType' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [EventTypes]
+      summary: List / resolve SR event types
+      operationId: listEventTypes
+      description: Paginated list of event types; resolves the effective version for a date.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, PUBLISHED, RETIRED]
+        - name: as_of
+          in: query
+          description: Resolve the version effective on this date.
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Page of event types.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/EventType' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/event-types/{code}/publish:
+    post:
+      tags: [EventTypes]
+      summary: Publish an event type version (checker)
+      operationId: publishEventType
+      description: Custodian (`sr.taxonomy.publish`) publishes a DRAFT after effective-range, cadence, and correlation validation.
+      parameters:
+        - $ref: '#/components/parameters/EventTypeCode'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Published.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventType' }
+        '409':
+          description: Overlapping effective ranges (`SR_TYPE_OVERLAP`).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-02 INGESTION (WRITE-PORT) ===============
+  /sr/ingest:
+    post:
+      tags: [Ingestion]
+      summary: Canonical SR write-port — post a service event (exactly-once)
+      operationId: ingestEvent
+      description: >
+        THE single, frozen, canonical ledger write path. Accepts the dedup tuple
+        `(source_module, source_reference_id, source_event_version)` for syntactic
+        dedup and `fact_key` for semantic (per-fact) dedup of qualifying-service
+        events. Requires the `sr.ingest.write` scope and (statically) `Idempotency-Key`
+        for exactly-once posting. Delegates to the FR-03 append engine which assigns
+        the gap-free `sequence_no`, chains `entry_hash`, and obtains an RFC 3161
+        timestamp token. Manual custodian ingestion uses `source_module=G12_MANUAL`
+        (maker-checker).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IngestRequest' }
+            examples:
+              promotion:
+                summary: Promotion with semantic fact key (G06)
+                value:
+                  source_module: G06
+                  source_reference_id: ord-9912
+                  source_event_version: 1
+                  event_type_code: PROMOTION
+                  employee_id: 8f3a-aa
+                  event_date: '2019-06-01'
+                  fact_key: 'EMP:8f3a-aa|CAT:PROMOTION|EFF:2019-06-01|POST:HEADMASTER'
+                  order_no: PROM/2019/9912
+                  order_date: '2019-05-20'
+                  sanctioning_authority: Director of Education
+                  payload:
+                    from_designation: Asst. Teacher
+                    to_designation: Headmaster
+                    pay_scale: Level-9
+                  document_ids: [doc-aa11]
+                  qualifying_service_impact: QUALIFYING
+      responses:
+        '201':
+          description: >
+            Accepted — exactly one new ledger entry created (`validation_result=ACCEPTED`).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResponse' }
+        '200':
+          description: >
+            Idempotent / semantic no-op. Returns the original `sr_event_id` with
+            `validation_result` = `DUPLICATE_NOOP` (syntactic idempotency replay) or
+            `SEMANTIC_DUPLICATE_NOOP` (same real-world fact posted by another module).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResponse' }
+        '403':
+          description: >
+            `SR_SOURCE_NOT_ALLOWED` (403) — the `source_module` is not in the event
+            type's `allowed_source_modules` allowlist; or missing `sr.ingest.write`.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                sourceNotAllowed:
+                  value:
+                    error:
+                      code: SR_SOURCE_NOT_ALLOWED
+                      message: You don't have permission to perform this action.
+                      field: source_module
+                      details: { reason: SOURCE_NOT_ALLOWED }
+        '422':
+          description: >
+            Validation failure. `SR_FACT_KEY_REQUIRED` (qualifying-service event missing
+            `fact_key`), `SR_PAYLOAD_INVALID` (payload fails the type JSON Schema), or
+            `SR_FUTURE_DATE` (`event_date` beyond future tolerance).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                factKeyRequired:
+                  value:
+                    error:
+                      code: SR_FACT_KEY_REQUIRED
+                      message: A semantic fact_key is required for this qualifying-service event.
+                      field: fact_key
+                      details: { reason: FACT_KEY_REQUIRED }
+        '404':
+          description: >
+            `SR_TYPE_NOT_FOUND` (no published event type effective for `event_date`)
+            or `SR_EMPLOYEE_NOT_FOUND` (`employee_id` not in G01).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: >
+            `SR_DUPLICATE_EVENT` / `SR_SEMANTIC_DUPLICATE` (surfaced as no-ops on 200)
+            or `SR_SEMANTIC_CONFLICT` — same `fact_key` with disagreeing facts; no entry
+            created, a reconciliation task is opened and the custodian notified.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                semanticConflict:
+                  value:
+                    error:
+                      code: SR_SEMANTIC_CONFLICT
+                      message: Same fact_key with disagreeing facts; flagged for reconciliation.
+                      field: fact_key
+                      details: { reason: SEMANTIC_CONFLICT, conflicting_event_id: sr-0042 }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/ingest/reversal:
+    post:
+      tags: [Ingestion]
+      summary: Post a reversal / cancellation event (quashed order)
+      operationId: ingestReversal
+      description: >
+        Reversal envelope (`is_reversal=true`, `reverses_source_reference_id`). A
+        reversal referencing an existing source reference auto-spawns the
+        `WF-G12-CORRIGENDUM` supersession workflow (FR-05) and returns the correction id.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReversalRequest' }
+            examples:
+              quash:
+                summary: Major penalty quashed by tribunal (G09)
+                value:
+                  source_module: G09
+                  reverses_source_reference_id: case-557
+                  source_reference_id: case-557-quash
+                  event_type_code: MAJOR_PENALTY_REVERSAL
+                  employee_id: 8f3a-aa
+                  event_date: '2026-05-10'
+                  order_no: OA/4471/2026
+                  sanctioning_authority: State Administrative Tribunal
+      responses:
+        '201':
+          description: Reversal recorded; corrigendum workflow spawned.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReversalResponse' }
+        '404':
+          description: >
+            `SR_REVERSAL_TARGET_NOT_FOUND` — reversal references an unknown
+            `source_reference_id`.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/ingest/{ingestion_request_id}:
+    get:
+      tags: [Ingestion]
+      summary: Get an ingestion request record
+      operationId: getIngestionRequest
+      parameters:
+        - name: ingestion_request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Ingestion request record.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestionRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-09 TIMELINE ============================
+  /sr/employees/{id}/timeline:
+    get:
+      tags: [Timeline]
+      summary: SR timeline for an employee (chronological, filterable)
+      operationId: getEmployeeTimeline
+      description: >
+        Paginated, chronological ledger view for one employee. Non-self access
+        requires a stated `purpose` (else `SR_PURPOSE_REQUIRED`, 422). P02 applies
+        field masking and data-scope; out-of-scope subjects return 404.
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: purpose
+          in: query
+          description: Stated purpose (required for non-self access).
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { $ref: '#/components/schemas/EventCategory' }
+        - name: from_date
+          in: query
+          schema: { type: string, format: date }
+        - name: to_date
+          in: query
+          schema: { type: string, format: date }
+        - name: sort
+          in: query
+          schema: { type: string, example: 'event_date:asc' }
+      responses:
+        '200':
+          description: Page of ledger entries.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/SrEvent' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '422':
+          description: '`SR_PURPOSE_REQUIRED` — non-self access without a stated purpose.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/events/{id}:
+    get:
+      tags: [Timeline]
+      summary: Get a single SR ledger entry by id
+      operationId: getEvent
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Ledger entry.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrEvent' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-04 INTEGRITY / ANCHORS ==================
+  /sr/integrity/verify:
+    post:
+      tags: [Integrity]
+      summary: Verify content + status hash chains
+      operationId: verifyIntegrity
+      description: >
+        Recompute and verify the content chain and the status sub-ledger chain for
+        an employee (or scope). Read-only. `sr.integrity.verify` (custodian/auditor).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IntegrityVerifyRequest' }
+      responses:
+        '200':
+          description: PASS with verified counts, or FAIL with first divergence.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrityRun' }
+        '422':
+          description: >
+            Non-suppressible FAIL. `SR_INTEGRITY_FAILED` (content chain),
+            `SR_STATUS_CHAIN_FAILED` (status sub-ledger).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/integrity/verify-anchor:
+    post:
+      tags: [Integrity]
+      summary: Verify chain heads against the external anchor
+      operationId: verifyAnchor
+      description: >
+        Compare live chain heads to the latest `sr_anchors` Merkle root and verify
+        the anchor's RFC 3161 timestamp. A head-vs-anchor mismatch (insider rewrite
+        or stale restore) is a non-suppressible FAIL.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IntegrityVerifyRequest' }
+      responses:
+        '200':
+          description: Anchor comparison PASS.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrityRun' }
+        '422':
+          description: '`SR_ANCHOR_MISMATCH` — chain head does not match the anchor (insider/stale-restore).'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                anchorMismatch:
+                  value:
+                    error:
+                      code: SR_ANCHOR_MISMATCH
+                      message: Chain head for employee does not match the latest anchor.
+                      field: employee_id
+                      details:
+                        cause: ANCHOR_MISMATCH
+                        anchor_id: an-02
+                        expected_head: 9f10-ee
+                        stored_head: 77aa-12
+        '412':
+          description: '`SR_ANCHOR_MISSING` — no current anchor within cadence.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/integrity/runs:
+    get:
+      tags: [Integrity]
+      summary: List integrity verification runs
+      operationId: listIntegrityRuns
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: outcome
+          in: query
+          schema: { type: string, enum: [PASS, FAIL, PENDING] }
+      responses:
+        '200':
+          description: Page of integrity runs.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/IntegrityRun' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/anchors:
+    get:
+      tags: [Integrity]
+      summary: List external Merkle-root anchors (auditor)
+      operationId: listAnchors
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of anchors.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Anchor' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-05 CORRECTIONS =========================
+  /sr/events/{id}/corrigendum:
+    post:
+      tags: [Corrections]
+      summary: Initiate a corrigendum (maker)
+      operationId: createCorrigendum
+      description: >
+        Never edits/deletes the original. Creates a corrigendum that supersedes it
+        (SUPERSESSION transition in the status sub-ledger). Maker-checker; routine
+        corrigenda require a distinct second custodian co-sign (SoD). `sr.correction.create`.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CorrigendumRequest' }
+      responses:
+        '201':
+          description: Corrigendum created (pending checker/co-sign).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Correction' }
+        '409':
+          description: '`SR_ENTRY_SUPERSEDED` — target already superseded (redirects to latest ACTIVE successor).'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/corrections/{id}/approve:
+    post:
+      tags: [Corrections]
+      summary: Approve a correction (checker)
+      operationId: approveCorrection
+      description: Custodian approval (`sr.correction.approve`); maker cannot self-approve.
+      parameters:
+        - $ref: '#/components/parameters/CorrectionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DecisionRequest' }
+      responses:
+        '200':
+          description: Approved (or forwarded to co-sign).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Correction' }
+        '403':
+          description: 'FORBIDDEN — separation-of-duties (maker == checker).'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412':
+          description: '`SR_SECOND_CUSTODIAN_REQUIRED` — routine corrigendum lacks a distinct co-signer.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/corrections/{id}/cosign:
+    post:
+      tags: [Corrections]
+      summary: Second-custodian co-sign of a routine corrigendum
+      operationId: cosignCorrection
+      description: Distinct second custodian co-sign (`sr.correction.cosign`); enforces maker ≠ checker ≠ second custodian.
+      parameters:
+        - $ref: '#/components/parameters/CorrectionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DecisionRequest' }
+      responses:
+        '200':
+          description: Co-signed; corrigendum appended and original SUPERSEDED.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Correction' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '412':
+          description: '`SR_SECOND_CUSTODIAN_REQUIRED` — co-signer not distinct.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-06 ANNOTATIONS / DISPUTES ==============
+  /sr/events/{id}/dispute:
+    post:
+      tags: [Annotations]
+      summary: Raise a dispute on an entry (employee / heir)
+      operationId: disputeEvent
+      description: Employee/heir objects to an ACTIVE entry; `attestation_status` → DISPUTED. `sr.dispute.create`.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DisputeRequest' }
+      responses:
+        '201':
+          description: Dispute raised.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Correction' }
+        '409':
+          description: '`SR_ENTRY_SUPERSEDED` — cannot dispute a superseded entry.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/events/{id}/annotate:
+    post:
+      tags: [Annotations]
+      summary: Add a custodian annotation to an entry
+      operationId: annotateEvent
+      description: Attaches a statutory/contextual note without changing the fact (`entry_status` → ANNOTATED). `sr.annotate`.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnnotateRequest' }
+      responses:
+        '201':
+          description: Annotation added.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Correction' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/disputes/{id}/resolve:
+    post:
+      tags: [Annotations]
+      summary: Resolve a dispute (uphold or corrigendum)
+      operationId: resolveDispute
+      description: Custodian records UPHELD or CORRIGENDUM_ISSUED and notifies the disputant. `sr.dispute.resolve`.
+      parameters:
+        - $ref: '#/components/parameters/DisputeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DisputeResolveRequest' }
+      responses:
+        '200':
+          description: Dispute resolved.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Correction' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/disputes/{id}/appeal:
+    post:
+      tags: [Annotations, Appeals]
+      summary: Escalate an upheld dispute to appeal (FR-21)
+      operationId: appealDispute
+      description: >
+        Available only after a custodian UPHELD (else `SR_APPEAL_NOT_ELIGIBLE`).
+        Opens a `WF-G12-APPEAL` case for the Appellate Authority.
+      parameters:
+        - $ref: '#/components/parameters/DisputeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AppealRequest' }
+      responses:
+        '201':
+          description: Appeal raised.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Appeal' }
+        '409':
+          description: '`SR_APPEAL_NOT_ELIGIBLE` — appeal raised without a prior custodian uphold.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-07 ATTESTATION =========================
+  /sr/events/{id}/attest:
+    post:
+      tags: [Attestation]
+      summary: Custodian attest an entry (qualified signature)
+      operationId: attestEvent
+      description: >
+        Records a qualified PKI signature + RFC 3161 timestamp and an ATTESTED status
+        transition. Server-signing is rejected for statutory attestation. `sr.attest`.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttestRequest' }
+      responses:
+        '201':
+          description: Attested.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Attestation' }
+        '409':
+          description: '`SR_ENTRY_DISPUTED` — attest blocked by an open dispute.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: >
+            `SR_SIGNATURE_NOT_QUALIFIED` (server-signed rejected) or
+            `ERR-G12-SIGNATURE-INVALID` (qualified signature fails validation).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/attestations/batch:
+    post:
+      tags: [Attestation]
+      summary: Batch-attest multiple entries
+      operationId: batchAttest
+      description: Processes each entry to a discrete `sr_attestations` row with a qualified signature.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BatchAttestRequest' }
+      responses:
+        '200':
+          description: Batch outcome with per-entry results.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchAttestResult' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-08 VERIFICATION ========================
+  /sr/verification-cycles:
+    get:
+      tags: [Verification]
+      summary: List / get verification cycles
+      operationId: listVerificationCycles
+      parameters:
+        - name: employee_id
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of verification cycles.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/VerificationCycle' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/verification-cycles/{id}/bulk-confirm:
+    post:
+      tags: [Verification]
+      summary: Bulk-confirm routine entries with exceptions
+      operationId: bulkConfirmCycle
+      parameters:
+        - $ref: '#/components/parameters/CycleId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkConfirmRequest' }
+      responses:
+        '200':
+          description: Bulk confirmation recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationCycle' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/verification-cycles/{id}/confirm:
+    post:
+      tags: [Verification]
+      summary: Confirm a verification cycle (self)
+      operationId: confirmCycle
+      parameters:
+        - $ref: '#/components/parameters/CycleId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRequest' }
+      responses:
+        '200':
+          description: Confirmation recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationCycle' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/verification-cycles/{id}/assisted-confirm:
+    post:
+      tags: [Verification]
+      summary: Assisted confirmation (operator on behalf, with consent)
+      operationId: assistedConfirmCycle
+      parameters:
+        - $ref: '#/components/parameters/CycleId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssistedConfirmRequest' }
+      responses:
+        '200':
+          description: Assisted confirmation recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationCycle' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/verification-cycles/{id}/heir-confirm:
+    post:
+      tags: [Verification]
+      summary: Nominee / legal-heir confirmation (DEATH_IN_SERVICE)
+      operationId: heirConfirmCycle
+      parameters:
+        - $ref: '#/components/parameters/CycleId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HeirConfirmRequest' }
+      responses:
+        '200':
+          description: Heir confirmation recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationCycle' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/verification-cycles/{id}/finalise:
+    post:
+      tags: [Verification]
+      summary: Finalise a verification cycle (custodian)
+      operationId: finaliseCycle
+      description: Custodian finalises the cycle. A CRITICAL unresolved gap blocks pre-retirement finalisation (`SR_GAP_UNRESOLVED`).
+      parameters:
+        - $ref: '#/components/parameters/CycleId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Cycle finalised.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationCycle' }
+        '412':
+          description: '`SR_GAP_UNRESOLVED` — CRITICAL completeness gap blocks finalisation.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-10 EXTRACTS + FR-18 §65B ===============
+  /sr/employees/{id}/extracts:
+    post:
+      tags: [Extracts]
+      summary: Generate a certified true copy (purpose-driven redaction)
+      operationId: createExtract
+      description: >
+        Issues a certified extract with qualified signing and purpose-driven redaction.
+        FULL_SR extracts require a distinct second-custodian co-sign
+        (`SR_SECOND_CUSTODIAN_REQUIRED`). A live dispute/appeal renders on the extract.
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExtractRequest' }
+      responses:
+        '201':
+          description: Extract created (may await co-sign for FULL_SR).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Extract' }
+        '412':
+          description: >
+            `SR_SECOND_CUSTODIAN_REQUIRED` (FULL_SR needs a co-signer) or
+            `SR_REDACTION_REQUIRED` (requested scope exceeds redaction entitlement).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/extracts/{id}/cosign:
+    post:
+      tags: [Extracts]
+      summary: Second-custodian co-sign a FULL_SR extract
+      operationId: cosignExtract
+      parameters:
+        - $ref: '#/components/parameters/ExtractId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Extract co-signed and issued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Extract' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/extracts/{id}/revoke:
+    post:
+      tags: [Extracts]
+      summary: Revoke a certified extract
+      operationId: revokeExtract
+      parameters:
+        - $ref: '#/components/parameters/ExtractId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Extract revoked; revocation feed updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Extract' }
+        '409':
+          description: '`SR_EXTRACT_REVOKED` — already revoked.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/extracts/{id}:
+    get:
+      tags: [Extracts]
+      summary: Get a certified extract
+      operationId: getExtract
+      parameters:
+        - $ref: '#/components/parameters/ExtractId'
+      responses:
+        '200':
+          description: Extract.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Extract' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/extracts/{id}/authenticity-certificate:
+    post:
+      tags: [Extracts]
+      summary: Generate a §65B / BSA certificate-of-authenticity (FR-18)
+      operationId: generateAuthenticityCertificate
+      description: >
+        Machine-generated electronic-record authenticity certificate citing the
+        content digest, anchor reference, signer, and chain-of-custody.
+      parameters:
+        - $ref: '#/components/parameters/ExtractId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Certificate generated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthenticityCertificate' }
+        '412':
+          description: '`SR_ANCHOR_MISSING` — no current anchor to cite.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/authenticity-certificates/{id}:
+    get:
+      tags: [Extracts]
+      summary: Get a §65B authenticity certificate
+      operationId: getAuthenticityCertificate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Certificate.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthenticityCertificate' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-11 OFFLINE / QR VERIFY =================
+  /sr/verify/{qr_verification_token}:
+    get:
+      tags: [ExtractVerification]
+      summary: Public online verification of a certified extract
+      operationId: verifyExtractPublic
+      description: >
+        Lightweight public verification (online convenience). The offline bundle in
+        the PDF is self-contained and verifiable against the published CA chain and
+        embedded anchor reference without calling this endpoint.
+      security: []
+      parameters:
+        - name: qr_verification_token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Verification status.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicVerification' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/revocation-feed:
+    get:
+      tags: [ExtractVerification]
+      summary: Signed, cacheable revocation feed
+      operationId: getRevocationFeed
+      security: []
+      responses:
+        '200':
+          description: Signed revocation feed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevocationFeed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-12 ACCESS LOG ==========================
+  /sr/access-log:
+    get:
+      tags: [AccessLog]
+      summary: Query the SR access log (fail-closed)
+      operationId: getAccessLog
+      parameters:
+        - name: employee_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: actor
+          in: query
+          schema: { type: string }
+        - name: action
+          in: query
+          schema: { $ref: '#/components/schemas/AccessAction' }
+        - name: from_date
+          in: query
+          schema: { type: string, format: date }
+        - name: to_date
+          in: query
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of access-log entries.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AccessLogEntry' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-13 SUBSCRIPTIONS =======================
+  /sr/subscriptions:
+    post:
+      tags: [Subscriptions]
+      summary: Register a pull-feed subscription
+      operationId: createSubscription
+      description: >
+        Single authenticated PULL_FEED at launch. WEBHOOK / MESSAGE_BUS are deferred;
+        registering them returns `SR_DELIVERY_MODE_DEFERRED`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubscriptionCreate' }
+      responses:
+        '201':
+          description: Subscription registered.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '409':
+          description: '`SR_DELIVERY_MODE_DEFERRED` — WEBHOOK/MESSAGE_BUS registered while deferred.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/subscriptions/{id}/activate:
+    post:
+      tags: [Subscriptions]
+      summary: Activate a subscription
+      operationId: activateSubscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Subscription activated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/feed:
+    get:
+      tags: [Subscriptions]
+      summary: Pull the authenticated SR change feed
+      operationId: getFeed
+      description: Cursor over the `service_register_events` change feed from a sequence watermark.
+      parameters:
+        - name: since_seq
+          in: query
+          description: Return changes after this global feed sequence.
+          schema: { type: integer, format: int64 }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of feed events.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-14 LEGACY DIGITISATION =================
+  /sr/legacy/batches:
+    post:
+      tags: [Legacy]
+      summary: Create a legacy digitisation batch
+      operationId: createLegacyBatch
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LegacyBatchCreate' }
+      responses:
+        '201':
+          description: Batch created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegacyBatch' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/legacy/batches/{id}/records:
+    post:
+      tags: [Legacy]
+      summary: Add a record to a legacy batch
+      operationId: addLegacyRecord
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LegacyRecordCreate' }
+      responses:
+        '201':
+          description: Record added.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegacyRecord' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/legacy/records/{id}/verify:
+    post:
+      tags: [Legacy]
+      summary: Dual-verify a legacy record
+      operationId: verifyLegacyRecord
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LegacyVerifyRequest' }
+      responses:
+        '200':
+          description: Record verification recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegacyRecord' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/legacy/records/{id}/set-confidence:
+    post:
+      tags: [Legacy]
+      summary: Set the confidence flag on a legacy record
+      operationId: setLegacyConfidence
+      description: VERIFIED / RECONSTRUCTED / LEGACY_UNVERIFIABLE with a mandatory evidence note.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetConfidenceRequest' }
+      responses:
+        '200':
+          description: Confidence set.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegacyRecord' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/legacy/batches/{id}/promote:
+    post:
+      tags: [Legacy]
+      summary: Promote a legacy batch to the ledger (checker + co-sign)
+      operationId: promoteLegacyBatch
+      description: Custodian promotes matched records to the ledger; confidence-flagged records require co-sign.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Batch promoted (records appended via FR-03).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegacyBatch' }
+        '409':
+          description: '`SR_LEGACY_UNMATCHED` — a record is not matched to a master employee.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412':
+          description: '`SR_SECOND_CUSTODIAN_REQUIRED` — confidence-flagged promotion lacks a co-signer.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-15 RETENTION / LEGAL HOLD / DR =========
+  /sr/employees/{id}/legal-hold:
+    post:
+      tags: [Retention]
+      summary: Place or lift a legal hold on an employee's SR
+      operationId: setLegalHold
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LegalHoldRequest' }
+      responses:
+        '200':
+          description: Legal-hold state updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalHold' }
+        '409':
+          description: '`SR_LEGAL_HOLD_ACTIVE` — conflicting hold/tiering state.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/retention-policy:
+    get:
+      tags: [Retention]
+      summary: Get the SR retention policy (deletion-prohibited)
+      operationId: getRetentionPolicy
+      responses:
+        '200':
+          description: Retention policy.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionPolicy' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/dr/reconcile-anchor:
+    post:
+      tags: [Retention]
+      summary: DR restore gate — reconcile restored heads to the external anchor
+      operationId: reconcileAnchor
+      description: Post-restore verification; a stale restore (`SR_STALE_RESTORE`) is a gated failure.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DrReconcileRequest' }
+      responses:
+        '200':
+          description: Reconciliation report.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrityRun' }
+        '409':
+          description: '`SR_STALE_RESTORE` — restored chain heads predate the external anchor.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-16 FORENSICS / ANALYTICS ===============
+  /sr/forensics/employees/{id}:
+    get:
+      tags: [Forensics]
+      summary: Forensics view for an employee (content/status/anchor lineage)
+      operationId: getForensics
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Forensics view.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Forensics' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/forensics/as-of:
+    get:
+      tags: [Forensics]
+      summary: As-of reconstruction of the register state
+      operationId: getForensicsAsOf
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: employee_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: As-of forensic reconstruction.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Forensics' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/analytics/summary:
+    get:
+      tags: [Forensics]
+      summary: SR analytics summary (feeds G14)
+      operationId: getAnalyticsSummary
+      responses:
+        '200':
+          description: Analytics summary.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsSummary' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-17 GAPS ================================
+  /sr/employees/{id}/gaps:
+    get:
+      tags: [Gaps]
+      summary: List completeness gaps for an employee
+      operationId: listEmployeeGaps
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - name: severity
+          in: query
+          schema: { type: string, enum: [INFO, WARN, CRITICAL] }
+        - name: gap_status
+          in: query
+          schema: { $ref: '#/components/schemas/GapStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of gap findings.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Gap' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/gaps/{id}/explain:
+    post:
+      tags: [Gaps]
+      summary: Explain a gap (custodian)
+      operationId: explainGap
+      parameters:
+        - $ref: '#/components/parameters/GapId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GapExplainRequest' }
+      responses:
+        '200':
+          description: Gap explained.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Gap' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/gaps/{id}/close:
+    post:
+      tags: [Gaps]
+      summary: Close a gap (recorded or false-positive)
+      operationId: closeGap
+      parameters:
+        - $ref: '#/components/parameters/GapId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GapCloseRequest' }
+      responses:
+        '200':
+          description: Gap closed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Gap' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/gaps/{id}/corroborate:
+    post:
+      tags: [Gaps]
+      summary: Employee/heir corroborates a gap finding
+      operationId: corroborateGap
+      parameters:
+        - $ref: '#/components/parameters/GapId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GapCorroborateRequest' }
+      responses:
+        '200':
+          description: Corroboration recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Gap' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/gaps/summary:
+    get:
+      tags: [Gaps]
+      summary: Gap-register summary (gap-closure rate)
+      operationId: getGapSummary
+      responses:
+        '200':
+          description: Gap summary.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GapSummary' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-19 LTV / CRYPTO ========================
+  /sr/ltv/renew:
+    post:
+      tags: [LTV]
+      summary: Renew LTV / evidence record for an artefact
+      operationId: renewLtv
+      description: Manual/migration LTV renewal (PAdES-LTV / RFC 4998 archive timestamp) for an extract, attestation, or anchor.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LtvRenewRequest' }
+      responses:
+        '201':
+          description: Renewal recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LtvRenewal' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/ltv/renewals:
+    get:
+      tags: [LTV]
+      summary: List LTV renewals
+      operationId: listLtvRenewals
+      parameters:
+        - name: subject_type
+          in: query
+          schema: { type: string, enum: [EXTRACT, ATTESTATION, ANCHOR] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of renewals.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/LtvRenewal' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/crypto/migrate:
+    post:
+      tags: [LTV]
+      summary: Crypto migration (re-anchor to a new algorithm)
+      operationId: cryptoMigrate
+      description: Admin re-anchors to a new hash algorithm without rewriting history.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CryptoMigrateRequest' }
+      responses:
+        '202':
+          description: Migration accepted; re-anchor scheduled.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LtvRenewal' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-20 BULK CORRIGENDUM ====================
+  /sr/bulk-corrigenda:
+    post:
+      tags: [BulkCorrigendum]
+      summary: Create a bulk corrigendum batch (+ selector)
+      operationId: createBulkCorrigendum
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkCorrigendumCreate' }
+      responses:
+        '201':
+          description: Bulk corrigendum batch created (DRAFT).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkCorrigendum' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/bulk-corrigenda/{id}/preview:
+    post:
+      tags: [BulkCorrigendum]
+      summary: Preview a bulk corrigendum (impact + sample)
+      operationId: previewBulkCorrigendum
+      parameters:
+        - $ref: '#/components/parameters/BulkBatchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Impact preview with count and sample.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkCorrigendum' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/bulk-corrigenda/{id}/sample-approve:
+    post:
+      tags: [BulkCorrigendum]
+      summary: Second-custodian sampling approval
+      operationId: sampleApproveBulkCorrigendum
+      parameters:
+        - $ref: '#/components/parameters/BulkBatchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SampleApproveRequest' }
+      responses:
+        '200':
+          description: Sampling approval recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkCorrigendum' }
+        '403':
+          description: 'FORBIDDEN — sampling approver must differ from the maker (SoD).'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/bulk-corrigenda/{id}/apply:
+    post:
+      tags: [BulkCorrigendum]
+      summary: Apply an approved bulk corrigendum
+      operationId: applyBulkCorrigendum
+      description: Appends per-entry corrigenda (FR-05) with a full per-entry audit and applied/failed report.
+      parameters:
+        - $ref: '#/components/parameters/BulkBatchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Applied; per-entry outcome report returned.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkCorrigendum' }
+        '412':
+          description: '`SR_SECOND_CUSTODIAN_REQUIRED` — sampling approval not completed.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # ============================== FR-21 APPEALS =============================
+  /sr/appeals:
+    get:
+      tags: [Appeals]
+      summary: List appeals
+      operationId: listAppeals
+      parameters:
+        - name: employee_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AppealStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of appeals.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Appeal' }
+                  next_cursor: { $ref: '#/components/schemas/NextCursor' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/appeals/{id}/decide:
+    post:
+      tags: [Appeals]
+      summary: Appellate authority decides an appeal
+      operationId: decideAppeal
+      description: Records a binding outcome; an OVERTURNED appeal spawns a corrigendum (FR-05).
+      parameters:
+        - $ref: '#/components/parameters/AppealId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AppealDecideRequest' }
+      responses:
+        '200':
+          description: Appeal decided.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Appeal' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/appeals/{id}/withdraw:
+    post:
+      tags: [Appeals]
+      summary: Withdraw an appeal (appellant)
+      operationId: withdrawAppeal
+      parameters:
+        - $ref: '#/components/parameters/AppealId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Appeal withdrawn.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Appeal' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Platform Bearer JWT carrying resolved roles + tenant/entity scope (Platform §0.2).
+        SR ingestion principals hold only the `sr.ingest.write` scope.
+
+  headers:
+    XCorrelationId:
+      description: Correlation id echoed on every response and written to every audit + log line (Foundation §1).
+      schema: { type: string }
+
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      description: Page size (cursor pagination). Default 25, max 100.
+      required: false
+      schema:
+        type: integer
+        default: 25
+        minimum: 1
+        maximum: 100
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque forward cursor from a previous response's `next_cursor`.
+      required: false
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: >
+        Deterministic key for unsafe POSTs; a repeat within 24h returns the original
+        result (exactly-once SR posting). Required for workflow-initiating POSTs.
+      required: false
+      schema: { type: string }
+    EmployeeId:
+      name: id
+      in: path
+      required: true
+      description: Employee id (G01).
+      schema: { type: string, format: uuid }
+    EventId:
+      name: id
+      in: path
+      required: true
+      description: SR ledger entry id (`sr_event_id`).
+      schema: { type: string, format: uuid }
+    EventTypeCode:
+      name: code
+      in: path
+      required: true
+      description: SR event type code.
+      schema: { type: string }
+    CorrectionId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DisputeId:
+      name: id
+      in: path
+      required: true
+      description: Dispute id (`sr_corrections` row of type DISPUTE).
+      schema: { type: string, format: uuid }
+    CycleId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ExtractId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    GapId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AppealId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    BulkBatchId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    ValidationFailed:
+      description: >
+        422 VALIDATION_FAILED — input failed a VAL-*/schema rule. G12 domain codes:
+        `SR_PAYLOAD_INVALID`, `SR_FACT_KEY_REQUIRED`, `SR_FUTURE_DATE`,
+        `SR_SIGNATURE_NOT_QUALIFIED`, `ERR-G12-SIGNATURE-INVALID`, `SR_INTEGRITY_FAILED`,
+        `SR_STATUS_CHAIN_FAILED`, `SR_ANCHOR_MISMATCH`, `SR_PURPOSE_REQUIRED`.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: 401 UNAUTHENTICATED — no/invalid/expired session or token.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: >
+        403 FORBIDDEN — authenticated but not permitted (never leaks existence of
+        out-of-scope records). G12: `SR_SOURCE_NOT_ALLOWED`, `SR_DELETION_FORBIDDEN`,
+        separation-of-duties (maker == checker).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: >
+        404 NOT_FOUND — resource absent or out of scope. G12: `SR_TYPE_NOT_FOUND`,
+        `SR_EMPLOYEE_NOT_FOUND`, `SR_REVERSAL_TARGET_NOT_FOUND`.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: >
+        409 CONFLICT — idempotency replay / state / uniqueness conflict. G12:
+        `SR_DUPLICATE_EVENT`, `SR_SEMANTIC_DUPLICATE`, `SR_SEMANTIC_CONFLICT`,
+        `SR_ENTRY_IMMUTABLE`, `SR_ENTRY_SUPERSEDED`, `SR_ENTRY_DISPUTED`,
+        `SR_EXTRACT_REVOKED`, `SR_APPEAL_NOT_ELIGIBLE`, `SR_TYPE_OVERLAP`,
+        `SR_DELIVERY_MODE_DEFERRED`, `SR_LEGACY_UNMATCHED`, `SR_LEGAL_HOLD_ACTIVE`,
+        `SR_STALE_RESTORE`.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PreconditionFailed:
+      description: >
+        412 PRECONDITION_FAILED — a required precondition is unmet (incl. X.3-mapped
+        retryable upstream). G12: `SR_ATTESTATION_REQUIRED`, `SR_ANCHOR_MISSING`,
+        `SR_REDACTION_REQUIRED`, `SR_SECOND_CUSTODIAN_REQUIRED`, `SR_GAP_UNRESOLVED`.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: 429 RATE_LIMITED — rate limit or lockout exceeded.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Internal:
+      description: >
+        500 INTERNAL — unexpected server error, or non-retryable / X.3-mapped upstream
+        failure (`ERR-LOADFAIL`; 503 collapses here — no non-standard 503).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    # ---------- Canonical error envelope ----------
+    Error:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: >
+                A platform standard code (VALIDATION_FAILED/…/INTERNAL) or a G12 domain
+                code (`SR_*` / `ERR-G12-*`) carried in this field.
+            message: { type: string }
+            field:
+              type: [string, "null"]
+              description: Offending field for validation errors.
+            details:
+              type: [object, "null"]
+              additionalProperties: true
+              description: Structured discriminators, e.g. { reason, anchor_id, conflicting_event_id }.
+
+    NextCursor:
+      type: [string, "null"]
+      description: Opaque forward cursor for the next page; null when no more pages.
+
+    # ---------- Shared enums ----------
+    SourceModule:
+      type: string
+      description: Provenance module. Writer set per FR-01.B; G12_MANUAL/G12_LEGACY for G12-owned lanes.
+      enum:
+        [G01, G02, G03, G04, G05, G06, G07, G08, G09, G10, G11, G12, G13, G14,
+         G12_MANUAL, G12_LEGACY]
+
+    EventCategory:
+      type: string
+      description: SR event category (18 categories; APPRAISAL added v3.1).
+      enum:
+        [APPOINTMENT, CONFIRMATION, PROMOTION, TRANSFER, POSTING, PAY, INCREMENT,
+         LEAVE, TRAINING, AWARD, PUNISHMENT, SUSPENSION, DEPUTATION, IDENTITY,
+         QUALIFICATION, APPRAISAL, SEPARATION, OTHER]
+
+    QualifyingServiceImpact:
+      type: string
+      enum: [QUALIFYING, NON_QUALIFYING, PARTIAL, NOT_APPLICABLE]
+
+    ConfidenceStatus:
+      type: string
+      enum: [VERIFIED, RECONSTRUCTED, LEGACY_UNVERIFIABLE]
+
+    EntryStatus:
+      type: string
+      description: Derived projection from sr_status_events.
+      enum: [ACTIVE, SUPERSEDED, ANNOTATED]
+
+    AttestationStatus:
+      type: string
+      description: Derived projection from sr_status_events.
+      enum: [UNATTESTED, ATTESTED, EMPLOYEE_VERIFIED, DISPUTED]
+
+    ChainOrigin:
+      type: string
+      enum: [GENESIS, CONTINUED]
+
+    SignatureMethod:
+      type: string
+      description: PKI_QUALIFIED for statutory outputs; SERVER_SIGNED banned for statutory artefacts.
+      enum: [PKI_QUALIFIED, OTP_CONFIRMED, SERVER_SIGNED]
+
+    ValidationResult:
+      type: string
+      enum: [ACCEPTED, REJECTED, DUPLICATE_NOOP, SEMANTIC_DUPLICATE_NOOP, SEMANTIC_CONFLICT]
+
+    GapStatus:
+      type: string
+      enum: [GAP_FLAGGED, UNDER_REVIEW, EXPLAINED, CLOSED_RECORDED, CLOSED_FALSE_POSITIVE]
+
+    AppealStatus:
+      type: string
+      enum: [RAISED, UNDER_APPEAL, UPHELD, OVERTURNED, REMANDED, WITHDRAWN]
+
+    AccessAction:
+      type: string
+      enum: [VIEW_TIMELINE, VIEW_EVENT, PRINT, EXPORT, ISSUE_EXTRACT, VERIFY_INTEGRITY, VERIFY_ANCHOR, GENERATE_65B]
+
+    ExtractScope:
+      type: string
+      enum: [FULL_SR, DATE_RANGE, EVENT_CATEGORY, SINGLE_EVENT]
+
+    RedactionPolicy:
+      type: string
+      enum: [NONE, LOAN_EXCLUDE_DISCIPLINARY, PUBLIC_MINIMAL, PENSION_FULL, COURT_FULL]
+
+    # ---------- The full sr_event_type catalog (FR-01.A) ----------
+    SrEventTypeCode:
+      type: string
+      description: >
+        Full published `sr_event_type` catalog (FR-01.A, v3.1 authoritative). Writers
+        cite these strings exactly. Corrigendum/reversal partner codes (`*_CANCELLED`,
+        `*_REVERSAL`) are included where published. Pay/increment codes are contracted
+        now and enabled when G10 ships (deferred build).
+      enum:
+        - APPOINTMENT
+        - NAME_CHANGE
+        - DOB_CHANGE
+        - GENDER_CHANGE
+        - CATEGORY_CHANGE
+        - DECEASED
+        - QUALIFICATION_ADDED
+        - DEPARTMENTAL_EXAM_PASSED
+        - EL_AVAILED
+        - HPL_AVAILED
+        - COMMUTED_LEAVE
+        - STUDY_LEAVE
+        - MATERNITY_LEAVE
+        - LWP_SPELL
+        - EOL_SPELL
+        - TRANSFER
+        - RELIEVING
+        - JOINING
+        - MUTUAL_TRANSFER
+        - TRANSFER_CANCELLED
+        - RELIEVING_CANCELLED
+        - JOINING_CANCELLED
+        - PROMOTION
+        - OFFICIATING
+        - MACP
+        - CONFIRMATION
+        - POSTING
+        - REVERSION
+        - PROMOTION_CANCELLED
+        - OFFICIATING_CANCELLED
+        - APAR_FINAL_GRADE
+        - MINOR_PENALTY
+        - MAJOR_PENALTY
+        - SUSPENSION
+        - SUSPENSION_REVOKED
+        - CENSURE
+        - MINOR_PENALTY_REVERSAL
+        - MAJOR_PENALTY_REVERSAL
+        - PAY_FIXATION
+        - ANNUAL_INCREMENT
+        - INCREMENT_WITHHELD
+        - PAY_PROTECTION
+        - SEPARATION
+        - SUPERANNUATION
+        - RETIREMENT
+        - VOLUNTARY_RETIREMENT
+        - RESIGNATION
+        - DEATH_IN_SERVICE
+        - FAMILY_PENSION_SANCTIONED
+
+    EventTypeCreate:
+      type: object
+      required: [event_type_code, event_category, allowed_source_modules, payload_schema, effective_from]
+      properties:
+        event_type_code: { type: string }
+        event_category: { $ref: '#/components/schemas/EventCategory' }
+        allowed_source_modules:
+          type: array
+          items: { $ref: '#/components/schemas/SourceModule' }
+        is_qualifying_service: { type: boolean, default: false }
+        is_identity_event: { type: boolean, default: false }
+        default_qualifying_impact: { $ref: '#/components/schemas/QualifyingServiceImpact' }
+        fact_correlation_rule:
+          type: [object, "null"]
+          additionalProperties: true
+          description: Deterministic key derivation for fact_key (mandatory for qualifying-service types).
+        expected_cadence:
+          type: [object, "null"]
+          additionalProperties: true
+        supports_reversal: { type: boolean, default: false }
+        payload_schema:
+          type: object
+          additionalProperties: true
+          description: JSON Schema the event payload is validated against.
+        effective_from: { type: string, format: date }
+        effective_to: { type: [string, "null"], format: date }
+
+    EventType:
+      allOf:
+        - $ref: '#/components/schemas/EventTypeCreate'
+        - type: object
+          properties:
+            tenant_id: { type: string, format: uuid }
+            status: { type: string, enum: [DRAFT, PUBLISHED, RETIRED] }
+            version: { type: integer }
+            created_at: { type: string, format: date-time }
+
+    # ---------- Ingestion ----------
+    IngestRequest:
+      type: object
+      required: [source_module, source_reference_id, source_event_version, event_type_code, employee_id, event_date, payload]
+      properties:
+        source_module: { $ref: '#/components/schemas/SourceModule' }
+        source_reference_id:
+          type: string
+          maxLength: 64
+          description: Originating order/transaction id (part of the syntactic dedup tuple).
+        source_event_version:
+          type: integer
+          default: 1
+          description: Source event schema/version (part of the syntactic dedup tuple).
+        event_type_code: { $ref: '#/components/schemas/SrEventTypeCode' }
+        event_category: { $ref: '#/components/schemas/EventCategory' }
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        service_no: { type: [string, "null"], maxLength: 32 }
+        event_date:
+          type: string
+          format: date
+          description: Legal effective date (no time); back-dating allowed within future tolerance.
+        fact_key:
+          type: [string, "null"]
+          maxLength: 96
+          description: >
+            Semantic per-fact correlation key. MANDATORY for qualifying-service-bearing
+            event types (else 422 SR_FACT_KEY_REQUIRED); enables cross-module semantic dedup.
+        order_no: { type: [string, "null"], maxLength: 64 }
+        order_date: { type: [string, "null"], format: date }
+        sanctioning_authority: { type: [string, "null"], maxLength: 160 }
+        payload:
+          type: object
+          additionalProperties: true
+          description: Structured, schema-validated event data (validated against the type's payload_schema).
+        qualifying_service_impact: { $ref: '#/components/schemas/QualifyingServiceImpact' }
+        document_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    IngestResponse:
+      type: object
+      required: [sr_event_id, validation_result]
+      properties:
+        sr_event_id: { type: string }
+        sequence_no: { type: [integer, "null"], format: int64 }
+        entry_hash: { type: [string, "null"] }
+        prev_event_hash: { type: [string, "null"] }
+        tsa_timestamp_token:
+          type: [string, "null"]
+          description: RFC 3161 trusted timestamp token over entry_hash.
+        attestation_status: { $ref: '#/components/schemas/AttestationStatus' }
+        validation_result: { $ref: '#/components/schemas/ValidationResult' }
+        ingestion_request_id: { type: [string, "null"], format: uuid }
+        details:
+          type: [object, "null"]
+          additionalProperties: true
+
+    ReversalRequest:
+      type: object
+      required: [source_module, source_reference_id, reverses_source_reference_id, event_type_code, employee_id, event_date]
+      properties:
+        source_module: { $ref: '#/components/schemas/SourceModule' }
+        source_reference_id: { type: string, maxLength: 64 }
+        reverses_source_reference_id:
+          type: string
+          maxLength: 64
+          description: The original source_reference_id being reversed/cancelled.
+        is_reversal: { type: boolean, default: true }
+        event_type_code: { $ref: '#/components/schemas/SrEventTypeCode' }
+        employee_id: { type: string, format: uuid }
+        event_date: { type: string, format: date }
+        order_no: { type: [string, "null"], maxLength: 64 }
+        sanctioning_authority: { type: [string, "null"], maxLength: 160 }
+        payload:
+          type: [object, "null"]
+          additionalProperties: true
+
+    ReversalResponse:
+      type: object
+      properties:
+        ingestion_request_id: { type: string, format: uuid }
+        correction_id:
+          type: string
+          format: uuid
+          description: The WF-G12-CORRIGENDUM correction spawned by the reversal.
+        reverses_event_id: { type: string, format: uuid }
+        validation_result: { $ref: '#/components/schemas/ValidationResult' }
+
+    IngestionRequest:
+      type: object
+      properties:
+        ingestion_request_id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        source_module: { $ref: '#/components/schemas/SourceModule' }
+        source_reference_id: { type: string }
+        source_event_version: { type: integer }
+        event_type_code: { $ref: '#/components/schemas/SrEventTypeCode' }
+        employee_id: { type: string, format: uuid }
+        fact_key: { type: [string, "null"] }
+        is_reversal: { type: boolean }
+        validation_result: { $ref: '#/components/schemas/ValidationResult' }
+        semantic_dedup_result:
+          type: [string, "null"]
+          enum: [NEW_FACT, SEMANTIC_DUPLICATE, SEMANTIC_CONFLICT, null]
+        conflicting_event_id: { type: [string, "null"], format: uuid }
+        sr_event_id: { type: [string, "null"], format: uuid }
+        created_at: { type: string, format: date-time }
+
+    # ---------- Ledger entry ----------
+    SrEvent:
+      type: object
+      description: A `service_register_events` (E8) ledger entry (append-only, hash-chained).
+      properties:
+        sr_event_id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        service_no: { type: string }
+        sequence_no: { type: integer, format: int64 }
+        event_type_code: { $ref: '#/components/schemas/SrEventTypeCode' }
+        event_category: { $ref: '#/components/schemas/EventCategory' }
+        event_title: { type: string }
+        event_description: { type: [string, "null"] }
+        event_date: { type: string, format: date }
+        recorded_at: { type: string, format: date-time }
+        tsa_timestamp_token: { type: [string, "null"] }
+        tsa_authority: { type: [string, "null"] }
+        fact_key: { type: [string, "null"] }
+        source_module: { $ref: '#/components/schemas/SourceModule' }
+        source_reference_id: { type: [string, "null"] }
+        source_event_version: { type: integer }
+        reverses_event_id: { type: [string, "null"], format: uuid }
+        order_no: { type: [string, "null"] }
+        order_date: { type: [string, "null"], format: date }
+        sanctioning_authority: { type: [string, "null"] }
+        payload:
+          type: object
+          additionalProperties: true
+        qualifying_service_impact: { $ref: '#/components/schemas/QualifyingServiceImpact' }
+        confidence_status: { $ref: '#/components/schemas/ConfidenceStatus' }
+        entry_status: { $ref: '#/components/schemas/EntryStatus' }
+        attestation_status: { $ref: '#/components/schemas/AttestationStatus' }
+        supersedes_event_id: { type: [string, "null"], format: uuid }
+        superseded_by_event_id: { type: [string, "null"], format: uuid }
+        chain_origin: { $ref: '#/components/schemas/ChainOrigin' }
+        prior_chain_head_hash: { type: [string, "null"] }
+        prev_event_hash: { type: string }
+        entry_hash: { type: string }
+        hash_algorithm: { type: string }
+        ledger_version: { type: integer }
+        document_ids:
+          type: [array, "null"]
+          items: { type: string, format: uuid }
+        is_legacy: { type: boolean }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+
+    # ---------- Corrections / annotations / disputes ----------
+    CorrigendumRequest:
+      type: object
+      required: [reason_code, reason, payload]
+      properties:
+        reason_code: { type: string, maxLength: 48 }
+        reason: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+          description: Corrected facts (schema-validated exactly as ingestion).
+        document_ids:
+          type: array
+          items: { type: string, format: uuid }
+        is_identity_change:
+          type: boolean
+          default: false
+          description: If true, routes through WF-G12-IDENTITY-CHANGE (dual custodian).
+
+    Correction:
+      type: object
+      properties:
+        correction_id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        target_event_id: { type: string, format: uuid }
+        correction_type:
+          type: string
+          enum: [CORRIGENDUM, ANNOTATION, DISPUTE, DISPUTE_RESOLUTION, REVERSAL_CORRIGENDUM, BULK_CORRIGENDUM]
+        decision: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        reason_code: { type: [string, "null"] }
+        reason: { type: [string, "null"] }
+        corrigendum_event_id: { type: [string, "null"], format: uuid }
+        workflow_instance_id: { type: [string, "null"], format: uuid }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+
+    DecisionRequest:
+      type: object
+      properties:
+        comment: { type: [string, "null"] }
+
+    ReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+
+    DisputeRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+        document_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    AnnotateRequest:
+      type: object
+      required: [note]
+      properties:
+        note: { type: string }
+        document_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    DisputeResolveRequest:
+      type: object
+      required: [outcome]
+      properties:
+        outcome: { type: string, enum: [UPHELD, CORRIGENDUM_ISSUED] }
+        reason: { type: [string, "null"] }
+        corrigendum: { $ref: '#/components/schemas/CorrigendumRequest' }
+
+    # ---------- Attestation ----------
+    AttestRequest:
+      type: object
+      required: [signature_method]
+      properties:
+        signature_method: { $ref: '#/components/schemas/SignatureMethod' }
+        signed_digest: { type: [string, "null"] }
+        signature_value:
+          type: [string, "null"]
+          description: Qualified PKI signature bytes (base64); required for PKI_QUALIFIED.
+        signing_certificate_serial: { type: [string, "null"] }
+
+    BatchAttestRequest:
+      type: object
+      required: [event_ids, signature_method]
+      properties:
+        event_ids:
+          type: array
+          minItems: 1
+          items: { type: string, format: uuid }
+        signature_method: { $ref: '#/components/schemas/SignatureMethod' }
+
+    Attestation:
+      type: object
+      properties:
+        attestation_id: { type: string, format: uuid }
+        target_event_id: { type: string, format: uuid }
+        attestation_kind:
+          type: string
+          enum: [CUSTODIAN_ATTEST, EMPLOYEE_VERIFY, EMPLOYEE_DISPUTE, EXTRACT_SIGN, HEIR_VERIFY, ASSISTED_VERIFY]
+        signature_method: { $ref: '#/components/schemas/SignatureMethod' }
+        signing_certificate_serial: { type: [string, "null"] }
+        tsa_timestamp_token: { type: [string, "null"] }
+        attested_by: { type: string }
+        attested_at: { type: string, format: date-time }
+
+    BatchAttestResult:
+      type: object
+      properties:
+        total: { type: integer }
+        attested: { type: integer }
+        failed: { type: integer }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              event_id: { type: string, format: uuid }
+              outcome: { type: string, enum: [ATTESTED, FAILED] }
+              error_code: { type: [string, "null"] }
+
+    # ---------- Verification cycles ----------
+    VerificationCycle:
+      type: object
+      properties:
+        cycle_id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        cycle_type:
+          type: string
+          enum: [PERIODIC_5YR, PRE_RETIREMENT, AD_HOC, HEIR_VERIFICATION]
+        status:
+          type: string
+          enum: [OPEN, EMPLOYEE_REVIEW, BULK_REVIEW, DISPUTED, CUSTODIAN_REVIEW, COMPLETED, OVERDUE, ASSISTED, HEIR_PENDING]
+        period_from: { type: [string, "null"], format: date }
+        period_to: { type: [string, "null"], format: date }
+        exception_count: { type: [integer, "null"] }
+        created_at: { type: string, format: date-time }
+
+    BulkConfirmRequest:
+      type: object
+      required: [confirmed_event_ids]
+      properties:
+        confirmed_event_ids:
+          type: array
+          items: { type: string, format: uuid }
+        exception_event_ids:
+          type: array
+          items: { type: string, format: uuid }
+        signature_method: { $ref: '#/components/schemas/SignatureMethod' }
+
+    ConfirmRequest:
+      type: object
+      properties:
+        signature_method: { $ref: '#/components/schemas/SignatureMethod' }
+        comment: { type: [string, "null"] }
+
+    AssistedConfirmRequest:
+      type: object
+      required: [operator_id, consent_captured]
+      properties:
+        operator_id: { type: string }
+        consent_captured: { type: boolean }
+        consent_reference: { type: [string, "null"] }
+        signature_method: { $ref: '#/components/schemas/SignatureMethod' }
+
+    HeirConfirmRequest:
+      type: object
+      required: [heir_identity_ref, relationship]
+      properties:
+        heir_identity_ref: { type: string }
+        relationship: { type: string }
+        consent_captured: { type: boolean, default: true }
+        signature_method: { $ref: '#/components/schemas/SignatureMethod' }
+
+    # ---------- Extracts / §65B ----------
+    ExtractRequest:
+      type: object
+      required: [scope, purpose]
+      properties:
+        scope: { $ref: '#/components/schemas/ExtractScope' }
+        purpose:
+          type: string
+          description: Stated purpose (drives redaction; required for non-self access).
+        redaction_policy: { $ref: '#/components/schemas/RedactionPolicy' }
+        from_date: { type: [string, "null"], format: date }
+        to_date: { type: [string, "null"], format: date }
+        event_category: { $ref: '#/components/schemas/EventCategory' }
+        single_event_id: { type: [string, "null"], format: uuid }
+
+    Extract:
+      type: object
+      properties:
+        extract_id: { type: string, format: uuid }
+        extract_no: { type: string }
+        employee_id: { type: string, format: uuid }
+        scope: { $ref: '#/components/schemas/ExtractScope' }
+        redaction_policy: { $ref: '#/components/schemas/RedactionPolicy' }
+        redacted_categories:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/EventCategory' }
+        status: { type: string, enum: [DRAFT, AWAITING_COSIGN, ISSUED, REVOKED] }
+        content_digest: { type: [string, "null"] }
+        anchor_id: { type: [string, "null"], format: uuid }
+        signature_method: { $ref: '#/components/schemas/SignatureMethod' }
+        ltv_status: { type: string, enum: [NONE, LTV_APPLIED, LTV_RENEWED] }
+        authenticity_certificate_id: { type: [string, "null"], format: uuid }
+        document_id: { type: [string, "null"], format: uuid }
+        qr_verification_token: { type: [string, "null"] }
+        issued_at: { type: [string, "null"], format: date-time }
+
+    AuthenticityCertificate:
+      type: object
+      properties:
+        certificate_id: { type: string, format: uuid }
+        extract_id: { type: string, format: uuid }
+        certificate_no: { type: string }
+        statute_reference:
+          type: string
+          example: BSA 2023 s.63 / IT Act s.65B
+        content_digest: { type: string }
+        anchor_id: { type: string, format: uuid }
+        signer_identity: { type: string }
+        signing_certificate_serial: { type: string }
+        tsa_timestamp_token: { type: string }
+        chain_of_custody:
+          type: object
+          additionalProperties: true
+        system_description: { type: string }
+        document_id: { type: string, format: uuid }
+        issued_at: { type: string, format: date-time }
+
+    # ---------- Offline verification ----------
+    PublicVerification:
+      type: object
+      properties:
+        status: { type: string, enum: [VALID, REVOKED, NOT_FOUND] }
+        extract_no: { type: string }
+        issued_at: { type: [string, "null"], format: date }
+        employee_name_masked: { type: [string, "null"] }
+        scope: { $ref: '#/components/schemas/ExtractScope' }
+        redacted_categories:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/EventCategory' }
+        event_count: { type: [integer, "null"] }
+        content_digest: { type: [string, "null"] }
+        anchor_id: { type: [string, "null"] }
+        ca_chain_published_at: { type: [string, "null"] }
+        offline_verifiable: { type: boolean }
+
+    RevocationFeed:
+      type: object
+      properties:
+        generated_at: { type: string, format: date-time }
+        signature: { type: string }
+        revoked_extract_nos:
+          type: array
+          items: { type: string }
+
+    # ---------- Access log ----------
+    AccessLogEntry:
+      type: object
+      properties:
+        access_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        actor: { type: string }
+        action: { $ref: '#/components/schemas/AccessAction' }
+        purpose: { type: [string, "null"] }
+        accessed_at: { type: string, format: date-time }
+        correlation_id: { type: string }
+
+    # ---------- Subscriptions / feed ----------
+    SubscriptionCreate:
+      type: object
+      required: [module, categories]
+      properties:
+        module: { $ref: '#/components/schemas/SourceModule' }
+        categories:
+          type: array
+          items: { $ref: '#/components/schemas/EventCategory' }
+        delivery_mode:
+          type: string
+          enum: [PULL_FEED, WEBHOOK, MESSAGE_BUS]
+          default: PULL_FEED
+          description: PULL_FEED at launch; WEBHOOK/MESSAGE_BUS deferred (SR_DELIVERY_MODE_DEFERRED).
+
+    Subscription:
+      allOf:
+        - $ref: '#/components/schemas/SubscriptionCreate'
+        - type: object
+          properties:
+            subscription_id: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, PAUSED, RETIRED] }
+            last_delivered_seq: { type: [integer, "null"], format: int64 }
+
+    FeedResponse:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              feed_seq: { type: integer, format: int64 }
+              sr_event: { $ref: '#/components/schemas/SrEvent' }
+        next_cursor: { $ref: '#/components/schemas/NextCursor' }
+
+    # ---------- Legacy digitisation ----------
+    LegacyBatchCreate:
+      type: object
+      required: [batch_name, legacy_source_id]
+      properties:
+        batch_name: { type: string }
+        legacy_source_id: { type: string, maxLength: 80 }
+        org_unit_id: { type: [string, "null"], format: uuid }
+
+    LegacyBatch:
+      allOf:
+        - $ref: '#/components/schemas/LegacyBatchCreate'
+        - type: object
+          properties:
+            batch_id: { type: string, format: uuid }
+            status:
+              type: string
+              enum: [CREATED, SCANNING, DATA_ENTRY, DUAL_VERIFICATION, RECONCILIATION, READY_FOR_PROMOTION, PROMOTED, REJECTED]
+            record_count: { type: integer }
+            promoted_count: { type: integer }
+            failed_count: { type: integer }
+            created_at: { type: string, format: date-time }
+
+    LegacyRecordCreate:
+      type: object
+      required: [employee_ref, event_type_code, event_date, payload]
+      properties:
+        employee_ref: { type: string }
+        event_type_code: { $ref: '#/components/schemas/SrEventTypeCode' }
+        event_date: { type: string, format: date }
+        payload:
+          type: object
+          additionalProperties: true
+        document_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    LegacyRecord:
+      type: object
+      properties:
+        record_id: { type: string, format: uuid }
+        batch_id: { type: string, format: uuid }
+        employee_id: { type: [string, "null"], format: uuid }
+        match_status: { type: string, enum: [UNMATCHED, MATCHED, AMBIGUOUS] }
+        verification_status: { type: string, enum: [PENDING, VERIFIED, DISCREPANCY] }
+        confidence_status: { $ref: '#/components/schemas/ConfidenceStatus' }
+        corroboration_status:
+          type: string
+          enum: [NOT_REQUIRED, PENDING_EMPLOYEE, CORROBORATED, UNCORROBORATED]
+        evidence_quality_note: { type: [string, "null"] }
+
+    LegacyVerifyRequest:
+      type: object
+      required: [verification_status]
+      properties:
+        verification_status: { type: string, enum: [VERIFIED, DISCREPANCY] }
+        comment: { type: [string, "null"] }
+
+    SetConfidenceRequest:
+      type: object
+      required: [confidence_status, evidence_quality_note]
+      properties:
+        confidence_status: { $ref: '#/components/schemas/ConfidenceStatus' }
+        evidence_quality_note: { type: string }
+
+    # ---------- Retention / legal hold / DR ----------
+    LegalHoldRequest:
+      type: object
+      required: [action, reason]
+      properties:
+        action: { type: string, enum: [PLACE, LIFT] }
+        reason: { type: string }
+
+    LegalHold:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        hold_active: { type: boolean }
+        reason: { type: [string, "null"] }
+        updated_at: { type: string, format: date-time }
+
+    RetentionPolicy:
+      type: object
+      properties:
+        deletion_prohibited: { type: boolean, example: true }
+        retention_basis:
+          type: string
+          example: DPDP Act 2023 s.17 — processing necessary for a legal obligation
+        minimum_retention: { type: string, example: PERMANENT }
+        archive_after_years: { type: [integer, "null"] }
+
+    DrReconcileRequest:
+      type: object
+      required: [restore_reference]
+      properties:
+        restore_reference: { type: string }
+        tenant_id: { type: [string, "null"], format: uuid }
+
+    # ---------- Forensics / analytics ----------
+    Forensics:
+      type: object
+      properties:
+        employee_id: { type: [string, "null"], format: uuid }
+        content_chain_status: { type: string, enum: [PASS, FAIL, PENDING] }
+        status_chain_status: { type: string, enum: [PASS, FAIL, PENDING] }
+        anchor_status: { type: string, enum: [MATCH, MISMATCH, MISSING] }
+        head_content_hash: { type: [string, "null"] }
+        head_status_hash: { type: [string, "null"] }
+        latest_anchor_id: { type: [string, "null"], format: uuid }
+        lineage:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        as_of: { type: [string, "null"], format: date }
+
+    AnalyticsSummary:
+      type: object
+      properties:
+        total_events: { type: integer, format: int64 }
+        attestation_coverage_pct: { type: number }
+        verification_completion_pct: { type: number }
+        gap_closure_rate_pct: { type: number }
+        anchor_freshness_hours: { type: number }
+        open_appeals: { type: integer }
+        ltv_renewal_backlog: { type: integer }
+
+    # ---------- Gaps ----------
+    Gap:
+      type: object
+      properties:
+        gap_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        rule_id: { type: string, format: uuid }
+        expected_period_from: { type: string, format: date }
+        expected_period_to: { type: string, format: date }
+        expected_event_category: { $ref: '#/components/schemas/EventCategory' }
+        gap_status: { $ref: '#/components/schemas/GapStatus' }
+        explanation_code: { type: [string, "null"] }
+        resolved_event_id: { type: [string, "null"], format: uuid }
+        corroborated_by: { type: [string, "null"] }
+        severity: { type: string, enum: [INFO, WARN, CRITICAL] }
+        detected_at: { type: string, format: date-time }
+        closed_at: { type: [string, "null"], format: date-time }
+
+    GapExplainRequest:
+      type: object
+      required: [explanation_code]
+      properties:
+        explanation_code: { type: string, enum: [WITHHELD, NOT_DUE, LEGACY_MISSING, RECORDED_LATE] }
+        comment: { type: [string, "null"] }
+
+    GapCloseRequest:
+      type: object
+      required: [resolution]
+      properties:
+        resolution: { type: string, enum: [CLOSED_RECORDED, CLOSED_FALSE_POSITIVE] }
+        resolved_event_id: { type: [string, "null"], format: uuid }
+        comment: { type: [string, "null"] }
+
+    GapCorroborateRequest:
+      type: object
+      required: [corroborated]
+      properties:
+        corroborated: { type: boolean }
+        comment: { type: [string, "null"] }
+
+    GapSummary:
+      type: object
+      properties:
+        detected: { type: integer }
+        resolved: { type: integer }
+        open_critical: { type: integer }
+        gap_closure_rate_pct: { type: number }
+
+    # ---------- LTV / crypto ----------
+    LtvRenewRequest:
+      type: object
+      required: [subject_type, subject_id, renewal_kind]
+      properties:
+        subject_type: { type: string, enum: [EXTRACT, ATTESTATION, ANCHOR] }
+        subject_id: { type: string, format: uuid }
+        renewal_kind: { type: string, enum: [LTV_INITIAL, ARCHIVE_TIMESTAMP, ALGORITHM_MIGRATION, RE_ANCHOR] }
+        new_algorithm: { type: [string, "null"] }
+
+    LtvRenewal:
+      type: object
+      properties:
+        renewal_id: { type: string, format: uuid }
+        subject_type: { type: string, enum: [EXTRACT, ATTESTATION, ANCHOR] }
+        subject_id: { type: string, format: uuid }
+        renewal_kind: { type: string, enum: [LTV_INITIAL, ARCHIVE_TIMESTAMP, ALGORITHM_MIGRATION, RE_ANCHOR] }
+        prior_algorithm: { type: [string, "null"] }
+        new_algorithm: { type: [string, "null"] }
+        evidence_record_ref: { type: string }
+        tsa_timestamp_token: { type: string }
+        new_anchor_id: { type: [string, "null"], format: uuid }
+        triggered_by: { type: string, enum: [SCHEDULE, CERT_EXPIRY, ALGO_DEPRECATION, MANUAL] }
+        renewed_at: { type: string, format: date-time }
+
+    CryptoMigrateRequest:
+      type: object
+      required: [new_algorithm]
+      properties:
+        new_algorithm: { type: string, example: SHA-384 }
+        reason: { type: [string, "null"] }
+
+    # ---------- Bulk corrigendum ----------
+    BulkCorrigendumCreate:
+      type: object
+      required: [reason_code, trigger_reference, target_selector]
+      properties:
+        reason_code:
+          type: string
+          enum: [PAY_COMMISSION_REVISION, SENIORITY_REFIXATION, COURT_DIRECTION]
+        trigger_reference: { type: string }
+        target_selector:
+          type: object
+          additionalProperties: true
+          description: Criteria selecting affected entries (cadre, category, date range).
+        sample_size: { type: [integer, "null"] }
+
+    BulkCorrigendum:
+      type: object
+      properties:
+        bulk_batch_id: { type: string, format: uuid }
+        batch_no: { type: string }
+        reason_code: { type: string }
+        trigger_reference: { type: string }
+        target_count: { type: integer }
+        sample_size: { type: integer }
+        sample_approved_count: { type: integer }
+        status:
+          type: string
+          enum: [DRAFT, PREVIEW, SAMPLING_APPROVAL, APPROVED, APPLYING, APPLIED, REJECTED]
+        applied_count: { type: integer }
+        failed_count: { type: integer }
+        workflow_instance_id: { type: [string, "null"], format: uuid }
+        applied_at: { type: [string, "null"], format: date-time }
+
+    SampleApproveRequest:
+      type: object
+      required: [approved]
+      properties:
+        approved: { type: boolean }
+        sample_approved_count: { type: [integer, "null"] }
+        comment: { type: [string, "null"] }
+
+    # ---------- Appeals ----------
+    AppealRequest:
+      type: object
+      required: [appeal_reason]
+      properties:
+        appeal_reason: { type: string }
+        target_event_id: { type: [string, "null"], format: uuid }
+        document_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    Appeal:
+      type: object
+      properties:
+        appeal_id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        target_event_id: { type: [string, "null"], format: uuid }
+        source_dispute_id: { type: [string, "null"], format: uuid }
+        appeal_reason: { type: string }
+        appellate_authority: { type: [string, "null"] }
+        workflow_instance_id: { type: [string, "null"], format: uuid }
+        status: { $ref: '#/components/schemas/AppealStatus' }
+        decision_text: { type: [string, "null"] }
+        resulting_correction_id: { type: [string, "null"], format: uuid }
+        decided_by: { type: [string, "null"] }
+        decided_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    AppealDecideRequest:
+      type: object
+      required: [outcome, decision_text]
+      properties:
+        outcome: { type: string, enum: [UPHELD, OVERTURNED, REMANDED] }
+        decision_text: { type: string }
+
+    # ---------- Integrity / anchor ----------
+    IntegrityVerifyRequest:
+      type: object
+      properties:
+        employee_id: { type: [string, "null"], format: uuid }
+        tenant_id: { type: [string, "null"], format: uuid }
+        scope: { type: string, enum: [EMPLOYEE, TENANT, ROLLING], default: EMPLOYEE }
+
+    IntegrityRun:
+      type: object
+      properties:
+        run_id: { type: string, format: uuid }
+        scope: { type: string }
+        outcome: { type: string, enum: [PASS, FAIL, PENDING] }
+        fail_cause:
+          type: [string, "null"]
+          enum: [CONTENT_CHAIN, STATUS_CHAIN, ANCHOR_MISMATCH, STALE_RESTORE, null]
+        first_divergent_sequence_no: { type: [integer, "null"], format: int64 }
+        first_divergent_status_sequence_no: { type: [integer, "null"], format: int64 }
+        expected_hash: { type: [string, "null"] }
+        stored_hash: { type: [string, "null"] }
+        anchor_id: { type: [string, "null"], format: uuid }
+        verified_count: { type: [integer, "null"], format: int64 }
+        verifier: { type: string }
+        verified_at: { type: string, format: date-time }
+
+    Anchor:
+      type: object
+      properties:
+        anchor_id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        anchor_seq: { type: integer, format: int64 }
+        period_from: { type: string, format: date-time }
+        period_to: { type: string, format: date-time }
+        merkle_root: { type: string }
+        leaf_count: { type: integer, format: int64 }
+        head_snapshot_digest: { type: string }
+        tsa_timestamp_token: { type: string }
+        tsa_authority: { type: string }
+        worm_document_id: { type: string, format: uuid }
+        external_notary_ref: { type: [string, "null"] }
+        prev_anchor_hash: { type: string }
+        anchor_hash: { type: string }
+        created_at: { type: string, format: date-time }

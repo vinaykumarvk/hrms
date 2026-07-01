@@ -1,0 +1,3141 @@
+openapi: 3.1.0
+info:
+  title: Government HRMS — G05 Transfer, Relieving & Joining Workflow API
+  version: 3.1.0
+  description: >
+    OpenAPI contract for module G05 (Transfer, Relieving and Joining Workflow) of the
+    Government HRMS, a public-sector configuration of the PrimeSoft HRMS platform.
+    Endpoints run on platform engines (P01 workflow, P02 authz, P05 audit, X.1/X.2/X.3
+    infrastructure) and are grounded in the G05 BRD v3.1 entity model and the
+    consolidated error taxonomy (ERR-G05-*).
+
+    Conventions (adopted verbatim from PLATFORM_FOUNDATION.md §4):
+      - All endpoints under /api/v1.
+      - Bearer JWT (bearerAuth) carrying resolved roles + tenant/entity scope; P02
+        Authorization.check per request.
+      - Every request carries/echoes X-Correlation-Id (response header on all responses).
+      - Workflow-initiating / external-signal POSTs accept an Idempotency-Key header;
+        a repeat within 24h returns the original result.
+      - Cursor pagination only: ?limit= (default 25, max 100) + cursor=; response next_cursor.
+      - Canonical error envelope: { error: { code, message, field, details } }; 4xx/5xx
+        map onto the 8 platform HTTP codes; ERR-G05-* ids carried in error.details.errorId.
+  contact:
+    name: Government HRMS — API Architecture
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Transfer Requests
+  - name: Eligibility & Policy
+  - name: Drives & Counselling
+  - name: Orders
+  - name: Proof of Service
+  - name: Clearance
+  - name: Charge Handover
+  - name: Relieving
+  - name: Transit & Joining
+  - name: Deputation
+  - name: SR Posting
+  - name: Amendments
+  - name: Representations & Holds
+  - name: Custody & Continuity
+  - name: Quarters & Estate
+  - name: Analytics
+
+paths:
+  /transfers/requests:
+    post:
+      tags: [Transfer Requests]
+      summary: Raise a transfer request (any transfer type)
+      operationId: createTransferRequest
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferRequestCreate' }
+      responses:
+        '201':
+          description: Transfer request created (DRAFT).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Transfer Requests]
+      summary: List transfer requests (scoped)
+      operationId: listTransferRequests
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { $ref: '#/components/schemas/TransferType' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Page of transfer requests.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/TransferRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/requests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    patch:
+      tags: [Transfer Requests]
+      summary: Update a draft transfer request
+      operationId: updateTransferRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferRequestUpdate' }
+      responses:
+        '200':
+          description: Updated transfer request.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/requests/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Transfer Requests]
+      summary: Submit a transfer request (starts P01 instance; runs eligibility)
+      operationId: submitTransferRequest
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Submitted; eligibility evaluated; workflow started.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/eligibility/evaluate:
+    post:
+      tags: [Eligibility & Policy]
+      summary: Evaluate transfer eligibility & policy (tenure/ban/protected/strength)
+      operationId: evaluateEligibility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EligibilityEvaluateRequest' }
+      responses:
+        '200':
+          description: Eligibility result.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibilityResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/requests/{id}/override:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Eligibility & Policy]
+      summary: Authority override of a policy block (recorded justification)
+      operationId: overrideEligibility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OverrideRequest' }
+      responses:
+        '200':
+          description: Override recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/policy-rules:
+    get:
+      tags: [Eligibility & Policy]
+      summary: List configured transfer policy rules
+      operationId: listPolicyRules
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of policy rules.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/TransferPolicyRule' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/drives:
+    post:
+      tags: [Drives & Counselling]
+      summary: Create a bulk transfer drive
+      operationId: createDrive
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferDriveCreate' }
+      responses:
+        '201':
+          description: Drive created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferDrive' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/drives/{id}/vacancies:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Drives & Counselling]
+      summary: Publish vacant positions for a drive (strength read-through)
+      operationId: publishDriveVacancies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vacancies]
+              properties:
+                vacancies:
+                  type: array
+                  items: { $ref: '#/components/schemas/VacancyPositionCreate' }
+      responses:
+        '201':
+          description: Vacancies published.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/VacancyPosition' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Drives & Counselling]
+      summary: List published vacancies for a drive
+      operationId: listDriveVacancies
+      parameters:
+        - name: published
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of vacancies.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/VacancyPosition' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/drives/{id}/preferences:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    put:
+      tags: [Drives & Counselling]
+      summary: Submit/replace an employee's ranked preferences for a drive
+      operationId: putDrivePreferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employeeId, preferences]
+              properties:
+                employeeId: { type: string, format: uuid }
+                preferences:
+                  type: array
+                  items: { $ref: '#/components/schemas/TransferPreferenceInput' }
+      responses:
+        '200':
+          description: Preferences saved.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/TransferPreference' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/drives/{id}/allot:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Drives & Counselling]
+      summary: Run batch allotment for a drive
+      operationId: allotDrive
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                allotmentMethod: { $ref: '#/components/schemas/AllotmentMethod' }
+      responses:
+        '200':
+          description: Allotment computed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AllotmentResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/drives/{id}/screen:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Drives & Counselling]
+      summary: Screen drive candidates for eligibility
+      operationId: screenDrive
+      responses:
+        '200':
+          description: Screening result.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriveScreenResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/drives/{id}/generate-orders:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Drives & Counselling]
+      summary: Generate bulk transfer orders for an allotted drive (JOB-G05-DRIVE)
+      operationId: generateDriveOrders
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Bulk order generation accepted (batch; partial-failure quarantine).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchJobAccepted' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/drives/{id}/dashboard:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Drives & Counselling]
+      summary: Drive progress dashboard
+      operationId: getDriveDashboard
+      responses:
+        '200':
+          description: Drive dashboard metrics.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriveDashboard' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/drives/{id}/counselling-sessions:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Drives & Counselling]
+      summary: Create an interactive counselling session for a drive
+      operationId: createCounsellingSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CounsellingSessionCreate' }
+      responses:
+        '201':
+          description: Session scheduled.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CounsellingSession' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /counselling-sessions/{id}/advance-turn:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Drives & Counselling]
+      summary: Advance the counselling turn to the next candidate
+      operationId: advanceCounsellingTurn
+      responses:
+        '200':
+          description: Turn advanced.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CounsellingSession' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /counselling-sessions/{id}/record-choice:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Drives & Counselling]
+      summary: Record an observed counselling choice (immutable, turn-checked)
+      operationId: recordCounsellingChoice
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CounsellingChoiceInput' }
+      responses:
+        '201':
+          description: Choice recorded (append-only).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CounsellingChoice' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /counselling-sessions/{id}/choices:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Drives & Counselling]
+      summary: List the immutable choice log for a session
+      operationId: listCounsellingChoices
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of choices.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/CounsellingChoice' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders:
+    post:
+      tags: [Orders]
+      summary: Create a transfer order (gapless numbering; P01 approval)
+      operationId: createTransferOrder
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferOrderCreate' }
+      responses:
+        '201':
+          description: Transfer order created (DRAFT/PENDING_APPROVAL).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Orders]
+      summary: Get a transfer order
+      operationId: getTransferOrder
+      responses:
+        '200':
+          description: Transfer order.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Orders]
+      summary: Approve/sanction a transfer order (Transfer Authority; P01)
+      operationId: approveTransferOrder
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalDecision' }
+      responses:
+        '200':
+          description: Order approved.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/publish:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Orders]
+      summary: Publish an approved order (commit gapless number; generate PDF; outbox)
+      operationId: publishTransferOrder
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Order published; SR TRANSFER queued to outbox.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/amend:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Amendments]
+      summary: Amend an order (pre-relief; supersede + revision; reversal SR)
+      operationId: amendTransferOrder
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderCorrectionRequest' }
+      responses:
+        '200':
+          description: Amended (new revision superseding prior).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Amendments]
+      summary: Cancel an order (pre-relief; reverse clearance/handover/reservation)
+      operationId: cancelTransferOrder
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderCorrectionRequest' }
+      responses:
+        '200':
+          description: Order cancelled; TRANSFER_CANCELLED reversal SR queued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Amendments]
+      summary: Revoke a post-relief/post-join order (reversal SR + G01 posting reversal)
+      operationId: revokeTransferOrder
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderCorrectionRequest' }
+      responses:
+        '200':
+          description: Order revoked; RELIEVING/JOINING_CANCELLED reversal SR queued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/serve:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Proof of Service]
+      summary: Record service of the order on the employee (proof-of-service)
+      operationId: serveOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServeOrderRequest' }
+      responses:
+        '200':
+          description: Service recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderAcknowledgement' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/acknowledge:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Proof of Service]
+      summary: Employee acknowledgement of order service
+      operationId: acknowledgeOrder
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                remarks: { type: string }
+      responses:
+        '200':
+          description: Acknowledged.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderAcknowledgement' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/deem-served:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Proof of Service]
+      summary: Mark order deemed-served (registered-post returned / published notice)
+      operationId: deemServedOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deemedServedReason]
+              properties:
+                deemedServedReason: { type: string }
+                proofDocumentId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Deemed served.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderAcknowledgement' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/service-record:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Proof of Service]
+      summary: Get the proof-of-service record for an order
+      operationId: getServiceRecord
+      responses:
+        '200':
+          description: Service record.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderAcknowledgement' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/clearance:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Clearance]
+      summary: Get the no-dues clearance checklist for an order (PARALLEL_ALL_OF)
+      operationId: getOrderClearance
+      responses:
+        '200':
+          description: Clearance checklist with items.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClearanceChecklist' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /clearance/items/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    patch:
+      tags: [Clearance]
+      summary: Grant/deny a departmental no-dues item (record dues)
+      operationId: updateClearanceItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClearanceItemUpdate' }
+      responses:
+        '200':
+          description: Clearance item updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClearanceItem' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /clearance/items/{id}/escalate:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Clearance]
+      summary: Escalate an overdue clearance item (P01 SLA runtime)
+      operationId: escalateClearanceItem
+      responses:
+        '200':
+          description: Item escalated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClearanceItem' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /clearance/items/{id}/deem-cleared:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Clearance]
+      summary: Forced-action deemed-clearance of an item (Authority; after SLA exhausted)
+      operationId: deemClearItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForcedActionRequest' }
+      responses:
+        '200':
+          description: Item deemed-cleared.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClearanceItem' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /clearance/{checklistId}/finalize:
+    parameters:
+      - name: checklistId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Clearance]
+      summary: Finalize a clearance checklist (join when all branches complete)
+      operationId: finalizeClearance
+      responses:
+        '200':
+          description: Checklist finalized.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClearanceChecklist' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/charge-handover:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Charge Handover]
+      summary: Record a charge handover (source) or assumption (destination)
+      operationId: createChargeHandover
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChargeHandoverCreate' }
+      responses:
+        '201':
+          description: Charge handover recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChargeHandover' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /charge-handovers/{id}/accept:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Charge Handover]
+      summary: Accept a charge handover (receiving officer)
+      operationId: acceptChargeHandover
+      responses:
+        '200':
+          description: Handover accepted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChargeHandover' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /charge-handovers/{id}/dispute:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Charge Handover]
+      summary: Dispute a charge handover (opens dispute SLA)
+      operationId: disputeChargeHandover
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Handover disputed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChargeHandover' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /charge-handovers/{id}/under-protest:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Charge Handover]
+      summary: Forced-action handover-under-protest (Authority)
+      operationId: chargeHandoverUnderProtest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForcedActionRequest' }
+      responses:
+        '200':
+          description: Handover recorded under protest.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChargeHandover' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/relieving-order:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Relieving]
+      summary: Draft a relieving order for an order (requires clearance/deemed)
+      operationId: createRelievingOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RelievingOrderCreate' }
+      responses:
+        '201':
+          description: Relieving order drafted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelievingOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /relieving-orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Relieving]
+      summary: Get a relieving order
+      operationId: getRelievingOrder
+      responses:
+        '200':
+          description: Relieving order.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelievingOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /relieving-orders/{id}/issue:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Relieving]
+      summary: Issue a relieving order (set LWD; pay-continuity/LPC signals; SR RELIEVING)
+      operationId: issueRelievingOrder
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Relieving order issued; RELIEVING SR + G10 signals queued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelievingOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /relieving-orders/{id}/deemed-relieve:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Relieving]
+      summary: Forced-action deemed-relief (Authority stand-relieves the employee)
+      operationId: deemedRelieve
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForcedActionRequest' }
+      responses:
+        '200':
+          description: Employee deemed relieved.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelievingOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/in-transit:
+    get:
+      tags: [Transit & Joining]
+      summary: List in-transit employees (by custody org unit)
+      operationId: listInTransit
+      parameters:
+        - name: org_unit
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of in-transit orders.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/TransferOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/extend-joining-time:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Transit & Joining]
+      summary: Extend joining time for an in-transit order
+      operationId: extendJoiningTime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExtendJoiningTimeRequest' }
+      responses:
+        '200':
+          description: Joining time extended.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferOrder' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/joining-report:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Transit & Joining]
+      summary: Submit a joining report at the destination
+      operationId: createJoiningReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JoiningReportCreate' }
+      responses:
+        '201':
+          description: Joining report submitted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JoiningReport' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /joining-reports/{id}/verify:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Transit & Joining]
+      summary: Verify a joining report (HR destination)
+      operationId: verifyJoiningReport
+      responses:
+        '200':
+          description: Joining report verified.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JoiningReport' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /joining-reports/{id}/confirm:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Transit & Joining]
+      summary: Confirm joining (assign sequence; SR JOINING; resume pay-continuity)
+      operationId: confirmJoiningReport
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Joining confirmed; JOINING SR + G01 posting update queued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JoiningReport' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /joining-reports/{id}/resequence:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Transit & Joining]
+      summary: Resequence inter-se joining order (deterministic tie-break; G06 feed)
+      operationId: resequenceJoining
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [joiningSequenceNo]
+              properties:
+                joiningSequenceNo: { type: integer, minimum: 1 }
+                interSeTiebreakKey: { type: string }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Joining resequenced.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JoiningReport' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /joining-reports/{id}/revert-to-source:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Transit & Joining]
+      summary: Revert a non-joined employee to the source office
+      operationId: revertToSource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Reverted to source.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JoiningReport' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /joining-reports/{id}/abandon:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Transit & Joining]
+      summary: Declare abandonment (triggers G09 disciplinary; G10 pay status)
+      operationId: abandonJoining
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Abandonment recorded; DISCIPLINARY_TRIGGER queued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JoiningReport' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/late-joining:
+    get:
+      tags: [Transit & Joining]
+      summary: List late/non-joining cases pending review
+      operationId: listLateJoining
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of late-joining cases.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/JoiningReport' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/joining-sequence:
+    get:
+      tags: [Transit & Joining]
+      summary: Get inter-se joining sequence for an office/designation/date
+      operationId: getJoiningSequence
+      parameters:
+        - name: office
+          in: query
+          schema: { type: string, format: uuid }
+        - name: designation
+          in: query
+          schema: { type: string, format: uuid }
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Ordered joining sequence.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/JoiningReport' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/custody:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Custody & Continuity]
+      summary: Get the in-transit custody assignment for an order
+      operationId: getCustody
+      responses:
+        '200':
+          description: Custody assignment.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustodyRecord' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Custody & Continuity]
+      summary: Set/override the in-transit custodian office (exactly one custodian)
+      operationId: setCustody
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [custodyOrgUnitId]
+              properties:
+                custodyOrgUnitId: { type: string, format: uuid }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Custody set.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustodyRecord' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/entitlement:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Custody & Continuity]
+      summary: Get the joining-time / transfer entitlement signal for an order
+      operationId: getEntitlement
+      responses:
+        '200':
+          description: Entitlement signal.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntitlementSignal' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /deputations:
+    get:
+      tags: [Deputation]
+      summary: List deputation records
+      operationId: listDeputations
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/RepatriationStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of deputations.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/DeputationRecord' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /deputations/{id}/extend:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Deputation]
+      summary: Extend a deputation (bounded by max tenure)
+      operationId: extendDeputation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newEndDate]
+              properties:
+                newEndDate: { type: string, format: date }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Deputation extended.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeputationRecord' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /deputations/{id}/repatriate:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Deputation]
+      summary: Repatriate a deputationist to the lending office
+      operationId: repatriateDeputation
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Repatriated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeputationRecord' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/representations:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Representations & Holds]
+      summary: File a representation / court-stay / retention hold against an order
+      operationId: fileRepresentation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RepresentationCreate' }
+      responses:
+        '201':
+          description: Representation filed (may activate STAY_HOLD).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferRepresentation' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /representations/{id}/decide:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Representations & Holds]
+      summary: Decide a representation (Authority)
+      operationId: decideRepresentation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RepresentationDecision' }
+      responses:
+        '200':
+          description: Representation decided.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferRepresentation' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /representations/{id}/vacate:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Representations & Holds]
+      summary: Vacate an active hold/stay
+      operationId: vacateRepresentation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Hold vacated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferRepresentation' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/holds:
+    get:
+      tags: [Representations & Holds]
+      summary: List active holds/representations
+      operationId: listHolds
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of holds.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/TransferRepresentation' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/forced-actions:
+    get:
+      tags: [Representations & Holds]
+      summary: List forced actions (deemed-clearance / under-protest / deemed-relief)
+      operationId: listForcedActions
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of forced-action audit records.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ForcedActionRecord' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/orders/{id}/quarter-retention:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Quarters & Estate]
+      summary: Request retention of official accommodation on transfer
+      operationId: requestQuarterRetention
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuarterRetentionRequest' }
+      responses:
+        '201':
+          description: Retention request recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuarterAllotment' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /quarter-allotments/{id}/approve-retention:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Quarters & Estate]
+      summary: Approve retention & set vacate-by date (Authority)
+      operationId: approveQuarterRetention
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vacateByDate]
+              properties:
+                vacateByDate: { type: string, format: date }
+                licenceFeeRate: { type: number }
+                remarks: { type: string }
+      responses:
+        '200':
+          description: Retention approved.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuarterAllotment' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /quarter-allotments/{id}/record-vacation:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Quarters & Estate]
+      summary: Record vacation of accommodation (closes licence-fee recovery)
+      operationId: recordQuarterVacation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vacatedOn]
+              properties:
+                vacatedOn: { type: string, format: date }
+      responses:
+        '200':
+          description: Vacation recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuarterAllotment' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /quarter-allotments:
+    get:
+      tags: [Quarters & Estate]
+      summary: List quarter allotments/retentions
+      operationId: listQuarterAllotments
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/RetentionStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of quarter allotments.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/QuarterAllotment' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/ingest:
+    post:
+      tags: [SR Posting]
+      summary: Canonical G12 SR ledger write-port (relay via X.3; dedup tuple + fact_key)
+      operationId: srIngest
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SrIngestEnvelope' }
+      responses:
+        '201':
+          description: SR event ingested into the G12 ledger.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrIngestResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /sr/ingest/reversal:
+    post:
+      tags: [SR Posting]
+      summary: G12 SR reversal write-port (is_reversal=true + reverses_source_reference_id)
+      operationId: srIngestReversal
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SrReversalEnvelope' }
+      responses:
+        '201':
+          description: SR reversal ingested (supersede-not-delete; corrigendum auto-spawned).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrIngestResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/sr-reconciliation:
+    get:
+      tags: [SR Posting]
+      summary: List SR outbox reconciliation status (pending/dead-lettered)
+      operationId: listSrReconciliation
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/OutboxStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of outbox rows.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/SrOutboxRow' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/sr-outbox/{id}/retry:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [SR Posting]
+      summary: Retry a failed/dead-lettered outbox row (relays to /sr/ingest)
+      operationId: retrySrOutbox
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Retry scheduled.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SrOutboxRow' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/analytics/summary:
+    get:
+      tags: [Analytics]
+      summary: Transfer/relieving/joining KPI summary
+      operationId: getAnalyticsSummary
+      responses:
+        '200':
+          description: KPI summary.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsSummary' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/analytics/clearance-bottlenecks:
+    get:
+      tags: [Analytics]
+      summary: Clearance bottleneck analytics (by department / SLA breach)
+      operationId: getClearanceBottlenecks
+      responses:
+        '200':
+          description: Clearance bottleneck rows.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /transfers/map/vacancies:
+    get:
+      tags: [Analytics]
+      summary: Geographic vacancy map (Phase-2)
+      operationId: getVacancyMap
+      parameters:
+        - name: cadre
+          in: query
+          schema: { type: string }
+        - name: office
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Geo-tagged vacancies.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/VacancyPosition' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer JWT carrying resolved roles + tenant/entity scope (P02).
+
+  headers:
+    XCorrelationId:
+      description: Correlation id echoed on every response and written to every audit/log line.
+      schema: { type: string }
+
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      description: Resource UUID.
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (default 25, max 100).
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque forward cursor.
+      schema: { type: string }
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: 'Sort spec: field:asc|desc.'
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Replay key for workflow-initiating / external-signal POSTs (24h window).
+      schema: { type: string }
+
+  responses:
+    ValidationFailed:
+      description: VALIDATION_FAILED (422) — input failed a VAL-* / VAL-G05-* rule.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: UNAUTHENTICATED (401) — no/invalid session.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: FORBIDDEN (403) — authenticated but not permitted (no existence leak).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: NOT_FOUND (404) — resource absent or out of scope.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: CONFLICT (409) — idempotency replay, duplicate start, or state conflict.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PreconditionFailed:
+      description: PRECONDITION_FAILED (412) — a required precondition is not met.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: RATE_LIMITED (429) — rate limit exceeded.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Internal:
+      description: INTERNAL (500) — unexpected server error (incl. mapped upstream failure).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      description: Canonical platform error envelope.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_FAILED
+                - UNAUTHENTICATED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - PRECONDITION_FAILED
+                - RATE_LIMITED
+                - INTERNAL
+              description: One of the 8 platform HTTP codes.
+            message:
+              type: string
+              description: Human-readable, resolved from a MSG-* / ERR-* id.
+            field:
+              type: [string, 'null']
+              description: Offending field for validation errors.
+            details:
+              type: [object, 'null']
+              description: >
+                Structured discriminators. For G05 conditions, carries
+                { errorId } e.g. ERR-G05-NOT-SERVED, ERR-G05-CLEARANCE-INCOMPLETE,
+                ERR-G05-STAY-HOLD, ERR-G05-DUAL-POSTING, ERR-G05-NUMBER-LOCKED, etc.
+              additionalProperties: true
+              properties:
+                errorId:
+                  type: string
+                  description: Module error id registered in the error taxonomy.
+                  enum:
+                    - ERR-G05-ACTIVE-TRANSFER
+                    - ERR-G05-ELIGIBILITY-BLOCKED
+                    - ERR-G05-BAN-WINDOW
+                    - ERR-G05-CLEARANCE-INCOMPLETE
+                    - ERR-G05-HANDOVER-DISPUTED
+                    - ERR-G05-NOT-IN-TRANSIT
+                    - ERR-G05-DEPUTATION-CAP
+                    - ERR-G05-VACANCY-FULL
+                    - ERR-G05-DUAL-POSTING
+                    - ERR-G05-STAY-HOLD
+                    - ERR-G05-MUTUAL-PAIR
+                    - ERR-G05-NOT-SERVED
+                    - ERR-G05-NUMBER-LOCKED
+                    - ERR-G05-COUNSEL-TURN
+                    - ERR-G05-FORCED-PRECOND
+                    - ERR-G05-RELIEVE-DATE
+                    - ERR-G05-QUARTER-OVERSTAY
+
+    Page:
+      type: object
+      description: Cursor pagination wrapper.
+      properties:
+        data:
+          type: array
+          items: {}
+        next_cursor:
+          type: [string, 'null']
+          description: Cursor for the next page; null when exhausted.
+
+    # ---- Enums (from BRD §5.5 / field tables) ----
+    TransferType:
+      type: string
+      enum: [REQUEST, ADMIN, MUTUAL, DEPUTATION, PROMOTION_LINKED]
+    RequestOrigin:
+      type: string
+      enum: [SELF, MANAGER, ADMIN, SYSTEM]
+    TransferGround:
+      type: string
+      enum: [MEDICAL, SPOUSE, COMPASSIONATE, ADMINISTRATIVE, REQUEST, PROMOTION, PUBLIC_INTEREST]
+    PriorityCategory:
+      type: string
+      enum: [PROTECTED_SPOUSE, MEDICAL, SINGLE_PARENT, DIFFERENTLY_ABLED, NEAR_RETIREMENT, NONE]
+    OrderClass:
+      type: string
+      enum: [SUBSTANTIVE, ADDITIONAL_CHARGE, DEPUTATION, REPATRIATION]
+    DistanceBand:
+      type: string
+      enum: [LOCAL, SHORT, MEDIUM, LONG, OUTSTATION]
+    AllotmentMethod:
+      type: string
+      enum: [SENIORITY, MERIT, PREFERENCE, MANUAL, COUNSELLING]
+    ClearanceDepartment:
+      type: string
+      enum: [IT, LIBRARY, ACCOUNTS, STORES, ADVANCES, ESTATE_QUARTERS, HR, OTHER]
+    EscalationTier:
+      type: string
+      enum: [NONE, OFFICER, DEPT_HEAD, AUTHORITY]
+    RepatriationStatus:
+      type: string
+      enum: [ACTIVE, EXTENSION_REQUESTED, EXTENDED, REPATRIATION_DUE, REPATRIATED]
+    RetentionStatus:
+      type: string
+      enum: [OCCUPIED, RETENTION_REQUESTED, RETENTION_APPROVED, VACATION_DUE, VACATED, OVERSTAY]
+    OutboxStatus:
+      type: string
+      enum: [PENDING, IN_FLIGHT, DELIVERED, FAILED, DEAD_LETTERED]
+    SrEventType:
+      type: string
+      description: G12-published SR event codes for G05.
+      enum: [TRANSFER, RELIEVING, JOINING, MUTUAL_TRANSFER]
+    SrReversalEventType:
+      type: string
+      enum: [TRANSFER_CANCELLED, RELIEVING_CANCELLED, JOINING_CANCELLED]
+    DeliveryChannel:
+      type: string
+      enum: [IN_APP, EMAIL, SMS, REGISTERED_POST, HAND_DELIVERY, PUBLISHED_NOTICE]
+
+    # ---- Core entities ----
+    TransferRequest:
+      type: object
+      properties:
+        transferRequestId: { type: string, format: uuid }
+        requestNo: { type: string }
+        employeeId: { type: string, format: uuid }
+        transferType: { $ref: '#/components/schemas/TransferType' }
+        requestOrigin: { $ref: '#/components/schemas/RequestOrigin' }
+        sourceOrgUnitId: { type: string, format: uuid }
+        requestedDestOrgUnitId: { type: [string, 'null'], format: uuid }
+        mutualCounterpartEmployeeId: { type: [string, 'null'], format: uuid }
+        ground: { $ref: '#/components/schemas/TransferGround' }
+        groundDetails: { type: [string, 'null'] }
+        supportingDocumentIds:
+          type: array
+          items: { type: string, format: uuid }
+        sensitiveDocumentIds:
+          type: array
+          items: { type: string, format: uuid }
+        sensitiveGround: { type: boolean }
+        linkedPromotionId: { type: [string, 'null'], format: uuid }
+        linkedDriveId: { type: [string, 'null'], format: uuid }
+        priorityCategory: { $ref: '#/components/schemas/PriorityCategory' }
+        status: { type: string }
+        eligibilityResult: { type: [object, 'null'], additionalProperties: true }
+        workflowInstanceId: { type: [string, 'null'], format: uuid }
+        requestedEffectiveDate: { type: [string, 'null'], format: date }
+
+    TransferRequestCreate:
+      type: object
+      required: [employeeId, transferType, requestOrigin, sourceOrgUnitId]
+      properties:
+        employeeId: { type: string, format: uuid }
+        transferType: { $ref: '#/components/schemas/TransferType' }
+        requestOrigin: { $ref: '#/components/schemas/RequestOrigin' }
+        sourceOrgUnitId: { type: string, format: uuid }
+        requestedDestOrgUnitId: { type: string, format: uuid }
+        mutualCounterpartEmployeeId: { type: string, format: uuid }
+        ground: { $ref: '#/components/schemas/TransferGround' }
+        groundDetails: { type: string, maxLength: 4000 }
+        priorityCategory: { $ref: '#/components/schemas/PriorityCategory' }
+        supportingDocumentIds:
+          type: array
+          items: { type: string, format: uuid }
+        sensitiveDocumentIds:
+          type: array
+          items: { type: string, format: uuid }
+        requestedEffectiveDate: { type: string, format: date }
+
+    TransferRequestUpdate:
+      type: object
+      properties:
+        requestedDestOrgUnitId: { type: string, format: uuid }
+        ground: { $ref: '#/components/schemas/TransferGround' }
+        groundDetails: { type: string, maxLength: 4000 }
+        priorityCategory: { $ref: '#/components/schemas/PriorityCategory' }
+        supportingDocumentIds:
+          type: array
+          items: { type: string, format: uuid }
+        sensitiveDocumentIds:
+          type: array
+          items: { type: string, format: uuid }
+        requestedEffectiveDate: { type: string, format: date }
+
+    TransferOrder:
+      type: object
+      properties:
+        transferOrderId: { type: string, format: uuid }
+        orderNo: { type: string, description: Gapless statutory number. }
+        orderClass: { $ref: '#/components/schemas/OrderClass' }
+        transferRequestId: { type: [string, 'null'], format: uuid }
+        employeeId: { type: string, format: uuid }
+        transferType: { $ref: '#/components/schemas/TransferType' }
+        sourceOrgUnitId: { type: string, format: uuid }
+        destOrgUnitId: { type: string, format: uuid }
+        sourceDesignationId: { type: string, format: uuid }
+        destDesignationId: { type: string, format: uuid }
+        orderDate: { type: [string, 'null'], format: date }
+        servedOnDate: { type: [string, 'null'], format: date }
+        acknowledgedAt: { type: [string, 'null'], format: date-time }
+        relieveByDate: { type: [string, 'null'], format: date }
+        expectedJoiningDate: { type: [string, 'null'], format: date }
+        joiningDistanceBand: { $ref: '#/components/schemas/DistanceBand' }
+        joiningTimeDays: { type: [integer, 'null'] }
+        joiningTimePayAdmissible: { type: boolean }
+        entitlementRef: { type: [string, 'null'] }
+        inTransitCustodyOrgUnitId: { type: [string, 'null'], format: uuid }
+        isDeputation: { type: boolean }
+        mutualPairOrderId: { type: [string, 'null'], format: uuid }
+        driveId: { type: [string, 'null'], format: uuid }
+        status: { type: string }
+        holdActive: { type: boolean }
+        orderDocumentId: { type: [string, 'null'], format: uuid }
+        approvedBy: { type: [string, 'null'], format: uuid }
+        approvedAt: { type: [string, 'null'], format: date-time }
+        workflowInstanceId: { type: [string, 'null'], format: uuid }
+        revisionNo: { type: integer }
+        supersededByOrderId: { type: [string, 'null'], format: uuid }
+
+    TransferOrderCreate:
+      type: object
+      required: [employeeId, transferType, sourceOrgUnitId, destOrgUnitId, orderClass]
+      properties:
+        transferRequestId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        transferType: { $ref: '#/components/schemas/TransferType' }
+        orderClass: { $ref: '#/components/schemas/OrderClass' }
+        sourceOrgUnitId: { type: string, format: uuid }
+        destOrgUnitId: { type: string, format: uuid }
+        sourceDesignationId: { type: string, format: uuid }
+        destDesignationId: { type: string, format: uuid }
+        joiningDistanceBand: { $ref: '#/components/schemas/DistanceBand' }
+        expectedJoiningDate: { type: string, format: date }
+        mutualPairOrderId: { type: string, format: uuid }
+        driveId: { type: string, format: uuid }
+        effectiveFrom: { type: string, format: date }
+
+    ApprovalDecision:
+      type: object
+      properties:
+        comment: { type: string }
+
+    OrderCorrectionRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, description: Mandatory justification (ERR-REASON-REQ if absent). }
+        changes: { type: object, additionalProperties: true }
+        effectiveFrom: { type: string, format: date }
+
+    EligibilityEvaluateRequest:
+      type: object
+      required: [employeeId, sourceOrgUnitId]
+      properties:
+        employeeId: { type: string, format: uuid }
+        transferType: { $ref: '#/components/schemas/TransferType' }
+        sourceOrgUnitId: { type: string, format: uuid }
+        destOrgUnitId: { type: string, format: uuid }
+        ground: { $ref: '#/components/schemas/TransferGround' }
+        requestedEffectiveDate: { type: string, format: date }
+
+    EligibilityResult:
+      type: object
+      properties:
+        eligible: { type: boolean }
+        enforcement:
+          type: string
+          enum: [PASS, HARD_BLOCK, SOFT_WARN, REQUIRE_OVERRIDE]
+        violations:
+          type: array
+          items:
+            type: object
+            properties:
+              ruleCode: { type: string }
+              ruleType: { type: string }
+              message: { type: string }
+              errorId: { type: string }
+
+    OverrideRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+        overriddenRuleCodes:
+          type: array
+          items: { type: string }
+
+    TransferPolicyRule:
+      type: object
+      properties:
+        policyRuleId: { type: string, format: uuid }
+        ruleCode: { type: string }
+        ruleType:
+          type: string
+          enum: [MIN_TENURE, MAX_TENURE, BAN_WINDOW, PROTECTED_CATEGORY, SANCTIONED_STRENGTH, COOLING_PERIOD, STATION_RETENTION, JOINING_TIME_PAY]
+        scopeCadre: { type: [string, 'null'] }
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid }
+        paramValue: { type: object, additionalProperties: true }
+        enforcement:
+          type: string
+          enum: [HARD_BLOCK, SOFT_WARN, REQUIRE_OVERRIDE]
+        effectiveFrom: { type: [string, 'null'], format: date }
+        effectiveTo: { type: [string, 'null'], format: date }
+        isActive: { type: boolean }
+
+    TransferDrive:
+      type: object
+      properties:
+        driveId: { type: string, format: uuid }
+        driveCode: { type: string }
+        title: { type: string }
+        cadre: { type: [string, 'null'] }
+        driveType:
+          type: string
+          enum: [ANNUAL, SEASONAL, AD_HOC, COUNSELLING]
+        preferenceWindowStart: { type: [string, 'null'], format: date }
+        preferenceWindowEnd: { type: [string, 'null'], format: date }
+        allotmentMethod: { $ref: '#/components/schemas/AllotmentMethod' }
+        status:
+          type: string
+          enum: [DRAFT, OPEN, COUNSELLING, ALLOTTED, ORDERS_ISSUED, CLOSED, CANCELLED]
+        totalPositions: { type: [integer, 'null'] }
+
+    TransferDriveCreate:
+      type: object
+      required: [driveCode, title, driveType, allotmentMethod]
+      properties:
+        driveCode: { type: string }
+        title: { type: string }
+        cadre: { type: string }
+        driveType:
+          type: string
+          enum: [ANNUAL, SEASONAL, AD_HOC, COUNSELLING]
+        preferenceWindowStart: { type: string, format: date }
+        preferenceWindowEnd: { type: string, format: date }
+        allotmentMethod: { $ref: '#/components/schemas/AllotmentMethod' }
+        totalPositions: { type: integer }
+
+    VacancyPosition:
+      type: object
+      properties:
+        vacancyPositionId: { type: string, format: uuid }
+        orgUnitId: { type: string, format: uuid }
+        designationId: { type: string, format: uuid }
+        cadre: { type: [string, 'null'] }
+        sanctionedStrengthCached: { type: [integer, 'null'] }
+        filledCountCached: { type: [integer, 'null'] }
+        reservedCount: { type: integer }
+        vacantCount: { type: [integer, 'null'], description: Derived at read; not authoritative. }
+        strengthAsOf: { type: [string, 'null'], format: date-time }
+        strengthSource:
+          type: string
+          enum: [G06, G01, MANUAL_FALLBACK]
+        driveId: { type: [string, 'null'], format: uuid }
+        isPublished: { type: boolean }
+        geoLat: { type: [number, 'null'] }
+        geoLng: { type: [number, 'null'] }
+
+    VacancyPositionCreate:
+      type: object
+      required: [orgUnitId, designationId]
+      properties:
+        orgUnitId: { type: string, format: uuid }
+        designationId: { type: string, format: uuid }
+        cadre: { type: string }
+        geoLat: { type: number }
+        geoLng: { type: number }
+
+    TransferPreference:
+      type: object
+      properties:
+        preferenceId: { type: string, format: uuid }
+        driveId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        preferenceRank: { type: integer, minimum: 1 }
+        preferredOrgUnitId: { type: string, format: uuid }
+        vacancyPositionId: { type: [string, 'null'], format: uuid }
+        allotted: { type: boolean }
+        seniorityScore: { type: [number, 'null'] }
+
+    TransferPreferenceInput:
+      type: object
+      required: [preferenceRank, preferredOrgUnitId]
+      properties:
+        preferenceRank: { type: integer, minimum: 1 }
+        preferredOrgUnitId: { type: string, format: uuid }
+        vacancyPositionId: { type: string, format: uuid }
+
+    AllotmentResult:
+      type: object
+      properties:
+        driveId: { type: string, format: uuid }
+        allotmentMethod: { $ref: '#/components/schemas/AllotmentMethod' }
+        allottedCount: { type: integer }
+        unallottedCount: { type: integer }
+        reservations:
+          type: array
+          items: { $ref: '#/components/schemas/VacancyReservation' }
+
+    DriveScreenResult:
+      type: object
+      properties:
+        driveId: { type: string, format: uuid }
+        eligibleCount: { type: integer }
+        blockedCount: { type: integer }
+        details:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    BatchJobAccepted:
+      type: object
+      properties:
+        jobId: { type: string }
+        driveId: { type: string, format: uuid }
+        status: { type: string, example: ACCEPTED }
+        totalQueued: { type: integer }
+
+    DriveDashboard:
+      type: object
+      properties:
+        driveId: { type: string, format: uuid }
+        status: { type: string }
+        totalPositions: { type: integer }
+        allotted: { type: integer }
+        ordersIssued: { type: integer }
+        relieved: { type: integer }
+        joined: { type: integer }
+        quarantined: { type: integer }
+
+    VacancyReservation:
+      type: object
+      properties:
+        reservationId: { type: string, format: uuid }
+        vacancyPositionId: { type: string, format: uuid }
+        transferOrderId: { type: [string, 'null'], format: uuid }
+        employeeId: { type: string, format: uuid }
+        driveId: { type: [string, 'null'], format: uuid }
+        lifecycleState:
+          type: string
+          enum: [RESERVED, VACATED_ON_RELIEF, FILLED_ON_JOIN, RELEASED, EXPIRED]
+        reservedAt: { type: string, format: date-time }
+        vacatedAt: { type: [string, 'null'], format: date-time }
+        filledAt: { type: [string, 'null'], format: date-time }
+
+    CounsellingSession:
+      type: object
+      properties:
+        sessionId: { type: string, format: uuid }
+        sessionCode: { type: string }
+        driveId: { type: string, format: uuid }
+        scheduledAt: { type: string, format: date-time }
+        turnOrderMethod:
+          type: string
+          enum: [SENIORITY, MERIT]
+        currentTurnEmployeeId: { type: [string, 'null'], format: uuid }
+        currentTurnStartedAt: { type: [string, 'null'], format: date-time }
+        turnTimeoutSeconds: { type: integer }
+        status:
+          type: string
+          enum: [SCHEDULED, IN_PROGRESS, PAUSED, COMPLETED, CANCELLED]
+        presidingOfficerId: { type: string, format: uuid }
+        totalCandidates: { type: integer }
+        completedCandidates: { type: integer }
+
+    CounsellingSessionCreate:
+      type: object
+      required: [sessionCode, scheduledAt, turnOrderMethod, presidingOfficerId]
+      properties:
+        sessionCode: { type: string }
+        scheduledAt: { type: string, format: date-time }
+        turnOrderMethod:
+          type: string
+          enum: [SENIORITY, MERIT]
+        turnTimeoutSeconds: { type: integer, default: 300 }
+        presidingOfficerId: { type: string, format: uuid }
+
+    CounsellingChoice:
+      type: object
+      properties:
+        choiceId: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        turnPosition: { type: integer }
+        vacancyPositionId: { type: [string, 'null'], format: uuid }
+        choiceAction:
+          type: string
+          enum: [CHOSEN, PASSED, DECLINED, AUTO_PASS_TIMEOUT, ABSENT]
+        choiceMadeAt: { type: string, format: date-time }
+        recordedBy: { type: string, format: uuid }
+        remarks: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    CounsellingChoiceInput:
+      type: object
+      required: [employeeId, turnPosition, choiceAction]
+      properties:
+        employeeId: { type: string, format: uuid }
+        turnPosition: { type: integer }
+        vacancyPositionId: { type: string, format: uuid }
+        choiceAction:
+          type: string
+          enum: [CHOSEN, PASSED, DECLINED, AUTO_PASS_TIMEOUT, ABSENT]
+        remarks: { type: string }
+
+    ClearanceChecklist:
+      type: object
+      properties:
+        clearanceChecklistId: { type: string, format: uuid }
+        checklistNo: { type: string }
+        transferOrderId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        sourceOrgUnitId: { type: string, format: uuid }
+        workflowInstanceId: { type: [string, 'null'], format: uuid }
+        status:
+          type: string
+          enum: [OPEN, IN_PROGRESS, BLOCKED, CLEARED, CLEARED_WITH_DUES, CLEARED_WITH_DEEMED, CANCELLED]
+        totalItems: { type: integer }
+        clearedItems: { type: integer }
+        deemedItems: { type: integer }
+        hasOutstandingDues: { type: boolean }
+        duesRecoveryRef: { type: [string, 'null'] }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ClearanceItem' }
+
+    ClearanceItem:
+      type: object
+      properties:
+        clearanceItemId: { type: string, format: uuid }
+        clearanceChecklistId: { type: string, format: uuid }
+        departmentCode: { $ref: '#/components/schemas/ClearanceDepartment' }
+        workflowBranchRef: { type: [string, 'null'] }
+        assignedOfficerId: { type: [string, 'null'], format: uuid }
+        status:
+          type: string
+          enum: [PENDING, CLEARED, DUES_OUTSTANDING, WAIVED, DEEMED_CLEARED]
+        slaDueAt: { type: [string, 'null'], format: date-time }
+        escalationTier: { $ref: '#/components/schemas/EscalationTier' }
+        escalatedAt: { type: [string, 'null'], format: date-time }
+        forcedActionType: { type: [string, 'null'] }
+        forcedActionReason: { type: [string, 'null'] }
+        forcedActionBy: { type: [string, 'null'], format: uuid }
+        duesAmount: { type: [number, 'null'] }
+        duesDescription: { type: [string, 'null'] }
+        remarks: { type: [string, 'null'] }
+        evidenceDocumentId: { type: [string, 'null'], format: uuid }
+        clearedAt: { type: [string, 'null'], format: date-time }
+
+    ClearanceItemUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [CLEARED, DUES_OUTSTANDING, WAIVED]
+        duesAmount: { type: number }
+        duesDescription: { type: string }
+        remarks: { type: string }
+        evidenceDocumentId: { type: string, format: uuid }
+
+    ChargeHandover:
+      type: object
+      properties:
+        chargeHandoverId: { type: string, format: uuid }
+        transferOrderId: { type: string, format: uuid }
+        phase:
+          type: string
+          enum: [HANDOVER_SOURCE, ASSUMPTION_DEST]
+        relinquishingEmployeeId: { type: [string, 'null'], format: uuid }
+        receivingEmployeeId: { type: [string, 'null'], format: uuid }
+        chargeType:
+          type: string
+          enum: [FULL, ADDITIONAL, CURRENT_DUTIES]
+        handoverDate: { type: string, format: date }
+        assetsHanded: { type: [object, 'null'], additionalProperties: true }
+        cashImprestAmount: { type: [number, 'null'] }
+        pendingFilesCount: { type: [integer, 'null'] }
+        handoverNoteDocumentId: { type: [string, 'null'], format: uuid }
+        status:
+          type: string
+          enum: [DRAFT, SUBMITTED, ACCEPTED, DISPUTED, UNDER_PROTEST]
+        underProtest: { type: boolean }
+        disputeSlaDueAt: { type: [string, 'null'], format: date-time }
+        forcedActionType: { type: [string, 'null'] }
+        forcedActionReason: { type: [string, 'null'] }
+        forcedActionBy: { type: [string, 'null'], format: uuid }
+        acceptedBy: { type: [string, 'null'], format: uuid }
+        acceptedAt: { type: [string, 'null'], format: date-time }
+
+    ChargeHandoverCreate:
+      type: object
+      required: [phase, chargeType, handoverDate]
+      properties:
+        phase:
+          type: string
+          enum: [HANDOVER_SOURCE, ASSUMPTION_DEST]
+        relinquishingEmployeeId: { type: string, format: uuid }
+        receivingEmployeeId: { type: string, format: uuid }
+        chargeType:
+          type: string
+          enum: [FULL, ADDITIONAL, CURRENT_DUTIES]
+        handoverDate: { type: string, format: date }
+        assetsHanded: { type: object, additionalProperties: true }
+        cashImprestAmount: { type: number }
+        pendingFilesCount: { type: integer }
+        handoverNoteDocumentId: { type: string, format: uuid }
+
+    RelievingOrder:
+      type: object
+      properties:
+        relievingOrderId: { type: string, format: uuid }
+        relievingOrderNo: { type: string }
+        transferOrderId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        clearanceChecklistId: { type: string, format: uuid }
+        lastWorkingDay: { type: string, format: date }
+        relievingTime:
+          type: string
+          enum: [FORENOON, AFTERNOON]
+        relieved: { type: boolean }
+        deemedRelief: { type: boolean }
+        forcedActionReason: { type: [string, 'null'] }
+        forcedActionBy: { type: [string, 'null'], format: uuid }
+        payContinuitySignalled: { type: boolean }
+        lpcRequested: { type: boolean }
+        relievingOrderDocumentId: { type: [string, 'null'], format: uuid }
+        status: { type: string }
+        issuedBy: { type: [string, 'null'], format: uuid }
+        workflowInstanceId: { type: [string, 'null'], format: uuid }
+
+    RelievingOrderCreate:
+      type: object
+      required: [lastWorkingDay, relievingTime]
+      properties:
+        lastWorkingDay: { type: string, format: date }
+        relievingTime:
+          type: string
+          enum: [FORENOON, AFTERNOON]
+        effectiveFrom: { type: string, format: date }
+
+    JoiningReport:
+      type: object
+      properties:
+        joiningReportId: { type: string, format: uuid }
+        joiningReportNo: { type: string }
+        transferOrderId: { type: string, format: uuid }
+        relievingOrderId: { type: [string, 'null'], format: uuid }
+        employeeId: { type: string, format: uuid }
+        destOrgUnitId: { type: string, format: uuid }
+        reportedDate: { type: string, format: date }
+        joiningDate: { type: string, format: date }
+        joiningTime:
+          type: string
+          enum: [FORENOON, AFTERNOON]
+        joiningSequenceNo: { type: [integer, 'null'] }
+        interSeTiebreakKey: { type: [string, 'null'] }
+        transitDays: { type: [integer, 'null'] }
+        transitWithinAdmissible: { type: [boolean, 'null'] }
+        serviceContinuityAsserted: { type: boolean }
+        chargeAssumptionId: { type: [string, 'null'], format: uuid }
+        payContinuityResumed: { type: boolean }
+        joiningDocumentId: { type: [string, 'null'], format: uuid }
+        status: { type: string }
+        verifiedBy: { type: [string, 'null'], format: uuid }
+        workflowInstanceId: { type: [string, 'null'], format: uuid }
+
+    JoiningReportCreate:
+      type: object
+      required: [reportedDate, joiningDate, joiningTime]
+      properties:
+        reportedDate: { type: string, format: date }
+        joiningDate: { type: string, format: date }
+        joiningTime:
+          type: string
+          enum: [FORENOON, AFTERNOON]
+        chargeAssumptionId: { type: string, format: uuid }
+        joiningDocumentId: { type: string, format: uuid }
+        effectiveFrom: { type: string, format: date }
+
+    ExtendJoiningTimeRequest:
+      type: object
+      required: [newExpectedJoiningDate, reason]
+      properties:
+        newExpectedJoiningDate: { type: string, format: date }
+        reason: { type: string }
+
+    DeputationRecord:
+      type: object
+      properties:
+        deputationId: { type: string, format: uuid }
+        transferOrderId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        borrowingOrgUnitId: { type: string, format: uuid }
+        lendingOrgUnitId: { type: string, format: uuid }
+        deputationTerms: { type: [object, 'null'], additionalProperties: true }
+        startDate: { type: string, format: date }
+        initialTenureMonths: { type: integer }
+        currentEndDate: { type: string, format: date }
+        maxTenureMonths: { type: [integer, 'null'] }
+        extensionCount: { type: integer }
+        repatriationDueDate: { type: [string, 'null'], format: date }
+        repatriationStatus: { $ref: '#/components/schemas/RepatriationStatus' }
+
+    TransferRepresentation:
+      type: object
+      properties:
+        representationId: { type: string, format: uuid }
+        representationNo: { type: string }
+        transferOrderId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        representationType:
+          type: string
+          enum: [REPRESENTATION, COURT_STAY, RETENTION_REQUEST]
+        filedBy:
+          type: string
+          enum: [EMPLOYEE, AUTHORITY, COURT, UNION]
+        authorityRef: { type: [string, 'null'] }
+        documentId: { type: [string, 'null'], format: uuid }
+        holdFromStage:
+          type: string
+          enum: [PRE_RELIEF, PRE_JOIN, ANY]
+        status:
+          type: string
+          enum: [FILED, UNDER_REVIEW, HOLD_ACTIVE, UPHELD, REJECTED, VACATED, WITHDRAWN]
+        decision:
+          type: [string, 'null']
+          enum: [ALLOW, DENY, MODIFY, VACATE, null]
+        decidedBy: { type: [string, 'null'], format: uuid }
+        decidedAt: { type: [string, 'null'], format: date-time }
+        validUntil: { type: [string, 'null'], format: date }
+        workflowInstanceId: { type: [string, 'null'], format: uuid }
+
+    RepresentationCreate:
+      type: object
+      required: [representationType, filedBy, holdFromStage]
+      properties:
+        representationType:
+          type: string
+          enum: [REPRESENTATION, COURT_STAY, RETENTION_REQUEST]
+        filedBy:
+          type: string
+          enum: [EMPLOYEE, AUTHORITY, COURT, UNION]
+        authorityRef: { type: string }
+        documentId: { type: string, format: uuid }
+        holdFromStage:
+          type: string
+          enum: [PRE_RELIEF, PRE_JOIN, ANY]
+        validUntil: { type: string, format: date }
+        reason: { type: string }
+
+    RepresentationDecision:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision:
+          type: string
+          enum: [ALLOW, DENY, MODIFY, VACATE]
+        reason: { type: string }
+        validUntil: { type: string, format: date }
+
+    ForcedActionRequest:
+      type: object
+      required: [forcedActionReason, forcedActionBy]
+      properties:
+        forcedActionReason: { type: string, description: Mandatory justification captured in audit. }
+        forcedActionBy: { type: string, format: uuid, description: Granting Authority (not the transferee). }
+
+    ForcedActionRecord:
+      type: object
+      properties:
+        forcedActionType: { type: string, enum: [DEEMED_CLEARED, HANDOVER_UNDER_PROTEST, DEEMED_RELIEF] }
+        subjectType: { type: string }
+        subjectId: { type: string, format: uuid }
+        transferOrderId: { type: [string, 'null'], format: uuid }
+        forcedActionReason: { type: string }
+        forcedActionBy: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+
+    ServeOrderRequest:
+      type: object
+      required: [servedOnDate, deliveryChannel]
+      properties:
+        servedOnDate: { type: string, format: date }
+        deliveryChannel: { $ref: '#/components/schemas/DeliveryChannel' }
+        proofDocumentId: { type: string, format: uuid }
+
+    OrderAcknowledgement:
+      type: object
+      properties:
+        acknowledgementId: { type: string, format: uuid }
+        transferOrderId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        servedOnDate: { type: string, format: date }
+        deliveryChannel: { $ref: '#/components/schemas/DeliveryChannel' }
+        servedBy: { type: [string, 'null'], format: uuid }
+        acknowledgementStatus:
+          type: string
+          enum: [SERVED, ACKNOWLEDGED, DEEMED_SERVED, REFUSED]
+        acknowledgedAt: { type: [string, 'null'], format: date-time }
+        deemedServedReason: { type: [string, 'null'] }
+        proofDocumentId: { type: [string, 'null'], format: uuid }
+
+    CustodyRecord:
+      type: object
+      properties:
+        transferOrderId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        inTransitCustodyOrgUnitId: { type: [string, 'null'], format: uuid }
+        status: { type: string }
+        singleCustodianInvariantOk: { type: boolean, description: True iff exactly one custodian. }
+
+    EntitlementSignal:
+      type: object
+      properties:
+        transferOrderId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        transferType: { $ref: '#/components/schemas/TransferType' }
+        ground: { $ref: '#/components/schemas/TransferGround' }
+        distanceBand: { $ref: '#/components/schemas/DistanceBand' }
+        joiningTimePayAdmissible: { type: boolean }
+        entitlementRef: { type: [string, 'null'] }
+
+    QuarterAllotment:
+      type: object
+      properties:
+        quarterAllotmentId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        transferOrderId: { type: [string, 'null'], format: uuid }
+        quarterRef: { type: string }
+        orgUnitId: { type: string, format: uuid }
+        retentionAllowed: { type: boolean }
+        retentionStatus: { $ref: '#/components/schemas/RetentionStatus' }
+        vacateByDate: { type: [string, 'null'], format: date }
+        vacatedOn: { type: [string, 'null'], format: date }
+        licenceFeeRate: { type: [number, 'null'] }
+        penalRateApplies: { type: boolean }
+        licenceFeeRecoveryRef: { type: [string, 'null'] }
+
+    QuarterRetentionRequest:
+      type: object
+      required: [quarterRef, orgUnitId]
+      properties:
+        quarterRef: { type: string }
+        orgUnitId: { type: string, format: uuid }
+        reason: { type: string }
+
+    # ---- SR ingest contracts (G12-frozen envelope) ----
+    SrIngestEnvelope:
+      type: object
+      required: [source_module, source_reference_id, source_event_version, event_type, fact_key, tenant_id]
+      properties:
+        source_module:
+          type: string
+          const: G05
+          description: Explicit source module (never inferred).
+        source_reference_id:
+          type: string
+          description: Originating G05 aggregate/checkpoint reference (dedup tuple member).
+        source_event_version:
+          type: integer
+          description: Event version (dedup tuple member).
+        event_type: { $ref: '#/components/schemas/SrEventType' }
+        fact_key:
+          type: string
+          description: Qualifying-service correlation key (required; missing → SR_FACT_KEY_REQUIRED).
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: [string, 'null'], format: uuid }
+        body:
+          type: object
+          description: SR event body.
+          properties:
+            order_no: { type: string }
+            source_org_unit_id: { type: string, format: uuid }
+            dest_org_unit_id: { type: string, format: uuid }
+            effective_date: { type: string, format: date }
+            service_continuity_asserted:
+              type: boolean
+              description: Required true for RELIEVING/JOINING.
+          additionalProperties: true
+
+    SrReversalEnvelope:
+      type: object
+      required: [source_module, source_reference_id, source_event_version, event_type, fact_key, tenant_id, is_reversal, reverses_source_reference_id]
+      properties:
+        source_module:
+          type: string
+          const: G05
+        source_reference_id: { type: string }
+        source_event_version: { type: integer }
+        event_type: { $ref: '#/components/schemas/SrReversalEventType' }
+        fact_key: { type: string }
+        tenant_id: { type: string, format: uuid }
+        entity_id: { type: [string, 'null'], format: uuid }
+        is_reversal:
+          type: boolean
+          const: true
+        reverses_source_reference_id:
+          type: string
+          description: The source_reference_id of the event being reversed.
+        body:
+          type: object
+          additionalProperties: true
+
+    SrIngestResult:
+      type: object
+      properties:
+        ledgerEventId: { type: [string, 'null'], format: uuid }
+        status:
+          type: string
+          enum: [INGESTED, DUPLICATE, PENDING]
+        deduped: { type: boolean }
+        factKey: { type: string }
+
+    SrOutboxRow:
+      type: object
+      properties:
+        outboxId: { type: string, format: uuid }
+        aggregateType:
+          type: string
+          enum: [TRANSFER_ORDER, RELIEVING_ORDER, JOINING_REPORT]
+        aggregateId: { type: string, format: uuid }
+        targetSystem:
+          type: string
+          enum: [G12_SR, G10_PAYROLL, G01_MASTER, G09_DISCIPLINARY]
+        eventType:
+          type: string
+          enum:
+            - TRANSFER
+            - RELIEVING
+            - JOINING
+            - MUTUAL_TRANSFER
+            - TRANSFER_CANCELLED
+            - RELIEVING_CANCELLED
+            - JOINING_CANCELLED
+            - PAY_CONTINUITY
+            - ENTITLEMENT
+            - LPC_REQUEST
+            - POSTING_UPDATE
+            - LICENCE_FEE_RECOVERY
+            - SENIORITY_FEED
+            - DISCIPLINARY_TRIGGER
+        idempotencyKey: { type: string }
+        status: { $ref: '#/components/schemas/OutboxStatus' }
+        attemptCount: { type: integer }
+        maxAttempts: { type: integer }
+        nextAttemptAt: { type: [string, 'null'], format: date-time }
+        lastError: { type: [string, 'null'] }
+        deliveredAt: { type: [string, 'null'], format: date-time }
+        deadLetteredAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    AnalyticsSummary:
+      type: object
+      properties:
+        medianOrderToRelieveDays: { type: number }
+        continuousPayPct: { type: number }
+        auditableTransitPct: { type: number }
+        policyViolationsWithoutOverride: { type: integer }
+        clearanceClosedPct: { type: number }
+        srPostedPct: { type: number }
+        selfServicePct: { type: number }
+
+    ReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, description: Mandatory justification (ERR-REASON-REQ if absent). }

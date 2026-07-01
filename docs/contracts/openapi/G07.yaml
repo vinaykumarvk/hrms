@@ -1,0 +1,2606 @@
+openapi: 3.1.0
+info:
+  title: Government HRMS — G07 Training & Skill Development Management API
+  version: 3.0.0
+  description: >-
+    OpenAPI contract for module G07 (Training and Skill Development Management),
+    a platform-native extension of the PrimeSoft HRMS. Business logic runs on the
+    shared platform engines: approvals on P01, jobs on X.1, LMS/LRS integration on
+    X.3, forms on W.2, audit on P05, authorization on P02, notifications on X.2.
+    Significant certifications/qualifications are posted (by reference) to the G12
+    Service Register ledger. All endpoints adopt the platform API conventions:
+    cursor pagination, Idempotency-Key on unsafe POSTs, X-Correlation-Id on every
+    response, and the canonical error envelope. Grounded on
+    docs/brd/v3/G07-training-skill-development.md, docs/contracts/error-taxonomy.yaml
+    (ERR-G07-*), and PLATFORM_FOUNDATION.md §4.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Competency Framework
+  - name: Skill Inventory & Gaps
+  - name: Planning
+  - name: Catalog & Content
+  - name: Delivery Logistics
+  - name: Enrolment
+  - name: Campaigns
+  - name: Execution
+  - name: Compliance & Credentials
+  - name: Modern Learning
+  - name: LMS/LRS Integration
+  - name: Service Register & Finance
+  - name: Data Governance
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Bearer JWT carrying resolved roles + tenant/entity scope (P02). Endpoints
+        call Authorization.check; they never re-implement permission logic.
+  headers:
+    XCorrelationId:
+      description: >-
+        Correlation id echoed on every response and written to every P05 audit/log
+        line for the request (assigned if absent on the request).
+      required: true
+      schema:
+        type: string
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size for cursor pagination (default 25, max 100).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque forward cursor from a previous response's next_cursor.
+      schema:
+        type: string
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: Sort expression, e.g. field:asc|desc.
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Idempotency key for unsafe POSTs that start a transaction; a repeat within
+        24h returns the original result (Foundation §1).
+      schema:
+        type: string
+    IdempotencyKeyOptional:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional idempotency key; a repeat within 24h returns the original result.
+      schema:
+        type: string
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      description: Canonical error envelope (Foundation §4.1). 4xx/5xx return only this object.
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: >-
+                One of the 8 standard wire codes, or a module/domain code
+                (e.g. ERR-G07-CAPACITY) carried in this field.
+            message:
+              type: string
+              description: Human-readable message resolved from a MSG-*/ERR-* id.
+            field:
+              type: [string, "null"]
+              description: Offending field for validation errors.
+            details:
+              type: [object, "null"]
+              description: Structured discriminators, e.g. { reason -> code }.
+      example:
+        error:
+          code: VALIDATION_FAILED
+          message: "obtained_score exceeds max_score"
+          field: obtained_score
+          details: {}
+    Page:
+      type: object
+      description: Cursor pagination wrapper.
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+        next_cursor:
+          type: [string, "null"]
+          description: Cursor for the next page; null when exhausted.
+    SkillCategory:
+      type: object
+      required: [name]
+      properties:
+        skillCategoryId: { type: string, format: uuid, readOnly: true }
+        code: { type: string, maxLength: 40 }
+        name: { type: string, maxLength: 150 }
+        description: { type: string }
+        status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+    Skill:
+      type: object
+      required: [skillCategoryId, name]
+      properties:
+        skillId: { type: string, format: uuid, readOnly: true }
+        skillCategoryId: { type: string, format: uuid }
+        code: { type: string, maxLength: 40 }
+        name: { type: string, maxLength: 150 }
+        description: { type: string }
+        isComplianceSkill: { type: boolean, default: false }
+        defaultValidityMonths: { type: [integer, "null"] }
+        revalidationIntervalMonths:
+          type: [integer, "null"]
+          minimum: 1
+          description: Freshness window (VAL-G07-REVAL); NULL = never decays.
+        status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+    ProficiencyLevel:
+      type: object
+      required: [levelOrder, name, descriptor]
+      properties:
+        proficiencyLevelId: { type: string, format: uuid, readOnly: true }
+        levelOrder: { type: integer, description: 1..N contiguous ascending. }
+        code: { type: string, maxLength: 20 }
+        name: { type: string, maxLength: 60 }
+        descriptor:
+          type: string
+          description: Behavioural anchor; required before PUBLISH (VAL-G07-ANCHOR).
+        status: { type: string, enum: [PUBLISHED, ARCHIVED] }
+    Competency:
+      type: object
+      required: [name]
+      properties:
+        competencyId: { type: string, format: uuid, readOnly: true }
+        code: { type: string, maxLength: 40 }
+        name: { type: string, maxLength: 150 }
+        competencyType:
+          type: string
+          enum: [TECHNICAL, BEHAVIOURAL, LEADERSHIP, FUNCTIONAL, COMPLIANCE]
+        linkedSkillIds:
+          type: array
+          items: { type: string, format: uuid }
+        status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+    CompetencyModel:
+      type: object
+      required: [name, scopeType, ownerId, reviewDueDate, effectiveFrom]
+      properties:
+        competencyModelId: { type: string, format: uuid, readOnly: true }
+        code: { type: string, maxLength: 40 }
+        name: { type: string, maxLength: 150 }
+        scopeType:
+          type: string
+          enum: [DESIGNATION, CADRE, ROLE, ORG_UNIT, GENERIC]
+        designationId: { type: [string, "null"], format: uuid }
+        roleId: { type: [string, "null"], format: uuid }
+        cadre: { type: [string, "null"] }
+        orgUnitId: { type: [string, "null"], format: uuid }
+        ownerId: { type: string, format: uuid }
+        reviewDueDate: { type: string, format: date }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: [string, "null"], format: date }
+        version: { type: integer, default: 1, readOnly: true }
+        status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+    CompetencyModelItem:
+      type: object
+      required: [competencyId, targetProficiencyLevelId]
+      properties:
+        competencyModelItemId: { type: string, format: uuid, readOnly: true }
+        competencyId: { type: string, format: uuid }
+        targetProficiencyLevelId: { type: string, format: uuid }
+        isCritical: { type: boolean, default: false }
+        weight: { type: [number, "null"] }
+    EmployeeSkill:
+      type: object
+      required: [skillId, currentProficiencyLevelId, source]
+      properties:
+        employeeSkillId: { type: string, format: uuid, readOnly: true }
+        employeeId: { type: string, format: uuid, readOnly: true }
+        skillId: { type: string, format: uuid }
+        currentProficiencyLevelId: { type: string, format: uuid }
+        source: { type: string, enum: [SELF, MANAGER, ASSESSMENT, CERTIFICATION, IMPORT] }
+        validatedBy: { type: [string, "null"], format: uuid }
+        validatedAt: { type: [string, "null"], format: date-time }
+        lastValidatedAt: { type: [string, "null"], format: date-time }
+        acquiredOn: { type: [string, "null"], format: date }
+        expiresOn: { type: [string, "null"], format: date }
+        freshnessStatus: { type: string, enum: [FRESH, STALE, EXPIRED], readOnly: true }
+        status: { type: string, enum: [DECLARED, VALIDATED, EXPIRED, REVOKED] }
+    SkillGapAnalysis:
+      type: object
+      required: [competencyModelId]
+      properties:
+        skillGapAnalysisId: { type: string, format: uuid, readOnly: true }
+        employeeId: { type: string, format: uuid, readOnly: true }
+        competencyModelId: { type: string, format: uuid }
+        scoringMode: { type: string, enum: [BINARY, WEIGHTED], default: BINARY }
+        appraisalCycleRef: { type: [string, "null"] }
+        modelStaleFlag: { type: boolean, readOnly: true }
+        staleSkillCount: { type: integer, readOnly: true }
+        overallGapScore: { type: [number, "null"], readOnly: true }
+        criticalGapCount: { type: integer, readOnly: true }
+        generatedOn: { type: string, format: date-time, readOnly: true }
+        recomputeTrigger:
+          type: string
+          enum: [FULL, INCREMENTAL_SKILL_EVENT, INCREMENTAL_MODEL_EVENT, ON_DEMAND]
+        status: { type: string, enum: [DRAFT, FINALIZED, SUPERSEDED], readOnly: true }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SkillGapItem' }
+    SkillGapItem:
+      type: object
+      properties:
+        skillGapItemId: { type: string, format: uuid, readOnly: true }
+        competencyId: { type: string, format: uuid }
+        targetProficiencyLevelId: { type: string, format: uuid }
+        currentProficiencyLevelId: { type: [string, "null"], format: uuid }
+        gapSize: { type: integer, minimum: 0 }
+        isCritical: { type: boolean }
+        weightApplied: { type: [number, "null"] }
+        discountedForStaleness: { type: boolean }
+        source: { type: string, enum: [GAP_ANALYSIS, APPRAISAL, MANDATORY] }
+    GapContractEntry:
+      type: object
+      description: Gap Contract v1 projection consumed by G06/G08.
+      properties:
+        employeeId: { type: string, format: uuid }
+        competencyModelId: { type: string, format: uuid }
+        generatedOn: { type: string, format: date-time }
+        scoringMode: { type: string, enum: [BINARY, WEIGHTED] }
+        modelStaleFlag: { type: boolean }
+        gaps:
+          type: array
+          items:
+            type: object
+            properties:
+              competencyId: { type: string }
+              isCritical: { type: boolean }
+              gapSize: { type: integer }
+              discountedForStaleness: { type: boolean }
+    TrainingNeed:
+      type: object
+      required: [source, priority]
+      properties:
+        trainingNeedId: { type: string, format: uuid, readOnly: true }
+        employeeId: { type: [string, "null"], format: uuid }
+        orgUnitId: { type: [string, "null"], format: uuid }
+        competencyId: { type: [string, "null"], format: uuid }
+        source: { type: string, enum: [GAP_ANALYSIS, APPRAISAL, MANDATORY, MANAGER, SELF, INDUCTION] }
+        priority: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        financialYear: { type: string }
+        justification: { type: string }
+        status: { type: string, enum: [IDENTIFIED, CONSOLIDATED, PLANNED, ADDRESSED, DEFERRED, REJECTED] }
+    AnnualTrainingPlan:
+      type: object
+      required: [financialYear]
+      properties:
+        annualTrainingPlanId: { type: string, format: uuid, readOnly: true }
+        orgUnitId: { type: [string, "null"], format: uuid }
+        financialYear: { type: string }
+        title: { type: string }
+        status: { type: string, enum: [DRAFT, SUBMITTED, APPROVED, ACTIVE, CLOSED] }
+    TrainingPlanItem:
+      type: object
+      required: [trainingProgramId]
+      properties:
+        trainingPlanItemId: { type: string, format: uuid, readOnly: true }
+        trainingProgramId: { type: string, format: uuid }
+        trainingNeedId: { type: [string, "null"], format: uuid }
+        plannedManDays: { type: [number, "null"] }
+        allocatedBudget: { type: [number, "null"] }
+    TrainingProgram:
+      type: object
+      required: [name, deliveryMode]
+      properties:
+        trainingProgramId: { type: string, format: uuid, readOnly: true }
+        code: { type: string, maxLength: 40 }
+        name: { type: string, maxLength: 200 }
+        deliveryMode:
+          type: string
+          enum: [CLASSROOM, ELEARNING, BLENDED, EXTERNAL, ON_THE_JOB, WEBINAR]
+        providerType: { type: string, enum: [INTERNAL, EXTERNAL, VENDOR, GOVT_INSTITUTE] }
+        isMandatory: { type: boolean, default: false }
+        isInduction: { type: boolean, default: false }
+        linkedCompetencyIds:
+          type: array
+          items: { type: string, format: uuid }
+        cpdCredits: { type: [number, "null"] }
+        certificationOnCompletion: { type: boolean, default: false }
+        certificateValidityMonths: { type: [integer, "null"] }
+        defaultCost: { type: [number, "null"] }
+        defaultCapacity: { type: [integer, "null"] }
+        lmsContentPackageId: { type: [string, "null"], format: uuid }
+        learningRecordStoreId: { type: [string, "null"], format: uuid }
+        status: { type: string, enum: [DRAFT, PUBLISHED, RETIRED] }
+    TrainingSession:
+      type: object
+      required: [trainingProgramId, startDate]
+      properties:
+        trainingSessionId: { type: string, format: uuid, readOnly: true }
+        trainingProgramId: { type: string, format: uuid }
+        trainerId: { type: [string, "null"], format: uuid }
+        venueId: { type: [string, "null"], format: uuid }
+        startDate: { type: string, format: date }
+        endDate: { type: [string, "null"], format: date }
+        capacity: { type: integer }
+        enrolledCount: { type: integer, readOnly: true }
+        status: { type: string, enum: [DRAFT, OPEN, FULL, RUNNING, COMPLETED, CANCELLED] }
+    Trainer:
+      type: object
+      required: [name]
+      properties:
+        trainerId: { type: string, format: uuid, readOnly: true }
+        name: { type: string }
+        trainerType: { type: string, enum: [INTERNAL, EXTERNAL] }
+        userId: { type: [string, "null"], format: uuid }
+        vendorEmpanelmentId: { type: [string, "null"], format: uuid }
+        avgRating: { type: [number, "null"], readOnly: true }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+    Venue:
+      type: object
+      required: [name]
+      properties:
+        venueId: { type: string, format: uuid, readOnly: true }
+        name: { type: string }
+        venueType: { type: string, enum: [PHYSICAL, VIRTUAL] }
+        capacity: { type: [integer, "null"] }
+        location: { type: string }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+    Nomination:
+      type: object
+      required: [employeeId, nominationType]
+      properties:
+        trainingNominationId: { type: string, format: uuid, readOnly: true }
+        trainingSessionId: { type: string, format: uuid, readOnly: true }
+        employeeId: { type: string, format: uuid }
+        trainingNeedId: { type: [string, "null"], format: uuid }
+        trainingCampaignId: { type: [string, "null"], format: uuid }
+        nominationType:
+          type: string
+          enum: [SELF, MANAGER, HR, MANDATORY, INDUCTION, CAMPAIGN]
+        nominatedBy: { type: string, format: uuid, readOnly: true }
+        workflowInstanceId: { type: [string, "null"], format: uuid, readOnly: true }
+        status:
+          type: string
+          enum: [DRAFT, PENDING_L1, PENDING_L2, APPROVED, WAITLISTED, REJECTED, WITHDRAWN, CANCELLED, COMPLETED, NO_SHOW]
+          readOnly: true
+        waitlistPosition: { type: [integer, "null"], readOnly: true }
+        estimatedCost: { type: number, default: 0 }
+        completionStatus: { type: [string, "null"], enum: [PASS, FAIL, INCOMPLETE, "null"] }
+    Attendance:
+      type: object
+      required: [trainingNominationId, sessionDate, attendanceStatus, markedByActorType, markedByActorId]
+      properties:
+        trainingAttendanceId: { type: string, format: uuid, readOnly: true }
+        trainingNominationId: { type: string, format: uuid }
+        sessionDate: { type: string, format: date }
+        attendanceStatus: { type: string, enum: [PRESENT, ABSENT, LATE, EXCUSED] }
+        checkInAt: { type: [string, "null"], format: date-time }
+        checkOutAt: { type: [string, "null"], format: date-time }
+        markedByActorType: { type: string, enum: [EMPLOYEE, TRAINER, KIOSK_OPERATOR] }
+        markedByActorId: { type: string, format: uuid }
+        captureMode: { type: string, enum: [ONLINE, KIOSK, ASSISTED, OFFLINE_SYNC, LMS_DERIVED], default: ONLINE }
+        offlineCapturedAt: { type: [string, "null"], format: date-time }
+        offlineSyncBatchId: { type: [string, "null"], format: uuid }
+        evidenceDocumentId: { type: [string, "null"], format: uuid }
+    Assessment:
+      type: object
+      required: [assessmentPhase, maxScore, obtainedScore, passThreshold, assessedByActorType, assessedByActorId]
+      properties:
+        trainingAssessmentId: { type: string, format: uuid, readOnly: true }
+        trainingNominationId: { type: string, format: uuid, readOnly: true }
+        assessmentPhase: { type: string, enum: [PRE, POST, REASSESSMENT] }
+        maxScore: { type: number }
+        obtainedScore: { type: number }
+        passThreshold: { type: number }
+        result: { type: string, enum: [PASS, FAIL], readOnly: true }
+        assessedByActorType: { type: string, enum: [EMPLOYEE, TRAINER, SYSTEM] }
+        assessedByActorId: { type: string, format: uuid }
+        assessedAt: { type: string, format: date-time }
+    Feedback:
+      type: object
+      required: [kirkpatrickLevel]
+      properties:
+        trainingFeedbackId: { type: string, format: uuid, readOnly: true }
+        trainingNominationId: { type: [string, "null"], format: uuid }
+        trainingProgramId: { type: [string, "null"], format: uuid }
+        kirkpatrickLevel: { type: string, enum: [L1_REACTION, L2_LEARNING, L3_BEHAVIOUR, L4_RESULTS] }
+        responsesJson: { type: object }
+    Certification:
+      type: object
+      required: [title, issuingAuthority, issueDate]
+      properties:
+        certificationId: { type: string, format: uuid, readOnly: true }
+        employeeId: { type: string, format: uuid }
+        credentialSource: { type: string, enum: [INTERNAL_PROGRAM, EXTERNAL_PROFESSIONAL], default: INTERNAL_PROGRAM }
+        trainingProgramId: { type: [string, "null"], format: uuid }
+        trainingNominationId: { type: [string, "null"], format: uuid }
+        certificateNo: { type: string, maxLength: 50 }
+        title: { type: string, maxLength: 200 }
+        issuingAuthority: { type: string, maxLength: 150 }
+        issuingBody: { type: [string, "null"], maxLength: 150 }
+        externalReferenceNo: { type: [string, "null"], maxLength: 80 }
+        verificationStatus: { type: string, enum: [NOT_REQUIRED, PENDING, VERIFIED, REJECTED] }
+        issueDate: { type: string, format: date }
+        validUntil: { type: [string, "null"], format: date }
+        isMandatory: { type: boolean, default: false }
+        lapsedMandatory: { type: boolean, readOnly: true }
+        certificateDocumentId: { type: [string, "null"], format: uuid }
+        srPostingStatus: { type: string, enum: [NOT_REQUIRED, PENDING, POSTED, FAILED], readOnly: true }
+        serviceRegisterEventId: { type: [string, "null"], format: uuid, readOnly: true }
+        status: { type: string, enum: [ACTIVE, EXPIRED, REVOKED, SUPERSEDED] }
+    ExternalCredential:
+      type: object
+      required: [title, issuingBody, externalReferenceNo, issueDate]
+      properties:
+        certificationId: { type: string, format: uuid, readOnly: true }
+        employeeId: { type: string, format: uuid, readOnly: true }
+        title: { type: string, maxLength: 200 }
+        issuingBody: { type: string, maxLength: 150 }
+        externalReferenceNo: { type: string, maxLength: 80, description: Unique per employee (VAL-G07-CREDREF). }
+        issueDate: { type: string, format: date }
+        validUntil: { type: [string, "null"], format: date }
+        isMandatory: { type: boolean, default: false }
+        evidenceDocumentId: { type: [string, "null"], format: uuid }
+        verificationStatus: { type: string, enum: [NOT_REQUIRED, PENDING, VERIFIED, REJECTED], readOnly: true }
+    TrainingBudget:
+      type: object
+      required: [financialYear, allocatedAmount]
+      properties:
+        trainingBudgetId: { type: string, format: uuid, readOnly: true }
+        orgUnitId: { type: [string, "null"], format: uuid }
+        financialYear: { type: string }
+        category: { type: [string, "null"] }
+        allocatedAmount: { type: number }
+        committedAmount: { type: number, readOnly: true }
+        actualAmount: { type: number, readOnly: true }
+        status: { type: string, enum: [DRAFT, APPROVED, ACTIVE, CLOSED] }
+    TrainingCost:
+      type: object
+      required: [trainingBudgetId, costType, amount, costStage]
+      properties:
+        trainingCostId: { type: string, format: uuid, readOnly: true }
+        trainingBudgetId: { type: string, format: uuid }
+        trainingSessionId: { type: [string, "null"], format: uuid }
+        trainingNominationId: { type: [string, "null"], format: uuid }
+        vendorEmpanelmentId: { type: [string, "null"], format: uuid }
+        trainingSponsorshipId: { type: [string, "null"], format: uuid }
+        costType:
+          type: string
+          enum: [TRAINER_FEE, VENUE, MATERIAL, TRAVEL, REIMBURSEMENT, LMS_LICENSE, SPONSORSHIP, BOND_RECOVERY, OTHER]
+        amount: { type: number }
+        costStage: { type: string, enum: [COMMITTED, ACTUAL] }
+        payableToPayroll: { type: boolean, default: false }
+        invoiceDocumentId: { type: [string, "null"], format: uuid }
+        status: { type: string, enum: [DRAFT, APPROVED, PAID, CANCELLED] }
+    LearningPath:
+      type: object
+      required: [name]
+      properties:
+        learningPathId: { type: string, format: uuid, readOnly: true }
+        code: { type: string, maxLength: 40 }
+        name: { type: string }
+        description: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              trainingProgramId: { type: string, format: uuid }
+              stepOrder: { type: integer }
+        status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+    LmsEnrollment:
+      type: object
+      required: [trainingNominationId, learningRecordStoreId, lmsCourseRef, lmsUserRef]
+      properties:
+        lmsEnrollmentId: { type: string, format: uuid, readOnly: true }
+        trainingNominationId: { type: string, format: uuid }
+        learningRecordStoreId: { type: string, format: uuid }
+        lmsContentPackageId: { type: [string, "null"], format: uuid }
+        syncMode: { type: string, enum: [XAPI_LRS, SCORM_POLL, MANUAL] }
+        lmsCourseRef: { type: string, maxLength: 120 }
+        lmsUserRef: { type: string, maxLength: 120 }
+        standard: { type: string, enum: [SCORM_12, SCORM_2004, XAPI, NONE] }
+        progressPct: { type: number, minimum: 0, maximum: 100, default: 0 }
+        completionStatus: { type: string, enum: [NOT_STARTED, IN_PROGRESS, COMPLETED, FAILED] }
+        score: { type: [number, "null"] }
+    XapiIngest:
+      type: object
+      required: [learningRecordStoreId, lmsEnrollmentId, statementId, verb]
+      properties:
+        learningRecordStoreId: { type: string, format: uuid }
+        lmsEnrollmentId: { type: string, format: uuid }
+        statementId: { type: string, description: xAPI statement id; X.3 inbound idempotency key. }
+        verb: { type: string }
+        progressPct: { type: [number, "null"] }
+        score: { type: [number, "null"] }
+    ScormPoll:
+      type: object
+      required: [learningRecordStoreId]
+      properties:
+        learningRecordStoreId: { type: string, format: uuid }
+        sincePollCursor: { type: [string, "null"] }
+    TrainingCampaign:
+      type: object
+      required: [name, trainingProgramId, scopeType, financialYear, windowStart, windowEnd]
+      properties:
+        trainingCampaignId: { type: string, format: uuid, readOnly: true }
+        code: { type: string, maxLength: 40 }
+        name: { type: string, maxLength: 200 }
+        trainingProgramId: { type: string, format: uuid }
+        scopeType: { type: string, enum: [ORG_UNIT, CADRE, DESIGNATION, ALL_STAFF] }
+        scopeRef: { type: [string, "null"] }
+        financialYear: { type: string }
+        windowStart: { type: string, format: date }
+        windowEnd: { type: string, format: date }
+        renewalCadenceMonths: { type: [integer, "null"] }
+        autoWave: { type: boolean, default: true }
+        waveSize: { type: [integer, "null"] }
+        escalationPolicyJson: { type: [object, "null"] }
+        coverageDenominatorRule:
+          type: string
+          enum: [ELIGIBLE_ALL, EXCLUDE_LONG_LEAVE, EXCLUDE_NON_LOGIN_UNMAPPED, CUSTOM]
+        status: { type: string, enum: [DRAFT, APPROVED, RUNNING, PAUSED, COMPLETED, CANCELLED] }
+    VendorEmpanelment:
+      type: object
+      required: [vendorName, empanelmentRef, validFrom]
+      properties:
+        vendorEmpanelmentId: { type: string, format: uuid, readOnly: true }
+        vendorName: { type: string, maxLength: 200 }
+        trainerId: { type: [string, "null"], format: uuid }
+        empanelmentRef: { type: string, maxLength: 80 }
+        contractRef: { type: [string, "null"], maxLength: 80 }
+        contractDocumentId: { type: [string, "null"], format: uuid }
+        procurementRef: { type: [string, "null"], maxLength: 80 }
+        validFrom: { type: string, format: date }
+        validUntil: { type: [string, "null"], format: date }
+        rateCardJson: { type: [object, "null"] }
+        status:
+          type: string
+          enum: [DRAFT, PENDING_APPROVAL, EMPANELLED, SUSPENDED, EXPIRED, BLACKLISTED]
+    TrainingSponsorship:
+      type: object
+      required: [employeeId, sponsorshipType, sponsoredAmount, startDate]
+      properties:
+        trainingSponsorshipId: { type: string, format: uuid, readOnly: true }
+        employeeId: { type: string, format: uuid }
+        trainingProgramId: { type: [string, "null"], format: uuid }
+        externalCourseName: { type: [string, "null"], maxLength: 200 }
+        sponsorshipType: { type: string, enum: [STUDY_LEAVE, DEPUTATION, DEGREE, EXTERNAL_COURSE] }
+        sponsoredAmount: { type: number }
+        startDate: { type: string, format: date }
+        endDate: { type: [string, "null"], format: date }
+        serviceBondMonths: { type: integer, default: 0 }
+        bondEndDate: { type: [string, "null"], format: date }
+        bondRecoveryAmount: { type: [number, "null"] }
+        obligationStatus:
+          type: string
+          enum: [PROPOSED, SANCTIONED, ACTIVE, FULFILLED, BREACHED, RECOVERED, WAIVED]
+    LmsContentPackage:
+      type: object
+      required: [trainingProgramId, packageVersion, standard, hosting]
+      properties:
+        lmsContentPackageId: { type: string, format: uuid, readOnly: true }
+        trainingProgramId: { type: string, format: uuid }
+        packageVersion: { type: string, maxLength: 20 }
+        standard: { type: string, enum: [SCORM_12, SCORM_2004, XAPI] }
+        hosting: { type: string, enum: [SELF_HOSTED, EXTERNAL_LMS] }
+        packageDocumentId: { type: [string, "null"], format: uuid }
+        launchUrlTemplate: { type: [string, "null"], maxLength: 300 }
+        wcagConformance: { type: string, enum: [AA, A, NON_CONFORMANT, UNKNOWN] }
+        accessibilityNotes: { type: [string, "null"] }
+        status: { type: string, enum: [DRAFT, PUBLISHED, RETIRED] }
+    AssessmentItem:
+      type: object
+      required: [itemBankCode, questionText, itemType]
+      properties:
+        assessmentItemId: { type: string, format: uuid, readOnly: true }
+        trainingProgramId: { type: [string, "null"], format: uuid }
+        itemBankCode: { type: string, maxLength: 40 }
+        questionText: { type: string }
+        itemType: { type: string, enum: [SINGLE_CHOICE, MULTI_CHOICE, TRUE_FALSE, NUMERIC, FREE_TEXT] }
+        optionsJson: { type: [object, "null"] }
+        correctKeyJson:
+          type: [object, "null"]
+          description: RBAC-restricted; field-masked on serialization (P02).
+        maxScore: { type: number, default: 1 }
+        wcagConformance: { type: string, enum: [AA, A, NON_CONFORMANT, UNKNOWN] }
+        version: { type: integer, default: 1 }
+        status: { type: string, enum: [DRAFT, PUBLISHED, RETIRED] }
+    RetentionAction:
+      type: object
+      required: [employeeId, triggerEvent, actionType, scopeEntity]
+      properties:
+        learningDataRetentionActionId: { type: string, format: uuid, readOnly: true }
+        employeeId: { type: string, format: uuid }
+        triggerEvent: { type: string, enum: [RETIRED, RESIGNED, TERMINATED, DECEASED, DSR_ERASURE_REQUEST] }
+        actionType:
+          type: string
+          enum: [ANONYMISE_SELF_ASSESSMENT, ERASE_MARKETPLACE_PRESENCE, DETACH_FEEDBACK_AUTHOR, RETAIN_STATUTORY, EXPORT]
+        scopeEntity: { type: string }
+        retentionOverride: { type: boolean, default: false }
+        executedAt: { type: [string, "null"], format: date-time, readOnly: true }
+    SrIngestEvent:
+      type: object
+      description: Pinned G12 SR training/qualification event (append-only, via X.3).
+      required: [eventType, sourceModule, idempotencyKey, employeeId, title, occurredAt]
+      properties:
+        eventType: { type: string, example: TRAINING_QUALIFICATION }
+        sourceModule: { type: string, example: G07 }
+        idempotencyKey: { type: string }
+        tenantId: { type: string }
+        entityId: { type: string }
+        employeeId: { type: string, format: uuid }
+        title: { type: string }
+        issuingAuthority: { type: string }
+        credentialSource: { type: string, enum: [INTERNAL_PROGRAM, EXTERNAL_PROFESSIONAL] }
+        isMandatory: { type: boolean }
+        issueDate: { type: string, format: date }
+        validUntil: { type: [string, "null"], format: date }
+        significanceRules:
+          type: array
+          items: { type: string }
+        documentId: { type: [string, "null"] }
+        occurredAt: { type: string, format: date-time }
+    ReasonBody:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, description: Justification (VAL-COMMENT / ERR-REASON-REQ). }
+    AcceptedJob:
+      type: object
+      description: Accepted async/batch job acknowledgement (X.1 runner).
+      properties:
+        jobId: { type: string }
+        resumable: { type: boolean }
+        status: { type: string }
+  responses:
+    Ok:
+      description: Success. X-Correlation-Id returned in the response header.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema:
+            type: object
+    Created:
+      description: Resource created.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema:
+            type: object
+    Accepted:
+      description: Accepted for asynchronous processing (X.1 job / X.3 outbound).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema:
+            type: object
+    Page:
+      description: Cursor-paginated list.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Page'
+    ValidationFailed:
+      description: 422 — input failed a VAL-*/VAL-G07-* rule.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: 401 — no/invalid/expired session or bad X.3 service signature.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: 403 — RBAC/SoD/self-approval denial (never leaks out-of-scope existence).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: 404 — resource absent or out of scope.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: 409 — idempotency replay, duplicate, capacity/budget/schedule/state conflict.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PreconditionFailed:
+      description: 412 — a required precondition is not met (incl. retryable upstream).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: 429 — rate limit / lockout exceeded.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Internal:
+      description: 500 — unexpected server error or non-retryable upstream failure.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+paths:
+  /skill-categories:
+    post:
+      tags: [Competency Framework]
+      summary: Create a skill category (FR-G07-001)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkillCategory' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /skills:
+    get:
+      tags: [Competency Framework]
+      summary: List skills (FR-G07-001)
+      parameters:
+        - { name: categoryId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Competency Framework]
+      summary: Create a skill (FR-G07-001)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Skill' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /skills/{id}:
+    patch:
+      tags: [Competency Framework]
+      summary: Update a skill (FR-G07-001)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Skill' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /skills/{id}:publish:
+    post:
+      tags: [Competency Framework]
+      summary: Publish a skill via P01 master-data approval flow (FR-G07-001)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /skills/{id}:archive:
+    post:
+      tags: [Competency Framework]
+      summary: Archive a skill (FR-G07-001)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /competencies:
+    post:
+      tags: [Competency Framework]
+      summary: Create a competency (FR-G07-001)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Competency' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /proficiency-levels:
+    post:
+      tags: [Competency Framework]
+      summary: Create a proficiency level with behavioural anchor (FR-G07-001)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProficiencyLevel' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /competency-models:
+    post:
+      tags: [Competency Framework]
+      summary: Create a role/designation-scoped competency model (FR-G07-002)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompetencyModel' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /competency-models/{id}/items:
+    post:
+      tags: [Competency Framework]
+      summary: Add required-competency lines to a model (FR-G07-002)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompetencyModelItem' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /competency-models/{id}:publish:
+    post:
+      tags: [Competency Framework]
+      summary: Publish a competency model via P01 (FR-G07-002)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /competency-models/staleness-report:
+    get:
+      tags: [Competency Framework]
+      summary: Competency-model staleness report (FR-G07-002)
+      parameters:
+        - { name: orgUnitId, in: query, required: false, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/effective-competency-model:
+    get:
+      tags: [Competency Framework]
+      summary: Resolve the effective competency model for an employee (FR-G07-002)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: The effective competency model.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompetencyModel' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/skills:
+    get:
+      tags: [Skill Inventory & Gaps]
+      summary: List an employee's skill inventory (FR-G07-003)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: freshness, in: query, required: false, schema: { type: string, enum: [FRESH, STALE, EXPIRED] } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Skill Inventory & Gaps]
+      summary: Declare/add an employee skill (FR-G07-003)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmployeeSkill' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/skills/{skillId}:
+    patch:
+      tags: [Skill Inventory & Gaps]
+      summary: Update an employee skill row (FR-G07-003)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: skillId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmployeeSkill' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/skills/{skillId}:validate:
+    post:
+      tags: [Skill Inventory & Gaps]
+      summary: Manager/L&D validation of an employee skill (FR-G07-003)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: skillId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/skill-gap-analyses:
+    post:
+      tags: [Skill Inventory & Gaps]
+      summary: Compute an incremental skill-gap analysis (FR-G07-004)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkillGapAnalysis' }
+      responses:
+        '201':
+          description: Gap analysis snapshot.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkillGapAnalysis' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/skill-gap-analyses/latest:
+    get:
+      tags: [Skill Inventory & Gaps]
+      summary: Latest finalized gap analysis for an employee (FR-G07-004)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Latest gap analysis.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkillGapAnalysis' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /skill-gap-items/{id}:convert-to-need:
+    post:
+      tags: [Skill Inventory & Gaps]
+      summary: Convert a gap item into a training need (FR-G07-004)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /gap-contract/v1:
+    get:
+      tags: [Skill Inventory & Gaps]
+      summary: Gap Contract v1 for a single (employee, model) — consumed by G06/G08 (FR-G07-024)
+      parameters:
+        - { name: employeeId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: modelId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Gap Contract v1 projection.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GapContractEntry' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /gap-contract/v1/batch:
+    get:
+      tags: [Skill Inventory & Gaps]
+      summary: Gap Contract v1 batch projection (FR-G07-024)
+      parameters:
+        - { name: orgUnitId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: fy, in: query, required: false, schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-needs:
+    get:
+      tags: [Planning]
+      summary: List training needs (FR-G07-005)
+      parameters:
+        - { name: fy, in: query, required: false, schema: { type: string } }
+        - { name: orgUnitId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Planning]
+      summary: Create a training need (FR-G07-005)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingNeed' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-needs:consolidate:
+    post:
+      tags: [Planning]
+      summary: Consolidate and prioritise training needs (FR-G07-005)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /annual-training-plans:
+    post:
+      tags: [Planning]
+      summary: Create an annual training plan (FR-G07-006)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnnualTrainingPlan' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /annual-training-plans/{id}/items:
+    post:
+      tags: [Planning]
+      summary: Add planned program lines to a plan (FR-G07-006)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingPlanItem' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /annual-training-plans/{id}:submit:
+    post:
+      tags: [Planning]
+      summary: Submit a plan for approval via P01 (FR-G07-006)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /annual-training-plans/{id}:approve:
+    post:
+      tags: [Planning]
+      summary: Approve a plan and its budget (P01, FR-G07-006)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-calendar:
+    get:
+      tags: [Planning]
+      summary: Annual training calendar (FR-G07-006)
+      parameters:
+        - { name: fy, in: query, required: false, schema: { type: string } }
+        - { name: orgUnitId, in: query, required: false, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-programs:
+    get:
+      tags: [Catalog & Content]
+      summary: List training programs (FR-G07-007)
+      parameters:
+        - { name: mode, in: query, required: false, schema: { type: string } }
+        - { name: provider, in: query, required: false, schema: { type: string } }
+        - { name: mandatory, in: query, required: false, schema: { type: boolean } }
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Catalog & Content]
+      summary: Create a training program (FR-G07-007)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingProgram' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-programs/{id}:
+    patch:
+      tags: [Catalog & Content]
+      summary: Update a training program (FR-G07-007)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingProgram' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-programs/{id}:publish:
+    post:
+      tags: [Catalog & Content]
+      summary: Publish a training program (FR-G07-007)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-programs/{id}:retire:
+    post:
+      tags: [Catalog & Content]
+      summary: Retire a training program (FR-G07-007)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /content-packages:
+    post:
+      tags: [Catalog & Content]
+      summary: Create a SCORM/xAPI content package version (FR-G07-021)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LmsContentPackage' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /content-packages/{id}:
+    patch:
+      tags: [Catalog & Content]
+      summary: Update a content package (FR-G07-021)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LmsContentPackage' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /content-packages/{id}:publish:
+    post:
+      tags: [Catalog & Content]
+      summary: Publish a content package; WCAG gate enforced (FR-G07-021)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /content-packages/{id}:retire:
+    post:
+      tags: [Catalog & Content]
+      summary: Retire a content package (FR-G07-021)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /assessment-items:
+    post:
+      tags: [Catalog & Content]
+      summary: Create an assessment item (FR-G07-021)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssessmentItem' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /programs/{id}/content-packages:
+    get:
+      tags: [Catalog & Content]
+      summary: List content packages for a program (FR-G07-021)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-sessions:
+    get:
+      tags: [Delivery Logistics]
+      summary: List training sessions (FR-G07-008)
+      parameters:
+        - { name: programId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Delivery Logistics]
+      summary: Schedule a training session/batch (FR-G07-008)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingSession' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-sessions/{id}:cancel:
+    post:
+      tags: [Delivery Logistics]
+      summary: Cancel a training session (FR-G07-008)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonBody' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /trainers:
+    post:
+      tags: [Delivery Logistics]
+      summary: Create a trainer profile (FR-G07-008)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Trainer' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /venues:
+    post:
+      tags: [Delivery Logistics]
+      summary: Create a venue (FR-G07-008)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Venue' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /vendor-empanelments:
+    get:
+      tags: [Delivery Logistics]
+      summary: List vendor empanelments (FR-G07-019)
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: validOn, in: query, required: false, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Delivery Logistics]
+      summary: Create a vendor empanelment (FR-G07-019)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VendorEmpanelment' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /vendor-empanelments/{id}:approve:
+    post:
+      tags: [Delivery Logistics]
+      summary: Approve a vendor empanelment via P01 — requester ≠ approver (FR-G07-019)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /vendor-empanelments/{id}:suspend:
+    post:
+      tags: [Delivery Logistics]
+      summary: Suspend a vendor empanelment (FR-G07-019)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonBody' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /vendor-empanelments/{id}:blacklist:
+    post:
+      tags: [Delivery Logistics]
+      summary: Blacklist a vendor empanelment (FR-G07-019)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonBody' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-sessions/{id}/nominations:
+    post:
+      tags: [Enrolment]
+      summary: Create a nomination (P01-initiated, idempotent) (FR-G07-009)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Nomination' }
+      responses:
+        '201':
+          description: Nomination created; enters P01 approval.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Nomination' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /nominations:
+    get:
+      tags: [Enrolment]
+      summary: List nominations (FR-G07-009)
+      parameters:
+        - { name: employeeId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: sessionId, in: query, required: false, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /nominations/{id}:approve:
+    post:
+      tags: [Enrolment]
+      summary: Approve a nomination (P01 advance) — may waitlist if full (FR-G07-009)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Approved or waitlisted with position.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Nomination' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /nominations/{id}:reject:
+    post:
+      tags: [Enrolment]
+      summary: Reject a nomination (P01 advance) (FR-G07-009)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonBody' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /nominations/{id}:withdraw:
+    post:
+      tags: [Enrolment]
+      summary: Withdraw a nomination — mandatory/campaign self-withdrawal blocked (FR-G07-009)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-sessions/{id}/waitlist:
+    get:
+      tags: [Enrolment]
+      summary: Session waitlist ordered by position (FR-G07-009)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /sessions/{id}/attendance:
+    get:
+      tags: [Execution]
+      summary: Attendance for a session, optionally by date (FR-G07-010)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Execution]
+      summary: Bulk-mark attendance per day (incl. kiosk/assisted) (FR-G07-010)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/Attendance' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /sessions/{id}/attendance:offline-sync:
+    post:
+      tags: [Execution]
+      summary: Sync buffered offline attendance batch idempotently (FR-G07-010, FR-G07-022)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/Attendance' }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /attendance/{id}:
+    patch:
+      tags: [Execution]
+      summary: Correct an attendance record (FR-G07-010)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Attendance' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /nominations/{id}/assessments:
+    post:
+      tags: [Execution]
+      summary: Record a pre/post assessment result (FR-G07-011)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Assessment' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /sessions/{id}/feedback:
+    post:
+      tags: [Execution]
+      summary: Submit Kirkpatrick L1–L4 feedback (FR-G07-011)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Feedback' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /sessions/{id}/evaluation-summary:
+    get:
+      tags: [Execution]
+      summary: Session evaluation summary incl. learning gain (FR-G07-011)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /programs/{id}/l3l4-summary:
+    get:
+      tags: [Execution]
+      summary: Programme-level Kirkpatrick L3/L4 summary (FR-G07-011)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /kiosk/sessions:
+    post:
+      tags: [Execution]
+      summary: Open an attributed kiosk/assisted operator session (FR-G07-022)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operatorId: { type: string, format: uuid }
+                venueId: { type: [string, "null"], format: uuid }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /kiosk/{empId}/self-assessment:
+    post:
+      tags: [Execution]
+      summary: Assisted self-assessment capture for a non-login employee (FR-G07-022)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmployeeSkill' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /coverage/eligibility:
+    get:
+      tags: [Execution]
+      summary: Coverage eligibility for a campaign/employee (FR-G07-022)
+      parameters:
+        - { name: campaignId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: employeeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /nominations/{id}:issue-certificate:
+    post:
+      tags: [Compliance & Credentials]
+      summary: Issue a certificate on completion (FR-G07-012)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Certification' }
+      responses:
+        '201':
+          description: Certificate issued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Certification' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /certifications/{id}:revoke:
+    post:
+      tags: [Compliance & Credentials]
+      summary: Request certificate revocation via P01 (FR-G07-012)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonBody' }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/certifications:
+    get:
+      tags: [Compliance & Credentials]
+      summary: List an employee's certifications (FR-G07-012)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/lapsed-mandatory:
+    get:
+      tags: [Compliance & Credentials]
+      summary: Lapsed mandatory certifications (consumed by G06) (FR-G07-012)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /compliance/mandatory-status:
+    get:
+      tags: [Compliance & Credentials]
+      summary: Mandatory-compliance status by org unit (FR-G07-012)
+      parameters:
+        - { name: orgUnitId, in: query, required: false, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /induction:enroll:
+    post:
+      tags: [Compliance & Credentials]
+      summary: Enrol a joiner into induction (event-driven + manual) (FR-G07-013)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employeeId]
+              properties:
+                employeeId: { type: string, format: uuid }
+                dateOfJoining: { type: string, format: date }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /induction/status:
+    get:
+      tags: [Compliance & Credentials]
+      summary: Induction completion status (FR-G07-013)
+      parameters:
+        - { name: orgUnitId, in: query, required: false, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/external-credentials:
+    get:
+      tags: [Compliance & Credentials]
+      summary: List an employee's external credentials (FR-G07-018)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Compliance & Credentials]
+      summary: Capture an external/professional credential (FR-G07-018)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExternalCredential' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /external-credentials/{id}:verify:
+    post:
+      tags: [Compliance & Credentials]
+      summary: Verify an external credential — verifier ≠ submitter (FR-G07-018)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                verificationMethod: { type: string, enum: [DOCUMENT, ISSUER_PORTAL, THIRD_PARTY, MANUAL_ATTEST] }
+                evidenceDocumentId: { type: [string, "null"], format: uuid }
+                comments: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /external-credentials/{id}:reject:
+    post:
+      tags: [Compliance & Credentials]
+      summary: Reject an external credential (FR-G07-018)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonBody' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-campaigns:
+    post:
+      tags: [Campaigns]
+      summary: Create a mandatory-compliance campaign (FR-G07-017)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingCampaign' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-campaigns/{id}:approve:
+    post:
+      tags: [Campaigns]
+      summary: Approve/launch a campaign via P01 (FR-G07-017)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-campaigns/{id}:enroll-batch:
+    post:
+      tags: [Campaigns]
+      summary: Bulk-enrol eligible targets idempotently (resumable X.1 job) (FR-G07-017)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Batch enrolment accepted; runs as a resumable X.1 job.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AcceptedJob' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-campaigns/{id}:auto-wave:
+    post:
+      tags: [Campaigns]
+      summary: Auto-wave targets into capacity-bounded sessions (FR-G07-017)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-campaigns/{id}/coverage:
+    get:
+      tags: [Campaigns]
+      summary: Campaign coverage against eligible denominator (FR-G07-017)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: orgUnitId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-campaigns/{id}/overdue:
+    get:
+      tags: [Campaigns]
+      summary: Overdue campaign targets (FR-G07-017)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/recommendations:
+    get:
+      tags: [Modern Learning]
+      summary: Learning recommendations (feature-flagged ld.recommendations) (FR-G07-014)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /learning-paths:
+    post:
+      tags: [Modern Learning]
+      summary: Create a learning path (FR-G07-014)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LearningPath' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /employees/{empId}/cpd:
+    get:
+      tags: [Modern Learning]
+      summary: CPD credits for an employee (FR-G07-014)
+      parameters:
+        - { name: empId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: year, in: query, required: false, schema: { type: integer } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /marketplace/skills:
+    get:
+      tags: [Modern Learning]
+      summary: Skills marketplace (feature-flagged ld.marketplace) (FR-G07-014)
+      parameters:
+        - { name: skillId, in: query, required: false, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /lms/enrollments:
+    post:
+      tags: [LMS/LRS Integration]
+      summary: Provision an LMS/LRS enrolment (auto on approval) (FR-G07-015)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LmsEnrollment' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /lms/enrollments/{id}/launch:
+    get:
+      tags: [LMS/LRS Integration]
+      summary: SSO deep-link to launch the course (FR-G07-015)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /lms/xapi/ingest:
+    post:
+      tags: [LMS/LRS Integration]
+      summary: Ingest an xAPI statement from the LRS (X.3 inbound, idempotent) (FR-G07-015)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/XapiIngest' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /lms/scorm/poll:
+    post:
+      tags: [LMS/LRS Integration]
+      summary: SCORM reporting-API poll (internal JOB-G07-LMSSYNC trigger) (FR-G07-015)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScormPoll' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /lms/connectors/health:
+    get:
+      tags: [LMS/LRS Integration]
+      summary: Connector health, circuit-breaker state and poll lag/cursor (FR-G07-015)
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /certifications/{id}:post-to-sr:
+    post:
+      tags: [Service Register & Finance]
+      summary: Post a significant certification to the G12 SR ledger via X.3 (FR-G07-016)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: SR posting accepted (pending/posted), pinned contract via X.3.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  srPostingStatus: { type: string, enum: [NOT_REQUIRED, PENDING, POSTED, FAILED] }
+                  isSignificant: { type: boolean }
+                  matchedRules: { type: array, items: { type: string } }
+                  targetLedger: { type: string }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /sr/ingest:
+    post:
+      tags: [Service Register & Finance]
+      summary: G12 SR ledger writer — append a training/qualification event (reference; via X.3)
+      description: >-
+        Reference to the G12-owned SR ledger append endpoint. G07 posts significant
+        certifications here by reference using the pinned, versioned event contract;
+        the ledger and event-contract authority belong to G12 (on the P05 substrate).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SrIngestEvent' }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-budgets:
+    post:
+      tags: [Service Register & Finance]
+      summary: Define a training budget (FR-G07-016)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingBudget' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-costs:
+    post:
+      tags: [Service Register & Finance]
+      summary: Record a training cost entry (FR-G07-016)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingCost' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-budgets/variance:
+    get:
+      tags: [Service Register & Finance]
+      summary: Budget variance (planned vs committed vs actual) (FR-G07-016)
+      parameters:
+        - { name: fy, in: query, required: false, schema: { type: string } }
+        - { name: orgUnitId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /analytics/cost-per-completion:
+    get:
+      tags: [Service Register & Finance]
+      summary: Cost-per-completion analytics (FR-G07-016)
+      parameters:
+        - { name: programId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: fy, in: query, required: false, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /significance/evaluate:
+    get:
+      tags: [Service Register & Finance]
+      summary: Evaluate the is_significant rule set for a nomination (rule trace) (FR-G07-016)
+      parameters:
+        - { name: nominationId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-sponsorships:
+    get:
+      tags: [Service Register & Finance]
+      summary: List sponsorships (FR-G07-020)
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: employeeId, in: query, required: false, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [Service Register & Finance]
+      summary: Create a sponsorship / study-leave / deputation record (FR-G07-020)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingSponsorship' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-sponsorships/{id}:sanction:
+    post:
+      tags: [Service Register & Finance]
+      summary: Sanction a sponsorship via P01 (FR-G07-020)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-sponsorships/{id}:mark-breached:
+    post:
+      tags: [Service Register & Finance]
+      summary: Mark a service bond breached (FR-G07-020)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonBody' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-sponsorships/{id}:waive:
+    post:
+      tags: [Service Register & Finance]
+      summary: Waive a service-bond obligation (FR-G07-020)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonBody' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /training-sponsorships/{id}:compute-recovery:
+    post:
+      tags: [Service Register & Finance]
+      summary: Compute bond-recovery amount and emit G10 payable (FR-G07-020)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /learning-data/retention-plan:
+    post:
+      tags: [Data Governance]
+      summary: Build a DPDP retention/erasure plan at exit (FR-G07-023)
+      parameters:
+        - { name: employeeId, in: query, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /learning-data/retention-actions:execute:
+    post:
+      tags: [Data Governance]
+      summary: Execute approved retention/erasure actions via P05 redaction (FR-G07-023)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetentionAction' }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /learning-data/retention-actions:
+    get:
+      tags: [Data Governance]
+      summary: List retention/erasure actions for an employee (FR-G07-023)
+      parameters:
+        - { name: employeeId, in: query, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+  /learning-data/export:
+    post:
+      tags: [Data Governance]
+      summary: Export an employee's learning data (DPDP portability) (FR-G07-023)
+      parameters:
+        - { name: employeeId, in: query, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+

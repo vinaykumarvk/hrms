@@ -1,0 +1,3629 @@
+openapi: 3.1.0
+info:
+  title: Government HRMS — G13 Document Management & Secure Storage API
+  version: "3.0.0"
+  description: >
+    OpenAPI 3.1 contract for government HRMS module **G13 — Document Management and Secure
+    Storage** (GOV-M13), the single attach/fetch document service every government module
+    (G01–G12) consumes. G13 is a public-sector EXTEND/REUSE of the PrimeSoft M11 document
+    vault; `documents` and `document_versions` are platform-core (reference), extended here
+    with the gov-statutory controls (WORM, legal hold + SoD, security clearance, certified
+    true copies, DPDP erasure lattice, hash-chained + externally-anchored access audit).
+
+
+    Grounding: `docs/brd/v3/G13-document-management-secure-storage.md` (Section 6 FRs,
+    Section 10 API, Section 5.5 enums), `docs/contracts/error-taxonomy.yaml` (ERR-G13-*, 35
+    codes), `docs/brd/PLATFORM_FOUNDATION.md` §4.
+
+
+    Conventions (Foundation §1): all endpoints under `/api/v1`; bearer JWT auth resolved per
+    request by P02 `Authorization.check`; `Idempotency-Key` on unsafe/transaction-initiating
+    POSTs (24h replay returns the original); cursor pagination (`limit` default 25 / max 100
+    + `cursor` → `next_cursor`); `X-Correlation-Id` echoed on every response and written to
+    the P05 audit line; canonical error envelope `{ error: { code, message, field, details } }`.
+    Every VIEW/DOWNLOAD/PRINT/SHARE is audited on the P05 substrate. Binaries are served only
+    through short-lived, single-use, session/user-bound signed URLs via the audited proxy —
+    never a raw blob URL.
+  contact:
+    name: API Architecture / Platform Foundation
+  license:
+    name: Government HRMS Internal
+
+servers:
+  - url: /api/v1
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: documents
+    description: Core document upload, fetch, metadata, lifecycle (FR-G13-001/003/016).
+  - name: document-types
+    description: Taxonomy, metadata schema, classification, tagging, signature/checkout policy (FR-G13-002).
+  - name: folders
+    description: Cabinet/folder structure and module-context attach contract (FR-G13-003).
+  - name: links
+    description: Polymorphic attach links used by G01–G12 (FR-G13-003/016/019).
+  - name: versions
+    description: Version history, check-in/out, supersede (FR-G13-004).
+  - name: acls
+    description: Record/field access control lists read by P02 (FR-G13-006).
+  - name: encryption
+    description: KMS envelope encryption, key rotation, key-DR, break-glass (FR-G13-005).
+  - name: scanning
+    description: Malware scan, quarantine, rescan, render sandboxing (FR-G13-007).
+  - name: search
+    description: Sandboxed OCR and permission-aware full-text search (FR-G13-008).
+  - name: retention
+    description: Retention policies and assignments (M11 classes) (FR-G13-009).
+  - name: legal-holds
+    description: Legal holds, SoD release, continuous-eval hold items and notices (FR-G13-009).
+  - name: disposition
+    description: Certified disposition maker-checker (FR-G13-009).
+  - name: signatures
+    description: E-signature (PAdES-LTV + RFC-3161) on DocumentGen sign-off (FR-G13-010).
+  - name: rendition
+    description: Watermarking, certified true copies, redaction (FR-G13-011/021).
+  - name: audit
+    description: Access audit, compliance reports, hash-chain verification and anchoring (FR-G13-012/020).
+  - name: shares
+    description: Secure internal/external sharing and expiring links (FR-G13-013).
+  - name: worm
+    description: WORM immutable storage for statutory documents (FR-G13-014).
+  - name: integrity
+    description: Domain-scoped dedup, checksum integrity, thumbnails/previews (FR-G13-015).
+  - name: dlp
+    description: Data-loss-prevention findings (FR-G13-016).
+  - name: clearances
+    description: Principal security-clearance management read by P02 (FR-G13-017).
+  - name: dsr
+    description: DPDP data-subject requests and erasure precedence lattice (FR-G13-018).
+  - name: orphans
+    description: Orphaned-document lifecycle (orphan reaper) (FR-G13-019).
+
+paths:
+  # ---------------------------------------------------------------------------
+  # FR-G13-001 / 003 / 016 — Documents: upload, list, detail, attach, fetch
+  # ---------------------------------------------------------------------------
+  /documents:
+    post:
+      tags: [documents]
+      summary: Create + upload a single document (multipart)
+      description: >
+        Ingests one binary through the M11 vault pipeline (VAL-FILE → AV scan → integrity hash
+        → domain-scoped dedup → metadata → sandboxed OCR/preview → ACTIVE). Never reveals whether
+        content was deduplicated (no existence oracle, R9). FR-G13-001.
+      operationId: createDocument
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentUploadRequest'
+      responses:
+        '201':
+          description: Document created and entering the scan pipeline.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentCreateResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [documents]
+      summary: List documents (cursor-paginated, permission-aware)
+      description: >
+        Lists documents the caller may see (P02 post-filter + clearance). Filterable by module
+        attach context (`moduleCode`/`entityRefId`), type, classification, folder. FR-G13-003.
+      operationId: listDocuments
+      parameters:
+        - { name: moduleCode, in: query, schema: { type: string }, description: Consuming module (G01–G12). }
+        - { name: entityRefId, in: query, schema: { type: string }, description: Business entity reference on the attach link. }
+        - { name: folderId, in: query, schema: { type: string, format: uuid } }
+        - { name: documentTypeCode, in: query, schema: { type: string } }
+        - { name: classification, in: query, schema: { $ref: '#/components/schemas/ClassificationLevel' } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: A page of documents.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/bulk:
+    post:
+      tags: [documents]
+      summary: Bulk upload batch (up to 100 files)
+      description: >
+        Accepts up to 100 files per batch, returning per-file success/failure without aborting
+        the batch. FR-G13-001.
+      operationId: bulkUploadDocuments
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BulkUploadRequest'
+      responses:
+        '207':
+          description: Per-file results (mixed success/failure).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkUploadResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/uploads:resume:
+    post:
+      tags: [documents]
+      summary: Create or resume a resumable upload session
+      description: >
+        Starts or resumes a resumable upload for large files (default 250 MB cap) that survives
+        transient loss. FR-G13-001.
+      operationId: resumeUpload
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResumableUploadRequest' }
+      responses:
+        '200':
+          description: Resumable upload session descriptor.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResumableUploadSession' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents:attach:
+    post:
+      tags: [links, documents]
+      summary: Module attach contract (G01–G12 bind a document, multipart)
+      description: >
+        The canonical, day-one-frozen attach contract every gov module consumes. Binds a
+        document to a business object (`moduleCode`, `entityName`, `entityRefId`, `linkRole`)
+        returning a stable `documentId`/`linkId`; increments `link_count`. Modules store only a
+        `document_id` reference, never the binary. Accepts `Idempotency-Key`. FR-G13-003/016.
+      operationId: attachDocument
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/AttachRequest' }
+      responses:
+        '201':
+          description: Document attached; stable id + link id returned.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttachResult' }
+        '409':
+          description: >
+            Conflict — `ERR-G13-DOCUMENT_NOT_ATTACHABLE` (deleted/disposed/orphaned) or
+            `ERR-G13-LINK_CONFLICT` (duplicate primary link).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:
+    get:
+      tags: [documents]
+      summary: Get document metadata (masked on serialization by P02)
+      description: >
+        Returns document metadata only (no binary). Restricted fields are masked on serialization
+        by P02; sealed documents return 404 (no existence leak). Binaries are retrieved via
+        `:fetch`. FR-G13-006/016.
+      operationId: getDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document metadata.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Document' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:fetch:
+    get:
+      tags: [documents]
+      summary: Fetch a document (intent=VIEW|DOWNLOAD, audited)
+      description: >
+        Corrected fetch contract (R2). `intent` is REQUIRED (`VAL-G13-FETCH-INTENT`). VIEW returns
+        a short-TTL, one-time, session/user(+IP)-bound streamed watermarked render URL through the
+        audited proxy — no raw blob. DOWNLOAD returns a file only when the caller holds the DOWNLOAD
+        right. CONFIDENTIAL+ never returns a raw forwardable blob URL. Every served byte writes a
+        `document_audit` row (P05). FR-G13-016.
+      operationId: fetchDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - name: intent
+          in: query
+          required: true
+          description: Missing intent ⇒ 422 `ERR-G13-FETCH_INTENT_REQUIRED`.
+          schema: { $ref: '#/components/schemas/FetchIntent' }
+      responses:
+        '200':
+          description: >
+            VIEW ⇒ a watermarked one-time render URL descriptor; DOWNLOAD ⇒ a single-use signed
+            download URL descriptor (only with DOWNLOAD right).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FetchResult' }
+        '404':
+          description: '`ERR-G13-DOCUMENT_DISPOSED` (fetch of a disposed document) or out-of-scope.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/render:
+    get:
+      tags: [rendition]
+      summary: Streamed watermarked render (audited proxy)
+      description: >
+        Returns a watermarked render of a restricted document via the audited proxy; watermark is
+        mandatory for CONFIDENTIAL+. FR-G13-011.
+      operationId: renderDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - { name: watermark, in: query, schema: { type: integer, enum: [0, 1], default: 1 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Watermarked render descriptor.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RenderResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-002 — Document types, tags, reclassify
+  # ---------------------------------------------------------------------------
+  /document-types:
+    post:
+      tags: [document-types]
+      summary: Create a document type
+      description: >
+        Defines a type (metadata schema realised as a W.2 form referencing VAL-*, default
+        classification/domain/retention, allowed MIME/size, WORM/signature defaults, allowed
+        signature methods, checkout mode, optional M11 `letter_template_ref`). FR-G13-002.
+      operationId: createDocumentType
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentTypeInput' }
+      responses:
+        '201':
+          description: Document type created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentType' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [document-types]
+      summary: List document types (cursor-paginated)
+      operationId: listDocumentTypes
+      parameters:
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/DocCategory' } }
+        - { name: active, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of document types.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentTypePage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /document-types/{id}:
+    put:
+      tags: [document-types]
+      summary: Update a document type
+      description: Deactivating a type prevents new uploads but preserves existing documents. FR-G13-002.
+      operationId: updateDocumentType
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentTypeInput' }
+      responses:
+        '200':
+          description: Document type updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentType' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/tags:
+    post:
+      tags: [document-types]
+      summary: Add tags to a document
+      description: >
+        Applies controlled-vocab (VAL-ENUM) or free tags; auto-applied OCR/DLP tags carry a
+        confidence score. FR-G13-002.
+      operationId: addDocumentTags
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TagInput' }
+      responses:
+        '200':
+          description: Tags applied.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagList' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:reclassify:
+    post:
+      tags: [document-types]
+      summary: Reclassify a document (downgrade via P01 maker-checker)
+      description: >
+        Upgrades applied by Librarian; downgrades require Security/DLP + a distinct approver via a
+        configured P01 flow + a reason (VAL-COMMENT). Unauthorised downgrade ⇒ 403
+        `ERR-G13-CLASSIFICATION_LOCKED`. FR-G13-002.
+      operationId: reclassifyDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReclassifyRequest' }
+      responses:
+        '202':
+          description: Reclassification proposed/applied (downgrade routed to P01).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowAck' }
+        '403':
+          description: '`ERR-G13-CLASSIFICATION_LOCKED` — unauthorised downgrade.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-003 — Folders, links
+  # ---------------------------------------------------------------------------
+  /folders:
+    post:
+      tags: [folders]
+      summary: Create a folder/cabinet
+      description: >
+        Folders carry inheritable classification and ACLs (read by P02); system folders are not
+        renamable/deletable by non-admins. FR-G13-003.
+      operationId: createFolder
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FolderInput' }
+      responses:
+        '201':
+          description: Folder created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Folder' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /document-links/{linkId}:
+    delete:
+      tags: [links]
+      summary: Detach a document link
+      description: >
+        Sets `detached_at`, decrements `link_count`; at 0 the document becomes an orphan candidate
+        (FR-G13-019). FR-G13-003.
+      operationId: detachLink
+      parameters:
+        - { name: linkId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Link detached.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-004 — Versioning, check-in/out, supersede
+  # ---------------------------------------------------------------------------
+  /documents/{id}/versions:
+    get:
+      tags: [versions]
+      summary: List document versions
+      description: >
+        Lists all versions (author, timestamp, size, hash, kind, summary); any version downloadable
+        per P02. `document_versions` is platform-core. FR-G13-004.
+      operationId: listVersions
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of versions.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VersionPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:checkout:
+    post:
+      tags: [versions]
+      summary: Check out a document (exclusive lock)
+      description: >
+        For `checkout_mode ∈ {OPTIONAL, REQUIRED}` acquires an exclusive ACTIVE lock (TTL default 8h).
+        Checkout on a `NONE` type ⇒ 409 `ERR-G13-CHECKOUT_NOT_SUPPORTED`; already locked ⇒ 409
+        `ERR-G13-DOCUMENT_LOCKED`. FR-G13-004.
+      operationId: checkoutDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Lock acquired.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutLock' }
+        '409':
+          description: '`ERR-G13-DOCUMENT_LOCKED` or `ERR-G13-CHECKOUT_NOT_SUPPORTED`.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:checkin:
+    post:
+      tags: [versions]
+      summary: Check in a new version (multipart)
+      description: >
+        Increments `version_no`, sets the new `current_version_id`, requires `change_summary`, and
+        runs the full scan pipeline. Only the lock holder / force-release admin may check in. WORM
+        content mutation before `worm_retain_until` ⇒ 409 `ERR-G13-WORM_IMMUTABLE`. FR-G13-004.
+      operationId: checkinDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/CheckinRequest' }
+      responses:
+        '200':
+          description: New version created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentVersion' }
+        '409':
+          description: '`ERR-G13-DOCUMENT_LOCKED` (not holder) or `ERR-G13-WORM_IMMUTABLE`.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:supersede:
+    post:
+      tags: [versions]
+      summary: Supersede the current version (multipart)
+      description: >
+        Records `version_kind=SUPERSEDE` + `superseded_version_id`; the superseded version is
+        retained for audit. Requires Librarian/owner right + reason. FR-G13-004.
+      operationId: supersedeDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/CheckinRequest' }
+      responses:
+        '200':
+          description: Version superseded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentVersion' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-005 — Encryption / KMS / break-glass
+  # ---------------------------------------------------------------------------
+  /admin/keys:rotate:
+    post:
+      tags: [encryption]
+      summary: Rotate a KMS CMK (background DEK re-wrap)
+      description: >
+        Rotates a CMK; DEKs are re-wrapped in the background (`JOB-G13-KEYROTATE`) without rewriting
+        object bytes. KMS down ⇒ 500 `ERR-G13-KEY_SERVICE_UNAVAILABLE`. FR-G13-005.
+      operationId: rotateKeys
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KeyRotateRequest' }
+      responses:
+        '202':
+          description: Rotation scheduled.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowAck' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/keys:recover:
+    post:
+      tags: [encryption]
+      summary: Recover CMK from escrow (dual-control)
+      description: >
+        Dual-control key-DR recovery from multi-region/HSM escrow per the rehearsed runbook (R6).
+        FR-G13-005.
+      operationId: recoverKeys
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KeyRecoverRequest' }
+      responses:
+        '202':
+          description: Recovery initiated (awaiting second approver where required).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowAck' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/encryption/status:
+    get:
+      tags: [encryption]
+      summary: Encryption / key-DR posture
+      description: Reports CMK inventory, rotation state, escrow/replication posture. FR-G13-005.
+      operationId: getEncryptionStatus
+      responses:
+        '200':
+          description: Encryption posture.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EncryptionStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:break-glass:
+    post:
+      tags: [encryption]
+      summary: Break-glass content access (dual-control, rate-limited)
+      description: >
+        Emergency access requiring two approvers; records `document_audit (BREAK_GLASS)` +
+        `security_audit_log`; locks after repeated failures ⇒ 429 `ERR-G13-BREAK_GLASS_LOCKED`.
+        FR-G13-005.
+      operationId: breakGlass
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BreakGlassRequest' }
+      responses:
+        '200':
+          description: Break-glass access granted (audited).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FetchResult' }
+        '429':
+          description: '`ERR-G13-BREAK_GLASS_LOCKED` — brute-force lockout.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-006 — ACLs, access check
+  # ---------------------------------------------------------------------------
+  /documents/{id}/acls:
+    post:
+      tags: [acls]
+      summary: Grant/deny a document ACL
+      description: >
+        DENY always wins (deny-by-default, P02). Time-boxed ACLs (`expires_at`) auto-revoke via the
+        platform entitlement-expiry job. FR-G13-006.
+      operationId: createAcl
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AclInput' }
+      responses:
+        '201':
+          description: ACL created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentAcl' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [acls]
+      summary: List document ACLs
+      operationId: listAcls
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of ACLs.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AclPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /acls/{aclId}:
+    delete:
+      tags: [acls]
+      summary: Revoke an ACL
+      operationId: deleteAcl
+      parameters:
+        - { name: aclId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: ACL revoked.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/access:check:
+    get:
+      tags: [acls]
+      summary: Explain effective access (P02 + clearance)
+      description: >
+        Returns the P02 decision for the caller (or a named principal) — `allowed`, effective
+        clearance vs classification, scope filter and field mask. Denied ⇒ 403
+        `ERR-G13-CLEARANCE_INSUFFICIENT`; sealed ⇒ 404. FR-G13-006.
+      operationId: checkAccess
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - { name: principal, in: query, schema: { type: string }, description: Optional principal to explain access for (defaults to caller). }
+      responses:
+        '200':
+          description: Access explanation.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessCheckResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-007 — Malware / quarantine / rescan
+  # ---------------------------------------------------------------------------
+  /admin/quarantine:
+    get:
+      tags: [scanning]
+      summary: List quarantined items
+      operationId: listQuarantine
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of quarantined scan results.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScanResultPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/quarantine/{id}:release:
+    post:
+      tags: [scanning]
+      summary: Release a quarantined item (Security/DLP)
+      description: Quarantine release requires Security/DLP approval + reason (audited). FR-G13-007.
+      operationId: releaseQuarantine
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Item released to ACTIVE.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScanResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:rescan:
+    post:
+      tags: [scanning]
+      summary: Re-scan a document version (AV signature update)
+      operationId: rescanDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Re-scan enqueued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowAck' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-008 — Search, reindex, OCR
+  # ---------------------------------------------------------------------------
+  /documents/search:
+    get:
+      tags: [search]
+      summary: Permission-aware full-text + metadata search
+      description: >
+        Returns only documents the caller may view (P02 post-filter + clearance) with highlighted
+        snippets. SECRET/TOP_SECRET full text excluded (metadata-only). Cursor-paginated. FR-G13-008.
+      operationId: searchDocuments
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: Full-text query. }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: class, in: query, schema: { $ref: '#/components/schemas/ClassificationLevel' } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: folder, in: query, schema: { type: string, format: uuid } }
+        - { name: tag, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of search hits.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchResultPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:reindex:
+    post:
+      tags: [search]
+      summary: Re-index a document
+      operationId: reindexDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Re-index enqueued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowAck' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/ocr:
+    get:
+      tags: [search]
+      summary: Get OCR status/text for a document
+      description: '`ocr_status` reflects PENDING/DONE/FAILED/NOT_APPLICABLE. FR-G13-008.'
+      operationId: getOcr
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: OCR result.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OcrResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-009 — Retention, legal holds, hold notices, disposition
+  # ---------------------------------------------------------------------------
+  /retention-policies:
+    post:
+      tags: [retention]
+      summary: Create a retention policy (M11 retention class)
+      description: >
+        REUSE/EXTEND of M11 retention classes (`VAL-M11-RETENTION`); adds event-confirmed anchor +
+        `requires_confirmed_anchor`. FR-G13-009.
+      operationId: createRetentionPolicy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetentionPolicyInput' }
+      responses:
+        '201':
+          description: Retention policy created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionPolicy' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/retention:
+    post:
+      tags: [retention]
+      summary: Assign a retention class to a document
+      description: Assignable at document/type/folder scope; effective class resolves most-specific-first. FR-G13-009.
+      operationId: assignRetention
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetentionAssignmentInput' }
+      responses:
+        '200':
+          description: Retention assigned.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionAssignment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /legal-holds:
+    post:
+      tags: [legal-holds]
+      summary: Place a legal hold (SoD, future-match)
+      description: >
+        Sets `legal_hold_count>0`, blocks disposition/delete/overwrite. High-value holds enter
+        PENDING_APPROVAL (P01, R10). `JOB-G13-HOLDEVAL` auto-adds future matching documents and
+        issues custodian notices (R11). FR-G13-009.
+      operationId: placeLegalHold
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LegalHoldInput' }
+      responses:
+        '201':
+          description: Legal hold placed (or proposed for high-value).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalHold' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /legal-holds/{id}:approve-placement:
+    post:
+      tags: [legal-holds]
+      summary: Approve a high-value hold placement (checker ≠ placer)
+      description: LH Approver approves placement (P01, R10). Self-approval ⇒ 403 `ERR-G13-SOD_VIOLATION`. FR-G13-009.
+      operationId: approveHoldPlacement
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalRequest' }
+      responses:
+        '200':
+          description: Placement approved; hold ACTIVE.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalHold' }
+        '403':
+          description: '`ERR-G13-SOD_VIOLATION` — maker == checker.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /legal-holds/{id}:release:
+    post:
+      tags: [legal-holds]
+      summary: Release a legal hold (dual-control)
+      description: >
+        Requires `release_proposed_by` + a distinct `release_approved_by` + mandatory
+        `release_reason` (`VAL-G13-HOLD-SOD`, R10). Missing distinct approver ⇒ 403
+        `ERR-G13-HOLD_RELEASE_SOD`. FR-G13-009.
+      operationId: releaseLegalHold
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HoldReleaseRequest' }
+      responses:
+        '200':
+          description: Hold released; eligibility restored.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalHold' }
+        '403':
+          description: '`ERR-G13-HOLD_RELEASE_SOD` — missing distinct approver.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /hold-notices/{id}:acknowledge:
+    post:
+      tags: [legal-holds]
+      summary: Acknowledge a custodian hold notice
+      description: Custodian acknowledges a `hold_notices` item; overdue notices escalate to LH Approver (X.2, R11). FR-G13-009.
+      operationId: acknowledgeHoldNotice
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Notice acknowledged.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HoldNotice' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/disposition:propose:
+    post:
+      tags: [disposition]
+      summary: Propose disposition (Librarian, maker)
+      description: >
+        Proposes disposition; the proposer cannot approve their own proposal. Active hold ⇒ 409
+        `ERR-G13-LEGAL_HOLD_ACTIVE`; permanent record ⇒ 409 `ERR-G13-RETENTION_PERMANENT`. FR-G13-009.
+      operationId: proposeDisposition
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DispositionProposeRequest' }
+      responses:
+        '201':
+          description: Disposition proposed (PROPOSED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispositionRecord' }
+        '409':
+          description: '`ERR-G13-LEGAL_HOLD_ACTIVE` or `ERR-G13-RETENTION_PERMANENT`.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/disposition:approve:
+    post:
+      tags: [disposition]
+      summary: Approve disposition (Records Manager, checker)
+      description: >
+        `approved_by ≠ proposed_by` (P01). Executes only with no active hold AND a confirmed anchor;
+        unconfirmed anchor ⇒ 409 `ERR-G13-ANCHOR_UNCONFIRMED`; self-approve ⇒ 403
+        `ERR-G13-SOD_VIOLATION`. Produces a `disposition_records` row with certificate + tombstone via
+        `JOB-M11-DISPOSAL`. FR-G13-009.
+      operationId: approveDisposition
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalRequest' }
+      responses:
+        '200':
+          description: Disposition approved/executed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispositionRecord' }
+        '403':
+          description: '`ERR-G13-SOD_VIOLATION` — maker == checker.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: '`ERR-G13-ANCHOR_UNCONFIRMED` or `ERR-G13-LEGAL_HOLD_ACTIVE`.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-010 — Signatures
+  # ---------------------------------------------------------------------------
+  /documents/{id}/signature-requests:
+    post:
+      tags: [signatures]
+      summary: Create a signing request (DocumentGen sign-off)
+      description: >
+        Runs on the DocumentGen sign-off service over P01/W.1 and the M11 `signoff_transactions`
+        model. Defines ordered/parallel signers, fields, method (from `allowed_signature_types`),
+        optional expiry; signer set resolvable (`VAL-M11-SIGNER`). Bad method ⇒ 422
+        `ERR-G13-SIGNATURE_METHOD_NOT_ALLOWED`. FR-G13-010.
+      operationId: createSignatureRequest
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignatureRequestInput' }
+      responses:
+        '201':
+          description: Signing request created (SENT).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SignatureRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /signature-requests/{id}:
+    get:
+      tags: [signatures]
+      summary: Get a signing request
+      operationId: getSignatureRequest
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Signing request detail.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SignatureRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /signature-requests/{id}/sign:
+    post:
+      tags: [signatures]
+      summary: Apply a signature (PAdES + RFC-3161 + LTV)
+      description: >
+        DocumentGen applies PAdES via the signing provider, obtains an RFC-3161 timestamp and embeds
+        OCSP/CRL revocation data (LTV) for statutory/WORM docs; a signed `document_version`
+        (`version_kind=SIGNED`) is emitted on completion. Missing LTV ⇒ 422
+        `ERR-G13-SIGNATURE_LTV_REQUIRED`; tamper ⇒ 422 `ERR-G13-SIGNATURE_INVALID`; PKI/TSA down ⇒
+        500 `ERR-G13-SIGNING_SERVICE_UNAVAILABLE`. FR-G13-010.
+      operationId: signDocument
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignRequest' }
+      responses:
+        '200':
+          description: Signature applied (or envelope DECLINED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Signature' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /signature-requests/{id}:cancel:
+    post:
+      tags: [signatures]
+      summary: Cancel a signing request
+      operationId: cancelSignatureRequest
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Signing request cancelled.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SignatureRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /signatures/{id}/verify:
+    get:
+      tags: [signatures]
+      summary: Verify a signature (LTV-durable)
+      description: Verifies signature integrity and LTV validity; tamper ⇒ `ERR-G13-SIGNATURE_INVALID`. FR-G13-010.
+      operationId: verifySignature
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Verification result.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SignatureVerifyResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-011 / 021 — Certified copies, redaction
+  # ---------------------------------------------------------------------------
+  /documents/{id}:certified-copy:
+    post:
+      tags: [rendition]
+      summary: Issue a certified true copy (v1)
+      description: >
+        Creates a new derivative (`version_kind=CERTIFIED_COPY`) stamped "CERTIFIED TRUE COPY" with a
+        `certificate_no`, issuer, date, optionally LTV-signed; WORM-stored for statutory records. The
+        original is never altered. Render fail ⇒ 422 `ERR-G13-RENDITION_FAILED`. FR-G13-011.
+      operationId: certifiedCopy
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CertifiedCopyRequest' }
+      responses:
+        '201':
+          description: Certified copy issued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentVersion' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:redact:
+    post:
+      tags: [rendition]
+      summary: Produce a redacted derivative (Phase 2)
+      description: >
+        Burns selected regions out of a rasterised render and re-OCRs to verify unrecoverability;
+        incomplete removal ⇒ 422 `ERR-G13-REDACTION_INCOMPLETE`; render fail ⇒ 422
+        `ERR-G13-RENDITION_FAILED`. Original never altered. FR-G13-021.
+      operationId: redactDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RedactRequest' }
+      responses:
+        '201':
+          description: Redacted derivative created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentVersion' }
+        '422':
+          description: '`ERR-G13-REDACTION_INCOMPLETE` or `ERR-G13-RENDITION_FAILED`.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/redactions:
+    get:
+      tags: [rendition]
+      summary: List redaction derivatives for a document
+      operationId: listRedactions
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of redaction derivatives.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VersionPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-012 / 020 — Audit, compliance reports, chain verify, anchors
+  # ---------------------------------------------------------------------------
+  /documents/{id}/audit:
+    get:
+      tags: [audit]
+      summary: Get a document's access-audit history (P05)
+      description: Immutable, hash-chained access rows (view/download/print/share/lifecycle) via `Audit.query`. FR-G13-012.
+      operationId: getDocumentAudit
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - { name: action, in: query, schema: { $ref: '#/components/schemas/DocAuditAction' } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of audit events.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditEventPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /audit/documents:
+    get:
+      tags: [audit]
+      summary: Query document access-audit across scope
+      operationId: queryAudit
+      parameters:
+        - { name: userId, in: query, schema: { type: string } }
+        - { name: documentId, in: query, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of audit events.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditEventPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /reports/compliance/{reportCode}:
+    get:
+      tags: [audit]
+      summary: Compliance report
+      description: >
+        Reports include documents missing retention, overdue disposition, active holds,
+        sensitive-access log, classification mix, audit-chain health, orphaned documents, DPDP
+        requests. FR-G13-012.
+      operationId: getComplianceReport
+      parameters:
+        - { name: reportCode, in: path, required: true, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Compliance report page.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ComplianceReport' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /audit:export:
+    post:
+      tags: [audit]
+      summary: Export audit data (CSV/JSON) with chain proof
+      description: Exportable via `Audit.export` for a date/scope range with chain-verification proof. FR-G13-012.
+      operationId: exportAudit
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuditExportRequest' }
+      responses:
+        '202':
+          description: Export job accepted.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditExportResult' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /audit:verify:
+    post:
+      tags: [audit]
+      summary: On-demand audit hash-chain verification
+      description: >
+        Recomputes a range and compares; a break sets `verification_status=BROKEN` and returns 500
+        `ERR-G13-AUDIT_CHAIN_BROKEN` with the offending `seq_no`. FR-G13-020.
+      operationId: verifyAuditChain
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Verification pass/fail result.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChainVerifyResult' }
+        '500':
+          description: '`ERR-G13-AUDIT_CHAIN_BROKEN` — chain verification failed (incident alert).'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /audit/anchors:
+    get:
+      tags: [audit]
+      summary: List audit anchors (Merkle roots to WORM/notary/TSA)
+      operationId: listAuditAnchors
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of audit anchors.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditAnchorPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/audit:anchor:
+    post:
+      tags: [audit]
+      summary: Force an audit anchoring run
+      description: Triggers `JOB-G13-ANCHOR` to summarise a window into an `audit_anchors` digest anchored to WORM/notary/TSA. FR-G13-020.
+      operationId: forceAuditAnchor
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Anchoring run enqueued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowAck' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-013 — Shares
+  # ---------------------------------------------------------------------------
+  /documents/{id}/shares:
+    post:
+      tags: [shares]
+      summary: Create an internal share or expiring external link
+      description: >
+        Internal shares grant scoped rights to a named user; external links require `expires_at`,
+        store only a hashed token, support optional argon2id password + `max_access_count`. DLP
+        `BLOCK_SHARE` ⇒ 403 `ERR-G13-SHARE_BLOCKED_DLP`. FR-G13-013.
+      operationId: createShare
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShareInput' }
+      responses:
+        '201':
+          description: Share created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentShare' }
+        '403':
+          description: '`ERR-G13-SHARE_BLOCKED_DLP` — external share blocked by DLP.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [shares]
+      summary: List shares for a document
+      operationId: listShares
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of shares.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SharePage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /shared/{token}:
+    get:
+      tags: [shares]
+      summary: Access a document via an external share token (public, rate-limited)
+      description: >
+        Anonymous entry point for external tokenised links. Serves a watermarked render via the
+        audited proxy after verifying hash/password/expiry/count/lockout. Expired/revoked/locked ⇒
+        404 to anonymous callers (no leak); over count ⇒ 403 `ERR-G13-SHARE_LIMIT_REACHED`; N failed
+        password attempts ⇒ 429 `ERR-G13-SHARE_LOCKED`. FR-G13-013.
+      operationId: accessShare
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: password, in: query, schema: { type: string }, description: Optional share password (argon2id-verified). }
+      responses:
+        '200':
+          description: Watermarked render descriptor served via the audited proxy.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RenderResult' }
+        '403':
+          description: '`ERR-G13-SHARE_LIMIT_REACHED` — access-count/expiry exceeded.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Expired/revoked/locked or unknown token (no existence leak).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: '`ERR-G13-SHARE_LOCKED` — password brute-force lockout.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /shares/{id}:revoke:
+    post:
+      tags: [shares]
+      summary: Revoke a share
+      operationId: revokeShare
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Share revoked (immediately invalidated).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentShare' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-014 — WORM
+  # ---------------------------------------------------------------------------
+  /documents/{id}:declare-worm:
+    post:
+      tags: [worm]
+      summary: Declare a document WORM-locked
+      description: >
+        Sets object-lock + `WORM_LOCKED` class + `worm_retain_until`. Thereafter overwrite/
+        version-mutate/delete/dispose before the horizon is rejected ⇒ 409 `ERR-G13-WORM_IMMUTABLE`.
+        Entirely gov-specific (M11 has no WORM). FR-G13-014.
+      operationId: declareWorm
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WormDeclareRequest' }
+      responses:
+        '200':
+          description: WORM lock declared.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WormStatus' }
+        '409':
+          description: '`ERR-G13-WORM_IMMUTABLE` — already locked / conflicting state.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:extend-retention:
+    post:
+      tags: [worm]
+      summary: Extend WORM retain-until (extend-only)
+      description: >
+        `worm_retain_until` may only be extended (`VAL-G13-WORM`); shortening ⇒ 422
+        `ERR-G13-RETENTION_SHORTEN_FORBIDDEN`. FR-G13-014.
+      operationId: extendWormRetention
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExtendRetentionRequest' }
+      responses:
+        '200':
+          description: Retain-until extended.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WormStatus' }
+        '422':
+          description: '`ERR-G13-RETENTION_SHORTEN_FORBIDDEN` — attempt to reduce retain-until.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/worm-status:
+    get:
+      tags: [worm]
+      summary: Get WORM status + retain-until
+      operationId: getWormStatus
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: WORM status.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WormStatus' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-015 — Integrity, thumbnail, preview
+  # ---------------------------------------------------------------------------
+  /documents/{id}/thumbnail:
+    get:
+      tags: [integrity]
+      summary: Get a sandboxed thumbnail
+      description: Sandbox-rendered thumbnail served per P02 (+ watermark for restricted docs). FR-G13-015.
+      operationId: getThumbnail
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Thumbnail render descriptor.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RenderResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}/preview:
+    get:
+      tags: [integrity]
+      summary: Get a sandboxed multi-page preview
+      description: >
+        Sandbox-rendered preview served per P02 (+ clearance + watermark). Integrity mismatch ⇒ 422
+        `ERR-G13-INTEGRITY_FAILED`; render over-limit ⇒ 422 `ERR-G13-RENDER_RESOURCE_LIMIT`. FR-G13-015.
+      operationId: getPreview
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+      responses:
+        '200':
+          description: Preview render descriptor.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RenderResult' }
+        '422':
+          description: '`ERR-G13-INTEGRITY_FAILED` or `ERR-G13-RENDER_RESOURCE_LIMIT`.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/integrity:scan:
+    post:
+      tags: [integrity]
+      summary: Trigger an integrity scan
+      description: Runs `JOB-G13-INTEGRITY`; mismatch flags `integrity_verified=false` and quarantines the version. FR-G13-015.
+      operationId: integrityScan
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IntegrityScanRequest' }
+      responses:
+        '202':
+          description: Integrity scan enqueued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowAck' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-016 — DLP
+  # ---------------------------------------------------------------------------
+  /documents/{id}/dlp:
+    get:
+      tags: [dlp]
+      summary: List DLP findings for a document
+      operationId: listDlpFindings
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of DLP findings.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DlpFindingPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /dlp-findings/{id}:resolve:
+    post:
+      tags: [dlp]
+      summary: Resolve a DLP finding
+      description: Marks a finding ACCEPTED/DISMISSED/REMEDIATED. FR-G13-016.
+      operationId: resolveDlpFinding
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DlpResolveRequest' }
+      responses:
+        '200':
+          description: Finding resolved.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DlpFinding' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-017 — Clearances
+  # ---------------------------------------------------------------------------
+  /clearances:
+    get:
+      tags: [clearances]
+      summary: List security clearances
+      operationId: listClearances
+      parameters:
+        - { name: principal, in: query, schema: { type: string }, description: USER id or ROLE code. }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ClearanceStatus' } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of clearances.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClearancePage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /clearances:propose:
+    post:
+      tags: [clearances]
+      summary: Propose a clearance grant (Security, maker)
+      description: >
+        Proposes a `clearance_level` for a USER or ROLE with validity window; approved by a distinct
+        checker via P01. Self-grant ⇒ 403 `ERR-G13-SOD_VIOLATION`. FR-G13-017.
+      operationId: proposeClearance
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClearanceProposeRequest' }
+      responses:
+        '201':
+          description: Clearance proposed (PENDING_APPROVAL).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecurityClearance' }
+        '403':
+          description: '`ERR-G13-SOD_VIOLATION` — self-grant.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /clearances/{id}:approve:
+    post:
+      tags: [clearances]
+      summary: Approve a clearance grant (Records Manager, checker)
+      description: >
+        `maker ≠ checker` (P01). TOP_SECRET requires two approvers; insufficient approvers ⇒ 422.
+        Self-approve ⇒ 403 `ERR-G13-SOD_VIOLATION`. FR-G13-017.
+      operationId: approveClearance
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalRequest' }
+      responses:
+        '200':
+          description: Clearance approved (ACTIVE).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecurityClearance' }
+        '403':
+          description: '`ERR-G13-SOD_VIOLATION` — maker == checker.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /clearances/{id}:suspend:
+    post:
+      tags: [clearances]
+      summary: Suspend a clearance
+      description: SUSPENDED immediately removes CONFIDENTIAL+ access (P02 reads live). FR-G13-017.
+      operationId: suspendClearance
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Clearance suspended.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecurityClearance' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /clearances/{id}:revoke:
+    post:
+      tags: [clearances]
+      summary: Revoke a clearance
+      operationId: revokeClearance
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Clearance revoked (defaults principal to INTERNAL).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecurityClearance' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-018 — Data-subject requests (DPDP)
+  # ---------------------------------------------------------------------------
+  /dsr:
+    post:
+      tags: [dsr]
+      summary: Register a data-subject request
+      description: >
+        Records subject, type (ACCESS/ERASURE/RECTIFICATION/PORTABILITY), received timestamp
+        (statutory clock), optional `consent_ref_id`. FR-G13-018.
+      operationId: createDsr
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DsrInput' }
+      responses:
+        '201':
+          description: DSR registered (RECEIVED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataSubjectRequest' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /dsr/{id}:
+    get:
+      tags: [dsr]
+      summary: Get a data-subject request
+      operationId: getDsr
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: DSR detail with lattice evaluation.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataSubjectRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /dsr/{id}:adjudicate:
+    post:
+      tags: [dsr]
+      summary: Adjudicate a DSR (DPO)
+      description: >
+        DPO evaluates each in-scope document against the precedence lattice; statutory/hold/WORM
+        documents are exempted (`EXEMPT_RETAINED`) with recorded legal basis ⇒ may surface
+        `ERR-G13-ERASURE_EXEMPTED`. FR-G13-018.
+      operationId: adjudicateDsr
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DsrAdjudicateRequest' }
+      responses:
+        '200':
+          description: DSR adjudicated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataSubjectRequest' }
+        '409':
+          description: '`ERR-G13-ERASURE_EXEMPTED` — overridden by statutory/hold/WORM basis.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /dsr/{id}:execute:
+    post:
+      tags: [dsr]
+      summary: Execute a DSR erasure (dual-control)
+      description: >
+        The DPO who exempts ≠ the custodian who executes (SoD, P01). Non-exempt documents erased via
+        the P05 redaction-marker path + `JOB-M11-DISPOSAL` (crypto-shred when `dek_shared=false`,
+        else physical purge); shared blobs never shredded. Self-execute ⇒ 403 `ERR-G13-SOD_VIOLATION`.
+        FR-G13-018.
+      operationId: executeDsr
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalRequest' }
+      responses:
+        '200':
+          description: DSR executed (FULFILLED / PARTIALLY_FULFILLED / EXEMPTED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataSubjectRequest' }
+        '403':
+          description: '`ERR-G13-SOD_VIOLATION` — executor == adjudicator.'
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------------------
+  # FR-G13-019 — Orphans
+  # ---------------------------------------------------------------------------
+  /admin/orphans:
+    get:
+      tags: [orphans]
+      summary: List orphaned documents (review queue)
+      description: Orphans appear with last-known links, owner, age; never auto-destroyed. FR-G13-019.
+      operationId: listOrphans
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of orphaned documents.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/orphans:scan:
+    post:
+      tags: [orphans]
+      summary: Trigger the orphan reaper scan
+      description: Runs `JOB-G13-ORPHAN` to reconcile `link_count` vs links and surface orphans. FR-G13-019.
+      operationId: scanOrphans
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Orphan scan enqueued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowAck' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /documents/{id}:rehome:
+    post:
+      tags: [orphans]
+      summary: Re-home / re-link an orphaned document
+      description: >
+        Re-links, retains with a new class, or routes to disposition (P01 maker-checker). Re-home to
+        a disposed entity ⇒ 409; dispose an orphan under hold ⇒ 409 `ERR-G13-LEGAL_HOLD_ACTIVE`.
+        FR-G13-019.
+      operationId: rehomeDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RehomeRequest' }
+      responses:
+        '200':
+          description: Document re-homed (returns to ACTIVE).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Document' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Bearer JWT session carrying resolved roles + tenant/entity scope (P02). Never raw
+        permissions — resolved per request by `Authorization.check`.
+
+  headers:
+    XCorrelationId:
+      description: Correlation id echoed on every response and written to the P05 audit line (Foundation §1).
+      schema: { type: string }
+
+  parameters:
+    DocumentId:
+      name: id
+      in: path
+      required: true
+      description: Document id (`documents` — platform-core).
+      schema: { type: string, format: uuid }
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (default 25, max 100).
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor from a prior `next_cursor`.
+      schema: { type: string }
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: '`field:asc|desc`.'
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Idempotency key for unsafe/transaction-initiating POSTs; a repeat within 24h returns the original result.
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: '`UNAUTHENTICATED` (401) — no/invalid/expired session.'
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: >
+        `FORBIDDEN` (403) — not permitted; never leaks existence of out-of-scope records. May carry
+        `ERR-G13-SOD_VIOLATION`, `ERR-G13-CLASSIFICATION_LOCKED`, `ERR-G13-CLEARANCE_INSUFFICIENT`,
+        `ERR-G13-HOLD_RELEASE_SOD`, `ERR-G13-SHARE_BLOCKED_DLP`, `ERR-G13-SHARE_LIMIT_REACHED`.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: >
+        `NOT_FOUND` (404) — absent or out of scope (indistinguishable by design). May carry
+        `ERR-G13-DOCUMENT_DISPOSED`.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: >
+        `CONFLICT` (409) — idempotency replay / state or uniqueness conflict. May carry
+        `ERR-G13-WORM_IMMUTABLE`, `ERR-G13-LEGAL_HOLD_ACTIVE`, `ERR-G13-RETENTION_PERMANENT`,
+        `ERR-G13-ANCHOR_UNCONFIRMED`, `ERR-G13-DOCUMENT_LOCKED`, `ERR-G13-CHECKOUT_NOT_SUPPORTED`,
+        `ERR-G13-DOCUMENT_NOT_ATTACHABLE`, `ERR-G13-LINK_CONFLICT`, `ERR-G13-ERASURE_EXEMPTED`.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationFailed:
+      description: >
+        `VALIDATION_FAILED` (422) — a VAL-* / catalog rule failed. May carry
+        `ERR-G13-INVALID_FILE_TYPE`, `ERR-G13-FILE_TOO_LARGE`, `ERR-G13-EMPTY_FILE`,
+        `ERR-G13-FETCH_INTENT_REQUIRED`, `ERR-G13-METADATA_INVALID`, `ERR-G13-MALWARE_DETECTED`,
+        `ERR-G13-RENDER_RESOURCE_LIMIT`, `ERR-G13-INTEGRITY_FAILED`,
+        `ERR-G13-RETENTION_SHORTEN_FORBIDDEN`, `ERR-G13-SIGNATURE_INVALID`,
+        `ERR-G13-SIGNATURE_METHOD_NOT_ALLOWED`, `ERR-G13-SIGNATURE_LTV_REQUIRED`,
+        `ERR-G13-RENDITION_FAILED`, `ERR-G13-REDACTION_INCOMPLETE`.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PreconditionFailed:
+      description: >
+        `PRECONDITION_FAILED` (412) — a required precondition is not met (includes retryable
+        upstream-unavailable path; replaces v2 503).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: >
+        `RATE_LIMITED` (429) — rate limit or brute-force lockout. May carry `ERR-G13-SHARE_LOCKED`,
+        `ERR-G13-BREAK_GLASS_LOCKED`.
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: >
+        `INTERNAL` (500) — unexpected/non-retryable upstream failure (503 collapses here via X.3).
+        May carry `ERR-G13-SIGNING_SERVICE_UNAVAILABLE`, `ERR-G13-KEY_SERVICE_UNAVAILABLE`,
+        `ERR-G13-AUDIT_CHAIN_BROKEN` (all render `ERR-LOADFAIL`).
+      headers:
+        X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    # ---- Error envelope (Foundation §1) ------------------------------------
+    Error:
+      type: object
+      description: Canonical error envelope (Foundation §1). Correlation id is in the `X-Correlation-Id` header, not the body.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: A standard platform code (VALIDATION_FAILED, FORBIDDEN, …) or a module code (`ERR-G13-*`).
+              examples: [ERR-G13-WORM_IMMUTABLE, FORBIDDEN]
+            message: { type: string }
+            field:
+              type: [string, "null"]
+              description: Offending field for validation errors.
+            details:
+              type: [object, "null"]
+              additionalProperties: true
+              description: 'Structured discriminators, e.g. `{ reason: <REASON> }`.'
+
+    # ---- Enums (Section 5.5) -----------------------------------------------
+    ClassificationLevel:
+      type: string
+      enum: [PUBLIC, INTERNAL, CONFIDENTIAL, SECRET, TOP_SECRET]
+    DocumentStatus:
+      type: string
+      enum: [DRAFT, SCANNING, QUARANTINED, ACTIVE, CHECKED_OUT, SUPERSEDED, ON_LEGAL_HOLD, DISPOSITION_DUE, DISPOSED, ARCHIVED, ORPHANED, DELETED]
+    VersionKind:
+      type: string
+      enum: [ORIGINAL, NEW_VERSION, SUPERSEDE, CERTIFIED_COPY, REDACTED, SIGNED]
+    SourceChannel:
+      type: string
+      enum: [WEB_UPLOAD, BULK, SCANNER, MOBILE, API, SYSTEM_GENERATED]
+    ScanStatus:
+      type: string
+      enum: [PENDING, CLEAN, INFECTED, QUARANTINED, SKIPPED]
+    OcrStatus:
+      type: string
+      enum: [PENDING, DONE, FAILED, NOT_APPLICABLE]
+    DocCategory:
+      type: string
+      enum: [IDENTITY, SERVICE, FINANCIAL, DISCIPLINARY, MEDICAL, TRAINING, PENSION, STATUTORY, OTHER]
+    FolderType:
+      type: string
+      enum: [CABINET, EMPLOYEE, MODULE, CASE, SHARED, SYSTEM]
+    PrincipalType:
+      type: string
+      enum: [USER, ROLE, ORG_UNIT, RELATIONSHIP]
+    AclEffect:
+      type: string
+      enum: [ALLOW, DENY]
+    TagType:
+      type: string
+      enum: [CLASSIFICATION, KEYWORD, PII_CATEGORY, RETENTION_HINT, SYSTEM]
+    TagOrigin:
+      type: string
+      enum: [USER, OCR, DLP, SYSTEM]
+    RetentionTrigger:
+      type: string
+      enum: [ON_CREATE, ON_SUPERSEDE, ON_EMPLOYEE_RETIRE, ON_CASE_CLOSE, FISCAL_YEAR_END]
+    DispositionAction:
+      type: string
+      enum: [DESTROY, ARCHIVE_TRANSFER, REVIEW]
+    RetentionScope:
+      type: string
+      enum: [DOCUMENT, DOCUMENT_TYPE, FOLDER]
+    RetentionStatus:
+      type: string
+      enum: [ACTIVE, DUE, HELD, DISPOSED]
+    LegalHoldStatus:
+      type: string
+      enum: [PENDING_APPROVAL, ACTIVE, RELEASE_PROPOSED, RELEASED]
+    HoldMatchBasis:
+      type: string
+      enum: [MANUAL, SAVED_SEARCH, EMPLOYEE, CASE]
+    HoldNoticeStatus:
+      type: string
+      enum: [SENT, ACKNOWLEDGED, OVERDUE, ESCALATED]
+    DocAuditAction:
+      type: string
+      enum: [VIEW, PREVIEW, DOWNLOAD, PRINT, SHARE, METADATA_UPDATE, VERSION_ADD, CLASSIFY, DISPOSE, HOLD_PLACE, HOLD_RELEASE, ACL_CHANGE, BREAK_GLASS, CLEARANCE_CHANGE, ERASURE]
+    AuditResult:
+      type: string
+      enum: [SUCCESS, DENIED]
+    AnchorTarget:
+      type: string
+      enum: [WORM, EXTERNAL_NOTARY, RFC3161_TSA]
+    AnchorVerifyStatus:
+      type: string
+      enum: [PENDING, VERIFIED, BROKEN]
+    ShareType:
+      type: string
+      enum: [INTERNAL_USER, EXTERNAL_LINK]
+    ShareStatus:
+      type: string
+      enum: [ACTIVE, EXPIRED, REVOKED, LOCKED]
+    LockStatus:
+      type: string
+      enum: [ACTIVE, RELEASED, EXPIRED, FORCE_RELEASED]
+    CheckoutMode:
+      type: string
+      enum: [NONE, OPTIONAL, REQUIRED]
+    SigningMode:
+      type: string
+      enum: [SEQUENTIAL, PARALLEL]
+    SignatureRequestStatus:
+      type: string
+      enum: [DRAFT, SENT, IN_PROGRESS, COMPLETED, DECLINED, EXPIRED, CANCELLED]
+    SignatureType:
+      type: string
+      enum: [AADHAAR_ESIGN, DSC_TOKEN, OTP_ESIGN, DRAWN]
+    SignatureStatus:
+      type: string
+      enum: [PENDING, SIGNED, DECLINED]
+    LtvStatus:
+      type: string
+      enum: [NONE, TIMESTAMPED, LTV_ENABLED]
+    DispositionStatus:
+      type: string
+      enum: [PROPOSED, APPROVED, EXECUTED, REJECTED, BLOCKED_HOLD]
+    ErasureMethod:
+      type: string
+      enum: [CRYPTO_SHRED, PHYSICAL_PURGE, EXEMPT_RETAINED]
+    StorageClass:
+      type: string
+      enum: [HOT, WARM, COLD, WORM_LOCKED]
+    KeyScope:
+      type: string
+      enum: [SHARED_CMK, DEDICATED_CMK]
+    DlpSeverity:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, CRITICAL]
+    DlpAction:
+      type: string
+      enum: [TAG, RECLASSIFY, REDACT, BLOCK_SHARE]
+    DlpFindingStatus:
+      type: string
+      enum: [OPEN, ACCEPTED, DISMISSED, REMEDIATED]
+    ClearancePrincipalType:
+      type: string
+      enum: [USER, ROLE]
+    ClearanceStatus:
+      type: string
+      enum: [PENDING_APPROVAL, ACTIVE, SUSPENDED, EXPIRED, REVOKED]
+    DsrType:
+      type: string
+      enum: [ACCESS, ERASURE, RECTIFICATION, PORTABILITY]
+    DsrStatus:
+      type: string
+      enum: [RECEIVED, UNDER_REVIEW, EXEMPTED, PARTIALLY_FULFILLED, FULFILLED, REJECTED]
+    FetchIntent:
+      type: string
+      enum: [VIEW, DOWNLOAD]
+
+    # ---- Pagination --------------------------------------------------------
+    PageMeta:
+      type: object
+      properties:
+        next_cursor:
+          type: [string, "null"]
+          description: Cursor for the next page, or null at the end.
+
+    # ---- Core entities -----------------------------------------------------
+    Document:
+      type: object
+      description: '`documents` — platform-core M11 vault master (reference), extended with gov columns.'
+      properties:
+        documentId: { type: string, format: uuid }
+        docNo: { type: string, description: Human-readable business key. }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        documentTypeCode: { type: string }
+        title: { type: string }
+        category: { $ref: '#/components/schemas/DocCategory' }
+        classification: { $ref: '#/components/schemas/ClassificationLevel' }
+        securityDomain: { type: string }
+        status: { $ref: '#/components/schemas/DocumentStatus' }
+        currentVersionId: { type: [string, "null"], format: uuid }
+        currentVersionNo: { type: integer }
+        folderId: { type: [string, "null"], format: uuid }
+        isWorm: { type: boolean }
+        isSealed: { type: boolean }
+        legalHoldCount: { type: integer }
+        anchorConfirmed: { type: boolean }
+        dpdpErasureState: { type: [string, "null"] }
+        linkCount: { type: integer }
+        wormRetainUntil: { type: [string, "null"], format: date-time }
+        dispositionDueDate: { type: [string, "null"], format: date }
+        metadata:
+          type: [object, "null"]
+          additionalProperties: true
+          description: Type-defined metadata validated against the W.2 form/JSON-Schema.
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DocumentPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Document' }
+
+    DocumentVersion:
+      type: object
+      description: '`document_versions` — platform-core (reference).'
+      properties:
+        versionId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        versionNo: { type: integer }
+        versionKind: { $ref: '#/components/schemas/VersionKind' }
+        supersededVersionId: { type: [string, "null"], format: uuid }
+        derivedFromVersionId: { type: [string, "null"], format: uuid }
+        storageObjectId: { type: [string, "null"], format: uuid }
+        contentHash: { type: [string, "null"], description: SHA-256 of stored bytes. }
+        sizeBytes: { type: [integer, "null"] }
+        mimeType: { type: [string, "null"] }
+        changeSummary: { type: [string, "null"] }
+        scanStatus: { $ref: '#/components/schemas/ScanStatus' }
+        ocrStatus: { $ref: '#/components/schemas/OcrStatus' }
+        integrityVerified: { type: boolean }
+        languageCode: { type: [string, "null"] }
+        authorId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+    VersionPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/DocumentVersion' }
+
+    DocumentCreateResult:
+      type: object
+      properties:
+        documentId: { type: string, format: uuid }
+        docNo: { type: string }
+        status: { $ref: '#/components/schemas/DocumentStatus' }
+        currentVersionNo: { type: integer }
+        securityDomain: { type: string }
+
+    DocumentUploadRequest:
+      type: object
+      required: [documentTypeCode, title, file]
+      properties:
+        file:
+          type: string
+          format: binary
+        documentTypeCode: { type: string }
+        title: { type: string }
+        folderId: { type: [string, "null"], format: uuid }
+        classification:
+          allOf: [ { $ref: '#/components/schemas/ClassificationLevel' } ]
+          description: Optional; must be >= the type default (may raise, not lower).
+        sourceChannel: { $ref: '#/components/schemas/SourceChannel' }
+        metadata:
+          type: [object, "null"]
+          additionalProperties: true
+    BulkUploadRequest:
+      type: object
+      required: [documentTypeCode, files]
+      properties:
+        documentTypeCode: { type: string }
+        folderId: { type: [string, "null"], format: uuid }
+        files:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            format: binary
+    BulkUploadResult:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              index: { type: integer }
+              status: { type: string, enum: [SUCCESS, FAILED] }
+              documentId: { type: [string, "null"], format: uuid }
+              error: { $ref: '#/components/schemas/Error' }
+    ResumableUploadRequest:
+      type: object
+      required: [fileName, sizeBytes]
+      properties:
+        fileName: { type: string }
+        sizeBytes: { type: integer }
+        mimeType: { type: [string, "null"] }
+    ResumableUploadSession:
+      type: object
+      properties:
+        uploadSessionId: { type: string }
+        uploadUrl: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+        receivedBytes: { type: integer }
+
+    AttachRequest:
+      type: object
+      required: [documentTypeCode, moduleCode, entityName, entityRefId, linkRole]
+      properties:
+        file:
+          type: [string, "null"]
+          format: binary
+          description: Optional — omit to link an already-stored document by `documentId`.
+        documentId: { type: [string, "null"], format: uuid }
+        documentTypeCode: { type: string }
+        title: { type: [string, "null"] }
+        moduleCode: { type: string, description: Consuming module (G01–G12). }
+        entityName: { type: string }
+        entityRefId: { type: string }
+        linkRole: { type: string }
+        isPrimary: { type: boolean, default: false }
+        classification: { $ref: '#/components/schemas/ClassificationLevel' }
+    AttachResult:
+      type: object
+      properties:
+        documentId: { type: string, format: uuid }
+        docNo: { type: string }
+        linkId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/DocumentStatus' }
+        currentVersionNo: { type: integer }
+        securityDomain: { type: string }
+
+    FetchResult:
+      type: object
+      description: Response to `:fetch`; VIEW and DOWNLOAD are structurally different (R2).
+      properties:
+        documentId: { type: string, format: uuid }
+        title: { type: string }
+        classification: { $ref: '#/components/schemas/ClassificationLevel' }
+        status: { $ref: '#/components/schemas/DocumentStatus' }
+        currentVersionNo: { type: integer }
+        mimeType: { type: [string, "null"] }
+        intent: { $ref: '#/components/schemas/FetchIntent' }
+        renderUrl: { type: [string, "null"], format: uri, description: VIEW — one-time watermarked render URL via the audited proxy. }
+        downloadUrl: { type: [string, "null"], format: uri, description: DOWNLOAD — single-use signed download URL (only with DOWNLOAD right). }
+        renderUrlMode: { type: [string, "null"], examples: [STREAM_WATERMARKED] }
+        oneTimeUse: { type: boolean }
+        boundSession: { type: [string, "null"] }
+        renderUrlExpiresAt: { type: [string, "null"], format: date-time }
+        downloadAvailable: { type: boolean }
+    RenderResult:
+      type: object
+      properties:
+        renderUrl: { type: string, format: uri }
+        renderUrlMode: { type: string, examples: [STREAM_WATERMARKED] }
+        oneTimeUse: { type: boolean }
+        expiresAt: { type: string, format: date-time }
+        watermarked: { type: boolean }
+
+    DocumentType:
+      type: object
+      description: EXTENDs the M11 `letter_templates` / merge-field model.
+      properties:
+        documentTypeId: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        category: { $ref: '#/components/schemas/DocCategory' }
+        metadataSchema: { type: [object, "null"], additionalProperties: true }
+        defaultClassification: { $ref: '#/components/schemas/ClassificationLevel' }
+        defaultSecurityDomain: { type: string }
+        allowedMimeTypes: { type: array, items: { type: string } }
+        maxSizeMb: { type: integer }
+        allowedSignatureTypes: { type: array, items: { $ref: '#/components/schemas/SignatureType' } }
+        signatureLegalBasis: { type: [string, "null"] }
+        checkoutMode: { $ref: '#/components/schemas/CheckoutMode' }
+        isWormDefault: { type: boolean }
+        isTopSecretEligible: { type: boolean }
+        requiresSignature: { type: boolean }
+        letterTemplateRef: { type: [string, "null"] }
+        active: { type: boolean }
+    DocumentTypeInput:
+      type: object
+      required: [code, name, defaultClassification, allowedMimeTypes, maxSizeMb]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        category: { $ref: '#/components/schemas/DocCategory' }
+        metadataSchema: { type: [object, "null"], additionalProperties: true }
+        defaultClassification: { $ref: '#/components/schemas/ClassificationLevel' }
+        defaultSecurityDomain: { type: [string, "null"] }
+        allowedMimeTypes: { type: array, items: { type: string } }
+        maxSizeMb: { type: integer }
+        allowedSignatureTypes: { type: array, items: { $ref: '#/components/schemas/SignatureType' } }
+        signatureLegalBasis: { type: [string, "null"] }
+        checkoutMode: { $ref: '#/components/schemas/CheckoutMode' }
+        isWormDefault: { type: boolean, default: false }
+        isTopSecretEligible: { type: boolean, default: false }
+        requiresSignature: { type: boolean, default: false }
+        letterTemplateRef: { type: [string, "null"] }
+        active: { type: boolean, default: true }
+    DocumentTypePage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/DocumentType' }
+
+    Tag:
+      type: object
+      properties:
+        tagId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        key: { type: string }
+        value: { type: [string, "null"] }
+        tagType: { $ref: '#/components/schemas/TagType' }
+        origin: { $ref: '#/components/schemas/TagOrigin' }
+        confidence: { type: [number, "null"], format: float }
+    TagInput:
+      type: object
+      required: [tags]
+      properties:
+        tags:
+          type: array
+          items:
+            type: object
+            required: [key]
+            properties:
+              key: { type: string }
+              value: { type: [string, "null"] }
+              tagType: { $ref: '#/components/schemas/TagType' }
+    TagList:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Tag' }
+
+    ReclassifyRequest:
+      type: object
+      required: [targetClassification, reason]
+      properties:
+        targetClassification: { $ref: '#/components/schemas/ClassificationLevel' }
+        reason: { type: string, description: Required for downgrade (VAL-COMMENT). }
+    WorkflowAck:
+      type: object
+      description: Acknowledgement for an async/workflow-routed action.
+      properties:
+        status: { type: string, examples: [ACCEPTED, PROPOSED, ENQUEUED] }
+        workflowInstanceId: { type: [string, "null"], format: uuid }
+        jobId: { type: [string, "null"] }
+        message: { type: [string, "null"] }
+
+    Folder:
+      type: object
+      properties:
+        folderId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        name: { type: string }
+        folderType: { $ref: '#/components/schemas/FolderType' }
+        parentFolderId: { type: [string, "null"], format: uuid }
+        classification: { $ref: '#/components/schemas/ClassificationLevel' }
+        moduleCode: { type: [string, "null"] }
+        isSystem: { type: boolean }
+    FolderInput:
+      type: object
+      required: [name, folderType]
+      properties:
+        name: { type: string }
+        folderType: { $ref: '#/components/schemas/FolderType' }
+        parentFolderId: { type: [string, "null"], format: uuid }
+        classification: { $ref: '#/components/schemas/ClassificationLevel' }
+        moduleCode: { type: [string, "null"] }
+
+    DocumentAcl:
+      type: object
+      properties:
+        aclId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        principalType: { $ref: '#/components/schemas/PrincipalType' }
+        principalRef: { type: string }
+        effect: { $ref: '#/components/schemas/AclEffect' }
+        rights: { type: array, items: { type: string, enum: [VIEW, DOWNLOAD, PRINT, UPDATE, ADMIN] } }
+        expiresAt: { type: [string, "null"], format: date-time }
+        needToKnowWorkflowId: { type: [string, "null"], format: uuid }
+    AclInput:
+      type: object
+      required: [principalType, principalRef, effect]
+      properties:
+        principalType: { $ref: '#/components/schemas/PrincipalType' }
+        principalRef: { type: string }
+        effect: { $ref: '#/components/schemas/AclEffect' }
+        rights: { type: array, items: { type: string, enum: [VIEW, DOWNLOAD, PRINT, UPDATE, ADMIN] } }
+        expiresAt: { type: [string, "null"], format: date-time }
+        needToKnowWorkflowId: { type: [string, "null"], format: uuid }
+    AclPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/DocumentAcl' }
+    AccessCheckResult:
+      type: object
+      description: The P02 `Authorization.check` outcome plus the clearance dimension G13 supplies.
+      properties:
+        allowed: { type: boolean }
+        effectiveClearanceLevel: { $ref: '#/components/schemas/ClassificationLevel' }
+        documentClassification: { $ref: '#/components/schemas/ClassificationLevel' }
+        clearanceSatisfied: { type: boolean }
+        scopeFilter: { type: [string, "null"] }
+        fieldMask: { type: array, items: { type: string } }
+        reason: { type: [string, "null"] }
+
+    CheckoutLock:
+      type: object
+      properties:
+        lockId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/LockStatus' }
+        heldBy: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+    CheckinRequest:
+      type: object
+      required: [file, changeSummary]
+      properties:
+        file: { type: string, format: binary }
+        changeSummary: { type: string }
+
+    KeyRotateRequest:
+      type: object
+      required: [kmsKeyId]
+      properties:
+        kmsKeyId: { type: string }
+        securityDomain: { type: [string, "null"] }
+    KeyRecoverRequest:
+      type: object
+      required: [kmsKeyId, reason]
+      properties:
+        kmsKeyId: { type: string }
+        reason: { type: string }
+        secondApproverId: { type: [string, "null"], format: uuid }
+    EncryptionStatus:
+      type: object
+      properties:
+        cmkCount: { type: integer }
+        rotationInProgress: { type: boolean }
+        escrowReplicated: { type: boolean }
+        lastRecoveryTestAt: { type: [string, "null"], format: date-time }
+        keys:
+          type: array
+          items:
+            type: object
+            properties:
+              kmsKeyId: { type: string }
+              securityDomain: { type: string }
+              keyScope: { $ref: '#/components/schemas/KeyScope' }
+              lastRotatedAt: { type: [string, "null"], format: date-time }
+    BreakGlassRequest:
+      type: object
+      required: [reason, secondApproverId]
+      properties:
+        reason: { type: string }
+        secondApproverId: { type: string, format: uuid }
+
+    ScanResult:
+      type: object
+      properties:
+        scanResultId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        versionId: { type: [string, "null"], format: uuid }
+        malwareVerdict: { $ref: '#/components/schemas/ScanStatus' }
+        engine: { type: [string, "null"] }
+        signatureVersion: { type: [string, "null"] }
+        resourceLimitBreached: { type: boolean }
+        scannedAt: { type: string, format: date-time }
+    ScanResultPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/ScanResult' }
+    ReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+    ApprovalRequest:
+      type: object
+      properties:
+        decision: { type: string, enum: [APPROVE, REJECT], default: APPROVE }
+        comment: { type: [string, "null"] }
+
+    OcrResult:
+      type: object
+      properties:
+        documentId: { type: string, format: uuid }
+        versionId: { type: string, format: uuid }
+        ocrStatus: { $ref: '#/components/schemas/OcrStatus' }
+        languageCode: { type: [string, "null"] }
+        text: { type: [string, "null"], description: Present only for principals cleared to see full content. }
+    SearchHit:
+      type: object
+      properties:
+        documentId: { type: string, format: uuid }
+        docNo: { type: string }
+        title: { type: string }
+        classification: { $ref: '#/components/schemas/ClassificationLevel' }
+        snippet: { type: [string, "null"], description: Metadata-only for restricted records. }
+        score: { type: [number, "null"], format: float }
+    SearchResultPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/SearchHit' }
+            facets:
+              type: [object, "null"]
+              additionalProperties: true
+
+    RetentionPolicy:
+      type: object
+      properties:
+        retentionPolicyId: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        retentionPeriodMonths: { type: [integer, "null"] }
+        isPermanent: { type: boolean }
+        trigger: { $ref: '#/components/schemas/RetentionTrigger' }
+        dispositionAction: { $ref: '#/components/schemas/DispositionAction' }
+        requiresConfirmedAnchor: { type: boolean }
+    RetentionPolicyInput:
+      type: object
+      required: [code, name, trigger, dispositionAction]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        retentionPeriodMonths: { type: [integer, "null"] }
+        isPermanent: { type: boolean, default: false }
+        trigger: { $ref: '#/components/schemas/RetentionTrigger' }
+        dispositionAction: { $ref: '#/components/schemas/DispositionAction' }
+        requiresConfirmedAnchor: { type: boolean, default: true }
+    RetentionAssignment:
+      type: object
+      properties:
+        retentionAssignmentId: { type: string, format: uuid }
+        retentionPolicyId: { type: string, format: uuid }
+        scope: { $ref: '#/components/schemas/RetentionScope' }
+        targetRef: { type: string }
+        status: { $ref: '#/components/schemas/RetentionStatus' }
+        dispositionDueDate: { type: [string, "null"], format: date }
+    RetentionAssignmentInput:
+      type: object
+      required: [retentionPolicyId, scope]
+      properties:
+        retentionPolicyId: { type: string, format: uuid }
+        scope: { $ref: '#/components/schemas/RetentionScope' }
+
+    LegalHold:
+      type: object
+      description: GAP gov-specific; runs on P01 + P05.
+      properties:
+        legalHoldId: { type: string, format: uuid }
+        name: { type: string }
+        matterRef: { type: [string, "null"] }
+        status: { $ref: '#/components/schemas/LegalHoldStatus' }
+        matchBasis: { $ref: '#/components/schemas/HoldMatchBasis' }
+        matchCriteria: { type: [object, "null"], additionalProperties: true }
+        isHighValue: { type: boolean }
+        placedBy: { type: string, format: uuid }
+        placementApprovedBy: { type: [string, "null"], format: uuid }
+        releaseProposedBy: { type: [string, "null"], format: uuid }
+        releaseApprovedBy: { type: [string, "null"], format: uuid }
+        releaseReason: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+    LegalHoldInput:
+      type: object
+      required: [name, matchBasis]
+      properties:
+        name: { type: string }
+        matterRef: { type: [string, "null"] }
+        matchBasis: { $ref: '#/components/schemas/HoldMatchBasis' }
+        matchCriteria: { type: [object, "null"], additionalProperties: true }
+        documentIds: { type: array, items: { type: string, format: uuid } }
+        isHighValue: { type: boolean, default: false }
+    HoldReleaseRequest:
+      type: object
+      required: [releaseReason]
+      properties:
+        releaseReason: { type: string }
+        releaseApprovedBy: { type: [string, "null"], format: uuid }
+    HoldNotice:
+      type: object
+      properties:
+        holdNoticeId: { type: string, format: uuid }
+        legalHoldId: { type: string, format: uuid }
+        custodianId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/HoldNoticeStatus' }
+        sentAt: { type: string, format: date-time }
+        acknowledgedAt: { type: [string, "null"], format: date-time }
+
+    DispositionRecord:
+      type: object
+      properties:
+        dispositionRecordId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/DispositionStatus' }
+        action: { $ref: '#/components/schemas/DispositionAction' }
+        proposedBy: { type: string, format: uuid }
+        approvedBy: { type: [string, "null"], format: uuid }
+        certificateNo: { type: [string, "null"] }
+        tombstoneRef: { type: [string, "null"] }
+        executedAt: { type: [string, "null"], format: date-time }
+    DispositionProposeRequest:
+      type: object
+      required: [action]
+      properties:
+        action: { $ref: '#/components/schemas/DispositionAction' }
+        reason: { type: [string, "null"] }
+
+    SignatureRequest:
+      type: object
+      description: REUSE of M11 `signoff_transactions` on DocumentGen sign-off.
+      properties:
+        signatureRequestId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/SignatureRequestStatus' }
+        signingMode: { $ref: '#/components/schemas/SigningMode' }
+        signers:
+          type: array
+          items:
+            type: object
+            properties:
+              signerId: { type: string, format: uuid }
+              order: { type: integer }
+              method: { $ref: '#/components/schemas/SignatureType' }
+              status: { $ref: '#/components/schemas/SignatureStatus' }
+        expiresAt: { type: [string, "null"], format: date-time }
+    SignatureRequestInput:
+      type: object
+      required: [signingMode, signers]
+      properties:
+        signingMode: { $ref: '#/components/schemas/SigningMode' }
+        signers:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [signerId, method]
+            properties:
+              signerId: { type: string, format: uuid }
+              order: { type: [integer, "null"] }
+              method: { $ref: '#/components/schemas/SignatureType' }
+        expiresAt: { type: [string, "null"], format: date-time }
+        legalBasis: { type: [string, "null"] }
+    SignRequest:
+      type: object
+      required: [method]
+      properties:
+        method: { $ref: '#/components/schemas/SignatureType' }
+        decision: { type: string, enum: [SIGN, DECLINE], default: SIGN }
+        declineReason: { type: [string, "null"] }
+        otp: { type: [string, "null"] }
+        certificateSubject: { type: [string, "null"] }
+    Signature:
+      type: object
+      properties:
+        signatureId: { type: string, format: uuid }
+        signatureRequestId: { type: string, format: uuid }
+        versionId: { type: string, format: uuid }
+        signerId: { type: string, format: uuid }
+        method: { $ref: '#/components/schemas/SignatureType' }
+        status: { $ref: '#/components/schemas/SignatureStatus' }
+        legalBasis: { type: [string, "null"] }
+        certificateSubject: { type: [string, "null"] }
+        signatureHash: { type: [string, "null"] }
+        ltvStatus: { $ref: '#/components/schemas/LtvStatus' }
+        signedAt: { type: [string, "null"], format: date-time }
+    SignatureVerifyResult:
+      type: object
+      properties:
+        signatureId: { type: string, format: uuid }
+        valid: { type: boolean }
+        ltvStatus: { $ref: '#/components/schemas/LtvStatus' }
+        timestampedAt: { type: [string, "null"], format: date-time }
+        reason: { type: [string, "null"] }
+
+    CertifiedCopyRequest:
+      type: object
+      properties:
+        purpose: { type: [string, "null"] }
+        applyLtvSignature: { type: boolean, default: false }
+        issuer: { type: [string, "null"] }
+    RedactRequest:
+      type: object
+      required: [regions]
+      properties:
+        regions:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [page, x, y, width, height]
+            properties:
+              page: { type: integer, minimum: 1 }
+              x: { type: number }
+              y: { type: number }
+              width: { type: number }
+              height: { type: number }
+        reason: { type: [string, "null"] }
+
+    AuditEvent:
+      type: object
+      description: '`document_audit` access row on the P05 substrate; hash-chained (OPEN-PLAT-03).'
+      properties:
+        auditId: { type: string, format: uuid }
+        seqNo: { type: integer }
+        documentId: { type: string, format: uuid }
+        versionId: { type: [string, "null"], format: uuid }
+        action: { $ref: '#/components/schemas/DocAuditAction' }
+        result: { $ref: '#/components/schemas/AuditResult' }
+        actorId: { type: [string, "null"], format: uuid }
+        actorRole: { type: [string, "null"] }
+        ipAddress: { type: [string, "null"] }
+        userAgent: { type: [string, "null"] }
+        shareId: { type: [string, "null"], format: uuid }
+        reason: { type: [string, "null"] }
+        rowHash: { type: [string, "null"] }
+        prevHash: { type: [string, "null"] }
+        correlationId: { type: [string, "null"] }
+        occurredAt: { type: string, format: date-time }
+    AuditEventPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/AuditEvent' }
+    ComplianceReport:
+      type: object
+      properties:
+        reportCode: { type: string }
+        generatedAt: { type: string, format: date-time }
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        next_cursor: { type: [string, "null"] }
+    AuditExportRequest:
+      type: object
+      required: [from, to, format]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        format: { type: string, enum: [CSV, JSON] }
+        documentId: { type: [string, "null"], format: uuid }
+    AuditExportResult:
+      type: object
+      properties:
+        exportId: { type: string, format: uuid }
+        status: { type: string, examples: [ACCEPTED, READY] }
+        downloadUrl: { type: [string, "null"], format: uri }
+        chainVerified: { type: boolean }
+    ChainVerifyResult:
+      type: object
+      properties:
+        verificationStatus: { $ref: '#/components/schemas/AnchorVerifyStatus' }
+        from: { type: [string, "null"], format: date-time }
+        to: { type: [string, "null"], format: date-time }
+        offendingSeqNo: { type: [integer, "null"] }
+        checkedRows: { type: integer }
+    AuditAnchor:
+      type: object
+      properties:
+        anchorId: { type: string, format: uuid }
+        windowStartSeq: { type: integer }
+        windowEndSeq: { type: integer }
+        merkleRoot: { type: string }
+        target: { $ref: '#/components/schemas/AnchorTarget' }
+        externalReceiptRef: { type: [string, "null"] }
+        verificationStatus: { $ref: '#/components/schemas/AnchorVerifyStatus' }
+        anchoredAt: { type: string, format: date-time }
+    AuditAnchorPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/AuditAnchor' }
+
+    DocumentShare:
+      type: object
+      properties:
+        shareId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        shareType: { $ref: '#/components/schemas/ShareType' }
+        status: { $ref: '#/components/schemas/ShareStatus' }
+        sharedWithUserId: { type: [string, "null"], format: uuid }
+        rights: { type: array, items: { type: string, enum: [VIEW, DOWNLOAD] } }
+        expiresAt: { type: [string, "null"], format: date-time }
+        maxAccessCount: { type: [integer, "null"] }
+        accessCount: { type: integer }
+        failedAttemptCount: { type: integer }
+        lockedUntil: { type: [string, "null"], format: date-time }
+        hasPassword: { type: boolean }
+        watermark: { type: boolean }
+        shareUrl: { type: [string, "null"], format: uri, description: External link URL (token embedded); returned once on creation. }
+    ShareInput:
+      type: object
+      required: [shareType, rights]
+      properties:
+        shareType: { $ref: '#/components/schemas/ShareType' }
+        rights: { type: array, items: { type: string, enum: [VIEW, DOWNLOAD] } }
+        sharedWithUserId: { type: [string, "null"], format: uuid, description: Required for INTERNAL_USER. }
+        expiresAt: { type: [string, "null"], format: date-time, description: Required for EXTERNAL_LINK. }
+        password: { type: [string, "null"], description: Optional argon2id-hashed password (never stored in clear). }
+        maxAccessCount: { type: [integer, "null"] }
+        watermark: { type: boolean, default: true }
+    SharePage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/DocumentShare' }
+
+    WormDeclareRequest:
+      type: object
+      required: [wormRetainUntil]
+      properties:
+        wormRetainUntil: { type: string, format: date-time }
+    ExtendRetentionRequest:
+      type: object
+      required: [wormRetainUntil]
+      properties:
+        wormRetainUntil: { type: string, format: date-time, description: Must be later than the current value (extend-only). }
+    WormStatus:
+      type: object
+      properties:
+        documentId: { type: string, format: uuid }
+        isWorm: { type: boolean }
+        storageClass: { $ref: '#/components/schemas/StorageClass' }
+        wormRetainUntil: { type: [string, "null"], format: date-time }
+        legalHoldCount: { type: integer }
+
+    IntegrityScanRequest:
+      type: object
+      properties:
+        documentId: { type: [string, "null"], format: uuid }
+        folderId: { type: [string, "null"], format: uuid }
+
+    DlpFinding:
+      type: object
+      properties:
+        dlpFindingId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        rule: { type: string }
+        severity: { $ref: '#/components/schemas/DlpSeverity' }
+        matchCount: { type: integer }
+        suggestedAction: { $ref: '#/components/schemas/DlpAction' }
+        status: { $ref: '#/components/schemas/DlpFindingStatus' }
+        detectedAt: { type: string, format: date-time }
+    DlpFindingPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/DlpFinding' }
+    DlpResolveRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/DlpFindingStatus' }
+        comment: { type: [string, "null"] }
+
+    SecurityClearance:
+      type: object
+      description: GAP gov-specific — the `clearance_level` P02 reads to gate CONFIDENTIAL+ documents.
+      properties:
+        clearanceId: { type: string, format: uuid }
+        principalType: { $ref: '#/components/schemas/ClearancePrincipalType' }
+        principalRef: { type: string }
+        clearanceLevel: { $ref: '#/components/schemas/ClassificationLevel' }
+        orgScopeRef: { type: [string, "null"] }
+        status: { $ref: '#/components/schemas/ClearanceStatus' }
+        justification: { type: [string, "null"] }
+        validFrom: { type: [string, "null"], format: date }
+        validUntil: { type: [string, "null"], format: date }
+        proposedBy: { type: [string, "null"], format: uuid }
+        approvedBy: { type: [string, "null"], format: uuid }
+    ClearanceProposeRequest:
+      type: object
+      required: [principalType, principalRef, clearanceLevel, justification]
+      properties:
+        principalType: { $ref: '#/components/schemas/ClearancePrincipalType' }
+        principalRef: { type: string }
+        clearanceLevel: { $ref: '#/components/schemas/ClassificationLevel' }
+        orgScopeRef: { type: [string, "null"] }
+        justification: { type: string }
+        validFrom: { type: [string, "null"], format: date }
+        validUntil: { type: [string, "null"], format: date }
+    ClearancePage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/SecurityClearance' }
+
+    DataSubjectRequest:
+      type: object
+      description: GAP gov-specific — DPDP DSR + erasure precedence lattice.
+      properties:
+        dsrId: { type: string, format: uuid }
+        subjectRef: { type: string }
+        type: { $ref: '#/components/schemas/DsrType' }
+        status: { $ref: '#/components/schemas/DsrStatus' }
+        consentRefId: { type: [string, "null"], format: uuid }
+        receivedAt: { type: string, format: date-time }
+        erasureMethod: { type: [string, "null"], allOf: [ { $ref: '#/components/schemas/ErasureMethod' } ] }
+        legalBasisExemption: { type: [string, "null"] }
+        affectedDocumentCount: { type: [integer, "null"] }
+        adjudicatedBy: { type: [string, "null"], format: uuid }
+        executedBy: { type: [string, "null"], format: uuid }
+    DsrInput:
+      type: object
+      required: [subjectRef, type]
+      properties:
+        subjectRef: { type: string }
+        type: { $ref: '#/components/schemas/DsrType' }
+        consentRefId: { type: [string, "null"], format: uuid }
+    DsrAdjudicateRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [FULFILL, EXEMPT, REJECT, PARTIAL] }
+        legalBasisExemption: { type: [string, "null"] }
+        comment: { type: [string, "null"] }
+
+    RehomeRequest:
+      type: object
+      properties:
+        action: { type: string, enum: [RELINK, RETAIN, PROPOSE_DISPOSITION], default: RELINK }
+        folderId: { type: [string, "null"], format: uuid }
+        moduleCode: { type: [string, "null"] }
+        entityName: { type: [string, "null"] }
+        entityRefId: { type: [string, "null"] }
+        linkRole: { type: [string, "null"] }
+        retentionPolicyId: { type: [string, "null"], format: uuid }

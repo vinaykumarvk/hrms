@@ -1,0 +1,3346 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Government HRMS — Module G14 Dashboard & Analytics — OpenAPI 3.1 contract
+# -----------------------------------------------------------------------------
+# Grounded in:
+#   - docs/brd/v3/G14-dashboard-and-analytics.md  (Section 8 + FR API tables,
+#     entity field tables E01–E24)
+#   - docs/contracts/error-taxonomy.yaml          (standard 8-code table +
+#     shared ERR-* + module ERR-G14-*)
+#   - docs/brd/PLATFORM_FOUNDATION.md §4           (API conventions, envelope)
+#
+# Platform conventions embedded (Foundation §4):
+#   - Base path /api/v1 ; all analytics endpoints under /analytics (M16 surface).
+#   - Bearer JWT (bearerAuth) global; every data-bearing endpoint is P02
+#     (Authorization.check) enforced + FR-17 suppression applied server-side.
+#   - X-Correlation-Id echoed on EVERY response (written to every audit/log line).
+#   - Idempotency-Key required on unsafe / workflow-initiating POSTs (24h replay).
+#   - Cursor pagination only: ?limit= (default 25, max 100) + cursor= ; next_cursor.
+#   - Canonical error envelope { error: { code, message, field, details } }.
+#   - 403/404 never reveal existence of out-of-scope records (P02 scope safety).
+#   - No 400 / 423 / 502 / 503 on the wire; upstream/mart failure maps to 412
+#     (retryable) or 500 + ERR-LOADFAIL (non-retryable) per error-taxonomy X.3.
+# =============================================================================
+
+info:
+  title: Government HRMS — G14 Dashboard & Analytics API
+  version: 3.0.0
+  description: >
+    Cross-module intelligence layer of the government HRMS, delivered as an
+    extension of PrimeSoft M16 Reports & Analytics on the `analytics.*`
+    entitlement. Covers role-based dashboards & widgets, governed versioned KPI
+    definitions with bitemporal snapshots and effective-dated targets, the
+    analytics data-mart layer (ETL on X.1), permission-scoped access policies
+    (declaring P02 dimensions — enforcement is P02, not a parallel engine),
+    saved reports / schedules / multi-format export, self-service report
+    builder, drill-down & P02-gated drill-through, alerting, data-freshness &
+    reconciliation, deterministic retirement forecasting, fairness-governed
+    probabilistic prediction, governed NL query (P03-aligned) and hardened
+    embedded BI (X.3), establishment/position reference, DPDP rectification /
+    erasure propagation, source data contracts, access-anomaly detection, and
+    metric-level complementary suppression. All reads inherit the P02 scope
+    filter + PII field mask and are audited into P05.
+  contact:
+    name: API Architecture / Platform Foundation
+
+servers:
+  - url: /api/v1
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Dashboards
+  - name: Widgets & Drill
+  - name: KPIs
+  - name: KPI Targets
+  - name: Snapshots & Reproducibility
+  - name: Data Marts
+  - name: Scope Policies
+  - name: Workforce Analytics
+  - name: Operational Analytics
+  - name: Compliance Analytics
+  - name: Report Builder
+  - name: Report Distribution
+  - name: Alerts
+  - name: Data Health
+  - name: Prediction Models
+  - name: Predictions
+  - name: Benchmarking
+  - name: NL Query
+  - name: Embedded BI
+  - name: Mobile & Briefings
+  - name: Suppression Policies
+  - name: Establishment
+  - name: DPDP Data-Subject Changes
+  - name: Source Data Contracts
+  - name: Access Anomalies
+  - name: Access Audit
+
+# -----------------------------------------------------------------------------
+# Reusable response bundles (YAML anchors resolve at parse; DRY across ops).
+# X-Correlation-Id header is attached to every 2xx via *corrHeaders.
+# -----------------------------------------------------------------------------
+x-corr-headers: &corrHeaders
+  X-Correlation-Id:
+    $ref: '#/components/headers/CorrelationId'
+
+x-read-errors: &readErrors
+  "401": { $ref: '#/components/responses/Unauthenticated' }
+  "403": { $ref: '#/components/responses/Forbidden' }
+  "404": { $ref: '#/components/responses/NotFound' }
+  "422": { $ref: '#/components/responses/ValidationFailed' }
+  "429": { $ref: '#/components/responses/RateLimited' }
+  "500": { $ref: '#/components/responses/Internal' }
+
+x-write-errors: &writeErrors
+  "401": { $ref: '#/components/responses/Unauthenticated' }
+  "403": { $ref: '#/components/responses/Forbidden' }
+  "404": { $ref: '#/components/responses/NotFound' }
+  "409": { $ref: '#/components/responses/Conflict' }
+  "412": { $ref: '#/components/responses/PreconditionFailed' }
+  "422": { $ref: '#/components/responses/ValidationFailed' }
+  "429": { $ref: '#/components/responses/RateLimited' }
+  "500": { $ref: '#/components/responses/Internal' }
+
+paths:
+
+  # ==========================================================================
+  # FR-G14-01 — Role-Based Dashboard Framework & Layout
+  # ==========================================================================
+  /analytics/dashboards:
+    post:
+      tags: [Dashboards]
+      summary: Create a dashboard
+      operationId: createDashboard
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DashboardCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Dashboard created (DRAFT).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+    get:
+      tags: [Dashboards]
+      summary: List dashboards visible to the caller (P02-scoped)
+      operationId: listDashboards
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Sort'
+        - name: target_role
+          in: query
+          schema: { $ref: '#/components/schemas/TargetRole' }
+        - name: category
+          in: query
+          schema: { $ref: '#/components/schemas/DashboardCategory' }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/DashboardStatus' }
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of dashboards.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardPage' }
+
+  /analytics/dashboards/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Dashboards]
+      summary: Get a dashboard (definition + widgets)
+      operationId: getDashboard
+      responses:
+        <<: *readErrors
+        "200":
+          description: Dashboard definition.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+
+  /analytics/dashboards/{id}/widgets:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Widgets & Drill]
+      summary: Add a widget to a dashboard
+      operationId: addDashboardWidget
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WidgetCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: >
+            Widget added. 409 ERR-G14-WIDGET-BINDING if bound to a
+            retired/missing KPI or report.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardWidget' }
+
+  /analytics/dashboards/{id}:publish:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Dashboards]
+      summary: Publish a dashboard (P01 maker-checker; SoD via P02)
+      operationId: publishDashboard
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishRequest' }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: >
+            Published (or routed to P01 checker). 403 ERR-G14-PUBLISH-CHECKER
+            if the maker attempts a gated self-publication.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+
+  /analytics/dashboards/{id}/render:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Dashboards]
+      summary: Render a dashboard with P02-scoped, suppressed, freshness-stamped data
+      description: >
+        Returns each widget's result set already passed through
+        Authorization.check (P02 scope + field mask) and FR-17 suppression, with
+        a data_as_of watermark and staleness state. `viewport=mobile` serves the
+        responsive mobile render (FR-16); RESTRICTED tiles honour the offline
+        policy.
+      operationId: renderDashboard
+      parameters:
+        - name: viewport
+          in: query
+          schema: { type: string, enum: [desktop, mobile], default: desktop }
+        - name: period
+          in: query
+          schema: { type: string }
+        - name: scope
+          in: query
+          schema: { type: string }
+        - name: asOfKnowledge
+          in: query
+          description: Bitemporal knowledge-time instant (FR-23) for reproducible render.
+          schema: { type: string, format: date-time }
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            Rendered dashboard. May carry suppression/partial-data notices
+            (ERR-G14-SMALL-CELL / ERR-G14-COMP-SUPPRESS notice surfaces).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardRender' }
+
+  /analytics/saved-views:
+    post:
+      tags: [Dashboards]
+      summary: Save a personal filter/layout view
+      operationId: createSavedView
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SavedViewCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Saved view created.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SavedView' }
+
+  # ==========================================================================
+  # FR-G14-02 — KPI Definition & Calculation Engine
+  # ==========================================================================
+  /analytics/kpis:
+    post:
+      tags: [KPIs]
+      summary: Create a KPI definition version
+      operationId: createKpi
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KpiDefinitionCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: >
+            KPI version created (DRAFT). 422 ERR-G14-KPI-EXPR if the aggregation
+            DSL fails validation.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KpiDefinition' }
+    get:
+      tags: [KPIs]
+      summary: List KPI definitions
+      operationId: listKpis
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: domain
+          in: query
+          schema: { $ref: '#/components/schemas/KpiDomain' }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/KpiStatus' }
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of KPI definitions.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KpiDefinitionPage' }
+
+  /analytics/kpis/{id}:activate:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [KPIs]
+      summary: Activate a KPI version (P01 checker)
+      operationId: activateKpi
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        <<: *writeErrors
+        "200":
+          description: >
+            Activated. 409 ERR-G14-KPI-VER-OVERLAP if another ACTIVE version
+            already exists for the kpi_code; 403 ERR-G14-PUBLISH-CHECKER on
+            maker self-approval.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KpiDefinition' }
+
+  /analytics/kpis/{id}/targets:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [KPI Targets]
+      summary: Set an effective-dated KPI target / alert threshold (VAL-EFFECTIVE)
+      operationId: setKpiTarget
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KpiTargetCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: >
+            Effective-dated target recorded (staged by the effective-date job).
+            422 (ERR-PAST-DATED) if effective_from precedes the current
+            effective date.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KpiTarget' }
+
+  /analytics/kpis/{code}/value:
+    parameters:
+      - $ref: '#/components/parameters/PathCode'
+    get:
+      tags: [KPIs]
+      summary: Compute/resolve a KPI value (P02-scoped, bitemporal-capable)
+      description: >
+        Resolves the governed KPI value for a scope/period, stamped with
+        kpi_version + definition_hash and a data_as_of watermark. `asOfKnowledge`
+        reproduces the value as it was known at a past instant (FR-23).
+      operationId: getKpiValue
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string }
+        - name: period
+          in: query
+          schema: { type: string }
+        - name: asOfKnowledge
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            KPI value. May be a suppression notice (ERR-G14-SMALL-CELL). 404
+            ERR-G14-ASOF-NA if the knowledge instant predates the first snapshot.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KpiValue' }
+
+  /analytics/kpis/{code}/trend:
+    parameters:
+      - $ref: '#/components/parameters/PathCode'
+    get:
+      tags: [KPIs]
+      summary: KPI snapshot trend (cursor-paginated, version markers)
+      operationId: getKpiTrend
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string }
+        - name: to
+          in: query
+          schema: { type: string }
+        - name: scope
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            Trend series. 409 ERR-G14-XVER-AGG if aggregation crosses a
+            definition version without acknowledgement.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KpiSnapshotPage' }
+
+  # ==========================================================================
+  # FR-G14-23 — Bitemporal snapshot / as-of-knowledge reproducibility
+  # ==========================================================================
+  /analytics/kpis/{code}/history:
+    parameters:
+      - $ref: '#/components/parameters/PathCode'
+    get:
+      tags: [Snapshots & Reproducibility]
+      summary: Knowledge-version lineage of a KPI snapshot (bitemporal)
+      operationId: getKpiHistory
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string }
+        - name: period
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            Ordered knowledge-versions (valid_time / knowledge_time / superseded).
+            404 ERR-G14-ASOF-NA if before the first snapshot version.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KpiSnapshotPage' }
+
+  # ==========================================================================
+  # FR-G14-03 — Analytics Data Layer (marts + ETL on X.1)
+  # ==========================================================================
+  /analytics/marts:
+    post:
+      tags: [Data Marts]
+      summary: Register a data mart (+ X.1 refresh job)
+      operationId: registerMart
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DatamartCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Mart registered.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsDatamart' }
+    get:
+      tags: [Data Marts]
+      summary: List registered marts
+      operationId: listMarts
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of marts.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DatamartPage' }
+
+  /analytics/marts/{id}:refresh:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Data Marts]
+      summary: Trigger a mart refresh (manual / backfill)
+      operationId: refreshMart
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MartRefreshRequest' }
+      responses:
+        <<: *writeErrors
+        "202":
+          description: >
+            Refresh enqueued on X.1. 409 ERR-G14-MART-BUSY on a concurrent
+            refresh lock; 500 ERR-G14-MART-REFRESH (ERR-LOADFAIL) on ETL error
+            with last-good retained.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DatamartRefreshLog' }
+
+  /analytics/marts/{id}/health:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Data Marts]
+      summary: Mart freshness / health
+      operationId: getMartHealth
+      responses:
+        <<: *readErrors
+        "200":
+          description: Freshness watermark + health status.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MartHealth' }
+
+  /analytics/marts/{id}/refresh-log:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Data Marts]
+      summary: Mart refresh run history (cursor-paginated)
+      operationId: listMartRefreshLog
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of refresh runs.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DatamartRefreshLogPage' }
+
+  # ==========================================================================
+  # FR-G14-04 — Analytics Scope Policies (declare P02 dimensions; enforce = P02)
+  # ==========================================================================
+  /analytics/scope-policies:
+    post:
+      tags: [Scope Policies]
+      summary: Create/update a scope policy (DRAFT, maker)
+      description: >
+        Declares which P02 scope dimensions and field-sensitivity flags apply per
+        mart/role. This entity does NOT enforce anything — enforcement is entirely
+        by Authorization.check (P02) at the data layer. Change is maker-checked
+        via P01 with SoD by P02.
+      operationId: createScopePolicy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScopePolicyCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Draft scope policy created.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsScopePolicy' }
+    get:
+      tags: [Scope Policies]
+      summary: List scope policies
+      operationId: listScopePolicies
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of scope policies.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopePolicyPage' }
+
+  /analytics/scope-policies/{id}:preview-as-role:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Scope Policies]
+      summary: Compute the P02 exposure diff for a role
+      operationId: previewScopePolicyAsRole
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: Before/after exposure diff (P02-computed).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeExposureDiff' }
+
+  /analytics/scope-policies/{id}:approve:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Scope Policies]
+      summary: Approve a scope policy (P01 checker ≠ maker)
+      operationId: approveScopePolicy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        <<: *writeErrors
+        "200":
+          description: >
+            Policy activated. 403 ERR-G14-SCOPE-CHECKER if the maker attempts
+            self-approval (SoD).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsScopePolicy' }
+
+  /analytics/scope-policies/resolve:
+    get:
+      tags: [Scope Policies]
+      summary: Resolve my effective P02 scope (debug/self)
+      operationId: resolveMyScope
+      responses:
+        <<: *readErrors
+        "200":
+          description: Effective scope filter + field mask for the caller.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolvedScope' }
+
+  # ==========================================================================
+  # FR-G14-05 — Workforce Analytics
+  # ==========================================================================
+  /analytics/workforce/headcount:
+    get:
+      tags: [Workforce Analytics]
+      summary: Headcount by scope/dimension
+      operationId: getHeadcount
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/DimensionQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Headcount result (P02-scoped, suppressed, freshness-stamped).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/workforce/attrition:
+    get:
+      tags: [Workforce Analytics]
+      summary: Attrition metrics
+      operationId: getAttrition
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/DimensionQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Attrition result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/workforce/vacancy:
+    get:
+      tags: [Workforce Analytics]
+      summary: Sanctioned (establishment) vs filled
+      operationId: getVacancy
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            Vacancy result. 422 ERR-G14-ESTAB-MISSING (notice surface) when the
+            sanctioned-strength/position reference is absent.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/workforce/retirement-profile:
+    get:
+      tags: [Workforce Analytics]
+      summary: Retirement horizon profile
+      operationId: getRetirementProfile
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/DimensionQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Retirement horizon result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/workforce/span-of-control:
+    get:
+      tags: [Workforce Analytics]
+      summary: Reports per manager (span of control)
+      operationId: getSpanOfControl
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Span-of-control result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  # ==========================================================================
+  # FR-G14-06 — Operational Analytics
+  # ==========================================================================
+  /analytics/operational/leave:
+    get:
+      tags: [Operational Analytics]
+      summary: Leave / absenteeism analytics
+      operationId: getLeaveAnalytics
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/DimensionQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Leave analytics result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/operational/payroll-cost:
+    get:
+      tags: [Operational Analytics]
+      summary: Payroll cost & overtime (locked snapshots only)
+      operationId: getPayrollCost
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            Payroll-cost result from locked snapshots. 412 ERR-G14-PAYROLL-LOCK
+            if the locked payroll snapshot is unavailable.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+        "412":
+          $ref: '#/components/responses/PreconditionFailed'
+
+  /analytics/operational/training:
+    get:
+      tags: [Operational Analytics]
+      summary: Training coverage & skill gaps
+      operationId: getTrainingAnalytics
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Training analytics result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/operational/appraisal:
+    get:
+      tags: [Operational Analytics]
+      summary: Appraisal rating distribution
+      operationId: getAppraisalAnalytics
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Appraisal distribution result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/operational/disciplinary:
+    get:
+      tags: [Operational Analytics]
+      summary: Disciplinary case aging
+      operationId: getDisciplinaryAnalytics
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Disciplinary aging result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/operational/pipeline:
+    get:
+      tags: [Operational Analytics]
+      summary: Transfer / promotion pipeline funnel
+      operationId: getPipelineAnalytics
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Pipeline funnel result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/operational/pension-forecast:
+    get:
+      tags: [Operational Analytics]
+      summary: Pension / retirement forecast (read G11)
+      operationId: getPensionForecast
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Pension forecast result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  # ==========================================================================
+  # FR-G14-07 — Compliance & Statutory Dashboards
+  # ==========================================================================
+  /analytics/compliance/reservation-roster:
+    get:
+      tags: [Compliance Analytics]
+      summary: Reservation-roster compliance (establishment-pinned)
+      operationId: getReservationRoster
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            Roster compliance result. 422 ERR-G14-ESTAB-MISSING (notice surface)
+            when the establishment reference is absent.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/compliance/mandatory-training:
+    get:
+      tags: [Compliance Analytics]
+      summary: Mandatory-training mandate status
+      operationId: getMandatoryTraining
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Mandatory-training status result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/compliance/sr-verification:
+    get:
+      tags: [Compliance Analytics]
+      summary: SR verification status (read G12; never writes SR)
+      operationId: getSrVerification
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            SR verification-status result. 412 (ERR-PRECOND) if the G12 source is
+            temporarily unavailable (retryable).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+        "412":
+          $ref: '#/components/responses/PreconditionFailed'
+
+  /analytics/compliance/sla-breaches:
+    get:
+      tags: [Compliance Analytics]
+      summary: Pending approvals & SLA-breach aging (read P01)
+      operationId: getSlaBreaches
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: SLA-breach aging result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  # ==========================================================================
+  # FR-G14-08 — Self-Service Report Builder
+  # ==========================================================================
+  /analytics/semantic/fields:
+    get:
+      tags: [Report Builder]
+      summary: Available report fields for a mart (P02-scoped)
+      operationId: listSemanticFields
+      parameters:
+        - name: mart
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        <<: *readErrors
+        "200":
+          description: Permitted fields/measures for the mart.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SemanticFieldList' }
+
+  /analytics/reports:preview:
+    post:
+      tags: [Report Builder]
+      summary: Run a report preview (first page)
+      operationId: previewReport
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SavedReportCreate' }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: >
+            Preview page (P02-scoped + suppressed). 422 ERR-G14-EXPORT-LIMIT if
+            the definition exceeds the configured row cap.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportResult' }
+
+  /analytics/reports:
+    post:
+      tags: [Report Builder]
+      summary: Save a report definition
+      operationId: createReport
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SavedReportCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Report saved.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SavedReport' }
+    get:
+      tags: [Report Builder]
+      summary: List saved reports
+      operationId: listReports
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: domain
+          in: query
+          schema: { $ref: '#/components/schemas/KpiDomain' }
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of saved reports.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SavedReportPage' }
+
+  /analytics/reports/{id}/run:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Report Builder]
+      summary: Run a saved report (paginated, reproducible)
+      description: >
+        Runs the saved report with P02 scope + suppression. `asOfKnowledge`
+        reproduces exactly the figures known at a past instant (FR-23).
+      operationId: runReport
+      parameters:
+        - name: asOfKnowledge
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Report result page.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportResult' }
+
+  # ==========================================================================
+  # FR-G14-09 — Scheduled Distribution & Export (X.1/X.2)
+  # ==========================================================================
+  /analytics/reports/{id}/schedules:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Report Distribution]
+      summary: Create a report schedule (+ X.1 job)
+      operationId: createReportSchedule
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportScheduleCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: >
+            Schedule created and registered on X.1. 403 ERR-G14-CHANNEL if a
+            RESTRICTED report targets an insecure delivery channel.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportSchedule' }
+
+  /analytics/reports/{id}:export:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Report Distribution]
+      summary: On-demand export (PDF / XLSX / CSV)
+      operationId: exportReport
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExportRequest' }
+      responses:
+        <<: *writeErrors
+        "202":
+          description: >
+            Export enqueued; artefact lands in documents (G13). 422
+            ERR-G14-EXPORT-LIMIT beyond the row cap; 403 ERR-G14-CHANNEL for
+            RESTRICTED to insecure channel.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportExecution' }
+
+  /analytics/executions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Report Distribution]
+      summary: Report execution status / artefact reference
+      operationId: getExecution
+      responses:
+        <<: *readErrors
+        "200":
+          description: Execution status (+ document_id when COMPLETED).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportExecution' }
+
+  /analytics/schedules/{id}:pause:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Report Distribution]
+      summary: Pause / resume a schedule
+      operationId: pauseSchedule
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [PAUSE, RESUME] }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: Schedule state updated.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportSchedule' }
+
+  # ==========================================================================
+  # FR-G14-10 — Drill-Down & Drill-Through (P02)
+  # ==========================================================================
+  /analytics/widgets/{id}/drilldown:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Widgets & Drill]
+      summary: Next drill-down level for a widget
+      operationId: widgetDrilldown
+      parameters:
+        - name: level
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: path
+          in: query
+          schema: { type: string }
+      responses:
+        <<: *readErrors
+        "200":
+          description: Drill-down result (P02-scoped + suppressed).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/widgets/{id}/drillthrough:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Widgets & Drill]
+      summary: Resolve a read-only deep link to a source record (live P02 authz)
+      operationId: widgetDrillthrough
+      parameters:
+        - name: rowKey
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            Read-only owning-module record route (authorised by a live
+            Authorization.check). 403/404 never reveal out-of-scope records.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DrillthroughLink' }
+
+  /analytics/access-log:
+    get:
+      tags: [Access Audit]
+      summary: View drill/export/view access audit (P05 query, authorised)
+      operationId: listAccessLog
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: action
+          in: query
+          schema: { $ref: '#/components/schemas/AccessAction' }
+        - name: user_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of access-log rows (reading this is itself audited).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessLogPage' }
+
+  # ==========================================================================
+  # FR-G14-11 — Alerting, Thresholds & Targets
+  # ==========================================================================
+  /analytics/alert-rules:
+    post:
+      tags: [Alerts]
+      summary: Create an alert rule
+      operationId: createAlertRule
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlertRuleCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Alert rule created.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertRule' }
+
+  /analytics/alert-rules/{id}:pause:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Alerts]
+      summary: Pause / resume an alert rule
+      operationId: pauseAlertRule
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [PAUSE, RESUME] }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: Alert rule state updated.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertRule' }
+
+  /analytics/alert-events:
+    get:
+      tags: [Alerts]
+      summary: List triggered alert events (P02-scoped)
+      operationId: listAlertEvents
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          schema: { type: string, enum: [OPEN, ACKNOWLEDGED, RESOLVED, SUPPRESSED] }
+        - name: severity
+          in: query
+          schema: { $ref: '#/components/schemas/Severity' }
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of alert events.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertEventPage' }
+
+  /analytics/alert-events/{id}:acknowledge:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Alerts]
+      summary: Acknowledge an alert event
+      operationId: acknowledgeAlertEvent
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        <<: *writeErrors
+        "200":
+          description: Alert acknowledged.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertEvent' }
+
+  # ==========================================================================
+  # FR-G14-12 — Data Freshness & Reconciliation Explainer
+  # ==========================================================================
+  /analytics/data-health:
+    get:
+      tags: [Data Health]
+      summary: Mart freshness summary (role-adaptive language)
+      operationId: getDataHealth
+      responses:
+        <<: *readErrors
+        "200":
+          description: Freshness / staleness summary across marts.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataHealthSummary' }
+
+  /analytics/kpis/{code}/reconciliation-explainer:
+    parameters:
+      - $ref: '#/components/parameters/PathCode'
+    get:
+      tags: [Data Health]
+      summary: Reconciliation explainer (as-of / watermark / variance / correction)
+      operationId: getReconciliationExplainer
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string }
+        - name: period
+          in: query
+          schema: { type: string }
+      responses:
+        <<: *readErrors
+        "200":
+          description: Watermark-relative reconciliation narrative + figures.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReconciliationExplainer' }
+
+  # ==========================================================================
+  # FR-G14-13 / 18 — Prediction Models (deterministic & probabilistic)
+  # ==========================================================================
+  /analytics/models:
+    post:
+      tags: [Prediction Models]
+      summary: Register a prediction model (deterministic or probabilistic)
+      description: >
+        Deterministic models (e.g. retirement) ship in Phase 1. Probabilistic
+        models (attrition/succession) must carry a model card, methodology and
+        excluded protected features, and require a fairness assessment before
+        activation.
+      operationId: registerModel
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PredictionModelCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: >
+            Model registered (DRAFT). 422 ERR-G14-METHODOLOGY if methodology is
+            missing; 422 ERR-G14-FAIRNESS if a probabilistic model lacks a
+            fairness assessment / model card.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PredictionModel' }
+    get:
+      tags: [Prediction Models]
+      summary: List prediction models
+      operationId: listModels
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: determinism
+          in: query
+          schema: { type: string, enum: [DETERMINISTIC, PROBABILISTIC] }
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of models.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PredictionModelPage' }
+
+  /analytics/models/{id}:assess-fairness:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Prediction Models]
+      summary: Run / record an adverse-impact (fairness) test
+      operationId: assessModelFairness
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FairnessAssessmentRequest' }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: Fairness assessment recorded on the model card.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PredictionModel' }
+
+  /analytics/models/{id}:activate:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Prediction Models]
+      summary: Activate a model (P01 checker + DPO co-sign)
+      operationId: activateModel
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        <<: *writeErrors
+        "200":
+          description: >
+            Model activated. 422 ERR-G14-FAIRNESS if fairness is NOT_ASSESSED /
+            FAILED without waiver; 403 ERR-G14-PUBLISH-CHECKER on maker
+            self-approval.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PredictionModel' }
+
+  /analytics/predictions/retirement:
+    get:
+      tags: [Predictions]
+      summary: Deterministic retirement forecast (P02-scoped)
+      operationId: getRetirementPredictions
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Retirement forecast distribution.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/predictions/attrition:
+    get:
+      tags: [Predictions]
+      summary: Aggregate / banded attrition-risk distribution
+      operationId: getAttritionPredictions
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Banded attrition-risk distribution (advisory; never sole basis).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/predictions/succession:
+    get:
+      tags: [Predictions]
+      summary: Aggregate / banded succession-risk distribution
+      operationId: getSuccessionPredictions
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Banded succession-risk distribution.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/predictions/individual:
+    post:
+      tags: [Predictions]
+      summary: Friction-gated individual predictive score (purpose required)
+      description: >
+        Individual-subject scores are friction-gated: a documented purpose is
+        mandatory, the access is FULL-fidelity audited (P05), and outputs are
+        prohibited as the sole/primary basis for any administrative action.
+      operationId: getIndividualPrediction
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IndividualPredictionRequest' }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: >
+            Individual score with explainability + prohibited-use notice. 403
+            ERR-G14-PRED-GATED if the friction-gate / purpose is not satisfied.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PredictionResult' }
+
+  # ==========================================================================
+  # FR-G14-14 — Benchmarking
+  # ==========================================================================
+  /analytics/benchmark/period:
+    get:
+      tags: [Benchmarking]
+      summary: Period-over-period comparison
+      operationId: benchmarkPeriod
+      parameters:
+        - name: kpi
+          in: query
+          required: true
+          schema: { type: string }
+        - name: periods
+          in: query
+          schema: { type: string, description: "Comma-separated period keys." }
+      responses:
+        <<: *readErrors
+        "200":
+          description: Period-over-period result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/benchmark/peers:
+    get:
+      tags: [Benchmarking]
+      summary: Peer org-unit ranking (P02-scoped)
+      operationId: benchmarkPeers
+      parameters:
+        - name: kpi
+          in: query
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/ScopeQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Peer ranking result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  /analytics/benchmark/target:
+    get:
+      tags: [Benchmarking]
+      summary: Target-vs-actual (effective-dated targets)
+      operationId: benchmarkTarget
+      parameters:
+        - name: kpi
+          in: query
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Target-vs-actual result.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsResult' }
+
+  # ==========================================================================
+  # FR-G14-15 — NL Query & Embedded BI
+  # ==========================================================================
+  /analytics/nlq:
+    post:
+      tags: [NL Query]
+      summary: Natural-language query (confidence-gated, P03 guardrails)
+      description: >
+        Governed NL-to-query: PII stripped server-side before any model call,
+        semantic mapping + P02 scope rewrite are built, informational-only.
+        Refuses below the confidence threshold rather than guessing.
+      operationId: nlQuery
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NlQueryRequest' }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: >
+            Resolved answer or governed refusal. 422 ERR-G14-NLQ-CONF (below
+            confidence), 422 ERR-G14-NLQ-CLARIFY (ambiguous — clarification
+            offered), 404 ERR-G14-METRIC-NA (references an unmodelled metric).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NlQueryResult' }
+
+  /analytics/embed-tokens:
+    post:
+      tags: [Embedded BI]
+      summary: Issue a scoped embed token (maker)
+      operationId: issueEmbedToken
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmbedTokenCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Embed token issued (PENDING_APPROVAL; secret never returned/stored plaintext).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmbedToken' }
+
+  /analytics/embed-tokens/{id}:approve:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Embedded BI]
+      summary: Approve an embed token (P01 checker ≠ issuer)
+      operationId: approveEmbedToken
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        <<: *writeErrors
+        "200":
+          description: >
+            Token activated. 403 ERR-G14-PUBLISH-CHECKER / SoD if the issuer
+            attempts self-approval.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmbedToken' }
+
+  /analytics/embed-tokens/{id}:revoke:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Embedded BI]
+      summary: Revoke an embed token
+      operationId: revokeEmbedToken
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        <<: *writeErrors
+        "200":
+          description: Token revoked.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmbedToken' }
+
+  /analytics/embed/session:
+    post:
+      tags: [Embedded BI]
+      summary: Exchange a short-lived code for a render session
+      description: >
+        The embed token travels in the request body/header, never in a URL. A
+        missing/expired/out-of-scope token yields 401 ERR-G14-EMBED-INVALID; a
+        revoked token yields 401 ERR-G14-EMBED-REVOKED.
+      operationId: createEmbedSession
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: Render session established.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmbedSession' }
+
+  # ==========================================================================
+  # FR-G14-16 — Mobile & Executive Briefings
+  # ==========================================================================
+  /analytics/briefings/schedules:
+    post:
+      tags: [Mobile & Briefings]
+      summary: Schedule an executive briefing pack (X.1)
+      operationId: createBriefingSchedule
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BriefingScheduleCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Briefing schedule created.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportSchedule' }
+
+  /analytics/briefings/{executionId}:
+    parameters:
+      - name: executionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Mobile & Briefings]
+      summary: Executive briefing artefact
+      operationId: getBriefing
+      responses:
+        <<: *readErrors
+        "200":
+          description: Briefing execution status + artefact reference.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportExecution' }
+
+  # ==========================================================================
+  # FR-G14-17 — Suppression Policies
+  # ==========================================================================
+  /analytics/suppression-policies:
+    post:
+      tags: [Suppression Policies]
+      summary: Create / update a suppression policy (k-anonymity + complementary)
+      operationId: createSuppressionPolicy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SuppressionPolicyCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Suppression policy saved.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuppressionPolicy' }
+    get:
+      tags: [Suppression Policies]
+      summary: List suppression policies
+      operationId: listSuppressionPolicies
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of suppression policies.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuppressionPolicyPage' }
+
+  # ==========================================================================
+  # FR-G14-19 — Establishment / Position Reference
+  # ==========================================================================
+  /analytics/establishment/positions:
+    post:
+      tags: [Establishment]
+      summary: Create / maintain a sanctioned position (Establishment Officer)
+      operationId: createPosition
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EstablishmentPositionCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Position created / updated.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EstablishmentPosition' }
+    get:
+      tags: [Establishment]
+      summary: List sanctioned positions (P02-scoped)
+      operationId: listPositions
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of positions.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EstablishmentPositionPage' }
+
+  /analytics/establishment/vacancy-base:
+    get:
+      tags: [Establishment]
+      summary: Sanctioned-strength denominator for a scope/period
+      operationId: getVacancyBase
+      parameters:
+        - $ref: '#/components/parameters/ScopeQ'
+        - $ref: '#/components/parameters/PeriodQ'
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            Sanctioned-strength denominator. 422 ERR-G14-ESTAB-MISSING (notice
+            surface) if the reference is absent.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VacancyBase' }
+
+  # ==========================================================================
+  # FR-G14-20 — DPDP Rectification / Erasure Propagation
+  # ==========================================================================
+  /analytics/data-subject-changes:
+    post:
+      tags: [DPDP Data-Subject Changes]
+      summary: Register a rectification / erasure / restriction (DPO / G01)
+      operationId: createDataSubjectChange
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DataSubjectChangeCreate' }
+      responses:
+        <<: *writeErrors
+        "202":
+          description: >
+            Change accepted; propagation across the analytics estate started.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataSubjectChange' }
+
+  /analytics/data-subject-changes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [DPDP Data-Subject Changes]
+      summary: Propagation status of a data-subject change
+      operationId: getDataSubjectChange
+      responses:
+        <<: *readErrors
+        "200":
+          description: >
+            Propagation status across marts/snapshots/predictions/exports.
+            ERR-G14-ERASURE-PENDING while still propagating (notice surface).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataSubjectChange' }
+
+  /analytics/data-subject-changes/{id}:retention-override:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [DPDP Data-Subject Changes]
+      summary: Record a statutory retention override legal basis (DPO)
+      operationId: retentionOverride
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [legal_basis]
+              properties:
+                legal_basis: { type: string }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: >
+            Legal basis recorded. 409 ERR-G14-RETENTION-BLOCK when statutory
+            retention overrides the erasure (notice surface).
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataSubjectChange' }
+
+  # ==========================================================================
+  # FR-G14-21 — Source Data Contracts
+  # ==========================================================================
+  /analytics/source-contracts:
+    post:
+      tags: [Source Data Contracts]
+      summary: Register / version a source data contract
+      operationId: createSourceContract
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SourceContractCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Contract registered.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SourceDataContract' }
+    get:
+      tags: [Source Data Contracts]
+      summary: List contracts / status
+      operationId: listSourceContracts
+      parameters:
+        - name: module
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of contracts.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SourceContractPage' }
+
+  /analytics/source-contracts/{id}:test:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Source Data Contracts]
+      summary: Run a contract test (CI verification)
+      operationId: testSourceContract
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        <<: *writeErrors
+        "200":
+          description: >
+            Contract test result. 409 ERR-G14-CONTRACT if the source schema
+            breached the data contract.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContractTestResult' }
+
+  # ==========================================================================
+  # FR-G14-22 — Access-Anomaly Detection
+  # ==========================================================================
+  /analytics/anomalies:
+    get:
+      tags: [Access Anomalies]
+      summary: List detected access anomalies (P02-scoped)
+      operationId: listAnomalies
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [OPEN, INVESTIGATING, DISMISSED, CONFIRMED] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        <<: *readErrors
+        "200":
+          description: Page of anomalies.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessAnomalyPage' }
+
+  /analytics/anomalies/{id}:review:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    post:
+      tags: [Access Anomalies]
+      summary: Review an anomaly (INVESTIGATING / DISMISSED / CONFIRMED)
+      operationId: reviewAnomaly
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [INVESTIGATING, DISMISSED, CONFIRMED] }
+                note: { type: [string, "null"] }
+      responses:
+        <<: *writeErrors
+        "200":
+          description: Anomaly review recorded.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessAnomaly' }
+
+  /analytics/anomaly-rules:
+    post:
+      tags: [Access Anomalies]
+      summary: Configure anomaly thresholds / baselines
+      operationId: createAnomalyRule
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnomalyRuleCreate' }
+      responses:
+        <<: *writeErrors
+        "201":
+          description: Anomaly rule configured.
+          headers: *corrHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnomalyRule' }
+
+# =============================================================================
+# COMPONENTS
+# =============================================================================
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Bearer JWT carrying resolved roles + tenant/entity scope (Platform §0.2).
+        Every data-bearing endpoint calls Authorization.check (P02); endpoints
+        never re-implement permission logic.
+
+  headers:
+    CorrelationId:
+      description: >
+        Correlation id echoed on every response and written to every audit and
+        log line for the request (Foundation §1). Assigned if absent inbound.
+      schema: { type: string }
+
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PathCode:
+      name: code
+      in: path
+      required: true
+      description: Business key (e.g. kpi_code).
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      description: Page size (cursor pagination). Default 25, max 100.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque forward cursor from a prior response's next_cursor.
+      schema: { type: string }
+    Sort:
+      name: sort
+      in: query
+      description: "Sort spec, e.g. field:asc | field:desc."
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >
+        Idempotency key for unsafe / workflow-initiating POSTs; a repeat within
+        24h returns the original result (Foundation §4).
+      schema: { type: string }
+    ScopeQ:
+      name: scope
+      in: query
+      description: Org-unit / cadre / manager scope id (resolved against P02).
+      schema: { type: string }
+    DimensionQ:
+      name: dimension
+      in: query
+      description: Group-by dimension (must be in the KPI's dimensions_allowed).
+      schema: { type: string }
+    PeriodQ:
+      name: period
+      in: query
+      description: "Period key (e.g. 2026-06, FY2026_27) or grain."
+      schema: { type: string }
+
+  responses:
+    Unauthenticated:
+      description: 401 UNAUTHENTICATED — no/invalid/expired/revoked session or embed token (ERR-G14-EMBED-INVALID / ERR-G14-EMBED-REVOKED).
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: >
+        403 FORBIDDEN — role/scope/field-mask, PII-ceiling or SoD denial (P02);
+        never reveals existence of out-of-scope records. Module surfaces:
+        ERR-G14-SCOPE-CHECKER, ERR-G14-PUBLISH-CHECKER, ERR-G14-SMALL-CELL,
+        ERR-G14-COMP-SUPPRESS, ERR-G14-CHANNEL, ERR-G14-PRED-GATED.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: >
+        404 NOT_FOUND — absent or out-of-scope resource (indistinguishable by
+        design). Module surfaces: ERR-G14-METRIC-NA, ERR-G14-ASOF-NA.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: >
+        409 CONFLICT — idempotency replay, state/uniqueness conflict. Module
+        surfaces: ERR-G14-WIDGET-BINDING, ERR-G14-KPI-VER-OVERLAP,
+        ERR-G14-XVER-AGG, ERR-G14-MART-BUSY, ERR-G14-CONTRACT,
+        ERR-G14-ERASURE-PENDING, ERR-G14-RETENTION-BLOCK.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PreconditionFailed:
+      description: >
+        412 PRECONDITION_FAILED — required precondition unmet, incl. retryable
+        upstream/mart unavailability. Module surfaces: ERR-G14-MART-UNAVAIL,
+        ERR-G14-PAYROLL-LOCK, ERR-PRECOND.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationFailed:
+      description: >
+        422 VALIDATION_FAILED — input failed a VAL-* rule. Module surfaces:
+        ERR-G14-KPI-EXPR, ERR-G14-EXPORT-LIMIT, ERR-G14-NLQ-CLARIFY,
+        ERR-G14-NLQ-CONF, ERR-G14-METHODOLOGY, ERR-G14-FAIRNESS,
+        ERR-G14-ESTAB-MISSING, ERR-PAST-DATED, ERR-REASON-REQ.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: 429 RATE_LIMITED — rate limit exceeded.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Internal:
+      description: >
+        500 INTERNAL — unexpected server error, or non-retryable upstream/mart
+        failure (503 collapses here). Module surface: ERR-G14-MART-REFRESH
+        (ERR-LOADFAIL).
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    # ---- Canonical error envelope (Foundation §1) ------------------------
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: A standard wire code or a module/domain code (e.g. ERR-G14-*).
+            message: { type: string }
+            field: { type: [string, "null"] }
+            details:
+              type: [object, "null"]
+              additionalProperties: true
+              description: "Structured discriminators, e.g. { reason: <REASON> }."
+
+    # ---- Pagination envelope --------------------------------------------
+    PageMeta:
+      type: object
+      properties:
+        next_cursor: { type: [string, "null"] }
+
+    # ---- Shared enums ----------------------------------------------------
+    TargetRole:
+      type: string
+      enum: [EMPLOYEE, MANAGER, HR_ADMIN, DEPT_HEAD, EXECUTIVE, AUDITOR, ANALYTICS_ADMIN]
+    DashboardCategory:
+      type: string
+      enum: [PERSONAL, WORKFORCE, OPERATIONAL, COMPLIANCE, EXECUTIVE, CUSTOM]
+    DashboardStatus:
+      type: string
+      enum: [DRAFT, PUBLISHED, ARCHIVED]
+    WidgetType:
+      type: string
+      enum: [KPI_TILE, LINE, BAR, PIE, DONUT, TABLE, HEATMAP, GAUGE, FUNNEL, MAP, TEXT]
+    RefreshHint:
+      type: string
+      enum: [LIVE, MART, CACHED]
+    KpiDomain:
+      type: string
+      enum: [WORKFORCE, LEAVE, ATTENDANCE, PAYROLL, TRAINING, APPRAISAL, DISCIPLINARY, TRANSFER, PROMOTION, PENSION, COMPLIANCE, SR]
+    KpiUnit:
+      type: string
+      enum: [COUNT, PERCENT, RATIO, CURRENCY, DAYS, SCORE]
+    KpiGrain:
+      type: string
+      enum: [EMPLOYEE, ORG_UNIT, CADRE, PERIOD, ENTERPRISE]
+    KpiStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, RETIRED]
+    Sensitivity:
+      type: string
+      enum: [PUBLIC, INTERNAL, RESTRICTED]
+    Severity:
+      type: string
+      enum: [INFO, WARNING, CRITICAL]
+    ScopeType:
+      type: string
+      enum: [ENTERPRISE, ORG_UNIT, CADRE, MANAGER]
+    ExportFormat:
+      type: string
+      enum: [PDF, XLSX, CSV]
+    ScopeDimension:
+      type: string
+      enum: [reporting_chain, org_unit, UAG, contribution_level, entity]
+    RiskBand:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, NO_PREDICTION]
+    HealthStatus:
+      type: string
+      enum: [HEALTHY, STALE, DEGRADED, FAILED]
+    AccessAction:
+      type: string
+      enum: [VIEW_DASHBOARD, RUN_REPORT, EXPORT, DRILLTHROUGH, NL_QUERY, API_QUERY, VIEW_INDIVIDUAL_PREDICTION]
+
+    # ---- Freshness / suppression envelope shared by analytics reads ------
+    FreshnessMeta:
+      type: object
+      properties:
+        data_as_of: { type: [string, "null"], format: date-time }
+        staleness_state:
+          type: string
+          enum: [FRESH, STALE, DEGRADED, PARTIAL]
+        staleness_message:
+          type: [string, "null"]
+          description: Role-adaptive language describing freshness (FR-12).
+        is_partial: { type: boolean, default: false }
+    SuppressionNotice:
+      type: object
+      properties:
+        code:
+          type: [string, "null"]
+          description: ERR-G14-SMALL-CELL or ERR-G14-COMP-SUPPRESS when a cell/complement is suppressed.
+        suppressed_cells: { type: integer, default: 0 }
+        min_cell_size_k: { type: [integer, "null"] }
+        message: { type: [string, "null"] }
+
+    AnalyticsResult:
+      description: >
+        Generic P02-scoped, suppressed, freshness-stamped analytics result set
+        for the read/aggregate endpoints.
+      type: object
+      properties:
+        kpi_code: { type: [string, "null"] }
+        scope: { type: [string, "null"] }
+        period: { type: [string, "null"] }
+        dimensions:
+          type: array
+          items: { type: string }
+        columns:
+          type: array
+          items: { type: string }
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        freshness: { $ref: '#/components/schemas/FreshnessMeta' }
+        suppression: { $ref: '#/components/schemas/SuppressionNotice' }
+
+    # ---- Dashboards (E01) ------------------------------------------------
+    Dashboard:
+      type: object
+      properties:
+        dashboard_id: { type: string, format: uuid }
+        dashboard_code: { type: string }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        target_role: { $ref: '#/components/schemas/TargetRole' }
+        category: { $ref: '#/components/schemas/DashboardCategory' }
+        layout_json: { type: object, additionalProperties: true }
+        default_filters_json: { type: [object, "null"], additionalProperties: true }
+        is_system: { type: boolean }
+        status: { $ref: '#/components/schemas/DashboardStatus' }
+        published_by: { type: [string, "null"], format: uuid }
+        published_at: { type: [string, "null"], format: date-time }
+        widgets:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardWidget' }
+    DashboardCreate:
+      type: object
+      required: [dashboard_code, name, target_role, category, layout_json]
+      properties:
+        dashboard_code: { type: string }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        target_role: { $ref: '#/components/schemas/TargetRole' }
+        category: { $ref: '#/components/schemas/DashboardCategory' }
+        layout_json: { type: object, additionalProperties: true }
+        default_filters_json: { type: [object, "null"], additionalProperties: true }
+    DashboardPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Dashboard' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    DashboardRender:
+      type: object
+      properties:
+        dashboard_id: { type: string, format: uuid }
+        viewport: { type: string, enum: [desktop, mobile] }
+        widgets:
+          type: array
+          items:
+            type: object
+            properties:
+              widget_id: { type: string, format: uuid }
+              result: { $ref: '#/components/schemas/AnalyticsResult' }
+        freshness: { $ref: '#/components/schemas/FreshnessMeta' }
+
+    # ---- Widgets (E02) ---------------------------------------------------
+    DashboardWidget:
+      type: object
+      properties:
+        widget_id: { type: string, format: uuid }
+        dashboard_id: { type: string, format: uuid }
+        title: { type: string }
+        widget_type: { $ref: '#/components/schemas/WidgetType' }
+        kpi_id: { type: [string, "null"], format: uuid }
+        query_ref: { type: [string, "null"], format: uuid }
+        dimensions_json: { type: [object, "null"], additionalProperties: true }
+        filters_json: { type: [object, "null"], additionalProperties: true }
+        drilldown_path_json: { type: [object, "null"], additionalProperties: true }
+        drillthrough_target: { type: [string, "null"] }
+        position_json: { type: object, additionalProperties: true }
+        refresh_hint: { $ref: '#/components/schemas/RefreshHint' }
+        show_plain_definition: { type: boolean, default: true }
+        display_order: { type: integer }
+    WidgetCreate:
+      type: object
+      required: [title, widget_type, position_json, refresh_hint]
+      properties:
+        title: { type: string }
+        widget_type: { $ref: '#/components/schemas/WidgetType' }
+        kpi_id: { type: [string, "null"], format: uuid }
+        query_ref: { type: [string, "null"], format: uuid }
+        dimensions_json: { type: [object, "null"], additionalProperties: true }
+        filters_json: { type: [object, "null"], additionalProperties: true }
+        drilldown_path_json: { type: [object, "null"], additionalProperties: true }
+        drillthrough_target: { type: [string, "null"] }
+        position_json: { type: object, additionalProperties: true }
+        refresh_hint: { $ref: '#/components/schemas/RefreshHint' }
+        show_plain_definition: { type: [boolean, "null"] }
+        display_order: { type: [integer, "null"] }
+    PublishRequest:
+      type: object
+      properties:
+        comment: { type: [string, "null"] }
+
+    # ---- Saved view (E05) ------------------------------------------------
+    SavedView:
+      type: object
+      properties:
+        view_id: { type: string, format: uuid }
+        owner_user_id: { type: string, format: uuid }
+        target_type: { type: string, enum: [DASHBOARD, REPORT] }
+        target_id: { type: string, format: uuid }
+        name: { type: string }
+        filters_json: { type: object, additionalProperties: true }
+        layout_json: { type: [object, "null"], additionalProperties: true }
+        is_default: { type: boolean }
+        visibility: { type: string, enum: [PRIVATE, SHARED_SCOPE] }
+    SavedViewCreate:
+      type: object
+      required: [target_type, target_id, name, filters_json, visibility]
+      properties:
+        target_type: { type: string, enum: [DASHBOARD, REPORT] }
+        target_id: { type: string, format: uuid }
+        name: { type: string }
+        filters_json: { type: object, additionalProperties: true }
+        layout_json: { type: [object, "null"], additionalProperties: true }
+        is_default: { type: [boolean, "null"] }
+        visibility: { type: string, enum: [PRIVATE, SHARED_SCOPE] }
+
+    # ---- KPI definition (E03) --------------------------------------------
+    KpiDefinition:
+      type: object
+      properties:
+        kpi_id: { type: string, format: uuid }
+        kpi_code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        plain_language_note: { type: [string, "null"] }
+        domain: { $ref: '#/components/schemas/KpiDomain' }
+        version: { type: integer }
+        definition_hash: { type: string }
+        source_mart_id: { type: string, format: uuid }
+        expression: { type: string }
+        unit: { $ref: '#/components/schemas/KpiUnit' }
+        grain: { $ref: '#/components/schemas/KpiGrain' }
+        default_period: { type: [string, "null"], enum: [DAY, WEEK, MONTH, QUARTER, YEAR, ROLLING_12M, null] }
+        dimensions_allowed:
+          type: [array, "null"]
+          items: { type: string }
+        reconciliation_target: { type: [string, "null"] }
+        reconciliation_tolerance: { type: [number, "null"] }
+        direction: { type: [string, "null"], enum: [HIGHER_BETTER, LOWER_BETTER, ON_TARGET, null] }
+        min_cell_size: { type: [integer, "null"] }
+        sensitivity: { $ref: '#/components/schemas/Sensitivity' }
+        status: { $ref: '#/components/schemas/KpiStatus' }
+        approved_by: { type: [string, "null"], format: uuid }
+    KpiDefinitionCreate:
+      type: object
+      required: [kpi_code, name, description, domain, source_mart_id, expression, unit, grain, sensitivity]
+      properties:
+        kpi_code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        plain_language_note: { type: [string, "null"] }
+        domain: { $ref: '#/components/schemas/KpiDomain' }
+        source_mart_id: { type: string, format: uuid }
+        expression:
+          type: string
+          description: Safe aggregation DSL (whitelisted functions/columns).
+        unit: { $ref: '#/components/schemas/KpiUnit' }
+        grain: { $ref: '#/components/schemas/KpiGrain' }
+        default_period: { type: [string, "null"], enum: [DAY, WEEK, MONTH, QUARTER, YEAR, ROLLING_12M, null] }
+        dimensions_allowed:
+          type: [array, "null"]
+          items: { type: string }
+        reconciliation_target: { type: [string, "null"] }
+        reconciliation_tolerance: { type: [number, "null"] }
+        direction: { type: [string, "null"], enum: [HIGHER_BETTER, LOWER_BETTER, ON_TARGET, null] }
+        min_cell_size: { type: [integer, "null"] }
+        sensitivity: { $ref: '#/components/schemas/Sensitivity' }
+    KpiDefinitionPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/KpiDefinition' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ---- KPI value + snapshot (E04) --------------------------------------
+    KpiValue:
+      type: object
+      properties:
+        kpi_code: { type: string }
+        kpi_version: { type: integer }
+        definition_hash: { type: string }
+        scope_type: { $ref: '#/components/schemas/ScopeType' }
+        scope_id: { type: [string, "null"] }
+        period_key: { type: string }
+        value: { type: [number, "null"] }
+        numerator: { type: [number, "null"] }
+        denominator: { type: [number, "null"] }
+        cell_size: { type: [integer, "null"] }
+        as_of_knowledge: { type: [string, "null"], format: date-time }
+        freshness: { $ref: '#/components/schemas/FreshnessMeta' }
+        suppression: { $ref: '#/components/schemas/SuppressionNotice' }
+    KpiSnapshot:
+      type: object
+      properties:
+        snapshot_id: { type: string, format: uuid }
+        kpi_id: { type: string, format: uuid }
+        kpi_version: { type: integer }
+        definition_hash: { type: string }
+        scope_type: { $ref: '#/components/schemas/ScopeType' }
+        scope_id: { type: [string, "null"] }
+        period_key: { type: string }
+        valid_time: { type: string, format: date }
+        knowledge_time: { type: string, format: date-time }
+        is_superseded: { type: boolean }
+        superseded_by: { type: [string, "null"], format: uuid }
+        value: { type: number }
+        numerator: { type: [number, "null"] }
+        denominator: { type: [number, "null"] }
+        cell_size: { type: [integer, "null"] }
+        data_as_of: { type: string, format: date-time }
+        computed_at: { type: string, format: date-time }
+        is_partial: { type: boolean }
+    KpiSnapshotPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/KpiSnapshot' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ---- KPI target (E17) ------------------------------------------------
+    KpiTarget:
+      type: object
+      properties:
+        target_id: { type: string, format: uuid }
+        kpi_id: { type: string, format: uuid }
+        scope_type: { $ref: '#/components/schemas/ScopeType' }
+        scope_id: { type: [string, "null"] }
+        target_value: { type: number }
+        target_kind: { type: string, enum: [KPI_TARGET, ALERT_THRESHOLD] }
+        effective_from: { type: string, format: date }
+        effective_to: { type: [string, "null"], format: date }
+        status: { type: string, enum: [ACTIVE, SUPERSEDED] }
+    KpiTargetCreate:
+      type: object
+      required: [scope_type, target_value, target_kind, effective_from]
+      properties:
+        scope_type: { $ref: '#/components/schemas/ScopeType' }
+        scope_id: { type: [string, "null"] }
+        target_value: { type: number }
+        target_kind: { type: string, enum: [KPI_TARGET, ALERT_THRESHOLD] }
+        effective_from: { type: string, format: date }
+        effective_to: { type: [string, "null"], format: date }
+
+    # ---- Data mart (E09/E10) --------------------------------------------
+    AnalyticsDatamart:
+      type: object
+      properties:
+        mart_id: { type: string, format: uuid }
+        mart_code: { type: string }
+        name: { type: string }
+        mart_type: { type: string, enum: [FACT, DIMENSION, AGGREGATE, MATERIALIZED_VIEW, SEMANTIC] }
+        grain: { type: string }
+        source_modules:
+          type: array
+          items: { type: string }
+        source_objects:
+          type: array
+          items: { type: string }
+        contract_id: { type: [string, "null"], format: uuid }
+        refresh_strategy: { type: string, enum: [FULL, INCREMENTAL, CDC, ON_DEMAND] }
+        refresh_job_id: { type: [string, "null"] }
+        refresh_cron: { type: [string, "null"] }
+        freshness_sla_minutes: { type: integer }
+        watermark_column: { type: [string, "null"] }
+        last_refreshed_at: { type: [string, "null"], format: date-time }
+        last_watermark_value: { type: [string, "null"] }
+        health_status: { $ref: '#/components/schemas/HealthStatus' }
+        contains_pii: { type: boolean }
+    DatamartCreate:
+      type: object
+      required: [mart_code, name, mart_type, grain, source_modules, source_objects, refresh_strategy, freshness_sla_minutes, contains_pii]
+      properties:
+        mart_code: { type: string }
+        name: { type: string }
+        mart_type: { type: string, enum: [FACT, DIMENSION, AGGREGATE, MATERIALIZED_VIEW, SEMANTIC] }
+        grain: { type: string }
+        source_modules:
+          type: array
+          items: { type: string }
+        source_objects:
+          type: array
+          items: { type: string }
+        contract_id: { type: [string, "null"], format: uuid }
+        refresh_strategy: { type: string, enum: [FULL, INCREMENTAL, CDC, ON_DEMAND] }
+        refresh_cron: { type: [string, "null"] }
+        freshness_sla_minutes: { type: integer }
+        watermark_column: { type: [string, "null"] }
+        contains_pii: { type: boolean }
+    DatamartPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AnalyticsDatamart' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    MartRefreshRequest:
+      type: object
+      properties:
+        run_type: { type: string, enum: [MANUAL, BACKFILL], default: MANUAL }
+        from_watermark: { type: [string, "null"] }
+    DatamartRefreshLog:
+      type: object
+      properties:
+        refresh_id: { type: string, format: uuid }
+        mart_id: { type: string, format: uuid }
+        run_type: { type: string, enum: [SCHEDULED, MANUAL, BACKFILL] }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        rows_read: { type: [integer, "null"] }
+        rows_written: { type: [integer, "null"] }
+        from_watermark: { type: [string, "null"] }
+        to_watermark: { type: [string, "null"] }
+        reconcile_variance: { type: [number, "null"] }
+        status: { type: string, enum: [RUNNING, SUCCESS, PARTIAL, FAILED] }
+        error_detail: { type: [string, "null"] }
+    DatamartRefreshLogPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DatamartRefreshLog' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    MartHealth:
+      type: object
+      properties:
+        mart_id: { type: string, format: uuid }
+        health_status: { $ref: '#/components/schemas/HealthStatus' }
+        last_refreshed_at: { type: [string, "null"], format: date-time }
+        last_watermark_value: { type: [string, "null"] }
+        freshness_sla_minutes: { type: integer }
+        reconcile_variance: { type: [number, "null"] }
+
+    # ---- Scope policy (E11) ---------------------------------------------
+    AnalyticsScopePolicy:
+      type: object
+      properties:
+        policy_id: { type: string, format: uuid }
+        role: { type: string }
+        scope_dimensions:
+          type: array
+          items: { $ref: '#/components/schemas/ScopeDimension' }
+        mart_id: { type: [string, "null"], format: uuid }
+        field_sensitivity_map_json: { type: [object, "null"], additionalProperties: true }
+        priority: { type: integer }
+        version: { type: integer }
+        status: { type: string, enum: [DRAFT, PENDING_APPROVAL, ACTIVE, REJECTED, SUPERSEDED] }
+        created_by: { type: string, format: uuid }
+        approved_by: { type: [string, "null"], format: uuid }
+        preview_diff_json: { type: [object, "null"], additionalProperties: true }
+        workflow_instance_id: { type: [string, "null"], format: uuid }
+        is_active: { type: boolean }
+    ScopePolicyCreate:
+      type: object
+      required: [role, scope_dimensions, priority]
+      properties:
+        role: { type: string }
+        scope_dimensions:
+          type: array
+          items: { $ref: '#/components/schemas/ScopeDimension' }
+        mart_id: { type: [string, "null"], format: uuid }
+        field_sensitivity_map_json: { type: [object, "null"], additionalProperties: true }
+        priority: { type: integer }
+    ScopePolicyPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AnalyticsScopePolicy' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    ScopeExposureDiff:
+      type: object
+      properties:
+        role: { type: string }
+        before: { type: object, additionalProperties: true }
+        after: { type: object, additionalProperties: true }
+        added_exposure:
+          type: array
+          items: { type: string }
+        removed_exposure:
+          type: array
+          items: { type: string }
+    ResolvedScope:
+      type: object
+      properties:
+        subject_roles:
+          type: array
+          items: { type: string }
+        scope_filter: { type: object, additionalProperties: true }
+        field_mask:
+          type: array
+          items: { type: string }
+
+    # ---- Report builder (E06/E08) ---------------------------------------
+    SavedReport:
+      type: object
+      properties:
+        report_id: { type: string, format: uuid }
+        report_code: { type: string }
+        name: { type: string }
+        domain: { $ref: '#/components/schemas/KpiDomain' }
+        source_mart_id: { type: string, format: uuid }
+        select_fields_json: { type: object, additionalProperties: true }
+        filters_json: { type: [object, "null"], additionalProperties: true }
+        group_by_json: { type: [object, "null"], additionalProperties: true }
+        aggregations_json: { type: [object, "null"], additionalProperties: true }
+        sort_json: { type: [object, "null"], additionalProperties: true }
+        row_limit: { type: integer }
+        min_cell_size: { type: [integer, "null"] }
+        sensitivity: { $ref: '#/components/schemas/Sensitivity' }
+        owner_user_id: { type: string, format: uuid }
+        visibility: { type: string, enum: [PRIVATE, SHARED_SCOPE, PUBLISHED] }
+        status: { type: string, enum: [DRAFT, ACTIVE, ARCHIVED] }
+    SavedReportCreate:
+      type: object
+      required: [name, domain, source_mart_id, select_fields_json, visibility, sensitivity]
+      properties:
+        report_code: { type: [string, "null"] }
+        name: { type: string }
+        domain: { $ref: '#/components/schemas/KpiDomain' }
+        source_mart_id: { type: string, format: uuid }
+        select_fields_json: { type: object, additionalProperties: true }
+        filters_json: { type: [object, "null"], additionalProperties: true }
+        group_by_json: { type: [object, "null"], additionalProperties: true }
+        aggregations_json: { type: [object, "null"], additionalProperties: true }
+        sort_json: { type: [object, "null"], additionalProperties: true }
+        row_limit: { type: [integer, "null"], maximum: 100000 }
+        min_cell_size: { type: [integer, "null"] }
+        sensitivity: { $ref: '#/components/schemas/Sensitivity' }
+        visibility: { type: string, enum: [PRIVATE, SHARED_SCOPE, PUBLISHED] }
+    SavedReportPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SavedReport' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    ReportResult:
+      type: object
+      properties:
+        report_id: { type: [string, "null"], format: uuid }
+        columns:
+          type: array
+          items: { type: string }
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        row_count: { type: [integer, "null"] }
+        as_of_knowledge: { type: [string, "null"], format: date-time }
+        freshness: { $ref: '#/components/schemas/FreshnessMeta' }
+        suppression: { $ref: '#/components/schemas/SuppressionNotice' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    SemanticFieldList:
+      type: object
+      properties:
+        mart: { type: string }
+        fields:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              type: { type: string }
+              is_measure: { type: boolean }
+              sensitivity: { $ref: '#/components/schemas/Sensitivity' }
+
+    # ---- Report distribution (E07/E08) ----------------------------------
+    ReportSchedule:
+      type: object
+      properties:
+        schedule_id: { type: string, format: uuid }
+        report_id: { type: string, format: uuid }
+        job_id: { type: string }
+        cron_expr: { type: string }
+        timezone: { type: string }
+        format: { $ref: '#/components/schemas/ExportFormat' }
+        recipients_json: { type: object, additionalProperties: true }
+        scope_mode: { type: string, enum: [OWNER_SCOPE, PER_RECIPIENT_SCOPE] }
+        burst_dimension: { type: [string, "null"] }
+        delivery_channel: { type: string, enum: [EMAIL, IN_APP, BOTH, SFTP] }
+        next_run_at: { type: [string, "null"], format: date-time }
+        last_run_at: { type: [string, "null"], format: date-time }
+        status: { type: string, enum: [ACTIVE, PAUSED, DISABLED] }
+        owner_user_id: { type: string, format: uuid }
+    ReportScheduleCreate:
+      type: object
+      required: [cron_expr, timezone, format, recipients_json, scope_mode, delivery_channel]
+      properties:
+        cron_expr: { type: string }
+        timezone: { type: string }
+        format: { $ref: '#/components/schemas/ExportFormat' }
+        recipients_json: { type: object, additionalProperties: true }
+        scope_mode: { type: string, enum: [OWNER_SCOPE, PER_RECIPIENT_SCOPE] }
+        burst_dimension: { type: [string, "null"] }
+        delivery_channel: { type: string, enum: [EMAIL, IN_APP, BOTH, SFTP] }
+    ExportRequest:
+      type: object
+      required: [format]
+      properties:
+        format: { $ref: '#/components/schemas/ExportFormat' }
+        as_of_knowledge: { type: [string, "null"], format: date-time }
+        filters_json: { type: [object, "null"], additionalProperties: true }
+    ReportExecution:
+      type: object
+      properties:
+        execution_id: { type: string, format: uuid }
+        report_id: { type: string, format: uuid }
+        schedule_id: { type: [string, "null"], format: uuid }
+        triggered_by: { type: [string, "null"], format: uuid }
+        run_type: { type: string, enum: [ON_DEMAND, SCHEDULED, PREVIEW] }
+        format: { $ref: '#/components/schemas/ExportFormat' }
+        as_of_knowledge: { type: [string, "null"], format: date-time }
+        row_count: { type: [integer, "null"] }
+        document_id: { type: [string, "null"], format: uuid }
+        status: { type: string, enum: [QUEUED, RUNNING, COMPLETED, FAILED, EXPIRED, REDACTED] }
+        error_detail: { type: [string, "null"] }
+        data_as_of: { type: [string, "null"], format: date-time }
+        started_at: { type: [string, "null"], format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+
+    # ---- Drill / access log (E16) ---------------------------------------
+    DrillthroughLink:
+      type: object
+      properties:
+        allowed: { type: boolean }
+        record_route: { type: [string, "null"], description: Read-only owning-module record route template. }
+        module: { type: [string, "null"] }
+    AnalyticsAccessLog:
+      type: object
+      properties:
+        access_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        action: { $ref: '#/components/schemas/AccessAction' }
+        target_type: { type: string, enum: [DASHBOARD, WIDGET, REPORT, KPI, RECORD, PREDICTION] }
+        target_id: { type: [string, "null"] }
+        sensitivity: { $ref: '#/components/schemas/Sensitivity' }
+        log_fidelity: { type: string, enum: [FULL, SAMPLED] }
+        purpose_text: { type: [string, "null"] }
+        row_count: { type: [integer, "null"] }
+        data_as_of: { type: [string, "null"], format: date-time }
+        correlation_id: { type: string }
+        occurred_at: { type: string, format: date-time }
+    AccessLogPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AnalyticsAccessLog' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ---- Alerts (E12/E13) ------------------------------------------------
+    AlertRule:
+      type: object
+      properties:
+        rule_id: { type: string, format: uuid }
+        kpi_id: { type: string, format: uuid }
+        name: { type: string }
+        scope_type: { $ref: '#/components/schemas/ScopeType' }
+        scope_id: { type: [string, "null"] }
+        operator: { type: string, enum: [GT, GTE, LT, LTE, EQ, NEQ, DELTA_PCT] }
+        threshold_ref: { type: [string, "null"], format: uuid }
+        threshold: { type: [number, "null"] }
+        severity: { $ref: '#/components/schemas/Severity' }
+        evaluation_freq: { type: string, enum: [ON_REFRESH, HOURLY, DAILY] }
+        recipients_json: { type: object, additionalProperties: true }
+        status: { type: string, enum: [ACTIVE, PAUSED, DISABLED] }
+    AlertRuleCreate:
+      type: object
+      required: [kpi_id, name, scope_type, operator, severity, evaluation_freq, recipients_json]
+      properties:
+        kpi_id: { type: string, format: uuid }
+        name: { type: string }
+        scope_type: { $ref: '#/components/schemas/ScopeType' }
+        scope_id: { type: [string, "null"] }
+        operator: { type: string, enum: [GT, GTE, LT, LTE, EQ, NEQ, DELTA_PCT] }
+        threshold_ref: { type: [string, "null"], format: uuid }
+        threshold: { type: [number, "null"] }
+        severity: { $ref: '#/components/schemas/Severity' }
+        evaluation_freq: { type: string, enum: [ON_REFRESH, HOURLY, DAILY] }
+        recipients_json: { type: object, additionalProperties: true }
+    AlertEvent:
+      type: object
+      properties:
+        event_id: { type: string, format: uuid }
+        rule_id: { type: string, format: uuid }
+        kpi_id: { type: string, format: uuid }
+        scope_id: { type: [string, "null"] }
+        observed_value: { type: number }
+        threshold: { type: number }
+        severity: { $ref: '#/components/schemas/Severity' }
+        data_as_of: { type: string, format: date-time }
+        is_partial: { type: boolean }
+        status: { type: string, enum: [OPEN, ACKNOWLEDGED, RESOLVED, SUPPRESSED] }
+        acknowledged_by: { type: [string, "null"], format: uuid }
+        acknowledged_at: { type: [string, "null"], format: date-time }
+    AlertEventPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AlertEvent' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ---- Data health / reconciliation (FR-12) ---------------------------
+    DataHealthSummary:
+      type: object
+      properties:
+        overall_state: { type: string, enum: [FRESH, STALE, DEGRADED, PARTIAL] }
+        message: { type: [string, "null"] }
+        marts:
+          type: array
+          items: { $ref: '#/components/schemas/MartHealth' }
+    ReconciliationExplainer:
+      type: object
+      properties:
+        kpi_code: { type: string }
+        scope: { type: [string, "null"] }
+        period: { type: [string, "null"] }
+        data_as_of: { type: [string, "null"], format: date-time }
+        watermark: { type: [string, "null"] }
+        source_value: { type: [number, "null"] }
+        mart_value: { type: [number, "null"] }
+        variance: { type: [number, "null"] }
+        within_tolerance: { type: [boolean, "null"] }
+        narrative: { type: [string, "null"], description: Role-adaptive explanation of any difference. }
+
+    # ---- Prediction models & results (E14/E15) --------------------------
+    PredictionModel:
+      type: object
+      properties:
+        model_id: { type: string, format: uuid }
+        model_code: { type: string }
+        model_type: { type: string, enum: [RULE_BASED, STATISTICAL, ML] }
+        determinism: { type: string, enum: [DETERMINISTIC, PROBABILISTIC] }
+        version: { type: string }
+        features_json: { type: object, additionalProperties: true }
+        protected_features_excluded:
+          type: array
+          items: { type: string }
+        methodology: { type: string }
+        model_card_ref: { type: [string, "null"], format: uuid }
+        adverse_impact_result: { type: [object, "null"], additionalProperties: true }
+        fairness_status: { type: string, enum: [NOT_ASSESSED, PASSED, FAILED, WAIVED_WITH_REASON] }
+        intended_use: { type: string }
+        prohibited_use: { type: string }
+        source_mart_ids:
+          type: array
+          items: { type: string, format: uuid }
+        confidence_basis: { type: [string, "null"] }
+        status: { $ref: '#/components/schemas/KpiStatus' }
+        approved_by: { type: [string, "null"], format: uuid }
+    PredictionModelCreate:
+      type: object
+      required: [model_code, model_type, determinism, version, features_json, methodology, intended_use, prohibited_use, source_mart_ids]
+      properties:
+        model_code: { type: string }
+        model_type: { type: string, enum: [RULE_BASED, STATISTICAL, ML] }
+        determinism: { type: string, enum: [DETERMINISTIC, PROBABILISTIC] }
+        version: { type: string }
+        features_json: { type: object, additionalProperties: true }
+        protected_features_excluded:
+          type: array
+          items: { type: string }
+        methodology: { type: string }
+        model_card_ref: { type: [string, "null"], format: uuid }
+        intended_use: { type: string }
+        prohibited_use: { type: string }
+        source_mart_ids:
+          type: array
+          items: { type: string, format: uuid }
+        confidence_basis: { type: [string, "null"] }
+    PredictionModelPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PredictionModel' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    FairnessAssessmentRequest:
+      type: object
+      properties:
+        test_config_json: { type: [object, "null"], additionalProperties: true }
+        waiver_reason: { type: [string, "null"] }
+    IndividualPredictionRequest:
+      type: object
+      required: [model_id, subject_id, purpose_text]
+      properties:
+        model_id: { type: string, format: uuid }
+        subject_id: { type: string }
+        purpose_text:
+          type: string
+          description: Documented purpose (friction-gate; captured to the access log).
+    PredictionResult:
+      type: object
+      properties:
+        result_id: { type: string, format: uuid }
+        model_id: { type: string, format: uuid }
+        subject_type: { type: string, enum: [EMPLOYEE, ORG_UNIT, CADRE] }
+        subject_id: { type: string }
+        score: { type: number }
+        risk_band: { $ref: '#/components/schemas/RiskBand' }
+        top_factors_json: { type: [object, "null"], additionalProperties: true }
+        confidence: { type: [number, "null"] }
+        is_individual_gated: { type: boolean }
+        period_key: { type: string }
+        data_as_of: { type: string, format: date-time }
+        prohibited_use_notice: { type: [string, "null"] }
+
+    # ---- NL query (E20) --------------------------------------------------
+    NlQueryRequest:
+      type: object
+      required: [question_text]
+      properties:
+        question_text: { type: string }
+        scope: { type: [string, "null"] }
+    NlQueryResult:
+      type: object
+      properties:
+        nlq_id: { type: string, format: uuid }
+        resolved_kpi_id: { type: [string, "null"], format: uuid }
+        resolved_filters_json: { type: [object, "null"], additionalProperties: true }
+        confidence: { type: number }
+        outcome:
+          type: string
+          enum: [ANSWERED, CLARIFICATION_REQUESTED, REFUSED_LOW_CONFIDENCE, REFUSED_OUT_OF_SCOPE, REFUSED_UNMODELLED]
+        clarification_prompt: { type: [string, "null"] }
+        result: { $ref: '#/components/schemas/AnalyticsResult' }
+
+    # ---- Embed tokens (E18) ---------------------------------------------
+    EmbedToken:
+      type: object
+      properties:
+        token_id: { type: string, format: uuid }
+        widget_ids:
+          type: array
+          items: { type: string, format: uuid }
+        subject_user_id: { type: [string, "null"], format: uuid }
+        subject_role: { type: [string, "null"] }
+        allowed_frame_ancestors:
+          type: array
+          items: { type: string }
+        issued_by: { type: string, format: uuid }
+        approved_by: { type: [string, "null"], format: uuid }
+        expires_at: { type: string, format: date-time }
+        rotated_from: { type: [string, "null"], format: uuid }
+        status: { type: string, enum: [PENDING_APPROVAL, ACTIVE, EXPIRED, REVOKED, ROTATED] }
+        revoked_by: { type: [string, "null"], format: uuid }
+        revoked_at: { type: [string, "null"], format: date-time }
+    EmbedTokenCreate:
+      type: object
+      required: [widget_ids, allowed_frame_ancestors, expires_at]
+      properties:
+        widget_ids:
+          type: array
+          items: { type: string, format: uuid }
+        subject_user_id: { type: [string, "null"], format: uuid }
+        subject_role: { type: [string, "null"] }
+        allowed_frame_ancestors:
+          type: array
+          items: { type: string }
+        expires_at: { type: string, format: date-time }
+    EmbedSession:
+      type: object
+      properties:
+        session_id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+        widget_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    # ---- Briefings (FR-16) ----------------------------------------------
+    BriefingScheduleCreate:
+      type: object
+      required: [cron_expr, timezone, format, recipients_json]
+      properties:
+        cron_expr: { type: string }
+        timezone: { type: string }
+        format: { $ref: '#/components/schemas/ExportFormat' }
+        recipients_json: { type: object, additionalProperties: true }
+        dashboard_id: { type: [string, "null"], format: uuid }
+
+    # ---- Suppression policy (E24) ---------------------------------------
+    SuppressionPolicy:
+      type: object
+      properties:
+        policy_id: { type: string, format: uuid }
+        name: { type: string }
+        applies_to: { type: string, enum: [TILE, CHART, DRILLTHROUGH, EXPORT, ALL] }
+        min_cell_size_k: { type: integer }
+        complementary: { type: boolean }
+        band_instead_of_hide: { type: boolean }
+        domains:
+          type: [array, "null"]
+          items: { type: string }
+        is_active: { type: boolean }
+    SuppressionPolicyCreate:
+      type: object
+      required: [name, applies_to, min_cell_size_k, complementary, band_instead_of_hide]
+      properties:
+        name: { type: string }
+        applies_to: { type: string, enum: [TILE, CHART, DRILLTHROUGH, EXPORT, ALL] }
+        min_cell_size_k: { type: integer, default: 5 }
+        complementary: { type: boolean }
+        band_instead_of_hide: { type: boolean }
+        domains:
+          type: [array, "null"]
+          items: { type: string }
+    SuppressionPolicyPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SuppressionPolicy' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ---- Establishment position (E21) -----------------------------------
+    EstablishmentPosition:
+      type: object
+      properties:
+        position_id: { type: string, format: uuid }
+        position_code: { type: string }
+        org_unit_id: { type: string, format: uuid }
+        cadre: { type: string }
+        designation_id: { type: string, format: uuid }
+        sanctioned_strength: { type: integer }
+        reservation_category: { type: [string, "null"] }
+        roster_point: { type: [integer, "null"] }
+        filled_by_employee_id: { type: [string, "null"], format: uuid }
+        effective_from: { type: string, format: date }
+        effective_to: { type: [string, "null"], format: date }
+        status: { type: string, enum: [SANCTIONED, FROZEN, ABOLISHED] }
+        maintained_by: { type: string, format: uuid }
+    EstablishmentPositionCreate:
+      type: object
+      required: [position_code, org_unit_id, cadre, designation_id, sanctioned_strength, effective_from]
+      properties:
+        position_code: { type: string }
+        org_unit_id: { type: string, format: uuid }
+        cadre: { type: string }
+        designation_id: { type: string, format: uuid }
+        sanctioned_strength: { type: integer, minimum: 0 }
+        reservation_category: { type: [string, "null"] }
+        roster_point: { type: [integer, "null"] }
+        effective_from: { type: string, format: date }
+        effective_to: { type: [string, "null"], format: date }
+    EstablishmentPositionPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/EstablishmentPosition' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    VacancyBase:
+      type: object
+      properties:
+        scope: { type: [string, "null"] }
+        period: { type: [string, "null"] }
+        sanctioned_strength: { type: integer }
+        filled_count: { type: integer }
+        vacant_count: { type: integer }
+        by_reservation_category:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    # ---- DPDP data-subject change (E22) ---------------------------------
+    DataSubjectChange:
+      type: object
+      properties:
+        change_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        change_type: { type: string, enum: [RECTIFICATION, ERASURE, RESTRICTION] }
+        source_event_ref: { type: string }
+        requested_by: { type: string, format: uuid }
+        legal_basis: { type: [string, "null"] }
+        affected_marts:
+          type: [array, "null"]
+          items: { type: string }
+        affected_snapshots: { type: [integer, "null"] }
+        affected_predictions: { type: [integer, "null"] }
+        affected_exports: { type: [integer, "null"] }
+        status: { type: string, enum: [RECEIVED, PROPAGATING, COMPLETED, BLOCKED_RETENTION, FAILED] }
+        completed_at: { type: [string, "null"], format: date-time }
+    DataSubjectChangeCreate:
+      type: object
+      required: [employee_id, change_type, source_event_ref]
+      properties:
+        employee_id: { type: string, format: uuid }
+        change_type: { type: string, enum: [RECTIFICATION, ERASURE, RESTRICTION] }
+        source_event_ref: { type: string }
+
+    # ---- Source data contract (E19) -------------------------------------
+    SourceDataContract:
+      type: object
+      properties:
+        contract_id: { type: string, format: uuid }
+        source_module: { type: string }
+        source_view: { type: string }
+        version: { type: string }
+        schema_json: { type: object, additionalProperties: true }
+        cdc_mechanism: { type: string, enum: [DEBEZIUM_CDC, BATCH, ON_DEMAND] }
+        breaking_change_policy: { type: string }
+        status: { type: string, enum: [DRAFT, ACTIVE, DEPRECATED, BREACHED] }
+        last_contract_test_at: { type: [string, "null"], format: date-time }
+        co_signed_by: { type: [string, "null"], format: uuid }
+    SourceContractCreate:
+      type: object
+      required: [source_module, source_view, version, schema_json, cdc_mechanism, breaking_change_policy]
+      properties:
+        source_module: { type: string }
+        source_view: { type: string }
+        version: { type: string }
+        schema_json: { type: object, additionalProperties: true }
+        cdc_mechanism: { type: string, enum: [DEBEZIUM_CDC, BATCH, ON_DEMAND] }
+        breaking_change_policy: { type: string }
+    SourceContractPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SourceDataContract' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    ContractTestResult:
+      type: object
+      properties:
+        contract_id: { type: string, format: uuid }
+        passed: { type: boolean }
+        violations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        tested_at: { type: string, format: date-time }
+
+    # ---- Access anomaly (E23) -------------------------------------------
+    AccessAnomaly:
+      type: object
+      properties:
+        anomaly_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        anomaly_type:
+          type: string
+          enum: [OFF_HOURS_BULK_EXPORT, SCOPE_EDGE_PROBING, UNUSUAL_DRILLTHROUGH_VOLUME, REPEATED_DENIED, MASS_NL_QUERY]
+        evidence_json: { type: object, additionalProperties: true }
+        severity: { $ref: '#/components/schemas/Severity' }
+        detected_at: { type: string, format: date-time }
+        status: { type: string, enum: [OPEN, INVESTIGATING, DISMISSED, CONFIRMED] }
+        reviewed_by: { type: [string, "null"], format: uuid }
+    AccessAnomalyPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AccessAnomaly' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    AnomalyRule:
+      type: object
+      properties:
+        rule_id: { type: string, format: uuid }
+        anomaly_type:
+          type: string
+          enum: [OFF_HOURS_BULK_EXPORT, SCOPE_EDGE_PROBING, UNUSUAL_DRILLTHROUGH_VOLUME, REPEATED_DENIED, MASS_NL_QUERY]
+        threshold_json: { type: object, additionalProperties: true }
+        severity: { $ref: '#/components/schemas/Severity' }
+        is_active: { type: boolean }
+    AnomalyRuleCreate:
+      type: object
+      required: [anomaly_type, threshold_json, severity]
+      properties:
+        anomaly_type:
+          type: string
+          enum: [OFF_HOURS_BULK_EXPORT, SCOPE_EDGE_PROBING, UNUSUAL_DRILLTHROUGH_VOLUME, REPEATED_DENIED, MASS_NL_QUERY]
+        threshold_json: { type: object, additionalProperties: true }
+        severity: { $ref: '#/components/schemas/Severity' }
