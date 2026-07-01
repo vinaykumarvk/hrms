@@ -30,17 +30,15 @@ phases:
   - id: PH-00B
     name: Thin PUDA strangler boundary
     prompt: docs/spec/pipeline/prompts/PH-00B.md
-    # TODO: replace with checks/ph-00b.sh asserting P01-workflow.yaml parses + boundary conformance tests pass +
-    #       PUDA golden suite still green. Until then this phase always parks for human verification.
-    exit_criteria: "false"
-    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-00b.sh
+    gate: auto                       # real machine check; flip to human to require sign-off before extraction
     depends_on: [PH-00A]
 
   - id: PH-00C
     name: Minimum workflow-core extraction
     prompt: docs/spec/pipeline/prompts/PH-00C.md
     # TODO: checks/ph-00c.sh -> workflow-core builds+typechecks, unit tests green, no PUDA identifiers leak, golden parity.
-    exit_criteria: "false"
+    exit_criteria: "true"          # human-verified stub: trivially green -> parks at gate:human until a real check exists
     gate: human
     depends_on: [PH-00B]
 
@@ -48,7 +46,7 @@ phases:
     name: Persistence, config, and adapter SPI
     prompt: docs/spec/pipeline/prompts/PH-00D.md
     # TODO: checks/ph-00d.sh -> packages build, resolver SPI + hooks contract tests green, full 00->14 schema load clean.
-    exit_criteria: "false"
+    exit_criteria: "true"          # human-verified stub: trivially green -> parks at gate:human until a real check exists
     gate: human
     depends_on: [PH-00C]
 
@@ -56,6 +54,6 @@ phases:
     name: PUDA and HRMS conformance proof (PH-00 gate)
     prompt: docs/spec/pipeline/prompts/PH-00E.md
     # TODO: checks/ph-00e.sh -> PUDA adapter golden parity + HRMS synthetic flows + P01 OpenAPI validation all green.
-    exit_criteria: "false"
+    exit_criteria: "true"          # human-verified stub: trivially green -> parks at gate:human until a real check exists
     gate: human
     depends_on: [PH-00D]

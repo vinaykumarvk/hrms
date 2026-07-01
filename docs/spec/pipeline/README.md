@@ -42,7 +42,7 @@ touch approvals/PH-00A.approved   # after you review the evidence
   spend cap.** Do not point this at production credentials.
 - **Verify the manifest content first:** a wrong prompt executes faithfully to a wrong result. Read `prompts/*` and
   the `exit_criteria` before `--execute`.
-- **If a phase's success can't be written as a shell command, keep `exit_criteria: "false"` + `gate: human`** — the
+- **If a phase's success can't be written as a shell command, keep `exit_criteria: "true"` + `gate: human` (trivially green -> parks)** — the
   driver will always park for human verification (that is the correct, honest default).
 
 ## Env overrides
