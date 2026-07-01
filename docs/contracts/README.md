@@ -12,7 +12,7 @@ These are the build-time contracts all downstream implementation consumes.
 | **Dependency register** | `dependency-register.yaml` | Per-module services consumed, owned/consumed entities, hard/soft deps, SR role, phase, effort; shared-contract ownership; arbiter. |
 
 Related: `../architecture.md` (system architecture + ADRs), `../phased-plan.md` (dependency-ordered build plan),
-`../data-model/` (validated 403-table schema).
+`../data-model/` (validated 447-table schema).
 
 ## The canonical SR write-port
 `POST /api/v1/sr/ingest` is owned by **G12** and is the single write path to the Service Register ledger.
