@@ -66,6 +66,26 @@ tags:
   description: FR-G08-22 controlled cycle errata correction
 - name: ServiceRegister
   description: 'Reference: canonical G12 SR write-port (POST /sr/ingest)'
+- name: ScorecardPillars
+  description: '[v3.2] scorecard pillar / perspective master (goals classify to a pillar)'
+- name: Metrics
+  description: '[v3.2] measurement-metric master referenced by goals'
+- name: GoalPlans
+  description: '[v3.2] goal-plan config master (per-field flag matrix as jsonb)'
+- name: ReviewDefinitions
+  description: '[v3.2] review definition inside a cycle (stage/visibility/rating matrix as jsonb)'
+- name: ReviewExcludedEmployees
+  description: '[v3.2] review-definition-scoped employee exclusion'
+- name: NormalizationSettings
+  description: '[v3.2] normalisation curve/band master'
+- name: CustomFormulaSettings
+  description: '[v3.2] custom score-formula master'
+- name: CalibrationSettings
+  description: '[v3.2] reusable calibration template master'
+- name: CycleExclusions
+  description: '[v3.2] cycle-scoped employee exclusion (add/remove/reverse)'
+- name: ProbationConfirmations
+  description: '[v3.2] probation confirmation decision lifecycle (recommend/approve/extend)'
 paths:
   /g08/cycles:
     post:
@@ -3687,6 +3707,1395 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+  /g08/scorecard-pillars:
+    post:
+      tags:
+      - ScorecardPillars
+      operationId: createScorecardPillar
+      summary: Create a scorecard pillar (PMS config master)
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScorecardPillarCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScorecardPillar'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - ScorecardPillars
+      operationId: listScorecardPillars
+      summary: List scorecard pillars
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ConfigStatus'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScorecardPillarPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/scorecard-pillars/{pillarId}:
+    put:
+      tags:
+      - ScorecardPillars
+      operationId: updateScorecardPillar
+      summary: Update a scorecard pillar
+      parameters:
+      - name: pillarId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Scorecard pillar id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScorecardPillarCreate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScorecardPillar'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/metrics:
+    post:
+      tags:
+      - Metrics
+      operationId: createMetric
+      summary: Create a metric (PMS config master)
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metric'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - Metrics
+      operationId: listMetrics
+      summary: List metrics
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ConfigStatus'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/metrics/{metricId}:
+    put:
+      tags:
+      - Metrics
+      operationId: updateMetric
+      summary: Update a metric
+      parameters:
+      - name: metricId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Metric id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricCreate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metric'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/goal-plans:
+    post:
+      tags:
+      - GoalPlans
+      operationId: createGoalPlan
+      summary: Create a goal plan (PMS config master)
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalPlanCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - GoalPlans
+      operationId: listGoalPlans
+      summary: List goal plans
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ConfigStatus'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalPlanPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/goal-plans/{goalPlanId}:
+    put:
+      tags:
+      - GoalPlans
+      operationId: updateGoalPlan
+      summary: Update a goal plan
+      parameters:
+      - name: goalPlanId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Goal plan id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalPlanCreate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/review-definitions:
+    post:
+      tags:
+      - ReviewDefinitions
+      operationId: createReviewDefinition
+      summary: Create a review definition (PMS config master)
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDefinitionCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDefinition'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - ReviewDefinitions
+      operationId: listReviewDefinitions
+      summary: List review definitions
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ConfigStatus'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDefinitionPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/review-definitions/{reviewDefinitionId}:
+    put:
+      tags:
+      - ReviewDefinitions
+      operationId: updateReviewDefinition
+      summary: Update a review definition
+      parameters:
+      - name: reviewDefinitionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Review definition id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDefinitionCreate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDefinition'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/normalization-settings:
+    post:
+      tags:
+      - NormalizationSettings
+      operationId: createNormalizationSetting
+      summary: Create a normalization setting (PMS config master)
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NormalizationSettingCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NormalizationSetting'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - NormalizationSettings
+      operationId: listNormalizationSettings
+      summary: List normalization settings
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ConfigStatus'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NormalizationSettingPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/normalization-settings/{normalizationSettingId}:
+    put:
+      tags:
+      - NormalizationSettings
+      operationId: updateNormalizationSetting
+      summary: Update a normalization setting
+      parameters:
+      - name: normalizationSettingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Normalization setting id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NormalizationSettingCreate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NormalizationSetting'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/custom-formula-settings:
+    post:
+      tags:
+      - CustomFormulaSettings
+      operationId: createCustomFormulaSetting
+      summary: Create a custom-formula setting (PMS config master)
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomFormulaSettingCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomFormulaSetting'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - CustomFormulaSettings
+      operationId: listCustomFormulaSettings
+      summary: List custom-formula settings
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ConfigStatus'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomFormulaSettingPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/custom-formula-settings/{customFormulaSettingId}:
+    put:
+      tags:
+      - CustomFormulaSettings
+      operationId: updateCustomFormulaSetting
+      summary: Update a custom-formula setting
+      parameters:
+      - name: customFormulaSettingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Custom-formula setting id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomFormulaSettingCreate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomFormulaSetting'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/calibration-settings:
+    post:
+      tags:
+      - CalibrationSettings
+      operationId: createCalibrationSetting
+      summary: Create a calibration setting (PMS config master)
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalibrationSettingCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationSetting'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - CalibrationSettings
+      operationId: listCalibrationSettings
+      summary: List calibration settings
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ConfigStatus'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationSettingPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/calibration-settings/{calibrationSettingId}:
+    put:
+      tags:
+      - CalibrationSettings
+      operationId: updateCalibrationSetting
+      summary: Update a calibration setting
+      parameters:
+      - name: calibrationSettingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Calibration setting id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalibrationSettingCreate'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationSetting'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/review-definitions/{reviewDefinitionId}/excluded-employees:
+    post:
+      tags:
+      - ReviewExcludedEmployees
+      operationId: addReviewExcludedEmployee
+      summary: Exclude an employee from a review definition
+      parameters:
+      - name: reviewDefinitionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Review definition id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewExcludedEmployeeCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewExcludedEmployee'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - ReviewExcludedEmployees
+      operationId: listReviewExcludedEmployees
+      summary: List employees excluded from a review definition
+      parameters:
+      - name: reviewDefinitionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Review definition id
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewExcludedEmployeePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/review-definitions/{reviewDefinitionId}/excluded-employees/{exclusionId}:
+    delete:
+      tags:
+      - ReviewExcludedEmployees
+      operationId: removeReviewExcludedEmployee
+      summary: Remove an employee exclusion from a review definition
+      parameters:
+      - name: reviewDefinitionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Review definition id
+      - name: exclusionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Review-exclusion id
+      responses:
+        '204':
+          description: Deleted
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/cycles/{cycleId}/exclusions:
+    post:
+      tags:
+      - CycleExclusions
+      operationId: addCycleExclusion
+      summary: Exclude an employee from an appraisal cycle (auto/manual)
+      parameters:
+      - name: cycleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Appraisal cycle id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CycleExclusionCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleExclusion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - CycleExclusions
+      operationId: listCycleExclusions
+      summary: List cycle exclusions
+      parameters:
+      - name: cycleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Appraisal cycle id
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ExclusionStatus'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleExclusionPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/cycles/{cycleId}/exclusions/{exclusionId}:
+    delete:
+      tags:
+      - CycleExclusions
+      operationId: removeCycleExclusion
+      summary: Remove a manual cycle exclusion
+      parameters:
+      - name: cycleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Appraisal cycle id
+      - name: exclusionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Cycle-exclusion id
+      responses:
+        '204':
+          description: Deleted
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/cycles/{cycleId}/exclusions/{exclusionId}/reverse:
+    post:
+      tags:
+      - CycleExclusions
+      operationId: reverseCycleExclusion
+      summary: Reverse (re-include) a reversible cycle exclusion
+      parameters:
+      - name: cycleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Appraisal cycle id
+      - name: exclusionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Cycle-exclusion id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleExclusion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/probation-confirmations:
+    post:
+      tags:
+      - ProbationConfirmations
+      operationId: createProbationConfirmation
+      summary: Open a probation confirmation record
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbationConfirmationCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbationConfirmation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+      - ProbationConfirmations
+      operationId: listProbationConfirmations
+      summary: List probation confirmations
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/cursor'
+      - $ref: '#/components/parameters/sort'
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ProbationConfStatus'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbationConfirmationPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/probation-confirmations/{confirmationId}:
+    get:
+      tags:
+      - ProbationConfirmations
+      operationId: getProbationConfirmation
+      summary: Get a probation confirmation record
+      parameters:
+      - name: confirmationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Probation-confirmation id
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbationConfirmation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/probation-confirmations/{confirmationId}/recommend:
+    post:
+      tags:
+      - ProbationConfirmations
+      operationId: recommendProbationConfirmation
+      summary: Manager records confirmation/extension/termination recommendation
+      parameters:
+      - name: confirmationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Probation-confirmation id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbationRecommendRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbationConfirmation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/probation-confirmations/{confirmationId}/approve:
+    post:
+      tags:
+      - ProbationConfirmations
+      operationId: approveProbationConfirmation
+      summary: HR approves the probation confirmation (maker != checker)
+      parameters:
+      - name: confirmationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Probation-confirmation id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbationApproveRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbationConfirmation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/probation-confirmations/{confirmationId}/extend:
+    post:
+      tags:
+      - ProbationConfirmations
+      operationId: extendProbationConfirmation
+      summary: Extend the probation period
+      parameters:
+      - name: confirmationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Probation-confirmation id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbationConfExtendRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbationConfirmation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /g08/calibration/recommendations/{recId}/acknowledge:
+    post:
+      tags:
+      - Calibration
+      operationId: acknowledgeCalibrationRecommendation
+      summary: Employee acknowledges a calibration recommendation (ack/with-comments/disagree)
+      parameters:
+      - name: recId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Calibration recommendation id
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalibrationAckRequest'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationRecommendation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     bearerAuth:
@@ -4332,6 +5741,23 @@ components:
         self_rating: *id046
         ro_rating: *id046
         snapshotted: *id007
+        metric_id: *id005
+        metric_criteria: *id045
+        target_prefix: *id045
+        timeline_start_date: *id006
+        timeline_end_date: *id006
+        scorecard_pillar_id: *id005
+        aligned_to_goal_id: *id005
+        aligned_to_ref: *id045
+        achievement_mapping: *id016
+        block_edit_achievement: *id007
+        assigned_to_roles: *id016
+        goal_plan_master_id: *id005
+        goal_source:
+          $ref: '#/components/schemas/GoalSource'
+        category: *id045
+        set_reason: *id045
+        goal_visibility: *id045
         status: &id051
           $ref: '#/components/schemas/GoalStatus'
         approved_by: *id005
@@ -4364,6 +5790,23 @@ components:
         target_value: *id045
         weightage: *id050
         due_date: *id006
+        metric_id: *id005
+        metric_criteria: *id045
+        target_prefix: *id045
+        timeline_start_date: *id006
+        timeline_end_date: *id006
+        scorecard_pillar_id: *id005
+        aligned_to_goal_id: *id005
+        aligned_to_ref: *id045
+        achievement_mapping: *id016
+        block_edit_achievement: *id007
+        assigned_to_roles: *id016
+        goal_plan_master_id: *id005
+        goal_source:
+          $ref: '#/components/schemas/GoalSource'
+        category: *id045
+        set_reason: *id045
+        goal_visibility: *id045
     GoalUpdate:
       type: object
       properties:
@@ -4376,6 +5819,21 @@ components:
         achievement_pct: *id046
         self_rating: *id046
         status: *id051
+        metric_id: *id005
+        metric_criteria: *id045
+        target_prefix: *id045
+        timeline_start_date: *id006
+        timeline_end_date: *id006
+        scorecard_pillar_id: *id005
+        aligned_to_goal_id: *id005
+        aligned_to_ref: *id045
+        achievement_mapping: *id016
+        block_edit_achievement: *id007
+        assigned_to_roles: *id016
+        goal_plan_master_id: *id005
+        category: *id045
+        set_reason: *id045
+        goal_visibility: *id045
     GoalSnapshotResult:
       type: object
       properties:
@@ -4478,6 +5936,8 @@ components:
           additionalProperties: true
         constraints_faced: *id045
         training_needs: *id045
+        overall_comments: *id045
+        development_areas: *id045
         submitted_at: *id027
         status:
           type: string
@@ -4506,6 +5966,10 @@ components:
         constraints_faced:
           type: string
         training_needs:
+          type: string
+        overall_comments:
+          type: string
+        development_areas:
           type: string
     Tier:
       type: string
@@ -5151,6 +6615,11 @@ components:
           - CARRIED
           - DECLINED
           - RATIFIED
+        potential_rating: *id045
+        employee_ack_status:
+          $ref: '#/components/schemas/CalibAckStatus'
+        employee_ack_comments: *id045
+        employee_ack_at: *id027
         created_at: *id026
         updated_at: *id027
         created_by: *id005
@@ -5544,6 +7013,12 @@ components:
           - ACTIVE
           - UNDER_REVIEW
           - CLOSED
+        pip_type: *id045
+        trigger_reason: *id045
+        checkin_cadence: *id045
+        support_plan: *id045
+        hrbp_id: *id005
+        next_review_date: *id006
         milestones:
           type:
           - array
@@ -5583,6 +7058,20 @@ components:
         supervisor_id:
           type: string
           format: uuid
+        pip_type:
+          type: string
+        trigger_reason:
+          type: string
+        checkin_cadence:
+          type: string
+        support_plan:
+          type: string
+        hrbp_id:
+          type: string
+          format: uuid
+        next_review_date:
+          type: string
+          format: date
         milestones:
           type: array
           items:
@@ -6176,3 +7665,1652 @@ components:
             format: uuid
         requires_renotify: *id007
         requires_regrade: *id007
+    ConfigStatus:
+      type: string
+      enum:
+      - DRAFT
+      - ACTIVE
+      - ARCHIVED
+    GoalSource:
+      type: string
+      enum:
+      - SELF
+      - MANAGER
+      - ADMIN
+      - CASCADED
+    CalibAckStatus:
+      type: string
+      enum:
+      - AWAITING
+      - ACKNOWLEDGED
+      - ACKNOWLEDGED_WITH_COMMENTS
+      - DISAGREED
+    ExclusionSource:
+      type: string
+      enum:
+      - AUTO
+      - MANUAL
+    ExclusionReversibility:
+      type: string
+      enum:
+      - REVERSIBLE
+      - PERMANENT
+    ExclusionStatus:
+      type: string
+      enum:
+      - EXCLUDED
+      - RE_INCLUDED
+    ProbationRecommendation:
+      type: string
+      enum:
+      - RECOMMEND_CONFIRMATION
+      - RECOMMEND_EXTENSION
+      - RECOMMEND_TERMINATION
+    ProbationConfStatus:
+      type: string
+      enum:
+      - IN_PROBATION
+      - PENDING_MANAGER
+      - PENDING_HR_APPROVAL
+      - CONFIRMED
+      - EXTENDED
+      - TERMINATED
+    ScorecardPillar:
+      type: object
+      required:
+      - pillar_id
+      - pillar_code
+      - name
+      - status
+      properties:
+        pillar_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        pillar_code:
+          type: string
+          maxLength: 40
+        name:
+          type: string
+          maxLength: 160
+        description:
+          type:
+          - string
+          - 'null'
+        source_created_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_updated_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        updated_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        is_deleted:
+          type: boolean
+    ScorecardPillarCreate:
+      type: object
+      required:
+      - pillar_code
+      - name
+      properties:
+        pillar_code:
+          type: string
+          maxLength: 40
+        name:
+          type: string
+          maxLength: 160
+        description:
+          type:
+          - string
+          - 'null'
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+    ScorecardPillarPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScorecardPillar'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    Metric:
+      type: object
+      required:
+      - metric_id
+      - metric_code
+      - name
+      - status
+      properties:
+        metric_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        metric_code:
+          type: string
+          maxLength: 80
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type:
+          - string
+          - 'null'
+        source_created_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_updated_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        updated_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        is_deleted:
+          type: boolean
+    MetricCreate:
+      type: object
+      required:
+      - metric_code
+      - name
+      properties:
+        metric_code:
+          type: string
+          maxLength: 80
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type:
+          - string
+          - 'null'
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+    MetricPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Metric'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    NormalizationSetting:
+      type: object
+      required:
+      - normalization_setting_id
+      - name
+      - status
+      properties:
+        normalization_setting_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 160
+        scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        scale_marker:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        scale_marks:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        min_marks:
+          type:
+          - number
+          - 'null'
+        max_marks:
+          type:
+          - number
+          - 'null'
+        ideal_pct:
+          type:
+          - number
+          - 'null'
+        delta_pct:
+          type:
+          - number
+          - 'null'
+        source_created_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_updated_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        updated_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        is_deleted:
+          type: boolean
+    NormalizationSettingCreate:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          maxLength: 160
+        scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        scale_marker:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        scale_marks:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        min_marks:
+          type:
+          - number
+          - 'null'
+        max_marks:
+          type:
+          - number
+          - 'null'
+        ideal_pct:
+          type:
+          - number
+          - 'null'
+        delta_pct:
+          type:
+          - number
+          - 'null'
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+    NormalizationSettingPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NormalizationSetting'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    CustomFormulaSetting:
+      type: object
+      required:
+      - custom_formula_setting_id
+      - name
+      - status
+      properties:
+        custom_formula_setting_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 160
+        information:
+          type:
+          - string
+          - 'null'
+        methodology:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        formula_for:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        formula:
+          type:
+          - string
+          - 'null'
+        source_created_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_updated_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        updated_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        is_deleted:
+          type: boolean
+    CustomFormulaSettingCreate:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          maxLength: 160
+        information:
+          type:
+          - string
+          - 'null'
+        methodology:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        formula_for:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        formula:
+          type:
+          - string
+          - 'null'
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+    CustomFormulaSettingPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomFormulaSetting'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    GoalPlan:
+      type: object
+      required:
+      - goal_plan_id
+      - goal_plan_code
+      - name
+      - status
+      properties:
+        goal_plan_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+        goal_plan_code:
+          type: string
+          maxLength: 60
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type:
+          - string
+          - 'null'
+        methodology:
+          type:
+          - string
+          - 'null'
+          maxLength: 40
+        enable_sub_goals:
+          type: boolean
+        start_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        end_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        user_assignment:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        exclusion_setting:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        enable_goal_count_limits:
+          type: boolean
+        min_goals:
+          type:
+          - integer
+          - 'null'
+        max_goals:
+          type:
+          - integer
+          - 'null'
+        enable_goal_weightage_limits:
+          type: boolean
+        min_weightage:
+          type:
+          - number
+          - 'null'
+        max_weightage:
+          type:
+          - number
+          - 'null'
+        achievement_mapping_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        default_achievement_mapping:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        goal_plan_approver:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        goal_plan_reviewer:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        enable_cascade:
+          type: boolean
+        scorecard_pillar_options:
+          type:
+          - string
+          - 'null'
+        metric_options:
+          type:
+          - string
+          - 'null'
+        field_settings:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        source_created_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_updated_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_started_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_archived_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        updated_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        is_deleted:
+          type: boolean
+    GoalPlanCreate:
+      type: object
+      required:
+      - goal_plan_code
+      - name
+      properties:
+        goal_plan_code:
+          type: string
+          maxLength: 60
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type:
+          - string
+          - 'null'
+        methodology:
+          type:
+          - string
+          - 'null'
+          maxLength: 40
+        enable_sub_goals:
+          type: boolean
+        start_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        end_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        user_assignment:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        exclusion_setting:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        enable_goal_count_limits:
+          type: boolean
+        min_goals:
+          type:
+          - integer
+          - 'null'
+        max_goals:
+          type:
+          - integer
+          - 'null'
+        enable_goal_weightage_limits:
+          type: boolean
+        min_weightage:
+          type:
+          - number
+          - 'null'
+        max_weightage:
+          type:
+          - number
+          - 'null'
+        achievement_mapping_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        default_achievement_mapping:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        goal_plan_approver:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        goal_plan_reviewer:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        enable_cascade:
+          type: boolean
+        scorecard_pillar_options:
+          type:
+          - string
+          - 'null'
+        metric_options:
+          type:
+          - string
+          - 'null'
+        field_settings:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+    GoalPlanPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GoalPlan'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    ReviewDefinition:
+      type: object
+      required:
+      - review_definition_id
+      - review_code
+      - name
+      - status
+      properties:
+        review_definition_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+        review_code:
+          type: string
+          maxLength: 60
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type:
+          - string
+          - 'null'
+        cycle_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        align_to_review_cycle:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        is_final_review:
+          type: boolean
+        enable_exclude_employees:
+          type: boolean
+        exclusion_setting:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        goal_rating_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        goal_normalization_setting:
+          type:
+          - string
+          - 'null'
+          maxLength: 160
+        overall_rating_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        overall_normalization_setting:
+          type:
+          - string
+          - 'null'
+          maxLength: 160
+        competency_normalization_setting:
+          type:
+          - string
+          - 'null'
+          maxLength: 160
+        calibration_enabled:
+          type: boolean
+        calibration_process:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        promotion_framework:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        stage_settings:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        field_settings:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        source_updated_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_started_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_archived_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        updated_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        is_deleted:
+          type: boolean
+    ReviewDefinitionCreate:
+      type: object
+      required:
+      - review_code
+      - name
+      properties:
+        review_code:
+          type: string
+          maxLength: 60
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type:
+          - string
+          - 'null'
+        cycle_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        align_to_review_cycle:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        is_final_review:
+          type: boolean
+        enable_exclude_employees:
+          type: boolean
+        exclusion_setting:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        goal_rating_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        goal_normalization_setting:
+          type:
+          - string
+          - 'null'
+          maxLength: 160
+        overall_rating_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        overall_normalization_setting:
+          type:
+          - string
+          - 'null'
+          maxLength: 160
+        competency_normalization_setting:
+          type:
+          - string
+          - 'null'
+          maxLength: 160
+        calibration_enabled:
+          type: boolean
+        calibration_process:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        promotion_framework:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        stage_settings:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        field_settings:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+    ReviewDefinitionPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewDefinition'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    CalibrationSetting:
+      type: object
+      required:
+      - calibration_setting_id
+      - name
+      - status
+      properties:
+        calibration_setting_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 160
+        overall_rating_enabled:
+          type: boolean
+        overall_rating_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        goal_rating_enabled:
+          type: boolean
+        goal_rating_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        competency_rating_enabled:
+          type: boolean
+        competency_rating_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        promotion_enabled:
+          type: boolean
+        promotion_framework:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        potential_enabled:
+          type: boolean
+        potential_framework:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        publish_method_overall:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        publish_method_goal:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        publish_method_competency:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        ideal_distribution:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        n_grid_enabled:
+          type: boolean
+        lobby_group_enabled:
+          type: boolean
+        moderation_fields:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        parameters:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        source_created_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_updated_on:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        updated_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        is_deleted:
+          type: boolean
+    CalibrationSettingCreate:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          maxLength: 160
+        overall_rating_enabled:
+          type: boolean
+        overall_rating_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        goal_rating_enabled:
+          type: boolean
+        goal_rating_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        competency_rating_enabled:
+          type: boolean
+        competency_rating_scale:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        promotion_enabled:
+          type: boolean
+        promotion_framework:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        potential_enabled:
+          type: boolean
+        potential_framework:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        publish_method_overall:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        publish_method_goal:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        publish_method_competency:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        ideal_distribution:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        n_grid_enabled:
+          type: boolean
+        lobby_group_enabled:
+          type: boolean
+        moderation_fields:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        parameters:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        status:
+          $ref: '#/components/schemas/ConfigStatus'
+    CalibrationSettingPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalibrationSetting'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    ReviewExcludedEmployee:
+      type: object
+      required:
+      - exclusion_id
+      - review_code
+      - employee_external_id
+      properties:
+        exclusion_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        review_definition_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        review_code:
+          type: string
+          maxLength: 60
+        review_name:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        employee_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        employee_external_id:
+          type: string
+          maxLength: 40
+        employee_name:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        updated_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        is_deleted:
+          type: boolean
+    ReviewExcludedEmployeeCreate:
+      type: object
+      required:
+      - employee_external_id
+      properties:
+        employee_external_id:
+          type: string
+          maxLength: 40
+        employee_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        employee_name:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        review_code:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+    ReviewExcludedEmployeePage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewExcludedEmployee'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    CycleExclusion:
+      type: object
+      required:
+      - exclusion_id
+      - cycle_id
+      - appraisee_id
+      - exclusion_reason
+      - status
+      properties:
+        exclusion_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+        cycle_id:
+          type: string
+          format: uuid
+        appraisee_id:
+          type: string
+          format: uuid
+        exclusion_source:
+          $ref: '#/components/schemas/ExclusionSource'
+        exclusion_reason:
+          type: string
+          maxLength: 60
+        detail:
+          type:
+          - string
+          - 'null'
+        justification:
+          type:
+          - string
+          - 'null'
+        reversibility:
+          $ref: '#/components/schemas/ExclusionReversibility'
+        status:
+          $ref: '#/components/schemas/ExclusionStatus'
+        re_included_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        re_included_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        updated_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        is_deleted:
+          type: boolean
+    CycleExclusionCreate:
+      type: object
+      required:
+      - appraisee_id
+      - exclusion_reason
+      properties:
+        appraisee_id:
+          type: string
+          format: uuid
+        exclusion_reason:
+          type: string
+          maxLength: 60
+        exclusion_source:
+          $ref: '#/components/schemas/ExclusionSource'
+        detail:
+          type:
+          - string
+          - 'null'
+        justification:
+          type:
+          - string
+          - 'null'
+        reversibility:
+          $ref: '#/components/schemas/ExclusionReversibility'
+    CycleExclusionPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CycleExclusion'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    ProbationConfirmation:
+      type: object
+      required:
+      - confirmation_id
+      - confirmation_no
+      - appraisee_id
+      - status
+      properties:
+        confirmation_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+        confirmation_no:
+          type: string
+          maxLength: 40
+        appraisee_id:
+          type: string
+          format: uuid
+        form_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        cycle_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        date_of_joining:
+          type:
+          - string
+          - 'null'
+          format: date
+        probation_end_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        probation_period_months:
+          type:
+          - integer
+          - 'null'
+        mentor_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        manager_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        manager_recommendation:
+          type:
+          - string
+          - 'null'
+          enum:
+          - RECOMMEND_CONFIRMATION
+          - RECOMMEND_EXTENSION
+          - RECOMMEND_TERMINATION
+          - null
+        manager_comments:
+          type:
+          - string
+          - 'null'
+        hr_approver_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        hr_approved_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        extension_months:
+          type:
+          - integer
+          - 'null'
+        confirmation_effective_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        new_designation_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        confirmation_bonus:
+          type: boolean
+        compensation_revision:
+          type: boolean
+        letter_template_ref:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        letter_doc_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        outcome:
+          type:
+          - string
+          - 'null'
+          enum:
+          - CONFIRMED
+          - EXTENDED
+          - DISCHARGE_RECOMMENDED
+          - null
+        status:
+          $ref: '#/components/schemas/ProbationConfStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        updated_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        is_deleted:
+          type: boolean
+    ProbationConfirmationCreate:
+      type: object
+      required:
+      - confirmation_no
+      - appraisee_id
+      properties:
+        confirmation_no:
+          type: string
+          maxLength: 40
+        appraisee_id:
+          type: string
+          format: uuid
+        form_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        cycle_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        date_of_joining:
+          type:
+          - string
+          - 'null'
+          format: date
+        probation_end_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        probation_period_months:
+          type:
+          - integer
+          - 'null'
+        mentor_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        manager_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+    ProbationConfirmationPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbationConfirmation'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor for the next page; null at end
+    ProbationRecommendRequest:
+      type: object
+      required:
+      - manager_recommendation
+      properties:
+        manager_recommendation:
+          $ref: '#/components/schemas/ProbationRecommendation'
+        manager_comments:
+          type:
+          - string
+          - 'null'
+        manager_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+    ProbationApproveRequest:
+      type: object
+      required: []
+      properties:
+        confirmation_effective_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        new_designation_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        confirmation_bonus:
+          type: boolean
+        compensation_revision:
+          type: boolean
+        letter_template_ref:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        hr_approver_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+    ProbationConfExtendRequest:
+      type: object
+      required:
+      - extension_months
+      properties:
+        extension_months:
+          type: integer
+        probation_end_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        detail:
+          type:
+          - string
+          - 'null'
+    CalibrationAckRequest:
+      type: object
+      required:
+      - employee_ack_status
+      properties:
+        employee_ack_status:
+          $ref: '#/components/schemas/CalibAckStatus'
+        employee_ack_comments:
+          type:
+          - string
+          - 'null'

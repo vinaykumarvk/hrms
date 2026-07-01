@@ -1112,18 +1112,48 @@
 - **Steps:** Exercise each convention.
 - **Expected:** `limit>100` clamped to max 100; `next_cursor` returned and honoured; replayed `Idempotency-Key` → same result / `409 ERR-DUP-INSTANCE` within 24h (no double effect); missing token → `401 UNAUTHENTICATED`; every 4xx/5xx uses `{error:{code,message,field,details}}` with `X-Correlation-Id` in the response header (never a body `requestId`).
 
+#### TC-G14-106
+- **Traces-to:** FR-G14-02, FR-G14-05, FR-G14-06; BRD §5.5a Reference KPI Catalog (v3.2 field reconciliation)
+- **Type:** Data-Integrity
+- **Title:** Seeded dept-view KPI tiles resolve via `kpi_definition` + mart with the catalogued P02 scope, grain and unit
+- **Priority:** P2
+- **Preconditions:** The v3.2 seed set is loaded: the 6 `kpi_definitions` (`ATT_PRESENT_PCT`, `ATT_WFH_TODAY`, `ATT_AVG_WORK_HRS`, `LEAVE_ON_TODAY`, `PERF_AVG_RATING`, `ATTRITION_LTM_PCT`) are ACTIVE and bound to the seed marts (`MART_ATTENDANCE`, `MART_LEAVE`, `MART_APPRAISAL`, `MART_HEADCOUNT`). MGR-A authenticated with P02 scope over OU-A only.
+- **Test data:** `GET /analytics/kpis/{code}/value?scope=OU-A&period=2026-06` for each of the 6 seeded `kpi_code`s; `GET /analytics/kpis?domain=ATTENDANCE` to read their definitions.
+- **Steps:** 1) List the seeded KPI definitions. 2) Resolve each tile value under MGR-A's P02 scope.
+- **Expected:** Each tile resolves to exactly one ACTIVE `kpi_definition` reading its catalogued `source_mart_id` (no inline formula), with `grain=ORG_UNIT` and the catalogued `unit` — `ATT_PRESENT_PCT`→`PERCENT`, `ATT_WFH_TODAY`→`COUNT`, `ATT_AVG_WORK_HRS`→`HOURS`, `LEAVE_ON_TODAY`→`COUNT`, `PERF_AVG_RATING`→`SCORE`, `ATTRITION_LTM_PCT`→`PERCENT`. Every value carries `data_as_of`; each is P02-scoped to OU-A and passes FR-17 suppression; no new table/entity is introduced (seed rows over E03/E09 only).
+
+#### TC-G14-107
+- **Traces-to:** FR-G14-02; OpenAPI `KpiUnit` enum; BRD §5.5 / §5.5a (`HOURS` added v3.2)
+- **Type:** API-Contract
+- **Title:** `HOURS` KPI unit is accepted by the contract and renders as hours for `ATT_AVG_WORK_HRS`
+- **Priority:** P2
+- **Preconditions:** `ATT_AVG_WORK_HRS` seeded ACTIVE (`unit=HOURS`, `grain=ORG_UNIT`, expression `avg(worked_minutes)/60.0`, `source_mart_id=MART_ATTENDANCE`). AADM may create a KPI version.
+- **Test data:** `POST /analytics/kpis` `{kpi_code:"ATT_AVG_WORK_HRS", ..., unit:"HOURS", grain:"ORG_UNIT"}`; then `GET /analytics/kpis/ATT_AVG_WORK_HRS/value?scope=OU-A&period=2026-06`; render the dept-attendance "Avg work hrs" tile.
+- **Steps:** 1) POST a KPI definition with `unit:"HOURS"`. 2) Resolve its value. 3) Render the bound tile.
+- **Expected:** `unit:"HOURS"` passes schema validation (no `422 ERR-VALIDATION` on the enum) — the `KpiUnit` enum accepts `HOURS`; the resolved `KpiValue` and rendered tile report `unit=HOURS` and format the number as hours (minutes/60), distinct from `DAYS`/`SCORE`; value carries `data_as_of` and is P02-scoped + suppressed.
+
+#### TC-G14-108
+- **Traces-to:** FR-G14-01, FR-G14-02; BRD §5.5a seed widgets (`MGR_TEAM` dashboard)
+- **Type:** Functional
+- **Title:** Seed `dashboard_widgets` bind the dept KPIs onto `MGR_TEAM` and render P02-scoped with catalogued units
+- **Priority:** P2
+- **Preconditions:** `MGR_TEAM` dashboard PUBLISHED with the three seed widgets binding `ATT_PRESENT_PCT`, `LEAVE_ON_TODAY`, and `PERF_AVG_RATING`. MGR-A authenticated with P02 scope over OU-A.
+- **Test data:** `GET /analytics/dashboards/{MGR_TEAM}/render?scope=OU-A&period=2026-06` as MGR-A.
+- **Steps:** Render the `MGR_TEAM` dashboard as MGR-A.
+- **Expected:** Three governed KPI tiles render — Present Today % (`PERCENT`), On Leave Today (`COUNT`), Team Avg Rating (`SCORE`) — each bound to its ACTIVE `kpi_definition` (not an inline formula), P02-scoped to OU-A, FR-17-suppressed, and carrying `data_as_of`; no new dashboard/widget entity beyond the seeded rows.
+
 ---
 
 ## 3. Traceability Matrix (FR → TC ids)
 
 | FR | Title | Test cases | Gaps |
 |---|---|---|---|
-| FR-G14-01 | Role-Based Dashboard Framework & Layout | TC-001, TC-002, TC-003, TC-004, TC-005, TC-006, TC-007, TC-008, TC-101 | none |
-| FR-G14-02 | KPI Definition & Calculation Engine | TC-009, TC-010, TC-011, TC-012, TC-013, TC-014, TC-015, TC-016, TC-103 | none |
+| FR-G14-01 | Role-Based Dashboard Framework & Layout | TC-001, TC-002, TC-003, TC-004, TC-005, TC-006, TC-007, TC-008, TC-101, TC-108 | none |
+| FR-G14-02 | KPI Definition & Calculation Engine | TC-009, TC-010, TC-011, TC-012, TC-013, TC-014, TC-015, TC-016, TC-103, TC-106, TC-107, TC-108 | none |
 | FR-G14-03 | Analytics Data Layer (marts + ETL X.1) | TC-017, TC-018, TC-019, TC-020, TC-021, TC-022 | none |
 | FR-G14-04 | Permission-Scoped Access via P02 (RLS) | TC-023, TC-024, TC-025, TC-026, TC-027, TC-028, TC-029, TC-030, TC-031, TC-101 | none |
-| FR-G14-05 | Workforce Analytics | TC-032, TC-033, TC-034, TC-035, TC-036, TC-037, TC-102 | none |
-| FR-G14-06 | Operational Analytics | TC-038, TC-039, TC-040, TC-026, TC-027, TC-102 | none |
+| FR-G14-05 | Workforce Analytics | TC-032, TC-033, TC-034, TC-035, TC-036, TC-037, TC-102, TC-106 | none |
+| FR-G14-06 | Operational Analytics | TC-038, TC-039, TC-040, TC-026, TC-027, TC-102, TC-106 | none |
 | FR-G14-07 | Compliance & Statutory Dashboards | TC-041, TC-042, TC-043, TC-044, TC-045, TC-102 | none |
 | FR-G14-08 | Self-Service Report Builder | TC-046, TC-047, TC-048, TC-049, TC-104 | none |
 | FR-G14-09 | Scheduled Distribution & Export | TC-050, TC-051, TC-052, TC-053, TC-045, TC-104 | none |
@@ -1153,25 +1183,25 @@
 
 | Type | Count | Test cases |
 |---|---|---|
-| Functional | 19 | TC-001, TC-005, TC-008, TC-009, TC-015, TC-017, TC-030, TC-032, TC-039, TC-040, TC-046, TC-050, TC-064, TC-068, TC-070, TC-077, TC-086, TC-093, TC-096 |
+| Functional | 20 | TC-001, TC-005, TC-008, TC-009, TC-015, TC-017, TC-030, TC-032, TC-039, TC-040, TC-046, TC-050, TC-064, TC-068, TC-070, TC-077, TC-086, TC-093, TC-096, TC-108 |
 | Boundary | 6 | TC-012, TC-016, TC-036, TC-048, TC-081, TC-095 |
 | Negative | 9 | TC-003, TC-010, TC-014, TC-021, TC-035, TC-052, TC-071, TC-073, TC-090 |
 | Authorization-RLS | 19 | TC-004, TC-023, TC-024, TC-025, TC-026, TC-027, TC-028, TC-031, TC-044, TC-047, TC-049, TC-051, TC-054, TC-069, TC-074, TC-075, TC-083, TC-087, TC-092 |
 | Privacy-Suppression | 7 | TC-037, TC-056, TC-076, TC-078, TC-079, TC-080, TC-084 |
 | Data-Freshness | 4 | TC-018, TC-061, TC-062, TC-063 |
 | State-Transition | 13 | TC-002, TC-011, TC-019, TC-029, TC-053, TC-057, TC-060, TC-066, TC-072, TC-082, TC-085, TC-089, TC-098 |
-| Data-Integrity | 18 | TC-006, TC-013, TC-020, TC-033, TC-034, TC-038, TC-041, TC-042, TC-055, TC-058, TC-059, TC-065, TC-067, TC-088, TC-091, TC-094, TC-097, TC-099 |
-| API-Contract | 4 | TC-007, TC-022, TC-043, TC-105 |
+| Data-Integrity | 19 | TC-006, TC-013, TC-020, TC-033, TC-034, TC-038, TC-041, TC-042, TC-055, TC-058, TC-059, TC-065, TC-067, TC-088, TC-091, TC-094, TC-097, TC-099, TC-106 |
+| API-Contract | 5 | TC-007, TC-022, TC-043, TC-105, TC-107 |
 | E2E-Flow | 6 | TC-045, TC-100, TC-101, TC-102, TC-103, TC-104 |
 
-> Some cases exercise more than one concern (e.g. TC-011 also asserts a version-overlap negative, TC-090 a BLOCKED_RETENTION state); each is counted under its **primary** declared type. Total distinct test cases: **105** (TC-G14-001 … TC-G14-105). Type counts sum to 105.
+> Some cases exercise more than one concern (e.g. TC-011 also asserts a version-overlap negative, TC-090 a BLOCKED_RETENTION state); each is counted under its **primary** declared type. Total distinct test cases: **108** (TC-G14-001 … TC-G14-108). Type counts sum to 108. *(v3.2 field reconciliation added TC-106–TC-108: seeded dept-view KPI catalog resolution, the `HOURS` unit, and seed-widget render.)*
 
 ### 4.2 By Priority
 
 | Priority | Count | Focus |
 |---|---|---|
 | P1 (critical) | 50 | Data-governance guarantees: P02 RLS + cross-scope leak (incl. sensitive G09/G10/G11), small-cell + complementary suppression, KPI versioning/overlap, bitemporal reproducibility, drill-through gating, predictive fairness + friction gate, NL/embed governance, DPDP propagation + retention block, maker-checker SoD, mart FAILED handling, platform contract. |
-| P2 (high) | 44 | Core functional flows, benchmarking, freshness states, scheduling/export, establishment math, anomaly detection, compliance exports. |
+| P2 (high) | 47 | Core functional flows, benchmarking, freshness states, scheduling/export, establishment math, anomaly detection, compliance exports, seeded dept-view KPI catalog + `HOURS` unit + seed widgets. |
 | P3 (medium) | 11 | Edge/UX cases: empty scope, role-adaptive language, additive schema change, drift freeze, anomaly review, retired-KPI auto-pause, concurrent-refresh contention. |
 
 ### 4.3 Governance-Guarantee Coverage Map (critical)

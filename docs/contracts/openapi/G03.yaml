@@ -78,6 +78,15 @@ tags:
     description: Career/event entitlement counters for sanction-based leave (FR-22).
   - name: Absence Programs
     description: Balance forecast and mass-leave / shutdown programs (FR-23).
+  - name: Attendance Config
+    description: >
+      v3.2 field-reconciliation config masters — attendance/overtime policies,
+      IP-restriction networks, reusable geofences, and leave/attendance reason
+      value sets (E32–E37; EXTEND M04/M05).
+  - name: Attendance Lock
+    description: >
+      Monthly attendance lock cycle at org scope and post-approval leave
+      revocation / balance-adjustment requests (E38–E40, v3.2).
 
 paths:
 
@@ -1958,6 +1967,925 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '500': { $ref: '#/components/responses/Internal' }
 
+  # ===========================================================================
+  # v3.2 FIELD-RECONCILIATION ADDITIONS (E32–E40) — ADD-ONLY
+  # ===========================================================================
+
+  # --- E36 leave_reasons (config master) -------------------------------------
+  /atl/leave-reasons:
+    post:
+      tags: [Leave Configuration]
+      summary: Create a leave-reason master entry (v3.2)
+      operationId: createLeaveReason
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveReasonCreate' }
+      responses:
+        '201':
+          description: Leave reason created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveReason' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Leave Configuration]
+      summary: List leave-reason master entries (v3.2)
+      operationId: listLeaveReasons
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, INACTIVE] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of leave reasons.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/LeaveReason' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-reasons/{id}:
+    get:
+      tags: [Leave Configuration]
+      summary: Get a leave-reason master entry (v3.2)
+      operationId: getLeaveReason
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Leave reason.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveReason' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+    patch:
+      tags: [Leave Configuration]
+      summary: Update a leave-reason master entry (v3.2)
+      operationId: updateLeaveReason
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveReasonUpdate' }
+      responses:
+        '200':
+          description: Leave reason updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveReason' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # --- E37 attendance_reasons (config master) --------------------------------
+  /atl/attendance-reasons:
+    post:
+      tags: [Regularisation]
+      summary: Create an attendance/regularisation-reason master entry (v3.2)
+      operationId: createAttendanceReason
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendanceReasonCreate' }
+      responses:
+        '201':
+          description: Attendance reason created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceReason' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Regularisation]
+      summary: List attendance-reason master entries (v3.2)
+      operationId: listAttendanceReasons
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, INACTIVE] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of attendance reasons.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/AttendanceReason' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/attendance-reasons/{id}:
+    get:
+      tags: [Regularisation]
+      summary: Get an attendance-reason master entry (v3.2)
+      operationId: getAttendanceReason
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Attendance reason.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceReason' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+    patch:
+      tags: [Regularisation]
+      summary: Update an attendance-reason master entry (v3.2)
+      operationId: updateAttendanceReason
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendanceReasonUpdate' }
+      responses:
+        '200':
+          description: Attendance reason updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceReason' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # --- E32 attendance_policies (config master) -------------------------------
+  /atl/attendance-policies:
+    post:
+      tags: [Attendance Config]
+      summary: Create an attendance policy (v3.2)
+      operationId: createAttendancePolicy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendancePolicyCreate' }
+      responses:
+        '201':
+          description: Attendance policy created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendancePolicy' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Attendance Config]
+      summary: List attendance policies (v3.2)
+      operationId: listAttendancePolicies
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, INACTIVE] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of attendance policies.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/AttendancePolicy' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/attendance-policies/{id}:
+    get:
+      tags: [Attendance Config]
+      summary: Get an attendance policy (v3.2)
+      operationId: getAttendancePolicy
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Attendance policy.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendancePolicy' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+    patch:
+      tags: [Attendance Config]
+      summary: Update an attendance policy (v3.2)
+      operationId: updateAttendancePolicy
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendancePolicyUpdate' }
+      responses:
+        '200':
+          description: Attendance policy updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendancePolicy' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # --- E33 overtime_policies (config master) ---------------------------------
+  /atl/overtime-policies:
+    post:
+      tags: [Attendance Config]
+      summary: Create an overtime policy (v3.2)
+      operationId: createOvertimePolicy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OvertimePolicyCreate' }
+      responses:
+        '201':
+          description: Overtime policy created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OvertimePolicy' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Attendance Config]
+      summary: List overtime policies (v3.2)
+      operationId: listOvertimePolicies
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, INACTIVE] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of overtime policies.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/OvertimePolicy' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/overtime-policies/{id}:
+    get:
+      tags: [Attendance Config]
+      summary: Get an overtime policy (v3.2)
+      operationId: getOvertimePolicy
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Overtime policy.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OvertimePolicy' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+    patch:
+      tags: [Attendance Config]
+      summary: Update an overtime policy (v3.2)
+      operationId: updateOvertimePolicy
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OvertimePolicyUpdate' }
+      responses:
+        '200':
+          description: Overtime policy updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OvertimePolicy' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # --- E35 geofences (config master) -----------------------------------------
+  /atl/geofences:
+    post:
+      tags: [Attendance Config]
+      summary: Create a reusable geofence (v3.2)
+      operationId: createGeofence
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GeofenceCreate' }
+      responses:
+        '201':
+          description: Geofence created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Geofence' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Attendance Config]
+      summary: List geofences (v3.2)
+      operationId: listGeofences
+      parameters:
+        - name: locationOrgUnitId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, INACTIVE] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of geofences.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Geofence' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/geofences/{id}:
+    get:
+      tags: [Attendance Config]
+      summary: Get a geofence (v3.2)
+      operationId: getGeofence
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Geofence.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Geofence' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+    patch:
+      tags: [Attendance Config]
+      summary: Update a geofence (v3.2)
+      operationId: updateGeofence
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GeofenceUpdate' }
+      responses:
+        '200':
+          description: Geofence updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Geofence' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # --- E34 attendance_networks (config master) -------------------------------
+  /atl/attendance-networks:
+    post:
+      tags: [Attendance Config]
+      summary: Create an IP-restriction network range (v3.2)
+      operationId: createAttendanceNetwork
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendanceNetworkCreate' }
+      responses:
+        '201':
+          description: Attendance network created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceNetwork' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Attendance Config]
+      summary: List IP-restriction network ranges (v3.2)
+      operationId: listAttendanceNetworks
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, INACTIVE] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of attendance networks.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/AttendanceNetwork' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/attendance-networks/{id}:
+    get:
+      tags: [Attendance Config]
+      summary: Get an IP-restriction network range (v3.2)
+      operationId: getAttendanceNetwork
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Attendance network.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceNetwork' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+    patch:
+      tags: [Attendance Config]
+      summary: Update an IP-restriction network range (v3.2)
+      operationId: updateAttendanceNetwork
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendanceNetworkUpdate' }
+      responses:
+        '200':
+          description: Attendance network updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceNetwork' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # --- E38 leave_balance_adjustments (P01 request → ledger ADJUSTMENT) --------
+  /atl/leave-balance-adjustments:
+    post:
+      tags: [Leave Balances & Ledger]
+      summary: Request a leave balance adjustment (maker; P01 maker-checker) (v3.2)
+      description: >
+        Raises an approvable balance-adjustment request. On approval it posts a
+        single `ADJUSTMENT` entry to the append-only `leave_ledger_entries`
+        SSOT under optimistic lock.
+      operationId: requestLeaveBalanceAdjustment
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveBalanceAdjustmentCreate' }
+      responses:
+        '201':
+          description: Adjustment request raised (pending checker approval).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveBalanceAdjustment' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Leave Balances & Ledger]
+      summary: List leave balance adjustment requests (v3.2)
+      operationId: listLeaveBalanceAdjustments
+      parameters:
+        - name: employeeId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AdjustmentStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of adjustment requests.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/LeaveBalanceAdjustment' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-balance-adjustments/{id}/decision:
+    post:
+      tags: [Leave Balances & Ledger]
+      summary: Approve or reject a balance adjustment (checker; P01, SoD) (v3.2)
+      description: >
+        Checker decision. Approve applies the ADJUSTMENT ledger entry under
+        optimistic lock; maker == checker is blocked (403 SoD). Stale
+        `expectedVersion` → 409 OPTIMISTIC_LOCK_CONFLICT.
+      operationId: decideLeaveBalanceAdjustment
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowDecision' }
+      responses:
+        '200':
+          description: Decision applied.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveBalanceAdjustment' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Optimistic-lock or state conflict (OPTIMISTIC_LOCK_CONFLICT).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # --- E39 leave_revocations (post-approval revocation → AVAIL_REVERSAL) ------
+  /atl/leave-revocations:
+    post:
+      tags: [Leave Applications]
+      summary: Request post-approval revocation of an approved leave (P01) (v3.2)
+      description: >
+        Revokes an already-APPROVED leave (distinct from pre-start withdrawal).
+        On approval it posts an `AVAIL_REVERSAL` refund to the ledger on the
+        same `leave_spell_lineage_id` and, if the period is locked, emits a
+        next-period payroll feed adjustment.
+      operationId: requestLeaveRevocation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveRevocationCreate' }
+      responses:
+        '201':
+          description: Revocation request raised (pending approval).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveRevocation' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: >
+            Application not in a revocable (APPROVED) state, or leave already
+            availed/past (CANNOT_CANCEL_PAST).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Leave Applications]
+      summary: List leave revocation requests (v3.2)
+      operationId: listLeaveRevocations
+      parameters:
+        - name: employeeId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: applicationId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of revocation requests.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/LeaveRevocation' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/leave-revocations/{id}/decision:
+    post:
+      tags: [Leave Applications]
+      summary: Approve or reject a leave revocation (P01) (v3.2)
+      operationId: decideLeaveRevocation
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowDecision' }
+      responses:
+        '200':
+          description: Decision applied; AVAIL_REVERSAL enqueued on approve.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveRevocation' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  # --- E40 attendance_lock_periods (monthly lock / unlock) -------------------
+  /atl/attendance-lock-periods:
+    post:
+      tags: [Attendance Lock]
+      summary: Lock an attendance month at org scope (v3.2)
+      description: >
+        Locks a `YYYY-MM` attendance cycle for a scope. While LOCKED, roster /
+        holiday / regularisation / leave edits touching the month are refused
+        (PERIOD_LOCKED) and corrections route to next-period feed adjustments.
+      operationId: lockAttendancePeriod
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendanceLockCreate' }
+      responses:
+        '201':
+          description: Attendance month locked.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceLockPeriod' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Month already locked for the scope (PERIOD_ALREADY_LOCKED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+    get:
+      tags: [Attendance Lock]
+      summary: List attendance lock periods (v3.2)
+      operationId: listAttendanceLockPeriods
+      parameters:
+        - name: lockMonth
+          in: query
+          schema: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+        - name: scopeOrgUnitId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/LockStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of attendance lock periods.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/AttendanceLockPeriod' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /atl/attendance-lock-periods/{id}/unlock:
+    post:
+      tags: [Attendance Lock]
+      summary: Reopen (unlock) a locked attendance month (v3.2)
+      operationId: unlockAttendancePeriod
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: Attendance month reopened (status REOPENED).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceLockPeriod' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Period not locked, or payroll already closed for the month (CONFLICT).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Internal' }
+
 components:
 
   securitySchemes:
@@ -2183,6 +3111,17 @@ components:
           default: SHIFT_START_LOCAL_DATE
         displayTimezone: { type: string, default: Asia/Kolkata }
         orgUnitScopeId: { type: [string, 'null'], format: uuid }
+        # --- v3.2 field-reconciliation additions (SQL SECTION 13b/13c) ---
+        isWfhShift: { type: boolean, default: false, description: 'v3.2 — Is WFH shift?' }
+        shiftType:
+          type: string
+          enum: [FIXED, FLEXIBLE, ROTATIONAL]
+          default: FIXED
+          description: v3.2 — structural shift type (flex window rides in shift_config).
+        leaveDeductionFactor: { type: [number, 'null'], description: v3.2 — leave-deduction factor. }
+        standardWorkingMinutes: { type: [integer, 'null'], description: v3.2 — standard working hours (minutes). }
+        attendancePolicyId: { type: [string, 'null'], format: uuid, description: v3.2 — governing attendance_policies (E32). }
+        overtimePolicyId: { type: [string, 'null'], format: uuid, description: v3.2 — overtime_policies (E33) enabled in shift. }
     Shift:
       allOf:
         - $ref: '#/components/schemas/ShiftCreate'
@@ -2244,6 +3183,24 @@ components:
           type: string
           enum: [GAZETTED, RESTRICTED, SECTIONAL, OPTIONAL]
         isRestrictedOptional: { type: boolean, default: false }
+        # --- v3.2 field-reconciliation additions ---
+        dayName: { type: [string, 'null'], description: v3.2 — day-of-week label. }
+        repeatNextYear: { type: boolean, default: false, description: v3.2 — import-forward next year. }
+        isNational: { type: boolean, default: false, description: v3.2 — national holiday flag. }
+        recurrenceType:
+          type: string
+          enum: [STATIC_DATE, DAY_OF_MONTH]
+          default: STATIC_DATE
+          description: v3.2 — static-date vs nth-day-of-month recurrence.
+        recurrenceConfig:
+          type: [object, 'null']
+          additionalProperties: true
+          description: 'v3.2 — { occurrence, month, day } for DAY_OF_MONTH.'
+        holidayCategory:
+          type: [string, 'null']
+          enum: [NATIONAL, REGIONAL, RELIGIOUS, COMPANY_SPECIFIC, null]
+          description: v3.2 — holiday category.
+        description: { type: [string, 'null'], description: v3.2 — notes / description. }
     Holiday:
       allOf:
         - $ref: '#/components/schemas/HolidayCreate'
@@ -2289,6 +3246,11 @@ components:
         sourceRef:
           type: [string, 'null']
           description: Device-side raw event id used for idempotent ingestion.
+        sourceIp:
+          type: [string, 'null']
+          description: >
+            v3.2 — capture source IP, checked against attendance_networks (E34)
+            IP-restriction ranges for network-bound punch governance.
     PunchBatchIngest:
       type: object
       required: [deviceId, punches]
@@ -2429,6 +3391,11 @@ components:
         otMinutes: { type: integer }
         otTreatment: { type: string, enum: [PAID, COMP_OFF] }
         rateMultiplier: { type: [number, 'null'] }
+        # --- v3.2 field-reconciliation additions ---
+        overtimePolicyId: { type: [string, 'null'], format: uuid, description: v3.2 — governing overtime_policies (E33). }
+        reason: { type: [string, 'null'], description: v3.2 — reason / comments (request-ot). }
+        workedOnHoliday: { type: boolean, default: false, description: v3.2 — worked on holiday. }
+        workedOnWeeklyOff: { type: boolean, default: false, description: v3.2 — worked on weekly off. }
     OvertimeDecision:
       type: object
       required: [decision]
@@ -2539,6 +3506,21 @@ components:
           default: EXCLUDE
         requiresReturnToWorkCert: { type: boolean, default: false }
         maxContinuousDays: { type: [integer, 'null'] }
+        # --- v3.2 field-reconciliation additions (leave_types) ---
+        isHourlyLeave: { type: boolean, default: false, description: 'v3.2 — Is hourly leave?' }
+        hoursPerDay: { type: [number, 'null'], description: v3.2 — hours in a day (hourly-leave basis). }
+        hourlyMinMinutes: { type: [integer, 'null'], description: v3.2 — min leave duration per application (minutes). }
+        hourlyMultipleMinutes: { type: [integer, 'null'], description: v3.2 — hourly leave only in multiples of (minutes). }
+        allowHourlyAcrossMidnight: { type: boolean, default: false, description: v3.2 — allow hourly leave across midnight. }
+        maxDaysPerYear: { type: [number, 'null'], description: v3.2 — maximum leave allowed per year. }
+        maxAvailedPerYear: { type: [number, 'null'], description: v3.2 — maximum leave availed per year. }
+        maxDaysPerMonth: { type: [number, 'null'], description: v3.2 — maximum leave allowed per month. }
+        minAdvanceNoticeDays: { type: [integer, 'null'], description: v3.2 — minimum advance notice (days). }
+        maxFutureApplyDays: { type: [integer, 'null'], description: v3.2 — max future days leave is allowed for. }
+        allowHalfDay: { type: boolean, default: true, description: v3.2 — allow half-day. }
+        attachmentMandatoryBeyondDays: { type: [integer, 'null'], description: v3.2 — attachment mandatory beyond X days. }
+        isSpecialLeave: { type: boolean, default: false, description: v3.2 — is this a special leave. }
+        hasUnlimitedBalance: { type: boolean, default: false, description: v3.2 — leave with unlimited balance. }
     LeaveType:
       allOf:
         - $ref: '#/components/schemas/LeaveTypeCreate'
@@ -2655,6 +3637,9 @@ components:
         contactDuringLeave: { type: [string, 'null'] }
         supportingDocumentId: { type: [string, 'null'], format: uuid }
         appliedOnBehalfBy: { type: [string, 'null'], format: uuid }
+        # --- v3.2 field-reconciliation additions (leave_applications) ---
+        approverNote: { type: [string, 'null'], description: v3.2 — optional context to approver (distinct from reason). }
+        hourlyMinutes: { type: [integer, 'null'], description: v3.2 — hourly-leave duration; total_days remains the debit basis. }
         days:
           type: array
           minItems: 1
@@ -2699,6 +3684,8 @@ components:
           type: [string, 'null']
           enum: [NOT_REQUIRED, PENDING, CLEARED, null]
         appliedOnBehalfBy: { type: [string, 'null'], format: uuid }
+        approverNote: { type: [string, 'null'], description: v3.2 — optional context to approver. }
+        hourlyMinutes: { type: [integer, 'null'], description: v3.2 — hourly-leave duration (debit basis stays total_days). }
         balancePreview: { $ref: '#/components/schemas/BalancePreview' }
         days:
           type: array
@@ -3034,3 +4021,346 @@ components:
           type: string
           enum: [FULL, FIRST_HALF, SECOND_HALF]
           default: FULL
+
+    # =====================================================================
+    # v3.2 FIELD-RECONCILIATION SCHEMAS (E32–E40) — ADD-ONLY
+    # =====================================================================
+
+    # --- Shared v3.2 enums -------------------------------------------------
+    AdjustmentStatus:
+      type: string
+      enum: [SUBMITTED, APPROVED, REJECTED, APPLIED, CANCELLED]
+    LockStatus:
+      type: string
+      enum: [OPEN, LOCKED, REOPENED]
+
+    # --- E36 leave_reasons -------------------------------------------------
+    LeaveReasonCreate:
+      type: object
+      required: [reasonCode, name]
+      properties:
+        reasonCode: { type: string, maxLength: 30 }
+        name: { type: string, maxLength: 120 }
+        category: { type: [string, 'null'], description: Medical/Compassionate/Family/Statutory (tenant-configurable). }
+        description: { type: [string, 'null'] }
+        applicableLeaveTypeIds:
+          type: [array, 'null']
+          items: { type: string }
+          description: Applicable leave types (e.g. ["EL","SL"]).
+        docRequired: { type: boolean, default: false }
+        hrbpAutoRoute: { type: boolean, default: false }
+        autoApproveThresholdDays: { type: [number, 'null'] }
+        effectiveFrom: { type: [string, 'null'], format: date }
+    LeaveReasonUpdate:
+      type: object
+      properties:
+        name: { type: [string, 'null'], maxLength: 120 }
+        category: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        applicableLeaveTypeIds:
+          type: [array, 'null']
+          items: { type: string }
+        docRequired: { type: [boolean, 'null'] }
+        hrbpAutoRoute: { type: [boolean, 'null'] }
+        autoApproveThresholdDays: { type: [number, 'null'] }
+        status: { type: [string, 'null'], enum: [ACTIVE, INACTIVE, null] }
+    LeaveReason:
+      allOf:
+        - $ref: '#/components/schemas/LeaveReasonCreate'
+        - type: object
+          required: [reasonId, status]
+          properties:
+            reasonId: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, INACTIVE] }
+            tenantId: { type: [string, 'null'], format: uuid }
+            entityId: { type: [string, 'null'], format: uuid }
+
+    # --- E37 attendance_reasons -------------------------------------------
+    AttendanceReasonCreate:
+      type: object
+      required: [reasonCode, name]
+      properties:
+        reasonCode: { type: string, maxLength: 30 }
+        name: { type: string, maxLength: 120 }
+        category: { type: [string, 'null'], description: MISS/MED/SYS/TRV/TRN/EMRG/WFH (tenant-configurable). }
+        description: { type: [string, 'null'] }
+        applicableScope:
+          type: [object, 'null']
+          additionalProperties: true
+          description: Applicable leave types / regularisation kinds.
+        docRequired: { type: boolean, default: false }
+        autoApprove: { type: boolean, default: false, description: Always auto-approve (e.g. system downtime). }
+        autoApproveThresholdDays: { type: [number, 'null'] }
+        frequencyCap: { type: [integer, 'null'], description: Usage limit per period (null = unlimited). }
+        frequencyPeriod: { type: [string, 'null'], enum: [MONTH, QUARTER, YEAR, null] }
+    AttendanceReasonUpdate:
+      type: object
+      properties:
+        name: { type: [string, 'null'], maxLength: 120 }
+        category: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        applicableScope:
+          type: [object, 'null']
+          additionalProperties: true
+        docRequired: { type: [boolean, 'null'] }
+        autoApprove: { type: [boolean, 'null'] }
+        autoApproveThresholdDays: { type: [number, 'null'] }
+        frequencyCap: { type: [integer, 'null'] }
+        frequencyPeriod: { type: [string, 'null'], enum: [MONTH, QUARTER, YEAR, null] }
+        status: { type: [string, 'null'], enum: [ACTIVE, INACTIVE, null] }
+    AttendanceReason:
+      allOf:
+        - $ref: '#/components/schemas/AttendanceReasonCreate'
+        - type: object
+          required: [reasonId, status]
+          properties:
+            reasonId: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, INACTIVE] }
+            tenantId: { type: [string, 'null'], format: uuid }
+            entityId: { type: [string, 'null'], format: uuid }
+
+    # --- E32 attendance_policies ------------------------------------------
+    AttendancePolicyCreate:
+      type: object
+      required: [policyCode, name]
+      properties:
+        policyCode: { type: string, maxLength: 30 }
+        name: { type: string, maxLength: 120 }
+        description: { type: [string, 'null'] }
+        graceInMinutes: { type: integer, default: 0 }
+        graceOutMinutes: { type: integer, default: 0 }
+        includeGraceInLate: { type: boolean, default: false }
+        includeGraceInEarlyOut: { type: boolean, default: false }
+        allowWfhCheckin: { type: boolean, default: false }
+        allowOutdutyCheckin: { type: boolean, default: false }
+        markAttendanceBasis: { type: [string, 'null'] }
+        bufferPreMinutes: { type: integer, default: 0 }
+        bufferPostMinutes: { type: integer, default: 0 }
+        backdatedEditLimitDays: { type: [integer, 'null'] }
+        rosterChangeLimitDays: { type: [integer, 'null'] }
+        abscondingTriggerDays: { type: [integer, 'null'] }
+        optionalHolidayLimitDays: { type: [integer, 'null'] }
+        autoApproveOptionalHoliday: { type: boolean, default: false }
+        nightShiftDifferentialEnabled: { type: boolean, default: false }
+        nsdMultiplier: { type: [number, 'null'] }
+        wfhCapPerMonth: { type: [integer, 'null'] }
+        workingDaysPerWeek: { type: [number, 'null'] }
+        dailyRequiredMinutes: { type: [integer, 'null'] }
+        policyConfig:
+          type: [object, 'null']
+          additionalProperties: true
+          description: Request windows, leave-deduction rules, hide/display flags (config, not data).
+    AttendancePolicyUpdate:
+      allOf:
+        - $ref: '#/components/schemas/AttendancePolicyCreate'
+        - type: object
+          properties:
+            status: { type: [string, 'null'], enum: [ACTIVE, INACTIVE, null] }
+    AttendancePolicy:
+      allOf:
+        - $ref: '#/components/schemas/AttendancePolicyCreate'
+        - type: object
+          required: [policyId, status]
+          properties:
+            policyId: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, INACTIVE] }
+
+    # --- E33 overtime_policies --------------------------------------------
+    OvertimePolicyCreate:
+      type: object
+      required: [policyCode, name]
+      properties:
+        policyCode: { type: string, maxLength: 30 }
+        name: { type: string, maxLength: 120 }
+        description: { type: [string, 'null'] }
+        calculationFrequency:
+          type: string
+          enum: [DAILY, WEEKLY, BIWEEKLY, SEMI_MONTHLY, MONTHLY, QUARTERLY, YEARLY]
+          default: DAILY
+        compensation: { type: string, enum: [PAID, COMP_OFF], default: COMP_OFF }
+        minOtMinutes: { type: integer, default: 0 }
+        dailyCapMinutes: { type: [integer, 'null'] }
+        weeklyCapMinutes: { type: [integer, 'null'] }
+        monthlyCapMinutes: { type: [integer, 'null'] }
+        yearlyCapMinutes: { type: [integer, 'null'] }
+        weekdayMultiplier: { type: [number, 'null'] }
+        weeklyOffMultiplier: { type: [number, 'null'] }
+        holidayMultiplier: { type: [number, 'null'] }
+        nsdMultiplier: { type: [number, 'null'] }
+        compoffMinMinutesFull: { type: [integer, 'null'] }
+        compoffMinMinutesHalf: { type: [integer, 'null'] }
+        compoffLapseDays: { type: [integer, 'null'] }
+        compoffMaxPerMonth: { type: [number, 'null'] }
+        slabs:
+          type: [array, 'null']
+          items:
+            type: object
+            additionalProperties: true
+          description: '[{ slab_name, multiplication_factor }] (Overtime_Slabs).'
+        thresholds:
+          type: [object, 'null']
+          additionalProperties: true
+          description: '{ weekly_pct, monthly_pct, quarterly_pct, yearly_pct }.'
+        indexingRules:
+          type: [object, 'null']
+          additionalProperties: true
+        policyConfig:
+          type: [object, 'null']
+          additionalProperties: true
+          description: Per-frequency approval routing, rounding, deduction rules (config).
+    OvertimePolicyUpdate:
+      allOf:
+        - $ref: '#/components/schemas/OvertimePolicyCreate'
+        - type: object
+          properties:
+            status: { type: [string, 'null'], enum: [ACTIVE, INACTIVE, null] }
+    OvertimePolicy:
+      allOf:
+        - $ref: '#/components/schemas/OvertimePolicyCreate'
+        - type: object
+          required: [policyId, status]
+          properties:
+            policyId: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, INACTIVE] }
+
+    # --- E35 geofences -----------------------------------------------------
+    GeofenceCreate:
+      type: object
+      required: [fenceCode, name, latitude, longitude, radiusMeters]
+      properties:
+        fenceCode: { type: string, maxLength: 30 }
+        name: { type: string, maxLength: 120 }
+        latitude: { type: number }
+        longitude: { type: number }
+        radiusMeters: { type: integer, minimum: 1 }
+        tag: { type: [string, 'null'] }
+        locationOrgUnitId: { type: [string, 'null'], format: uuid }
+        address: { type: [string, 'null'], description: Full street address. }
+        maxEmployees: { type: [integer, 'null'], description: Office capacity / max employees. }
+    GeofenceUpdate:
+      type: object
+      properties:
+        name: { type: [string, 'null'], maxLength: 120 }
+        latitude: { type: [number, 'null'] }
+        longitude: { type: [number, 'null'] }
+        radiusMeters: { type: [integer, 'null'], minimum: 1 }
+        tag: { type: [string, 'null'] }
+        locationOrgUnitId: { type: [string, 'null'], format: uuid }
+        address: { type: [string, 'null'] }
+        maxEmployees: { type: [integer, 'null'] }
+        status: { type: [string, 'null'], enum: [ACTIVE, INACTIVE, null] }
+    Geofence:
+      allOf:
+        - $ref: '#/components/schemas/GeofenceCreate'
+        - type: object
+          required: [fenceId, status]
+          properties:
+            fenceId: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, INACTIVE] }
+
+    # --- E34 attendance_networks (IP restriction) --------------------------
+    AttendanceNetworkCreate:
+      type: object
+      required: [networkCode, name, ipFrom, ipTo]
+      properties:
+        networkCode: { type: string, maxLength: 30 }
+        name: { type: string, maxLength: 120 }
+        ipFrom: { type: string, description: IP address range start (inet). }
+        ipTo: { type: string, description: IP address range end (inet). }
+        tag: { type: [string, 'null'] }
+    AttendanceNetworkUpdate:
+      type: object
+      properties:
+        name: { type: [string, 'null'], maxLength: 120 }
+        ipFrom: { type: [string, 'null'] }
+        ipTo: { type: [string, 'null'] }
+        tag: { type: [string, 'null'] }
+        status: { type: [string, 'null'], enum: [ACTIVE, INACTIVE, null] }
+    AttendanceNetwork:
+      allOf:
+        - $ref: '#/components/schemas/AttendanceNetworkCreate'
+        - type: object
+          required: [networkId, status]
+          properties:
+            networkId: { type: string, format: uuid }
+            status: { type: string, enum: [ACTIVE, INACTIVE] }
+
+    # --- E38 leave_balance_adjustments -------------------------------------
+    LeaveBalanceAdjustmentCreate:
+      type: object
+      required: [employeeId, leaveTypeId, adjustmentType, detailedReason, effectiveDate]
+      properties:
+        employeeId: { type: string, format: uuid }
+        leaveTypeId: { type: string, format: uuid }
+        adjustmentType: { type: string, enum: [CREDIT, DEBIT, RESET] }
+        amountDays: { type: [number, 'null'], description: Signed magnitude for CREDIT/DEBIT. }
+        resetToValue: { type: [number, 'null'], description: Target balance for RESET. }
+        reasonCategory: { type: [string, 'null'] }
+        detailedReason: { type: string, description: Why justified (audit-logged). }
+        supportingReference: { type: [string, 'null'] }
+        effectiveDate: { type: string, format: date }
+    LeaveBalanceAdjustment:
+      allOf:
+        - $ref: '#/components/schemas/LeaveBalanceAdjustmentCreate'
+        - type: object
+          required: [adjustmentId, status]
+          properties:
+            adjustmentId: { type: string, format: uuid }
+            workflowInstanceId: { type: [string, 'null'], format: uuid }
+            resultingLedgerEntryId: { type: [string, 'null'], format: uuid }
+            status: { $ref: '#/components/schemas/AdjustmentStatus' }
+
+    # --- E39 leave_revocations ---------------------------------------------
+    LeaveRevocationCreate:
+      type: object
+      required: [applicationId, employeeId, detailedReason]
+      properties:
+        applicationId: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        revocationType: { type: string, enum: [FULL, PARTIAL], default: FULL }
+        daysToRevoke: { type: [number, 'null'], description: Required for PARTIAL. }
+        reasonCategory: { type: [string, 'null'] }
+        detailedReason: { type: string, description: Why justified (audit-logged). }
+        refundToBalance: { type: boolean, default: true }
+    LeaveRevocation:
+      allOf:
+        - $ref: '#/components/schemas/LeaveRevocationCreate'
+        - type: object
+          required: [revocationId, status]
+          properties:
+            revocationId: { type: string, format: uuid }
+            workflowInstanceId: { type: [string, 'null'], format: uuid }
+            resultingLedgerEntryId: { type: [string, 'null'], format: uuid }
+            status:
+              type: string
+              enum: [DRAFT, SUBMITTED, APPROVED, REJECTED, CANCELLED]
+
+    # --- E40 attendance_lock_periods ---------------------------------------
+    AttendanceLockCreate:
+      type: object
+      required: [lockMonth]
+      properties:
+        lockMonth: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+        scopeOrgUnitId: { type: [string, 'null'], format: uuid, description: null = entity-wide. }
+        lockDeadline: { type: [string, 'null'], format: date }
+        resolutionMode:
+          type: string
+          enum: [AUTO_APPROVE, AUTO_DENY, MANUAL]
+          default: MANUAL
+          description: Disposition of regularisations pending at lock.
+        autoTriggerPayroll: { type: boolean, default: false }
+        lockNote: { type: [string, 'null'] }
+    AttendanceLockPeriod:
+      allOf:
+        - $ref: '#/components/schemas/AttendanceLockCreate'
+        - type: object
+          required: [lockPeriodId, status]
+          properties:
+            lockPeriodId: { type: string, format: uuid }
+            status: { $ref: '#/components/schemas/LockStatus' }
+            totalEmployeeDays: { type: [integer, 'null'] }
+            pendingAtLock: { type: [integer, 'null'] }
+            lockedBy: { type: [string, 'null'], format: uuid }
+            lockedAt: { type: [string, 'null'], format: date-time }
+            payrollStatus: { type: [string, 'null'] }
+            payrollClosedAt: { type: [string, 'null'], format: date-time }

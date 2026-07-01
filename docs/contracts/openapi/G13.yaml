@@ -80,6 +80,12 @@ tags:
     description: DPDP data-subject requests and erasure precedence lattice (FR-G13-018).
   - name: orphans
     description: Orphaned-document lifecycle (orphan reaper) (FR-G13-019).
+  - name: letter-config
+    description: RECON v3.2 — tenant letter/document config masters — categories + profile-field linkage, file-name formats, merge-field catalogue, policy-letter + self-generate settings (FR-G13-002/010).
+  - name: letter-generation
+    description: RECON v3.2 — per-letter generation queue (merge resolution, sign) and bulk-letter jobs (FR-G13-010).
+  - name: acknowledgements
+    description: RECON v3.2 — policy/letter acknowledgement campaigns and per-employee non-repudiation acknowledgement records (FR-G13-012).
 
 paths:
   # ---------------------------------------------------------------------------
@@ -2422,6 +2428,844 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  # ===========================================================================
+  # RECON v3.2 — Letter/document config masters, letter generation, acknowledgements
+  # (BRD §5.2 E27–E36; SQL Sections F/G). ADD-ONLY; vault paths above untouched.
+  # ===========================================================================
+
+  # --- Config master: document categories (+ profile-field linkage) — FR-G13-002 ---
+  /document-categories:
+    post:
+      tags: [letter-config]
+      summary: Create a document category (tenant config master, DOCCAT_N)
+      description: >
+        Creates a tenant-configurable category grouping employee document/profile fields
+        (`document_categories`, `DOCCAT_N`) — distinct from the closed `g13_doc_category` enum.
+        RECON v3.2. FR-G13-002.
+      operationId: createDocumentCategory
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentCategoryInput' }
+      responses:
+        '201':
+          description: Category created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentCategory' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [letter-config]
+      summary: List document categories (cursor-paginated)
+      operationId: listDocumentCategories
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ConfigStatus' } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of categories.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentCategoryPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /document-categories/{id}:
+    put:
+      tags: [letter-config]
+      summary: Update a document category
+      operationId: updateDocumentCategory
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentCategoryInput' }
+      responses:
+        '200':
+          description: Category updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentCategory' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /document-categories/{id}/profile-fields:
+    post:
+      tags: [letter-config]
+      summary: Link an employee-profile field to a category
+      description: >
+        Links a G01-owned employee-profile field slug to the category
+        (`document_category_profile_fields`; unique per `(category, profile_field_key)`,
+        text key, no cross-module FK). RECON v3.2. FR-G13-002.
+      operationId: linkCategoryProfileField
+      parameters:
+        - $ref: '#/components/parameters/DocumentCategoryId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryProfileFieldInput' }
+      responses:
+        '201':
+          description: Profile field linked.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CategoryProfileField' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [letter-config]
+      summary: List profile-field links for a category
+      operationId: listCategoryProfileFields
+      parameters:
+        - $ref: '#/components/parameters/DocumentCategoryId'
+      responses:
+        '200':
+          description: Profile-field links (display-order ascending).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CategoryProfileFieldList' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /document-categories/{id}/profile-fields/{fieldId}:
+    delete:
+      tags: [letter-config]
+      summary: Unlink a profile field from a category
+      operationId: unlinkCategoryProfileField
+      parameters:
+        - $ref: '#/components/parameters/DocumentCategoryId'
+        - { name: fieldId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Link removed.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # --- Config master: generated-document file-name formats (DOCFORMAT_N) — FR-G13-002 ---
+  /document-template-name-formats:
+    post:
+      tags: [letter-config]
+      summary: Create a generated-document file-name format (DOCFORMAT_N)
+      description: 'Defines a generated-document naming pattern/prefix/suffix/default (`document_template_name_formats`). RECON v3.2. FR-G13-002.'
+      operationId: createTemplateNameFormat
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateNameFormatInput' }
+      responses:
+        '201':
+          description: Format created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateNameFormat' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [letter-config]
+      summary: List file-name formats (cursor-paginated)
+      operationId: listTemplateNameFormats
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ConfigStatus' } }
+        - { name: isDefault, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of formats.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateNameFormatPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /document-template-name-formats/{id}:
+    put:
+      tags: [letter-config]
+      summary: Update a file-name format
+      operationId: updateTemplateNameFormat
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateNameFormatInput' }
+      responses:
+        '200':
+          description: Format updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateNameFormat' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # --- Reference catalogue: merge fields ({{token}} -> source) — FR-G13-010 ---
+  /merge-fields:
+    post:
+      tags: [letter-config]
+      summary: Register a merge field in the catalogue
+      description: >
+        Registers a `{{token}}` -> source-module dictionary entry (`merge_field_catalog`) that
+        letter generation resolves against. `source` is an open set (module/system code). RECON v3.2. FR-G13-010.
+      operationId: createMergeField
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MergeFieldInput' }
+      responses:
+        '201':
+          description: Merge field registered.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MergeField' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [letter-config]
+      summary: List merge-field catalogue (cursor-paginated)
+      operationId: listMergeFields
+      parameters:
+        - { name: source, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ConfigStatus' } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of merge fields.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MergeFieldPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /merge-fields/{id}:
+    put:
+      tags: [letter-config]
+      summary: Update a merge-field catalogue entry
+      operationId: updateMergeField
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MergeFieldInput' }
+      responses:
+        '200':
+          description: Merge field updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MergeField' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # --- Config master: per-company policy-letter settings — FR-G13-002/012 ---
+  /policy-letter-settings:
+    post:
+      tags: [letter-config]
+      summary: Create/update per-company policy-letter settings
+      description: >
+        Upserts per-company HR policy sign-off / letter-acknowledgement text and CTC letter-render
+        settings (`policy_letter_settings`; one row per `company_code`). RECON v3.2. FR-G13-002/012.
+      operationId: upsertPolicyLetterSettings
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PolicyLetterSettingsInput' }
+      responses:
+        '200':
+          description: Settings saved (created or updated for the company).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyLetterSettings' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [letter-config]
+      summary: List policy-letter settings (cursor-paginated)
+      operationId: listPolicyLetterSettings
+      parameters:
+        - { name: companyCode, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of per-company settings.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyLetterSettingsPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # --- Config master: self-service letter-generation defaults (SELFGEN_N) — FR-G13-010 ---
+  /self-generate-settings:
+    post:
+      tags: [letter-config]
+      summary: Create a self-service letter-generation setting (SELFGEN_N)
+      description: >
+        Holds self-service HR-letter-generation defaults — companies in scope, letter heads,
+        signing authorities/signatures (logical refs) (`self_generate_settings`). RECON v3.2. FR-G13-010.
+      operationId: createSelfGenerateSetting
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SelfGenerateSettingInput' }
+      responses:
+        '201':
+          description: Setting created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SelfGenerateSetting' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [letter-config]
+      summary: List self-generate settings (cursor-paginated)
+      operationId: listSelfGenerateSettings
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ConfigStatus' } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of settings.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SelfGenerateSettingPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /self-generate-settings/{id}:
+    put:
+      tags: [letter-config]
+      summary: Update a self-generate setting
+      operationId: updateSelfGenerateSetting
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SelfGenerateSettingInput' }
+      responses:
+        '200':
+          description: Setting updated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SelfGenerateSetting' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # --- Letter generation requests (queue + generate/resolve-merge/sign) — FR-G13-010 ---
+  /letter-generation-requests:
+    post:
+      tags: [letter-generation]
+      summary: Create a letter-generation request (enqueue)
+      description: >
+        Enqueues a per-letter generation request on `DocumentGen` (`letter_generation_requests`,
+        status DRAFT). RECON v3.2. FR-G13-010.
+      operationId: createLetterGenerationRequest
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LetterGenerationRequestInput' }
+      responses:
+        '201':
+          description: Request enqueued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LetterGenerationRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [letter-generation]
+      summary: List letter-generation requests (cursor-paginated)
+      operationId: listLetterGenerationRequests
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/LetterRequestStatus' } }
+        - { name: employeeId, in: query, schema: { type: string, format: uuid } }
+        - { name: letterType, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of letter requests.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LetterGenerationRequestPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /letter-generation-requests/{id}:
+    get:
+      tags: [letter-generation]
+      summary: Get a letter-generation request
+      operationId: getLetterGenerationRequest
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: The letter request.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LetterGenerationRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /letter-generation-requests/{id}:resolve-merge:
+    post:
+      tags: [letter-generation]
+      summary: Resolve merge fields for a letter request
+      description: >
+        Resolves every `{{token}}` against `merge_field_catalog` sources. Unresolved tokens leave the
+        request at `VALIDATION_ERROR` with `validation_error` populated and fail 422
+        `ERR-G13-METADATA_INVALID`. RECON v3.2. FR-G13-010.
+      operationId: resolveLetterMergeFields
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Merge resolution result (all tokens resolved).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MergeResolutionResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /letter-generation-requests/{id}:generate:
+    post:
+      tags: [letter-generation]
+      summary: Generate the letter document
+      description: >
+        Renders the letter through `DocumentGen` after every merge token resolves; produces a
+        `documents` row (`generated_document_id`). Unresolved tokens ⇒ 422 `ERR-G13-METADATA_INVALID`
+        (request → `VALIDATION_ERROR`). RECON v3.2. FR-G13-010.
+      operationId: generateLetter
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LetterGenerateRequest' }
+      responses:
+        '200':
+          description: Letter generated (document produced; may await signature).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LetterGenerationRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /letter-generation-requests/{id}:sign:
+    post:
+      tags: [letter-generation]
+      summary: Sign a generated letter
+      description: >
+        Routes the generated letter to the `DocumentGen` sign-off flow (creates/advances a
+        `signature_requests` envelope). Method must be in the type's allowed list ⇒ else 422
+        `ERR-G13-SIGNATURE_METHOD_NOT_ALLOWED`; tamper ⇒ 422 `ERR-G13-SIGNATURE_INVALID`; missing LTV ⇒
+        422 `ERR-G13-SIGNATURE_LTV_REQUIRED`; PKI/eSign down ⇒ 500 `ERR-G13-SIGNING_SERVICE_UNAVAILABLE`.
+        RECON v3.2. FR-G13-010.
+      operationId: signLetter
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LetterSignRequest' }
+      responses:
+        '200':
+          description: Signature applied/advanced (request may become ISSUED on the last signer).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LetterGenerationRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # --- Bulk letter jobs (start + status) — FR-G13-010 ---
+  /bulk-letter-jobs:
+    post:
+      tags: [letter-generation]
+      summary: Start a bulk letter/sign-off job
+      description: >
+        Starts a batch letter/sign-off job on `JOB-M11-BULKLTR` (`bulk_letter_jobs`, status QUEUED).
+        RECON v3.2. FR-G13-010.
+      operationId: startBulkLetterJob
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkLetterJobStartRequest' }
+      responses:
+        '202':
+          description: Job accepted and queued.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkLetterJob' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [letter-generation]
+      summary: List bulk letter jobs (cursor-paginated)
+      operationId: listBulkLetterJobs
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/BulkJobStatus' } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of jobs.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkLetterJobPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /bulk-letter-jobs/{id}:
+    get:
+      tags: [letter-generation]
+      summary: Get bulk letter job status (progress/ETA)
+      operationId: getBulkLetterJobStatus
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Job progress (record/processed/failed counts, percent, ETA).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkLetterJob' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # --- Acknowledgement campaigns (create/track) + acknowledgements — FR-G13-012 ---
+  /acknowledgement-campaigns:
+    post:
+      tags: [acknowledgements]
+      summary: Create a policy/letter acknowledgement campaign
+      description: >
+        Creates a sign-off/acknowledgement drive over an audience with cadence, SLA/escalation and
+        deadline (`acknowledgement_campaigns`, status DRAFT). RECON v3.2. FR-G13-012.
+      operationId: createAcknowledgementCampaign
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcknowledgementCampaignInput' }
+      responses:
+        '201':
+          description: Campaign created.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AcknowledgementCampaign' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [acknowledgements]
+      summary: List acknowledgement campaigns (cursor-paginated)
+      operationId: listAcknowledgementCampaigns
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/AckCampaignStatus' } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of campaigns.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AcknowledgementCampaignPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /acknowledgement-campaigns/{id}:
+    get:
+      tags: [acknowledgements]
+      summary: Get an acknowledgement campaign
+      operationId: getAcknowledgementCampaign
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: The campaign.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AcknowledgementCampaign' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /acknowledgement-campaigns/{id}:track:
+    get:
+      tags: [acknowledgements]
+      summary: Track campaign progress (rollup counts)
+      description: 'Returns assigned/acknowledged/pending/overdue rollups for the drive. RECON v3.2. FR-G13-012.'
+      operationId: trackAcknowledgementCampaign
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Campaign progress rollup.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignTrackResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /acknowledgement-campaigns/{id}/acknowledgements:
+    get:
+      tags: [acknowledgements]
+      summary: List per-employee acknowledgements in a campaign
+      operationId: listDocumentAcknowledgements
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/AckStatus' } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of acknowledgement records.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentAcknowledgementPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [acknowledgements]
+      summary: Acknowledge a policy/letter (employee self, in-campaign)
+      description: >
+        The assigned employee acknowledges the active document version. Captures the non-repudiation
+        snapshot (consent-text snapshot, app/browser version, IP, version_no) and transitions the record
+        PENDING → ACKNOWLEDGED (`document_acknowledgements`, DM25). Acknowledging another employee's
+        assignment ⇒ 403 FORBIDDEN. RECON v3.2. FR-G13-012.
+      operationId: acknowledgeDocument
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcknowledgeRequest' }
+      responses:
+        '201':
+          description: Acknowledgement recorded (non-repudiation snapshot captured).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentAcknowledgement' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /document-acknowledgements/{id}:record:
+    post:
+      tags: [acknowledgements]
+      summary: Record/capture a policy acknowledgement (non-repudiation)
+      description: >
+        Records an acknowledgement against an existing assignment id — captures the write-once
+        non-repudiation evidence (consent-text snapshot, app/browser version, IP, active version_no,
+        optional `consent_records` linkage) and marks ACKNOWLEDGED (`document_acknowledgements`, DM25).
+        Re-record on an already-ACKNOWLEDGED row ⇒ 409 CONFLICT (idempotent, write-once). RECON v3.2. FR-G13-012.
+      operationId: recordAcknowledgement
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecordAcknowledgementRequest' }
+      responses:
+        '200':
+          description: Acknowledgement recorded.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentAcknowledgement' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2448,6 +3292,12 @@ components:
       name: id
       in: path
       required: true
+      schema: { type: string, format: uuid }
+    DocumentCategoryId:
+      name: id
+      in: path
+      required: true
+      description: Document category id (`document_categories`; RECON v3.2).
       schema: { type: string, format: uuid }
     Limit:
       name: limit
@@ -3627,3 +4477,461 @@ components:
         entityRefId: { type: [string, "null"] }
         linkRole: { type: [string, "null"] }
         retentionPolicyId: { type: [string, "null"], format: uuid }
+
+    # =======================================================================
+    # RECON v3.2 — letter/document config, letter generation, acknowledgements
+    # (BRD §5.2 E27–E36; SQL Sections F/G). ADD-ONLY.
+    # =======================================================================
+
+    # ---- RECON enums (Section 5.5) ----------------------------------------
+    ConfigStatus:
+      type: string
+      description: '`g13_config_status` — lifecycle of a RECON config master.'
+      enum: [ACTIVE, INACTIVE]
+    LetterRequestStatus:
+      type: string
+      description: '`g13_letter_request_status` — letter-generation request lifecycle.'
+      enum: [DRAFT, PENDING_RESOLUTION, VALIDATION_ERROR, AWAITING_SIGNATURE, SCHEDULED, GENERATED, ISSUED, FAILED, CANCELLED]
+    BulkJobStatus:
+      type: string
+      description: '`g13_bulk_job_status` — bulk letter/sign-off job lifecycle.'
+      enum: [QUEUED, IN_PROGRESS, HELD, AWAITING_EMPLOYEE_ACTION, AWAITING_ACK, COMPLETE, FAILED]
+    AckCampaignStatus:
+      type: string
+      description: '`g13_ack_campaign_status` — acknowledgement campaign lifecycle.'
+      enum: [DRAFT, ACTIVE, CLOSING, COMPLETE]
+    AckStatus:
+      type: string
+      description: '`g13_ack_status` — per-employee acknowledgement lifecycle.'
+      enum: [PENDING, ACKNOWLEDGED, OVERDUE]
+
+    # ---- Document categories (+ profile-field linkage) — E27/E28 ----------
+    DocumentCategory:
+      type: object
+      description: '`document_categories` — tenant category master (DOCCAT_N).'
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        categoryCode: { type: string, description: 'Business key, DOCCAT_N (unique per tenant).' }
+        name: { type: string }
+        status: { $ref: '#/components/schemas/ConfigStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DocumentCategoryInput:
+      type: object
+      required: [categoryCode, name]
+      properties:
+        categoryCode: { type: string, maxLength: 60 }
+        name: { type: string, maxLength: 200 }
+        status: { type: [string, "null"], allOf: [ { $ref: '#/components/schemas/ConfigStatus' } ] }
+    DocumentCategoryPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/DocumentCategory' }
+    CategoryProfileField:
+      type: object
+      description: '`document_category_profile_fields` — category ↔ G01 profile-field slug linkage.'
+      properties:
+        id: { type: string, format: uuid }
+        documentCategoryId: { type: string, format: uuid }
+        profileFieldKey: { type: string, description: 'G01-owned employee-profile field slug (text key, no FK).' }
+        displayOrder: { type: integer }
+    CategoryProfileFieldInput:
+      type: object
+      required: [profileFieldKey]
+      properties:
+        profileFieldKey: { type: string, maxLength: 200 }
+        displayOrder: { type: [integer, "null"], default: 0 }
+    CategoryProfileFieldList:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CategoryProfileField' }
+
+    # ---- Generated-document file-name formats — E29 -----------------------
+    TemplateNameFormat:
+      type: object
+      description: '`document_template_name_formats` — generated-document naming (DOCFORMAT_N).'
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        formatCode: { type: string }
+        formatName: { type: string }
+        templateFolder: { type: [string, "null"] }
+        isDefault: { type: boolean }
+        nameFormat: { type: string }
+        prefix: { type: [string, "null"] }
+        suffix: { type: [string, "null"] }
+        status: { $ref: '#/components/schemas/ConfigStatus' }
+    TemplateNameFormatInput:
+      type: object
+      required: [formatCode, formatName, nameFormat]
+      properties:
+        formatCode: { type: string, maxLength: 60 }
+        formatName: { type: string, maxLength: 160 }
+        templateFolder: { type: [string, "null"], maxLength: 160 }
+        isDefault: { type: [boolean, "null"], default: false }
+        nameFormat: { type: string, maxLength: 500 }
+        prefix: { type: [string, "null"], maxLength: 120 }
+        suffix: { type: [string, "null"], maxLength: 120 }
+        status: { type: [string, "null"], allOf: [ { $ref: '#/components/schemas/ConfigStatus' } ] }
+    TemplateNameFormatPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/TemplateNameFormat' }
+
+    # ---- Merge-field catalogue — E32 --------------------------------------
+    MergeField:
+      type: object
+      description: '`merge_field_catalog` — {{token}} → source dictionary entry.'
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        fieldKey: { type: string, description: 'Token inside `{{ }}` (unique per tenant), e.g. LETTER_SERIAL_NO.' }
+        label: { type: string }
+        source: { type: string, description: 'Originating module/system (open set), e.g. M06_PAYROLL / SYSTEM.' }
+        resolutionNote: { type: [string, "null"] }
+        status: { $ref: '#/components/schemas/ConfigStatus' }
+    MergeFieldInput:
+      type: object
+      required: [fieldKey, label, source]
+      properties:
+        fieldKey: { type: string, maxLength: 80 }
+        label: { type: string, maxLength: 200 }
+        source: { type: string, maxLength: 60 }
+        resolutionNote: { type: [string, "null"], maxLength: 255 }
+        status: { type: [string, "null"], allOf: [ { $ref: '#/components/schemas/ConfigStatus' } ] }
+    MergeFieldPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/MergeField' }
+
+    # ---- Policy-letter settings (per company) — E30 -----------------------
+    PolicyLetterSettings:
+      type: object
+      description: '`policy_letter_settings` — per-company sign-off/ack text + CTC letter-render settings.'
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        companyCode: { type: string }
+        policySignoffText: { type: string }
+        letterAckText: { type: string }
+        letterCtcFontSize: { type: [string, "null"] }
+        letterCtcFont: { type: [string, "null"] }
+        letterCtcPadding: { type: [string, "null"] }
+        blockPolicyOnMobile: { type: boolean }
+    PolicyLetterSettingsInput:
+      type: object
+      required: [companyCode, policySignoffText, letterAckText]
+      properties:
+        companyCode: { type: string, maxLength: 40 }
+        policySignoffText: { type: string }
+        letterAckText: { type: string }
+        letterCtcFontSize: { type: [string, "null"], maxLength: 20 }
+        letterCtcFont: { type: [string, "null"], maxLength: 160 }
+        letterCtcPadding: { type: [string, "null"], maxLength: 20 }
+        blockPolicyOnMobile: { type: [boolean, "null"], default: false }
+    PolicyLetterSettingsPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/PolicyLetterSettings' }
+
+    # ---- Self-generate settings — E31 -------------------------------------
+    SelfGenerateSetting:
+      type: object
+      description: '`self_generate_settings` — self-service letter-generation defaults (SELFGEN_N). Letter-head / signing-authority / signature values are logical refs to masters outside G13.'
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        settingCode: { type: string }
+        name: { type: string }
+        companies: { type: array, items: { type: string } }
+        companyCodes: { type: array, items: { type: string } }
+        userAssignment: { type: [string, "null"] }
+        letterGenerationAccess: { type: array, items: { type: string } }
+        defaultLetterHeadHtmlRef: { type: [string, "null"] }
+        defaultLetterHeadDocxRef: { type: [string, "null"] }
+        defaultSigningAuthority1: { type: [string, "null"] }
+        defaultSigningAuthority2: { type: [string, "null"] }
+        defaultSigningAuthority3: { type: [string, "null"] }
+        defaultSigningAuthority4: { type: [string, "null"] }
+        defaultSignature1: { type: [string, "null"] }
+        defaultSignature2: { type: [string, "null"] }
+        defaultSignature3: { type: [string, "null"] }
+        defaultSignature4: { type: [string, "null"] }
+        status: { $ref: '#/components/schemas/ConfigStatus' }
+    SelfGenerateSettingInput:
+      type: object
+      required: [settingCode, name]
+      properties:
+        settingCode: { type: string, maxLength: 60 }
+        name: { type: string, maxLength: 160 }
+        companies: { type: array, items: { type: string } }
+        companyCodes: { type: array, items: { type: string } }
+        userAssignment: { type: [string, "null"] }
+        letterGenerationAccess: { type: array, items: { type: string } }
+        defaultLetterHeadHtmlRef: { type: [string, "null"], maxLength: 60 }
+        defaultLetterHeadDocxRef: { type: [string, "null"], maxLength: 60 }
+        defaultSigningAuthority1: { type: [string, "null"], maxLength: 60 }
+        defaultSigningAuthority2: { type: [string, "null"], maxLength: 60 }
+        defaultSigningAuthority3: { type: [string, "null"], maxLength: 60 }
+        defaultSigningAuthority4: { type: [string, "null"], maxLength: 60 }
+        defaultSignature1: { type: [string, "null"], maxLength: 60 }
+        defaultSignature2: { type: [string, "null"], maxLength: 60 }
+        defaultSignature3: { type: [string, "null"], maxLength: 60 }
+        defaultSignature4: { type: [string, "null"], maxLength: 60 }
+        status: { type: [string, "null"], allOf: [ { $ref: '#/components/schemas/ConfigStatus' } ] }
+    SelfGenerateSettingPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/SelfGenerateSetting' }
+
+    # ---- Letter generation requests — E33 ---------------------------------
+    LetterGenerationRequest:
+      type: object
+      description: '`letter_generation_requests` — per-letter generation queue row.'
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        requestNo: { type: string, description: 'Business key, unique per tenant.' }
+        letterType: { type: string }
+        templateRef: { type: [string, "null"], format: uuid, description: 'Logical ref to the M11 letter template.' }
+        documentTypeId: { type: [string, "null"], format: uuid }
+        employeeId: { type: [string, "null"], format: uuid, description: 'Null for candidate letters.' }
+        subjectName: { type: [string, "null"] }
+        requestedBy: { type: [string, "null"], format: uuid }
+        requestContext: { type: [string, "null"] }
+        mergeFieldsTotal: { type: integer }
+        mergeFieldsResolved: { type: integer }
+        signerSummary: { type: [string, "null"] }
+        signatureRequestId: { type: [string, "null"], format: uuid }
+        generatedDocumentId: { type: [string, "null"], format: uuid }
+        scheduledAt: { type: [string, "null"], format: date-time }
+        validationError: { type: [string, "null"], description: 'Populated when status = VALIDATION_ERROR (e.g. unresolved merge token).' }
+        status: { $ref: '#/components/schemas/LetterRequestStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    LetterGenerationRequestInput:
+      type: object
+      required: [requestNo, letterType]
+      properties:
+        requestNo: { type: string, maxLength: 40 }
+        letterType: { type: string, maxLength: 120 }
+        templateRef: { type: [string, "null"], format: uuid }
+        documentTypeId: { type: [string, "null"], format: uuid }
+        employeeId: { type: [string, "null"], format: uuid }
+        subjectName: { type: [string, "null"], maxLength: 200 }
+        requestContext: { type: [string, "null"], maxLength: 120 }
+        scheduledAt: { type: [string, "null"], format: date-time }
+    LetterGenerateRequest:
+      type: object
+      description: Optional generation overrides (file-name format, target folder).
+      properties:
+        nameFormatCode: { type: [string, "null"], description: 'DOCFORMAT_N to name the produced document.' }
+        folderId: { type: [string, "null"], format: uuid }
+    LetterSignRequest:
+      type: object
+      required: [method]
+      properties:
+        method: { type: string, description: 'Signature method; must be in the type''s allowed list (else ERR-G13-SIGNATURE_METHOD_NOT_ALLOWED).', examples: [DSC_TOKEN, AADHAAR_ESIGN] }
+        signerRef: { type: [string, "null"] }
+        comment: { type: [string, "null"] }
+    MergeResolutionResult:
+      type: object
+      description: Result of resolving a request's merge tokens against `merge_field_catalog`.
+      properties:
+        requestId: { type: string, format: uuid }
+        mergeFieldsTotal: { type: integer }
+        mergeFieldsResolved: { type: integer }
+        unresolvedTokens: { type: array, items: { type: string }, description: 'Tokens with no catalogue/source value; non-empty ⇒ VALIDATION_ERROR.' }
+        status: { $ref: '#/components/schemas/LetterRequestStatus' }
+    LetterGenerationRequestPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/LetterGenerationRequest' }
+
+    # ---- Bulk letter jobs — E34 -------------------------------------------
+    BulkLetterJob:
+      type: object
+      description: '`bulk_letter_jobs` — batch letter/sign-off job progress (JOB-M11-BULKLTR).'
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        jobNo: { type: string }
+        jobName: { type: string }
+        templateRef: { type: [string, "null"], format: uuid }
+        jobRef: { type: [string, "null"], format: uuid, description: 'Logical ref to core `jobs(id)` (no FK).' }
+        recordCount: { type: integer }
+        processedCount: { type: integer }
+        failedCount: { type: integer }
+        progressPct: { type: number, format: float }
+        eta: { type: [string, "null"], format: date-time }
+        status: { $ref: '#/components/schemas/BulkJobStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BulkLetterJobStartRequest:
+      type: object
+      required: [jobNo, jobName]
+      properties:
+        jobNo: { type: string, maxLength: 40 }
+        jobName: { type: string, maxLength: 200 }
+        templateRef: { type: [string, "null"], format: uuid }
+        recordCount: { type: [integer, "null"], default: 0 }
+    BulkLetterJobPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/BulkLetterJob' }
+
+    # ---- Acknowledgement campaigns — E35 ----------------------------------
+    AcknowledgementCampaign:
+      type: object
+      description: '`acknowledgement_campaigns` — sign-off/policy acknowledgement drive.'
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        campaignNo: { type: string }
+        name: { type: string }
+        documentId: { type: [string, "null"], format: uuid }
+        documentTitle: { type: [string, "null"] }
+        documentVersionNo: { type: [integer, "null"] }
+        purpose: { type: [string, "null"] }
+        audienceDescription: { type: [string, "null"] }
+        audienceUagRef: { type: [string, "null"] }
+        reminderCadence: { type: [string, "null"] }
+        escalateAfterSlaTo: { type: [string, "null"] }
+        startedAt: { type: [string, "null"], format: date-time }
+        deadline: { type: [string, "null"], format: date }
+        assignedCount: { type: integer }
+        acknowledgedCount: { type: integer }
+        pendingCount: { type: integer }
+        overdueCount: { type: integer }
+        status: { $ref: '#/components/schemas/AckCampaignStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AcknowledgementCampaignInput:
+      type: object
+      required: [campaignNo, name]
+      properties:
+        campaignNo: { type: string, maxLength: 40 }
+        name: { type: string, maxLength: 200 }
+        documentId: { type: [string, "null"], format: uuid }
+        documentTitle: { type: [string, "null"], maxLength: 255 }
+        documentVersionNo: { type: [integer, "null"] }
+        purpose: { type: [string, "null"], maxLength: 160 }
+        audienceDescription: { type: [string, "null"], maxLength: 200 }
+        audienceUagRef: { type: [string, "null"], maxLength: 80 }
+        reminderCadence: { type: [string, "null"], maxLength: 80 }
+        escalateAfterSlaTo: { type: [string, "null"], maxLength: 80 }
+        deadline: { type: [string, "null"], format: date }
+    CampaignTrackResult:
+      type: object
+      description: Progress rollup for an acknowledgement campaign.
+      properties:
+        campaignId: { type: string, format: uuid }
+        assignedCount: { type: integer }
+        acknowledgedCount: { type: integer }
+        pendingCount: { type: integer }
+        overdueCount: { type: integer }
+        status: { $ref: '#/components/schemas/AckCampaignStatus' }
+    AcknowledgementCampaignPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/AcknowledgementCampaign' }
+
+    # ---- Per-employee acknowledgement records — E36 -----------------------
+    DocumentAcknowledgement:
+      type: object
+      description: '`document_acknowledgements` — per-employee non-repudiation acknowledgement (DM25).'
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        entityId: { type: [string, "null"], format: uuid }
+        campaignId: { type: [string, "null"], format: uuid }
+        documentId: { type: [string, "null"], format: uuid }
+        documentTitle: { type: [string, "null"] }
+        documentVersionNo: { type: [integer, "null"], description: 'Version active at acknowledgement time (DM25).' }
+        employeeId: { type: string, format: uuid }
+        consentTextSnapshot: { type: [string, "null"], description: 'Write-once snapshot of the consent text shown (DM25).' }
+        appVersion: { type: [string, "null"], description: 'Browser/app version captured (DM25).' }
+        ipAddress: { type: [string, "null"] }
+        assignedAt: { type: string, format: date-time }
+        dueDate: { type: [string, "null"], format: date }
+        acknowledgedAt: { type: [string, "null"], format: date-time }
+        consentRecordId: { type: [string, "null"], format: uuid, description: 'Platform DPDP consent linkage.' }
+        status: { $ref: '#/components/schemas/AckStatus' }
+    AcknowledgeRequest:
+      type: object
+      description: In-campaign employee acknowledgement; the server captures IP/app version and snapshots consent text.
+      required: [employeeId]
+      properties:
+        employeeId: { type: string, format: uuid, description: 'Must be the caller''s own assignment (else 403 FORBIDDEN).' }
+        documentVersionNo: { type: [integer, "null"] }
+        consentTextSnapshot: { type: [string, "null"] }
+        appVersion: { type: [string, "null"] }
+        consentRecordId: { type: [string, "null"], format: uuid }
+    RecordAcknowledgementRequest:
+      type: object
+      description: Records non-repudiation evidence against an existing acknowledgement assignment (write-once).
+      properties:
+        consentTextSnapshot: { type: [string, "null"] }
+        appVersion: { type: [string, "null"] }
+        documentVersionNo: { type: [integer, "null"] }
+        consentRecordId: { type: [string, "null"], format: uuid }
+    DocumentAcknowledgementPage:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/DocumentAcknowledgement' }

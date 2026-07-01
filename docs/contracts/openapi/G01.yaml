@@ -45,6 +45,12 @@ tags:
   - { name: succession, description: Death, heirs, family-pension handoff (FR-EPM-024) }
   - { name: search, description: Phonetic / transliteration search (FR-EPM-025) }
   - { name: sr-posting, description: SR-ledger posting façade (reference only, §8.6) }
+  - { name: national-id-types, description: Configurable statutory national-ID type master (FR-EPM-007, v3.2) }
+  - { name: visas, description: Visas / work-permits (FR-EPM-006, v3.2) }
+  - { name: professional-certifications, description: Professional certifications (FR-EPM-006, v3.2) }
+  - { name: profile-skills, description: Declared profile skills (FR-EPM-006, v3.2) }
+  - { name: personal-details, description: Biographical personal-details satellite (FR-EPM-001, v3.2) }
+  - { name: dependent-details, description: Dependent extras satellite (FR-EPM-004, v3.2) }
 
 components:
   securitySchemes:
@@ -333,6 +339,8 @@ components:
         is_highest: { type: boolean }
         is_verified: { type: boolean }
         document_id: { type: [string, "null"] }
+        start_year: { type: [integer, "null"], description: "v3.2 — start year of study (1950–2100); year_of_passing is the end year." }
+        grade_type: { type: [string, "null"], enum: [CGPA, GPA, PERCENTAGE, GRADE, null], description: "v3.2 — qualifier for the grade value." }
         row_version: { type: integer }
 
     Experience:
@@ -343,6 +351,7 @@ components:
         from_date: { type: string, format: date }
         to_date: { type: [string, "null"], format: date }
         is_government_service: { type: boolean }
+        job_description: { type: [string, "null"], description: "v3.2 — free-text description of the prior role." }
         row_version: { type: integer }
 
     IdentityDocument:
@@ -354,6 +363,9 @@ components:
         is_verified: { type: boolean }
         valid_to: { type: [string, "null"], format: date }
         document_id: { type: [string, "null"] }
+        national_id_type_id: { type: [string, "null"], format: uuid, description: "v3.2 — links the value to the configurable national_id_types master (alias/mandatory/masking driven by that type)." }
+        is_temporary_id: { type: boolean, default: false, description: "v3.2 — interim/provisional temporary-ID flow." }
+        temporary_id_value: { type: [string, "null"], description: "v3.2 — temporary-ID value when is_temporary_id=true." }
         row_version: { type: integer }
 
     BankAccount:
@@ -366,6 +378,7 @@ components:
         is_primary_salary: { type: boolean }
         is_verified: { type: boolean }
         status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        penny_drop_status: { type: string, enum: [PENDING, VERIFIED, FAILED], default: PENDING, description: "v3.2 — tri-state penny-drop verification (bank-entry); is_verified alone cannot express FAILED." }
         row_version: { type: integer }
 
     Photo:
@@ -627,6 +640,122 @@ components:
           enum: [APPOINTMENT, NAME_CHANGE, DOB_CHANGE, GENDER_CHANGE, CATEGORY_CHANGE, DECEASED, QUALIFICATION_ADDED, DEPARTMENTAL_EXAM_PASSED]
         fact_key: { type: [string, "null"] }
         payload: { type: object, additionalProperties: true }
+
+    NationalIdType:
+      type: object
+      description: Tenant-configurable statutory-ID type master (v3.2, E35). Per-type alias/mandatory/temporary-id/issued-from-till/document config; per-employee values live on IdentityDocument.
+      required: [id_code, label]
+      properties:
+        national_id_type_id: { type: string, format: uuid }
+        id_code: { type: string, description: "CSV 'Code' (e.g. adhar_card_number, bank_pan_num)." }
+        label: { type: string, description: "CSV 'Option' display label." }
+        applicable_for: { type: string, default: All Employees }
+        is_enabled: { type: boolean, default: true }
+        alias: { type: [string, "null"] }
+        temporary_id_enabled: { type: boolean, default: false }
+        temporary_id_alias: { type: [string, "null"] }
+        issued_from_enabled: { type: boolean, default: false }
+        issued_from_alias: { type: [string, "null"] }
+        issued_from_mandatory: { type: boolean, default: false }
+        issued_till_enabled: { type: boolean, default: false }
+        issued_till_alias: { type: [string, "null"] }
+        issued_till_mandatory: { type: boolean, default: false }
+        id_document_enabled: { type: boolean, default: false }
+        id_document_alias: { type: [string, "null"] }
+        id_document_mandatory: { type: boolean, default: false, description: Drives whether a scan is required. }
+        mandatory_for_activation: { type: boolean, default: false }
+        mandatory_for_addition: { type: boolean, default: false }
+        is_unique: { type: boolean, default: false }
+        masking: { type: [string, "null"] }
+        maps_to_doc_type: { type: [string, "null"], enum: [PAN, AADHAAR, PASSPORT, VOTER_ID, DRIVING_LICENCE, null], description: Optional bridge to the legacy closed identity-doc-type enum. }
+        display_order: { type: integer, default: 0 }
+        row_version: { type: integer }
+
+    NationalIdTypeList:
+      allOf:
+        - $ref: '#/components/schemas/Cursor'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/NationalIdType' }
+
+    Visa:
+      type: object
+      description: Employee visa / work-permit (v3.2, E38). Distinct from statutory identity documents.
+      required: [country, visa_type]
+      properties:
+        visa_id: { type: string, format: uuid }
+        country: { type: string }
+        visa_type: { type: string, description: "e.g. Employment Pass, Dependent visa, Schengen Short-stay, Other." }
+        visa_number: { type: [string, "null"] }
+        issue_date: { type: [string, "null"], format: date }
+        valid_till: { type: [string, "null"], format: date, description: Drives the expiry-reminder report. }
+        issuing_authority: { type: [string, "null"] }
+        max_stay_days: { type: [integer, "null"] }
+        sponsor_type: { type: [string, "null"], enum: [SELF_SPONSORED, EXTERNAL_SPONSOR, null] }
+        sponsored_by: { type: [string, "null"], description: External sponsor name. }
+        is_dependent_visa: { type: boolean, default: false }
+        scan_document_id: { type: [string, "null"], description: G13 document reference for the visa scan. }
+        row_version: { type: integer }
+
+    ProfessionalCertification:
+      type: object
+      description: Professional certification (v3.2, E39; e.g. AWS/PMP). Distinct from statutory certificates (E25).
+      required: [certification_name]
+      properties:
+        certification_id: { type: string, format: uuid }
+        certification_name: { type: string }
+        issuing_organisation: { type: [string, "null"] }
+        credential_id: { type: [string, "null"] }
+        issue_date: { type: [string, "null"], format: date }
+        expiry_date: { type: [string, "null"], format: date, description: Drives the expiry-reminder report. }
+        is_verified: { type: boolean, default: false }
+        certificate_document_id: { type: [string, "null"] }
+        row_version: { type: integer }
+
+    ProfileSkill:
+      type: object
+      description: Declared profile skill (v3.2, E37).
+      required: [skill_name]
+      properties:
+        skill_id: { type: string, format: uuid }
+        skill_name: { type: string }
+        proficiency: { type: [string, "null"], enum: [BEGINNER, INTERMEDIATE, ADVANCED, EXPERT, null] }
+        years_of_experience: { type: [number, "null"] }
+        last_used_date: { type: [string, "null"], format: date }
+        is_verified: { type: boolean, default: false }
+        row_version: { type: integer }
+
+    PersonalDetails:
+      type: object
+      description: 1:1 biographical satellite (v3.2, E36). PUT upserts the single row per employee; the core golden record is never redefined.
+      properties:
+        personal_details_id: { type: [string, "null"], format: uuid }
+        country_of_birth: { type: [string, "null"] }
+        place_of_birth: { type: [string, "null"] }
+        marital_status_since: { type: [string, "null"], format: date }
+        marriage_anniversary_date: { type: [string, "null"], format: date }
+        father_name: { type: [string, "null"] }
+        mother_name: { type: [string, "null"] }
+        spouse_name: { type: [string, "null"] }
+        languages_spoken: { type: [array, "null"], items: { type: string } }
+        linkedin_id: { type: [string, "null"] }
+        row_version: { type: integer }
+
+    DependentDetails:
+      type: object
+      description: 1:1 extras satellite of a dependent (v3.2, E40). PUT upserts the single row per dependent.
+      properties:
+        dependent_details_id: { type: [string, "null"], format: uuid }
+        dependent_id: { type: [string, "null"], format: uuid }
+        nationality: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        country_code: { type: [string, "null"], default: "+91" }
+        address_line: { type: [string, "null"] }
+        same_as_employee_address: { type: boolean, default: false }
+        is_covered_group_insurance: { type: boolean, default: false, description: "add-dependent 'Add to group medical insurance' / detail-grid 'Insurance covered'." }
+        row_version: { type: integer }
 
   responses:
     Validation422:
@@ -2627,5 +2756,294 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden403' }
         '409': { $ref: '#/components/responses/Conflict409' }
         '412': { $ref: '#/components/responses/PreconditionFailed412' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  # ---------------------------------------------------------------------------
+  # v3.2 field-reconciliation additions (National-ID master + profile satellites)
+  # ---------------------------------------------------------------------------
+  /national-id-types:
+    get:
+      tags: [national-id-types]
+      summary: List configurable national-ID types (cursor) (FR-EPM-007, v3.2)
+      parameters:
+        - { name: enabled, in: query, required: false, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { description: National-ID types (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/NationalIdTypeList' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [national-id-types]
+      summary: Configure a national-ID type (FR-EPM-007, v3.2)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NationalIdType' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/NationalIdType' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /national-id-types/{typeId}:
+    get:
+      tags: [national-id-types]
+      summary: Get a national-ID type (FR-EPM-007, v3.2)
+      parameters: [ { name: typeId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '200': { description: National-ID type., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/NationalIdType' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    patch:
+      tags: [national-id-types]
+      summary: Update a national-ID type (etag/row_version) (FR-EPM-007, v3.2)
+      parameters: [ { name: typeId, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NationalIdType' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/NationalIdType' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [national-id-types]
+      summary: Soft-delete / disable a national-ID type (FR-EPM-007, v3.2)
+      parameters: [ { name: typeId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/visas:
+    get:
+      tags: [visas]
+      summary: List visas / work-permits (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Visas., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Visa' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [visas]
+      summary: Add a visa / work-permit (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Visa' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Visa' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/visas/{visaId}:
+    patch:
+      tags: [visas]
+      summary: Update a visa (etag/row_version) (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: visaId, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Visa' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Visa' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [visas]
+      summary: Soft-delete a visa (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: visaId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /visas/expiring:
+    get:
+      tags: [visas]
+      summary: Expiring-visa reminder report (FR-EPM-006, v3.2)
+      parameters: [ { name: within_days, in: query, required: false, schema: { type: integer, minimum: 1, default: 90 } }, { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Visas expiring within the window (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/Visa' } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/professional-certifications:
+    get:
+      tags: [professional-certifications]
+      summary: List professional certifications (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Professional certifications., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ProfessionalCertification' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [professional-certifications]
+      summary: Add a professional certification (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProfessionalCertification' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ProfessionalCertification' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/professional-certifications/{certId}:
+    patch:
+      tags: [professional-certifications]
+      summary: Update a professional certification (etag/row_version) (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: certId, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProfessionalCertification' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ProfessionalCertification' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [professional-certifications]
+      summary: Soft-delete a professional certification (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: certId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /professional-certifications/expiring:
+    get:
+      tags: [professional-certifications]
+      summary: Expiring professional-certification reminder report (FR-EPM-006, v3.2)
+      parameters: [ { name: within_days, in: query, required: false, schema: { type: integer, minimum: 1, default: 90 } }, { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' } ]
+      responses:
+        '200': { description: Certifications expiring within the window (cursor)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Cursor' }, { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/ProfessionalCertification' } } } } ] } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/skills:
+    get:
+      tags: [profile-skills]
+      summary: List profile skills (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Profile skills., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ProfileSkill' } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    post:
+      tags: [profile-skills]
+      summary: Add a profile skill (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileSkill' } } } }
+      responses:
+        '201': { description: Created., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileSkill' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/skills/{skillId}:
+    patch:
+      tags: [profile-skills]
+      summary: Update a profile skill (etag/row_version) (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: skillId, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileSkill' } } } }
+      responses:
+        '200': { description: Updated., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileSkill' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    delete:
+      tags: [profile-skills]
+      summary: Soft-delete a profile skill (FR-EPM-006, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: skillId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: Soft-deleted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/personal-details:
+    get:
+      tags: [personal-details]
+      summary: Get the biographical personal-details satellite (FR-EPM-001, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' } ]
+      responses:
+        '200': { description: Personal details (masked per PII ceiling)., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/PersonalDetails' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    put:
+      tags: [personal-details]
+      summary: Upsert the biographical personal-details satellite (1:1) (FR-EPM-001, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PersonalDetails' } } } }
+      responses:
+        '200': { description: Upserted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/PersonalDetails' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
+        '422': { $ref: '#/components/responses/Validation422' }
+        '500': { $ref: '#/components/responses/Internal500' }
+
+  /employees/{id}/dependents/{dependentId}/details:
+    get:
+      tags: [dependent-details]
+      summary: Get a dependent's extras satellite (FR-EPM-004, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: dependentId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '200': { description: Dependent details., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/DependentDetails' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '500': { $ref: '#/components/responses/Internal500' }
+    put:
+      tags: [dependent-details]
+      summary: Upsert a dependent's extras satellite (1:1 per dependent) (FR-EPM-004, v3.2)
+      parameters: [ { $ref: '#/components/parameters/EmployeeId' }, { name: dependentId, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/IdempotencyKeyHeader' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DependentDetails' } } } }
+      responses:
+        '200': { description: Upserted., headers: { X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' } }, content: { application/json: { schema: { $ref: '#/components/schemas/DependentDetails' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { $ref: '#/components/responses/NotFound404' }
+        '409': { $ref: '#/components/responses/Conflict409' }
         '422': { $ref: '#/components/responses/Validation422' }
         '500': { $ref: '#/components/responses/Internal500' }

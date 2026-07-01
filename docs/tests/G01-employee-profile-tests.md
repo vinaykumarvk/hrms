@@ -2,7 +2,7 @@
 
 ## 1. Header
 
-- **Module:** G01 — Employee Profile Management (`docs/brd/v3/G01-employee-profile-management.md`, v3.1)
+- **Module:** G01 — Employee Profile Management (`docs/brd/v3/G01-employee-profile-management.md`, v3.1; v3.2 field-reconciliation additions covered by TC-G01-131 … 148)
 - **Contract sources (every test grounded in):**
   - Requirements/FRs & business rules — BRD §6 (FR-EPM-001 … FR-EPM-025), §5.6 data-integrity rules, §8.2.1 semantic reasons, §8.5 change-feed backbone, §8.6 SR posting contract.
   - API endpoints, request/response, status codes — `docs/contracts/openapi/G01.yaml`.
@@ -1101,22 +1101,154 @@ Every test carries a **Traces-to** field naming the FR id and the specific Accep
 
 ---
 
+### v3.2 Field-Reconciliation Additions (National-ID master + profile satellites)
+
+*New cases for the v3.2 additive schema sync (BRD Amendments v3.1 → v3.2; SQL SECTION 6/7). Endpoints and fields grounded in `docs/contracts/openapi/G01.yaml` v3.2 additions; error codes reuse the existing taxonomy.*
+
+#### TC-G01-131
+- **Traces-to:** FR-EPM-007 (v3.2 F1, `national_id_types`); `POST /national-id-types`, `GET /national-id-types`
+- **Type:** Functional · **Priority:** P2
+- **Title:** Configure a National-ID type and list it (cursor)
+- **Steps:** 1. `u_hradmin1` `POST /api/v1/national-id-types` {id_code:"pran_number", label:"PRAN", applicable_for:"All Employees", is_enabled:true, temporary_id_enabled:true, is_unique:true, maps_to_doc_type:null} + Idempotency-Key. 2. `GET /api/v1/national-id-types?enabled=true`.
+- **Expected result:** `201` with `national_id_type_id`, `row_version=1`, echoed config flags; list `200` returns the type in `items` with `next_cursor` present (cursor shape); `X-Correlation-Id` header on both.
+
+#### TC-G01-132
+- **Traces-to:** FR-EPM-007 (v3.2); `uq_national_id_types_code` (unique per tenant); error-taxonomy CONFLICT
+- **Type:** Negative · **Priority:** P2
+- **Title:** Duplicate national-ID `id_code` within a tenant is rejected
+- **Steps:** 1. `POST /api/v1/national-id-types` with `id_code="pran_number"` a second time in TEN-1.
+- **Expected result:** `409 CONFLICT`; canonical envelope; no second row created; `X-Correlation-Id` present.
+
+#### TC-G01-133
+- **Traces-to:** FR-EPM-007 (v3.2 F7); `employee_identity_documents.national_id_type_id` / `is_temporary_id` / `temporary_id_value`; `POST /employees/{id}/identity-docs`
+- **Type:** Functional · **Priority:** P1
+- **Title:** Identity document linked to a configurable national_id_type with a temporary ID
+- **Steps:** 1. `u_hradmin1` `POST /api/v1/employees/{EMP-1001}/identity-docs` {type:"AADHAAR", national_id_type_id:<Aadhaar type id>, is_temporary_id:true, temporary_id_value:"TMP-AAD-9931"} + Idempotency-Key.
+- **Expected result:** `201`; response is masked (`number_masked`; raw `*_token` never surfaces); `national_id_type_id` echoed, `is_temporary_id=true`, `temporary_id_value` retained; mandatory/masking behaviour driven by the linked type.
+
+#### TC-G01-134
+- **Traces-to:** FR-EPM-007 AC (VAL-AADHAAR/VAL-PAN); error-taxonomy `ERR-G01-IDFMT` / reason `INVALID_ID`
+- **Type:** Negative · **Priority:** P1
+- **Title:** Statutory-ID checksum failure on a typed identity document
+- **Steps:** 1. `POST /api/v1/employees/{EMP-1001}/identity-docs` {type:"PAN", national_id_type_id:<PAN type id>, number:"AAAAA0000A-bad"}.
+- **Expected result:** `422 VALIDATION_FAILED`; `error.code=VALIDATION_FAILED`, message id `ERR-G01-IDFMT`, `details.reason="INVALID_ID"`; nothing persisted.
+
+#### TC-G01-135
+- **Traces-to:** FR-EPM-006 (v3.2 F4, `employee_visas`); `POST /employees/{id}/visas`, `GET /employees/{id}/visas`
+- **Type:** Functional · **Priority:** P2
+- **Title:** Add and list an employee visa / work-permit
+- **Steps:** 1. `POST /api/v1/employees/{EMP-1001}/visas` {country:"Singapore", visa_type:"Employment Pass", visa_number:"EP-4471228", issue_date:"2025-02-10", valid_till:"2027-02-09", sponsor_type:"EXTERNAL_SPONSOR", sponsored_by:"PrimeSoft Pte Ltd"} + Idempotency-Key. 2. `GET /api/v1/employees/{EMP-1001}/visas`.
+- **Expected result:** `201` with `visa_id`, `row_version=1`; list `200` returns the visa; distinct from statutory identity documents (separate resource/tag).
+
+#### TC-G01-136
+- **Traces-to:** FR-EPM-006 (v3.2 visa expiry); `GET /visas/expiring`; `ix_employee_visas_expiry`
+- **Type:** Functional · **Priority:** P3
+- **Title:** Expiring-visa reminder report returns visas within the window
+- **Steps:** 1. `GET /api/v1/visas/expiring?within_days=120&limit=25`.
+- **Expected result:** `200` cursor page (`items` + `next_cursor`) containing visas whose `valid_till` falls within 120 days (e.g. the TEN-1 Schengen visa valid_till 2026-07-04); scope/masking per caller; `X-Correlation-Id` present.
+
+#### TC-G01-137
+- **Traces-to:** FR-EPM-006 (v3.2); `ck_employee_visas_dates` (valid_till ≥ issue_date); error-taxonomy VALIDATION_FAILED
+- **Type:** Negative · **Priority:** P2
+- **Title:** Visa with `valid_till` before `issue_date` is rejected
+- **Steps:** 1. `POST /api/v1/employees/{EMP-1001}/visas` {country:"UAE", visa_type:"Employment", issue_date:"2026-06-01", valid_till:"2026-01-01"}.
+- **Expected result:** `422 VALIDATION_FAILED`; `field="valid_till"`; nothing persisted.
+
+#### TC-G01-138
+- **Traces-to:** FR-EPM-006 (v3.2 F5, `employee_professional_certifications`); `POST`/`GET /employees/{id}/professional-certifications`
+- **Type:** Functional · **Priority:** P2
+- **Title:** Add and list a professional certification (distinct from statutory certificates)
+- **Steps:** 1. `POST /api/v1/employees/{EMP-1001}/professional-certifications` {certification_name:"AWS Solutions Architect – Associate", issuing_organisation:"Amazon Web Services", credential_id:"AWS-ASA-88213", issue_date:"2024-09-01", expiry_date:"2027-09-01"} + Idempotency-Key. 2. `GET …/professional-certifications`.
+- **Expected result:** `201` with `certification_id`; list `200` returns it; kept separate from FR-EPM-023 statutory `employee_certificates`.
+
+#### TC-G01-139
+- **Traces-to:** FR-EPM-006 (v3.2); `ck_prof_cert_dates` (expiry_date ≥ issue_date); error-taxonomy VALIDATION_FAILED
+- **Type:** Negative · **Priority:** P2
+- **Title:** Professional certification with `expiry_date` before `issue_date` is rejected
+- **Steps:** 1. `POST …/professional-certifications` {certification_name:"X", issue_date:"2025-01-01", expiry_date:"2024-01-01"}.
+- **Expected result:** `422 VALIDATION_FAILED`; `field="expiry_date"`; nothing persisted.
+
+#### TC-G01-140
+- **Traces-to:** FR-EPM-006 (v3.2 F3, `employee_profile_skills`); `POST`/`GET /employees/{id}/skills`
+- **Type:** Functional · **Priority:** P3
+- **Title:** Add and list a declared profile skill
+- **Steps:** 1. `POST /api/v1/employees/{EMP-1001}/skills` {skill_name:"Python", proficiency:"ADVANCED", years_of_experience:8.0, last_used_date:"2026-06-01"} + Idempotency-Key. 2. `GET …/skills`.
+- **Expected result:** `201` with `skill_id`; list `200` returns the skill; `proficiency` constrained to the SKILL_PROFICIENCY set.
+
+#### TC-G01-141
+- **Traces-to:** FR-EPM-006 (v3.2); `uq_employee_skills_name` (one non-deleted row per employee+skill); error-taxonomy CONFLICT
+- **Type:** Negative · **Priority:** P2
+- **Title:** Duplicate skill name for the same employee is rejected
+- **Steps:** 1. `POST /api/v1/employees/{EMP-1001}/skills` {skill_name:"python"} (case-insensitive duplicate of TC-140).
+- **Expected result:** `409 CONFLICT`; canonical envelope; no second row; `X-Correlation-Id` present.
+
+#### TC-G01-142
+- **Traces-to:** FR-EPM-008 (v3.2 F11, `employee_bank_accounts.penny_drop_status`); `POST /bank-accounts/{id}:verify`; PENNY_DROP_STATUS enum
+- **Type:** State-Transition · **Priority:** P2
+- **Title:** Penny-drop verification sets `penny_drop_status = VERIFIED`
+- **Steps:** 1. Add a bank account (TC-046 pattern), approved via 4-eyes. 2. `POST /api/v1/bank-accounts/{bank_account_id}:verify` + Idempotency-Key.
+- **Expected result:** `200`; response `penny_drop_status="VERIFIED"` and `is_verified=true`; state moves PENDING→VERIFIED; audited.
+
+#### TC-G01-143
+- **Traces-to:** FR-EPM-008 (v3.2); tri-state PENNY_DROP_STATUS (PENDING/VERIFIED/FAILED); FR-EPM-014 never-blocks-payroll regression
+- **Type:** State-Transition · **Priority:** P2
+- **Title:** Failed penny-drop yields `penny_drop_status = FAILED` (tri-state), not a silent verify
+- **Steps:** 1. `POST /api/v1/bank-accounts/{bank_account_id}:verify` where the drop is returned/failed by the provider.
+- **Expected result:** `200`; `penny_drop_status="FAILED"`, `is_verified=false` (FAILED is representable, which `is_verified` alone could not express); disbursement gating still surfaces `NO_VERIFIED_BANK` downstream (G10); profile completeness/payroll not hard-blocked.
+
+#### TC-G01-144
+- **Traces-to:** FR-EPM-001 (v3.2 F2, `employee_personal_details`, 1:1); `GET`/`PUT /employees/{id}/personal-details`
+- **Type:** Functional · **Priority:** P2
+- **Title:** Upsert and read the biographical personal-details satellite (single row per employee)
+- **Steps:** 1. `PUT /api/v1/employees/{EMP-1001}/personal-details` {country_of_birth:"India", place_of_birth:"Hyderabad", father_name:"Ramesh Verma", languages_spoken:["Telugu","English","Hindi"], linkedin_id:"in.linkedin.com/in/anjali-rao"} + Idempotency-Key. 2. `GET …/personal-details`. 3. `PUT` again with an edited `place_of_birth`.
+- **Expected result:** first `PUT` `200` upserts; `GET` returns the row (masked per PII ceiling); second `PUT` updates the same single row (1:1 uniqueness preserved, no duplicate); core golden record unchanged.
+
+#### TC-G01-145
+- **Traces-to:** FR-EPM-004 (v3.2 F6, `employee_dependent_details`, 1:1 per dependent); `GET`/`PUT /employees/{id}/dependents/{dependentId}/details`
+- **Type:** Functional · **Priority:** P3
+- **Title:** Upsert and read a dependent's extras satellite (nationality / phone / insurance-covered)
+- **Steps:** 1. Add a dependent (TC-024 pattern) → `dependentId`. 2. `PUT /api/v1/employees/{EMP-1001}/dependents/{dependentId}/details` {nationality:"Indian", phone:"+91 98XXXX4455", same_as_employee_address:true, is_covered_group_insurance:true} + Idempotency-Key. 3. `GET …/details`.
+- **Expected result:** `PUT` `200` upserts the 1:1 satellite; `GET` returns `is_covered_group_insurance=true` ("Insurance covered" in the detail grid); core `employee_dependents` row not redefined.
+
+#### TC-G01-146
+- **Traces-to:** FR-EPM-006 (v3.2 F9/F10); `employee_education.start_year`/`grade_type`, `employee_experience.job_description`; `POST /employees/{id}/education`,`/experience`
+- **Type:** Functional · **Priority:** P2
+- **Title:** Education `start_year`/`grade_type` and experience `job_description` are persisted and returned
+- **Steps:** 1. `POST /api/v1/employees/{EMP-1001}/education` {level:"UG", start_year:2008, grade_type:"CGPA"} (value in `grade_or_percentage`). 2. `POST …/experience` {employer:"Prev Co", from_date:"2010-01-01", job_description:"Backend engineer on payments"}.
+- **Expected result:** both `201`; `GET` shows `start_year=2008`, `grade_type="CGPA"` on the education record and `job_description` on the experience record (additive fields; existing behaviour unchanged).
+
+#### TC-G01-147
+- **Traces-to:** FR-EPM-006 (v3.2); `ck_employee_education_start_year` (1950..2100); error-taxonomy VALIDATION_FAILED
+- **Type:** Negative · **Priority:** P2
+- **Title:** Education `start_year` outside 1950–2100 is rejected
+- **Steps:** 1. `POST /api/v1/employees/{EMP-1001}/education` {level:"UG", start_year:1000, grade_type:"GPA"}.
+- **Expected result:** `422 VALIDATION_FAILED`; `field="start_year"`; nothing persisted.
+
+#### TC-G01-148
+- **Traces-to:** FR-EPM-012 (v3.2 F8/F12, custom-field framework columns); `custom_field_definitions.external_field_id`/`display_target`/`for_object`/`is_editable`/`allow_decimals`/`number_separator`; nullable `section_id`; CUSTOM_FIELD_TYPE += DROPDOWN
+- **Type:** API-Contract · **Priority:** P3
+- **Title:** Custom-field definition carries the v3.2 framework columns and a non-profile-section target
+- **Steps:** 1. Define a custom field {field_key:"reason_for_letter", data_type:"DROPDOWN", external_field_id:"a64902e57de4a6", display_target:"HR Documents", for_object:"Others", is_editable:false, section_id:null} (Phase-2 config surface). 2. Read it back.
+- **Expected result:** the definition persists with `section_id=null` (targets an arbitrary HR object, not only a profile section), the CSV framework attributes are echoed, and `data_type="DROPDOWN"` is accepted (extended CUSTOM_FIELD_TYPE); `external_field_id` unique per tenant. (FR-EPM-012 remains Phase-2 deferred; this asserts the reconciled contract shape only.)
+
+---
+
 ## 3. Traceability Matrix (FR → covering TCs)
 
 | FR ID | Covering TC ids | Coverage note |
 |---|---|---|
-| FR-EPM-001 | TC-G01-001, 002, 003, 004, 005, 006, 007, 008, 009, 010, 011 | Happy E2E + mononym + all key negatives (mandatory, age, DOJ, dedup-block, sanction) + atomicity + exemption |
+| FR-EPM-001 | TC-G01-001, 002, 003, 004, 005, 006, 007, 008, 009, 010, 011 (+144 personal-details) | Happy E2E + mononym + all key negatives (mandatory, age, DOJ, dedup-block, sanction) + atomicity + exemption + v3.2 biographical satellite |
 | FR-EPM-002 | TC-G01-012, 013, 014, 015, 016 | Assemble + masking + separated read-only + alias-resolve + lazy-load/break-glass |
 | FR-EPM-003 | TC-G01-017, 018, 019, 020, 021, 022, 023 | Primary invariant + unique email + PRIMARY_REQUIRED + STALE_VERSION + address dating + self→G02 + format |
-| FR-EPM-004 | TC-G01-024, 025, 026, 027, 028, 029 | Share sum happy + SHARE_SUM_INVALID + minor guardian + SoD 4-eyes + heir + delete guard |
+| FR-EPM-004 | TC-G01-024, 025, 026, 027, 028, 029 (+145 dependent-details) | Share sum happy + SHARE_SUM_INVALID + minor guardian + SoD 4-eyes + heir + delete guard + v3.2 dependent extras satellite (insurance-covered) |
 | FR-EPM-005 | TC-G01-030, 031, 032 | Reorder + priority race + phone validation |
-| FR-EPM-006 | TC-G01-033, 034, 035, 036 | One-highest + IMMUTABLE_VERIFIED + bounds + gov-service/SR |
-| FR-EPM-007 | TC-G01-037, 038, 039, 040, 041, 042, 043, 044, 045 | Vault single-home + INVALID_ID + lawful_basis + no-raw-read + 4-eyes reveal + REASON_REQUIRED + dup-hash + KMS fail-closed + expiry |
-| FR-EPM-008 | TC-G01-046, 047, 048, 049, 050, 051 | 4-eyes state + SoD + IFSC + never-blocks-pay + STALE + reject |
+| FR-EPM-006 | TC-G01-033, 034, 035, 036 (+135, 136, 137 visas; 138, 139 prof-certs; 140, 141 skills; 146, 147 education/experience v3.2 cols) | One-highest + IMMUTABLE_VERIFIED + bounds + gov-service/SR + v3.2 visas (add/list/expiry/date-guard) + professional certifications + profile skills + education start_year/grade_type + experience job_description |
+| FR-EPM-007 | TC-G01-037, 038, 039, 040, 041, 042, 043, 044, 045 (+131, 132 national-id-types master; 133, 134 typed/temporary-id doc) | Vault single-home + INVALID_ID + lawful_basis + no-raw-read + 4-eyes reveal + REASON_REQUIRED + dup-hash + KMS fail-closed + expiry + v3.2 configurable national-ID master (config/dup) + national_id_type-linked doc with temporary-id |
+| FR-EPM-008 | TC-G01-046, 047, 048, 049, 050, 051 (+142, 143 penny-drop) | 4-eyes state + SoD + IFSC + never-blocks-pay + STALE + reject + v3.2 penny-drop tri-state (VERIFIED / FAILED) |
 | FR-EPM-009 | TC-G01-052, 053, 054, 055 | Photo PENDING→approve + CONSENT_REQUIRED biometric + file bounds + consent-withdraw disables |
 | FR-EPM-010 | TC-G01-056, 057, 058, 059, 060, 061 | Placement/denorm + OVER_STRENGTH + POSITION_INACTIVE + position_history + as-of chart + cycle |
 | FR-EPM-011 | TC-G01-062, 063, 064 | As-of snapshot + OUT_OF_RANGE + scheduled/versioned |
-| FR-EPM-012 | TC-G01-065 | Phase-2 deferred config surface (empty in v1) — flagged deferred |
+| FR-EPM-012 | TC-G01-065 (+148 v3.2 framework columns) | Phase-2 deferred config surface (empty in v1) — flagged deferred + v3.2 custom-field framework columns / non-section target contract shape |
 | FR-EPM-013 | TC-G01-066, 067, 068, 069, 070 (+ enforced in 013,040,097,125) | Fail-closed + cap 429 + 4-eyes-self + anomaly alert + policy immediacy |
 | FR-EPM-014 | TC-G01-071, 072, 073 | Score/checklist + never-blocks-payroll regression + recompute/cert DQ |
 | FR-EPM-015 | TC-G01-074, 075, 076, 077, 078, 079, 080 (+ 006, 043) | Merge/alias + zero-cross-module + SoD + MERGE_CONFLICT + UNDO_EXPIRED + resolve + dismiss |
@@ -1137,7 +1269,7 @@ Every test carries a **Traces-to** field naming the FR id and the specific Accep
 
 ## 4. Coverage Summary
 
-**Total test cases: 130** (TC-G01-001 … TC-G01-130).
+**Total test cases: 148** (TC-G01-001 … TC-G01-148). *(TC-131 … TC-148 are the v3.2 field-reconciliation additions.)*
 
 ### By type
 
@@ -1157,25 +1289,27 @@ Every test carries a **Traces-to** field naming the FR id and the specific Accep
 
 | Type (primary) | Count |
 |---|---|
-| Negative | 30 |
-| Functional | 23 |
+| Negative | 36 |
+| Functional | 32 |
 | Data-Integrity | 17 |
+| State-Transition | 13 |
 | Authorization | 13 |
-| State-Transition | 11 |
 | Boundary | 10 |
-| API-Contract | 8 |
+| API-Contract | 9 |
 | PII-Masking | 6 |
 | E2E-Flow | 6 |
-| **Total** | **130** |
+| **Total** | **148** |
+
+*v3.2 additions (TC-131…148) by primary type: Functional 9 (131,133,135,136,138,140,144,145,146), Negative 6 (132,134,137,139,141,147), State-Transition 2 (142,143), API-Contract 1 (148).*
 
 ### By priority
 
 | Priority | Count | Focus |
 |---|---|---|
-| P1 | 55 | Statutory correctness, security (Aadhaar/vault/break-glass), SoD/4-eyes, data-integrity invariants, tenant isolation, SR-post contract, error-code accuracy |
-| P2 | 52 | Core functional flows, state machines, effective-dating, consumption API, privacy/retention |
-| P3 | 23 | Advisory (completeness/DQ), certificates, UX ordering, performance-adjacent, secondary reports |
+| P1 | 57 | Statutory correctness, security (Aadhaar/vault/break-glass), SoD/4-eyes, data-integrity invariants, tenant isolation, SR-post contract, error-code accuracy, typed/temporary-id statutory doc |
+| P2 | 64 | Core functional flows, state machines, effective-dating, consumption API, privacy/retention, v3.2 national-ID master + visas/certs/skills + penny-drop + personal-details |
+| P3 | 27 | Advisory (completeness/DQ), certificates, UX ordering, performance-adjacent, secondary/expiry reports, v3.2 skills/dependent-details/custom-field framework |
 
 ### Error-code coverage (negative assertions map to taxonomy)
 
-Every `ERR-G01-*` and the standard/shared codes G01 emits are asserted at least once: `ERR-G01-IDFMT`/INVALID_ID (038), `ERR-G01-RANGE`/OUT_OF_RANGE·BATCH_TOO_LARGE (004,063,098), `ERR-G01-GOVLOCK`/GOVERNED_FIELD_LOCKED (111), `ERR-G01-CONSENT`/CONSENT_REQUIRED (053), `ERR-G01-INVARIANT`/PRIMARY_REQUIRED·SHARE_SUM_INVALID (019,025), `ERR-G01-STATE`/OVER_STRENGTH·POSITION_INACTIVE·INVALID_STATE (057,058,093), `ERR-G01-MERGE`/MERGE_CONFLICT·UNDO_EXPIRED (077,078,089), `ERR-G01-STALE`/STALE_VERSION (020,050,129), `ERR-G01-HOLD`/LEGAL_HOLD_ACTIVE (094,107), `ERR-G01-HEIR`/HEIR_REQUIRED (119), `ERR-G01-CAP`/BREAK_GLASS_CAP (067), `ERR-FORBIDDEN`/SOD_VIOLATION·IMMUTABLE_VERIFIED (027,034,047,076,091,114), `ERR-REASON-REQ`/REASON_REQUIRED (042), `ERR-PRECOND`/BLOCKING_OBLIGATIONS (092), `ERR-LOADFAIL`/KMS_UNAVAILABLE (044), `ERR-DUP-INSTANCE`/DUPLICATE_CANDIDATE (006), UNAUTHENTICATED (124), NOT_FOUND/tenant (096).
+Every `ERR-G01-*` and the standard/shared codes G01 emits are asserted at least once: `ERR-G01-IDFMT`/INVALID_ID (038), `ERR-G01-RANGE`/OUT_OF_RANGE·BATCH_TOO_LARGE (004,063,098), `ERR-G01-GOVLOCK`/GOVERNED_FIELD_LOCKED (111), `ERR-G01-CONSENT`/CONSENT_REQUIRED (053), `ERR-G01-INVARIANT`/PRIMARY_REQUIRED·SHARE_SUM_INVALID (019,025), `ERR-G01-STATE`/OVER_STRENGTH·POSITION_INACTIVE·INVALID_STATE (057,058,093), `ERR-G01-MERGE`/MERGE_CONFLICT·UNDO_EXPIRED (077,078,089), `ERR-G01-STALE`/STALE_VERSION (020,050,129), `ERR-G01-HOLD`/LEGAL_HOLD_ACTIVE (094,107), `ERR-G01-HEIR`/HEIR_REQUIRED (119), `ERR-G01-CAP`/BREAK_GLASS_CAP (067), `ERR-FORBIDDEN`/SOD_VIOLATION·IMMUTABLE_VERIFIED (027,034,047,076,091,114), `ERR-REASON-REQ`/REASON_REQUIRED (042), `ERR-PRECOND`/BLOCKING_OBLIGATIONS (092), `ERR-LOADFAIL`/KMS_UNAVAILABLE (044), `ERR-DUP-INSTANCE`/DUPLICATE_CANDIDATE (006), UNAUTHENTICATED (124), NOT_FOUND/tenant (096). **v3.2 additions:** `ERR-G01-IDFMT`/INVALID_ID also asserted on a national_id_type-linked doc (134); `VALIDATION_FAILED` on visa/cert date-order and education start_year range (137, 139, 147); `CONFLICT` on duplicate national-ID `id_code` (132) and duplicate skill name (141).

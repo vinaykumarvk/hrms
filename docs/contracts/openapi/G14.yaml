@@ -2290,7 +2290,9 @@ components:
       enum: [WORKFORCE, LEAVE, ATTENDANCE, PAYROLL, TRAINING, APPRAISAL, DISCIPLINARY, TRANSFER, PROMOTION, PENSION, COMPLIANCE, SR]
     KpiUnit:
       type: string
-      enum: [COUNT, PERCENT, RATIO, CURRENCY, DAYS, SCORE]
+      # HOURS added v3.2 (field reconciliation) — dept-attendance "Avg work hrs"
+      # tile (ATT_AVG_WORK_HRS = avg(worked_minutes)/60.0). See BRD §5.5 / §5.5a.
+      enum: [COUNT, PERCENT, RATIO, CURRENCY, DAYS, SCORE, HOURS]
     KpiGrain:
       type: string
       enum: [EMPLOYEE, ORG_UNIT, CADRE, PERIOD, ENTERPRISE]

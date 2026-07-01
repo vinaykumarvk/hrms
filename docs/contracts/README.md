@@ -5,7 +5,7 @@ These are the build-time contracts all downstream implementation consumes.
 
 | Contract | File | Contents |
 |---|---|---|
-| **API (OpenAPI 3.1)** | `openapi/G01.yaml … G14.yaml` | 14 module specs — **1,054 paths, 1,182 operations**. Shared conventions embedded (bearer auth, `/api/v1`, `X-Correlation-Id`, `Idempotency-Key`, cursor pagination, canonical `Error` envelope, 8 reusable standard responses). |
+| **API (OpenAPI 3.1)** | `openapi/G01.yaml … G14.yaml` | 14 module specs — **1,132 paths, 1,306 operations**. Shared conventions embedded (bearer auth, `/api/v1`, `X-Correlation-Id`, `Idempotency-Key`, cursor pagination, canonical `Error` envelope, 8 reusable standard responses). |
 | **Auth matrix** | `auth-matrix.yaml` | 76 roles (34 RBAC v1.7 base + 42 gov additions), 28 capability flags, 4-tier PII ceiling, 98 actions × modules, P02 resolution order, SoD notes. |
 | **Error taxonomy** | `error-taxonomy.yaml` | 311 codes: 8 standard HTTP + 8 shared platform + 295 module `ERR-G##-*`/`SR_*`, each mapped to one HTTP status + message. |
 | **State machines** | `state-machines.yaml` | 73 lifecycle machines across all 14 modules (states, transitions, guards, side-effects, P01 pattern). |

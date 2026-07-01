@@ -869,6 +869,97 @@
 - Steps: attempt attendance resume before clearance; then `POST /atl/leave-applications/{id}/return-to-work` with fitness cert (G13).
 - Expected: pre-clearance → `412 PRECONDITION_FAILED`/`409` `RETURN_TO_WORK_PENDING`; after clearance `CLEARED`, attendance resumes.
 
+### v3.2 — Field-Reconciliation Additions (Config Masters, Adjustments, Revocation, Lock, Geofence/IP, Hourly Leave)
+
+> Covers the v3.2 field-reconciliation delta (BRD `## Amendments (v3.1 → v3.2)`; data model SECTIONS 13b/13c; OpenAPI v3.2 paths E32–E40). ADD-ONLY: exercises the new config masters (`leave_reasons`, `attendance_reasons`, `attendance_policies`, `overtime_policies`, `geofences`, `attendance_networks`), the balance-adjustment and leave-revocation P01 flows, the monthly attendance lock, network/IP + geofence punch governance, and hourly leave. Error assertions reuse established ERR-G03-* / bare-reason / platform wire codes only.
+
+| TC | Traces-to | Type | Title |
+|---|---|---|---|
+| TC-G03-144 | v3.2 E36 / FR-10 | Functional | Configure a leave-reason master |
+| TC-G03-145 | v3.2 E36 | Negative | Duplicate leave-reason code rejected |
+| TC-G03-146 | v3.2 E37 / FR-05 | Functional | Configure an attendance/regularisation-reason master |
+| TC-G03-147 | v3.2 E37 / auth-matrix | Authorization | Employee cannot configure reason masters |
+| TC-G03-148 | v3.2 E38 / FR-11 AC5 | Data-Integrity | Request + approve balance adjustment → one ADJUSTMENT ledger entry |
+| TC-G03-149 | v3.2 E38 / SoD | Authorization | Adjustment maker == checker blocked; missing reason rejected |
+| TC-G03-150 | v3.2 E39 / FR-13 | State-Transition | Post-approval revocation of approved future leave → AVAIL_REVERSAL |
+| TC-G03-151 | v3.2 E39 | Negative | Revoke non-approved / past-availed leave rejected |
+| TC-G03-152 | v3.2 E40 / R6 | State-Transition | Lock an attendance month; edits in locked period blocked |
+| TC-G03-153 | v3.2 E40 | Negative | Re-lock already-locked month rejected |
+| TC-G03-154 | v3.2 E34/E35 / FR-03 | Functional | Punch inside geofence and allowed network accepted |
+| TC-G03-155 | v3.2 E34/E35 / FR-03 | Negative | Punch outside geofence / outside allowed network rejected |
+| TC-G03-156 | v3.2 leave_types/leave_applications / FR-12 | Functional | Hourly-leave application within policy |
+| TC-G03-157 | v3.2 leave_types | Negative | Hourly leave below min / not a valid multiple rejected |
+
+**TC-G03-144 — Configure a leave-reason master** · Priority: P2
+- Preconditions: `LADM` authenticated (T1/E1).
+- Test data: `POST /atl/leave-reasons` `{reasonCode:"MED_SELF", name:"Self medical", category:"Medical", applicableLeaveTypeIds:["EL","HPL"], docRequired:true, hrbpAutoRoute:false, autoApproveThresholdDays:2}`, `Idempotency-Key: <uuid>`.
+- Steps: Send request; then `GET /atl/leave-reasons?status=ACTIVE`.
+- Expected: `201`; body echoes `reasonId`, `status=ACTIVE`; `X-Correlation-Id` header present; P05 audit row written; the reason appears in the list page and is selectable in the leave dropdown within scope.
+
+**TC-G03-145 — Duplicate leave-reason code rejected** · Priority: P3
+- Preconditions: `MED_SELF` already exists (TC-G03-144).
+- Steps: `POST /atl/leave-reasons` with `reasonCode:"MED_SELF"` again (new Idempotency-Key).
+- Expected: `409 CONFLICT`; UNIQUE(`tenant_id`,`reason_code`) holds; no second row; `field=reasonCode`.
+
+**TC-G03-146 — Configure an attendance-reason master** · Priority: P2
+- Preconditions: `AADM` authenticated.
+- Test data: `POST /atl/attendance-reasons` `{reasonCode:"SWIPE_LOST_CARD", name:"Lost access card", category:"MISS", docRequired:false, autoApprove:false, frequencyCap:3, frequencyPeriod:"MONTH"}`.
+- Steps: POST; then `GET /atl/attendance-reasons`.
+- Expected: `201`, `status=ACTIVE`; reason available to the regularisation form; `frequencyCap`/`frequencyPeriod` persisted; listed in the page.
+
+**TC-G03-147 — Employee cannot configure reason masters** · Priority: P2
+- Test data: `EMP-1001` token → `POST /atl/leave-reasons` and `POST /atl/attendance-reasons`.
+- Expected: `403 FORBIDDEN` (`ERR-FORBIDDEN`); no master created; admin-config existence not leaked.
+
+**TC-G03-148 — Request + approve balance adjustment → ledger** · Priority: P1
+- Preconditions: EMP-1001 EL `current_balance` known, `version=v`.
+- Test data: `LADM` (maker) `POST /atl/leave-balance-adjustments` `{employeeId:EMP-1001, leaveTypeId:EL, adjustmentType:"CREDIT", amountDays:2, reasonCategory:"One-time award", detailedReason:"Approved award ref TCK-991", effectiveDate:"2026-07-05"}`.
+- Steps: maker requests; `HRADM` (checker) `POST /atl/leave-balance-adjustments/{id}/decision {decision:"APPROVE", expectedVersion:v}`.
+- Expected: request `201 SUBMITTED`; on approval `status=APPLIED`, exactly one `leave_ledger_entries` row `entryType=ADJUSTMENT amount:+2 balanceAfter=current+2` (append-only SSOT), `leave_balances.current_balance` updated under optimistic lock, `version→v+1`, `resultingLedgerEntryId` set; P05 before/after captured.
+
+**TC-G03-149 — Adjustment SoD + missing reason** · Priority: P1
+- Steps: (a) the maker `LADM` attempts `POST /atl/leave-balance-adjustments/{id}/decision {decision:"APPROVE"}` on their own request; (b) `POST /atl/leave-balance-adjustments` omitting `detailedReason`; (c) checker approves with a stale `expectedVersion`.
+- Expected: (a) `403 FORBIDDEN` (P02 SoD, checker ≠ maker); (b) `422 VALIDATION_FAILED`, `error.code=ERR-REASON-REQ`, `field=detailedReason`; (c) `409 CONFLICT`, `error.code=OPTIMISTIC_LOCK_CONFLICT`; no ledger entry written in any failing branch.
+
+**TC-G03-150 — Post-approval revocation of approved future leave** · Priority: P1
+- Preconditions: EMP-1001 APPROVED future EL (2 days), lineage `L1`, balance already debited.
+- Test data: `POST /atl/leave-revocations` `{applicationId:<L1-app>, employeeId:EMP-1001, revocationType:"FULL", reasonCategory:"Employee returned early", detailedReason:"Recalled to duty 05 Jul", refundToBalance:true}`.
+- Steps: request; approver `POST /atl/leave-revocations/{id}/decision {decision:"APPROVE"}`.
+- Expected: request `201 SUBMITTED`; on approval `status=APPROVED`; ledger `AVAIL_REVERSAL` credits the exact debited units back on the **same** `leave_spell_lineage_id=L1`; `resultingLedgerEntryId` set; balance credited; recompute enqueued; if the day is in a locked period a next-period `payroll_feed_adjustments` (`source_ref_type=LEAVE_CANCEL`) is emitted (R6).
+
+**TC-G03-151 — Revoke non-approved / past leave rejected** · Priority: P2
+- Test data: (a) revoke an application still `SUBMITTED` (not approved); (b) revoke a leave whose dates are in the past/availed.
+- Expected: (a) `409 CONFLICT` (invalid transition — only APPROVED leave is revocable); (b) `409 CONFLICT`, `error.code=CANNOT_CANCEL_PAST`; no ledger reversal in either case.
+
+**TC-G03-152 — Lock an attendance month; edits blocked** · Priority: P1
+- Preconditions: `AADM`/`PAYO` for scope E1; month 2026-06 processed, status `OPEN`.
+- Test data: `POST /atl/attendance-lock-periods` `{lockMonth:"2026-06", scopeOrgUnitId:<E1-ou>, resolutionMode:"MANUAL", autoTriggerPayroll:false, lockNote:"June cycle"}`.
+- Steps: lock; then attempt a roster edit / regularisation approval / leave cancel touching a 2026-06 day.
+- Expected: `201`, `status=LOCKED`, `lockedAt`/`lockedBy` set; subsequent edits touching the locked month are refused `409 CONFLICT`, `error.code=PERIOD_LOCKED` (or emit `LOCKED_PERIOD_ADJUSTMENT_EMITTED` next-period per R6); the locked figures are never overwritten.
+
+**TC-G03-153 — Re-lock already-locked month rejected** · Priority: P1
+- Preconditions: 2026-06 already `LOCKED` for the scope (TC-G03-152).
+- Steps: `POST /atl/attendance-lock-periods {lockMonth:"2026-06", scopeOrgUnitId:<E1-ou>}` again; and `POST /atl/attendance-lock-periods/{id}/unlock {reason}` after payroll close.
+- Expected: re-lock → `409 CONFLICT`, `error.code=PERIOD_ALREADY_LOCKED` (UNIQUE(`tenant_id`,`lock_month`,`scope_org_unit_id`)); unlock after payroll closed → `409 CONFLICT`; a valid unlock before payroll close → `200`, `status=REOPENED` with reason audited.
+
+**TC-G03-154 — Punch inside geofence and allowed network** · Priority: P2
+- Preconditions: `AADM` creates `POST /atl/geofences {fenceCode:"GF-HQ", name:"HQ", latitude:17.4, longitude:78.4, radiusMeters:150, locationOrgUnitId:<E1-ou>, address:"...", maxEmployees:200}` and `POST /atl/attendance-networks {networkCode:"IP-HQ", name:"HQ LAN", ipFrom:"10.1.0.0", ipTo:"10.1.255.255", tag:"Hyderabad Office"}`.
+- Test data: `POST /atl/punches/mobile` for EMP-1001 with coordinates inside GF-HQ and `sourceIp:"10.1.4.20"` (within IP-HQ), valid consent.
+- Expected: both masters `201`; punch `201` ACCEPTED (`ingestionStatus=ACCEPTED`); network + geofence checks pass; P05 audit written.
+
+**TC-G03-155 — Punch outside geofence / outside network rejected** · Priority: P1
+- Test data: (a) `POST /atl/punches/mobile` with coordinates outside GF-HQ radius; (b) same punch inside the fence but `sourceIp:"203.0.113.9"` (outside every `attendance_networks` range).
+- Expected: (a) `422 VALIDATION_FAILED`, `error.code=GEOFENCE_VIOLATION`, punch `REJECTED`; (b) `403 FORBIDDEN` — capture from outside an allowed network is refused; no attendance credited for either.
+
+**TC-G03-156 — Hourly-leave application within policy** · Priority: P2
+- Preconditions: leave type `HRLY` created with `isHourlyLeave:true, hoursPerDay:8, hourlyMinMinutes:60, hourlyMultipleMinutes:30, allowHourlyAcrossMidnight:false`; EMP-1001 has balance.
+- Test data: `POST /atl/leave-applications` `{employeeId:EMP-1001, leaveTypeId:HRLY, startDate:"2026-07-14", endDate:"2026-07-14", reason:"Clinic", hourlyMinutes:120, approverNote:"Back by 2pm", days:[{leaveDate:"2026-07-14", dayPortion:"FULL", dayUnits:0.5}]}`.
+- Expected: `201`; `hourlyMinutes=120` (≥ 60 and a multiple of 30) and `approverNote` persisted; `total_days` remains the debit basis (ledger debit derived from `total_days × debit_ratio`, not the minutes); reservation created as usual.
+
+**TC-G03-157 — Hourly leave below min / invalid multiple rejected** · Priority: P2
+- Test data: (a) `hourlyMinutes:30` where `hourlyMinMinutes=60`; (b) `hourlyMinutes:75` where `hourlyMultipleMinutes=30`.
+- Expected: both `422 VALIDATION_FAILED`, `field=hourlyMinutes` (below minimum / not an allowed multiple); no application or reservation created.
+
 ### Cross-Cutting: E2E, Contract, Authorization, Multi-Tenancy
 
 | TC | Traces-to | Type | Title |
@@ -944,6 +1035,7 @@
 | FR-21 | DPDP Consent & Fallback | TC-G03-122..127 |
 | FR-22 | Sanction Entitlement Counters | TC-G03-128..131 |
 | FR-23 | Forecast / Mass-Leave / Blackout / RTW | TC-G03-132..135 |
+| v3.2 field-reconciliation (E32–E40 config masters, adjustments, revocation, lock, geofence/IP, hourly leave) | BRD `## Amendments (v3.1 → v3.2)`; data model §13b/13c; OpenAPI v3.2 paths | TC-G03-144..157 |
 | Cross-cutting (E2E/contract/authz/multi-tenant/ledger) | Platform §8, §5.8, §5.6 | TC-G03-136..143 |
 
 **Special-coverage confirmation (per brief):**
@@ -962,7 +1054,13 @@
 | Comp-off | TC-G03-041, 049..053 |
 | Year-close | TC-G03-095..099 |
 | E2E lineage → G04, no /sr/ingest | TC-G03-137, 138 |
-| Authorization | TC-G03-006, 037, 059, 078, 094, 104, 116, 120, 127, 141, 142 |
+| Authorization | TC-G03-006, 037, 059, 078, 094, 104, 116, 120, 127, 141, 142, 147, 149 |
+| v3.2 config masters (leave/attendance reason, geofence, IP network) | TC-G03-144, 145, 146, 147, 154, 155 |
+| v3.2 balance adjustment (request + approve, SoD, ledger) | TC-G03-148, 149 |
+| v3.2 post-approval leave revocation | TC-G03-150, 151 |
+| v3.2 monthly attendance lock + locked-period edit block | TC-G03-152, 153 |
+| v3.2 geofence / IP-restricted punch | TC-G03-154, 155 |
+| v3.2 hourly-leave application | TC-G03-156, 157 |
 | State-transition (valid + invalid) | TC-G03-003, 004, 028, 033, 034, 075, 081, 082, 083, 086, 087, 106, 119, 135 |
 | Data-integrity (balance never negative, ledger conservation) | TC-G03-026, 027, 062, 063, 065, 066, 109, 143 |
 
@@ -970,7 +1068,7 @@
 
 ## 4. Coverage Summary
 
-**Total test cases: 143**
+**Total test cases: 157** (143 base + 14 v3.2 field-reconciliation additions, TC-G03-144..157)
 
 ### By type
 
@@ -986,16 +1084,20 @@
 | Concurrency | 3 | 065, 085 (+ 067 lock path) |
 | E2E-Flow | 3 | 136, 137, 138 |
 
-> Note: several cases assert more than one concern (e.g. authorization + negative, or state-transition + data-integrity); the table above lists each case under its **primary** declared Type. Primary-type totals: Functional 27, Negative 34, Data-Integrity 20, State-Transition 18, Boundary 13, Authorization 11, API-Contract 5, Concurrency 2, E2E-Flow 3 = **143**.
+> Note: several cases assert more than one concern (e.g. authorization + negative, or state-transition + data-integrity); the table above lists each case under its **primary** declared Type. Base primary-type totals: Functional 27, Negative 34, Data-Integrity 20, State-Transition 18, Boundary 13, Authorization 11, API-Contract 5, Concurrency 2, E2E-Flow 3.
+>
+> **v3.2 additions (TC-G03-144..157, +14):** Functional +4 (144, 146, 154, 156), Negative +5 (145, 151, 153, 155, 157), Authorization +2 (147, 149), Data-Integrity +1 (148), State-Transition +2 (150, 152) → new primary-type totals: Functional 31, Negative 39, Data-Integrity 21, State-Transition 20, Boundary 13, Authorization 13, API-Contract 5, Concurrency 2, E2E-Flow 3 = **157**.
 
 ### By priority
 
 | Priority | Count | Meaning |
 |---|---|---|
-| P1 (critical) | 58 | Money/ledger/concurrency/statutory/SoD/E2E paths — must pass to ship |
-| P2 (high) | 63 | Core functional + integrity + authorization |
-| P3 (medium) | 22 | Secondary flows, UI-adjacent, caps/edge advisories |
+| P1 (critical) | 64 | Money/ledger/concurrency/statutory/SoD/E2E paths — must pass to ship (+6 v3.2: 148, 149, 150, 152, 153, 155) |
+| P2 (high) | 70 | Core functional + integrity + authorization (+7 v3.2: 144, 146, 147, 151, 154, 156, 157) |
+| P3 (medium) | 23 | Secondary flows, UI-adjacent, caps/edge advisories (+1 v3.2: 145) |
 
 ### FR coverage
 
 **23 of 23 functional requirements covered (FR-01…FR-23) — 0 gaps.** All platform contract concerns (error envelope, pagination, idempotency, correlation id, multi-tenant scope safety), all G03 state machines (leave_application, regularisation, overtime, punch_anomaly_review, consent_record, year_close_run), the ERR-G03-* / bare-reason error mappings, and the G03→G04 SR-lineage handoff (with the negative assertion that G03 never calls `/sr/ingest`) are exercised.
+
+**v3.2 field-reconciliation delta covered (TC-G03-144..157).** The nine new entities (E32–E40: `attendance_policies`, `overtime_policies`, `attendance_networks`, `geofences`, `leave_reasons`, `attendance_reasons`, `leave_balance_adjustments`, `leave_revocations`, `attendance_lock_periods`) and the promoted DATA columns (leave hourly/max, shift wfh/type, holiday category/recurrence, OT reason/holiday, leave application approver_note/hourly_minutes, device modality) are exercised via config-master CRUD, the balance-adjustment and leave-revocation P01 flows, the monthly attendance lock with locked-period edit blocking, geofence + IP-network punch governance, and hourly-leave application — each with happy path and key negative asserting exact reused error codes.

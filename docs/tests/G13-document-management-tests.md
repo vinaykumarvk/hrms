@@ -7,7 +7,7 @@
 | Module | G13 — Document Management and Secure Storage (GOV-M13, ex M13-DMS) |
 | Scope | The single platform attach/fetch document service consumed by G01–G12: upload/ingestion, taxonomy/classification, folders + attach contract, versioning, KMS envelope encryption + key-DR, access control (RBAC + clearance + classification + relationship + need-to-know), malware scan/quarantine, OCR/permission-aware search, retention + legal hold (SoD) + disposition, e-signature (PAdES-LTV + RFC-3161), watermark/certified copies, access audit (P05) + hash-chain anchoring, secure sharing/expiring links, WORM, domain-scoped dedup/integrity, DLP + VIEW/DOWNLOAD fetch contract, principal clearance, DPDP DSR/erasure lattice, orphan reaper, redaction (Phase 2). |
 | Traceability basis | `docs/brd/v3/G13-document-management-secure-storage.md` (FR-G13-001…021, §5.5 enums, §5.6 DI-1…DI-18, §12 state tables); `docs/contracts/openapi/G13.yaml` (v3.0.0); `docs/contracts/error-taxonomy.yaml` (ERR-G13-*, 35 codes); `docs/contracts/state-machines.yaml` (G13 machines); `docs/contracts/auth-matrix.yaml` (G13 actions). |
-| Test-case count | 90 (TC-G13-001 … TC-G13-090) |
+| Test-case count | 122 (TC-G13-001 … TC-G13-122; includes 12 RECON v3.2 letter/config/acknowledgement cases TC-G13-111 … TC-G13-122) |
 | Standard error envelope | `{ error: { code, message, field, details } }` + `X-Correlation-Id` response header. Assert both the module `code` and the HTTP status on every negative case. |
 | API base | `/api/v1`; bearer JWT resolved by P02; `Idempotency-Key` on unsafe/transaction POSTs (24h replay returns original); cursor pagination (`limit` 25/100, `cursor`, `next_cursor`). |
 
@@ -715,12 +715,109 @@
 
 ---
 
+### RECON v3.2 — Letter/document config, letter generation & acknowledgements
+
+> Covers the v3.2 field-reconciliation additions (BRD §5.2 E27–E36; SQL Sections F/G): tenant config masters
+> (`document_categories` + `document_category_profile_fields`, `merge_field_catalog`), the letter-generation queue
+> (`letter_generation_requests`, `bulk_letter_jobs`) and the policy-acknowledgement surface
+> (`acknowledgement_campaigns`, `document_acknowledgements`). All rows are tenant-scoped (`TEN-A`/`ENT-A1`).
+> New seed refs: category `cat-doccat3` (DOCCAT_3, "Education and Training Certificates"); merge fields
+> `LETTER_SERIAL_NO` (SYSTEM), `L1_MANAGER_NAME` (M01_EMPLOYEE_MASTER), `CURRENT_ANNUAL_CTC` (M06_PAYROLL);
+> letter type "Relieving Letter" on type `PPO` (sig allowed `{DSC_TOKEN, AADHAAR_ESIGN}`); campaign
+> `camp-coc-2026` ("Code of Conduct 2026", version 42) with assignments to `EMP-3001` (self) and `EMP-3002`.
+
+**TC-G13-111** · Traces-to: FR-G13-002 (RECON `document_categories`/`document_category_profile_fields`) · Type: Functional · Priority: P2
+**Title:** Configure a document category and link an employee-profile field
+**Preconditions:** `LIB-1` authenticated in `TEN-A`.
+**Test data:** `POST /document-categories` `{ categoryCode:"DOCCAT_9", name:"Health Records", status:"ACTIVE" }`, `Idempotency-Key: K-cat-9`; then `POST /document-categories/{id}/profile-fields` `{ profileFieldKey:"bank_aadhar_img", displayOrder:1 }`.
+**Steps:** 1) POST the category. 2) POST the profile-field link on the returned id. 3) `GET /document-categories/{id}/profile-fields`.
+**Expected:** category `201` with `id`, `categoryCode="DOCCAT_9"`, `status="ACTIVE"`, `X-Correlation-Id`; link `201` with `profileFieldKey="bank_aadhar_img"`, `displayOrder=1`; list returns exactly one link (display-order ascending). Rows carry non-null `tenant_id`/`entity_id`.
+
+**TC-G13-112** · Traces-to: FR-G13-002 (RECON, `UNIQUE (tenant_id, category_code)`) · Type: Negative · Priority: P2
+**Title:** Duplicate category_code rejected within a tenant
+**Preconditions:** `DOCCAT_3` already exists in `TEN-A` (`cat-doccat3`).
+**Test data:** `POST /document-categories` `{ categoryCode:"DOCCAT_3", name:"Duplicate", status:"ACTIVE" }`, `Idempotency-Key: K-cat-dup`.
+**Steps:** POST the category.
+**Expected:** `409` `CONFLICT`; `field` names `categoryCode`; no second `document_categories` row created; the existing DOCCAT_3 unchanged. (`TEN-B` may still create its own DOCCAT_3 — uniqueness is tenant-scoped.)
+
+**TC-G13-113** · Traces-to: FR-G13-010 (RECON `merge_field_catalog`) · Type: Functional · Priority: P2
+**Title:** Register a merge field in the catalogue
+**Preconditions:** `LIB-1` authenticated in `TEN-A`.
+**Test data:** `POST /merge-fields` `{ fieldKey:"RELIEVING_DATE", label:"Relieving date", source:"M03_SEPARATION", resolutionNote:"Resolved at render time", status:"ACTIVE" }`, `Idempotency-Key: K-mf-1`.
+**Steps:** 1) POST the merge field. 2) `GET /merge-fields?source=M03_SEPARATION`.
+**Expected:** `201` with `id`, `fieldKey="RELIEVING_DATE"`, `source="M03_SEPARATION"`, `status="ACTIVE"`; list contains the new entry; `X-Correlation-Id` present.
+
+**TC-G13-114** · Traces-to: FR-G13-010 (RECON, `UNIQUE (tenant_id, field_key)`) · Type: Negative · Priority: P3
+**Title:** Duplicate merge-field key rejected within a tenant
+**Preconditions:** `LETTER_SERIAL_NO` already registered in `TEN-A`.
+**Test data:** `POST /merge-fields` `{ fieldKey:"LETTER_SERIAL_NO", label:"dup", source:"SYSTEM" }`, `Idempotency-Key: K-mf-dup`.
+**Steps:** POST the merge field.
+**Expected:** `409` `CONFLICT`; `field` names `fieldKey`; no duplicate `merge_field_catalog` row created.
+
+**TC-G13-115** · Traces-to: FR-G13-010 (RECON `letter_generation_requests`, merge resolution + sign) · Type: E2E-Flow · Priority: P1
+**Title:** Generate a letter — all merge tokens resolve, then sign to ISSUED
+**Preconditions:** `LIB-1` in `TEN-A`; merge fields `LETTER_SERIAL_NO`, `L1_MANAGER_NAME` registered and resolvable for `EMP-3001` (a confirmed employee with an L1 manager); type `PPO` allows `DSC_TOKEN`; PKI/eSign stub returns success with RFC-3161 + LTV.
+**Test data:** `POST /letter-generation-requests` `{ requestNo:"LTR/2026/9001", letterType:"Relieving Letter", documentTypeId:"dt-ppo", employeeId:"EMP-3001", requestContext:"M03 Separation flow" }`, `Idempotency-Key: K-ltr-1`.
+**Steps:** 1) POST the request (status DRAFT). 2) `POST /letter-generation-requests/{id}:resolve-merge`. 3) `POST /letter-generation-requests/{id}:generate`. 4) `POST /letter-generation-requests/{id}:sign` `{ method:"DSC_TOKEN" }`. 5) `GET /letter-generation-requests/{id}`.
+**Expected:** resolve `200` `mergeFieldsResolved==mergeFieldsTotal`, `unresolvedTokens:[]`; generate `200` produces `generatedDocumentId` (a `documents` row) and advances to `AWAITING_SIGNATURE`; sign `200` binds a `signatureRequestId`, applies PAdES-LTV, and (last signer) advances to `ISSUED`; every step writes a chained `document_audit` row on the P05 substrate.
+
+**TC-G13-116** · Traces-to: FR-G13-010 (RECON, unresolved-token block; VAL-M11-MERGE) · Type: Negative · Priority: P1
+**Title:** Unresolved merge token blocks generation; request goes VALIDATION_ERROR
+**Preconditions:** merge field `CURRENT_ANNUAL_CTC` (source `M06_PAYROLL`, "Populated only for confirmed employees") is unresolvable for a candidate with no payroll record.
+**Test data:** `POST /letter-generation-requests` `{ requestNo:"LTR/2026/9002", letterType:"Appointment Letter", subjectName:"Candidate One", requestContext:"HR Admin (M08 recruitment)" }`; then `:generate`.
+**Steps:** 1) POST the request. 2) `POST /letter-generation-requests/{id}:generate`. 3) `GET /letter-generation-requests/{id}`.
+**Expected:** generate `422` `ERR-G13-METADATA_INVALID`; `field`/`details` name the unresolved token `CURRENT_ANNUAL_CTC`; request `status="VALIDATION_ERROR"` with `validationError` populated; **no** `generatedDocumentId` and no `documents` row produced.
+
+**TC-G13-117** · Traces-to: FR-G13-010 (RECON sign; `allowed_signature_types`) · Type: Negative · Priority: P2
+**Title:** Signing a letter with a method outside the type's allowed list is rejected
+**Preconditions:** a generated letter request on type `ID_PROOF` (sig `{}` — no method allowed) at `AWAITING_SIGNATURE`.
+**Test data:** `POST /letter-generation-requests/{id}:sign` `{ method:"AADHAAR_ESIGN" }`, `Idempotency-Key: K-sign-bad`.
+**Steps:** POST the sign action.
+**Expected:** `422` `ERR-G13-SIGNATURE_METHOD_NOT_ALLOWED`; no `signatureRequestId` bound; request stays `AWAITING_SIGNATURE`; a DENIED audit row is written.
+
+**TC-G13-118** · Traces-to: FR-G13-010 (RECON `bulk_letter_jobs`, start + status) · Type: State-Transition · Priority: P2
+**Title:** Start a bulk letter job and poll its progress
+**Preconditions:** `LIB-1` in `TEN-A`; `JOB-M11-BULKLTR` worker stubbed to process the batch.
+**Test data:** `POST /bulk-letter-jobs` `{ jobNo:"BLK/2026/900", jobName:"Q3 Confirmation batch", recordCount:120 }`, `Idempotency-Key: K-blk-1`.
+**Steps:** 1) POST to start the job. 2) `GET /bulk-letter-jobs/{id}` (poll). 3) drive the stub to completion; `GET` again.
+**Expected:** start `202` with `status="QUEUED"`, `recordCount=120`, `progressPct=0`; poll shows `IN_PROGRESS` with `processedCount` increasing and `progressPct` in [0,100] and an `eta`; terminal `GET` shows `status="COMPLETE"`, `processedCount=120`, `progressPct=100.00`.
+
+**TC-G13-119** · Traces-to: FR-G13-012 (RECON `acknowledgement_campaigns`, create/track) · Type: State-Transition · Priority: P2
+**Title:** Create a policy acknowledgement campaign and track its rollup
+**Preconditions:** `LIB-1` in `TEN-A`; policy document "Code of Conduct 2026" version 42 vaulted.
+**Test data:** `POST /acknowledgement-campaigns` `{ campaignNo:"ACK/2026/900", name:"Code of Conduct v4.2 (annual refresh)", documentTitle:"Code of Conduct 2026", documentVersionNo:42, purpose:"annual refresh", audienceDescription:"All employees", reminderCadence:"Weekly", escalateAfterSlaTo:"hr_admin", deadline:"2026-08-31" }`, `Idempotency-Key: K-camp-1`.
+**Steps:** 1) POST the campaign (status DRAFT). 2) `GET /acknowledgement-campaigns/{id}:track`.
+**Expected:** `201` with `campaignNo="ACK/2026/900"`, `status="DRAFT"`, `documentVersionNo=42`; track `200` returns rollup fields `assignedCount`/`acknowledgedCount`/`pendingCount`/`overdueCount` (all consistent, `acknowledgedCount+pendingCount+overdueCount==assignedCount`).
+
+**TC-G13-120** · Traces-to: FR-G13-012 (RECON `document_acknowledgements`, DM25 non-repudiation) · Type: Data-Integrity · Priority: P1
+**Title:** Record a policy acknowledgement — non-repudiation snapshot captured, PENDING → ACKNOWLEDGED
+**Preconditions:** campaign `camp-coc-2026` ACTIVE; assignment `ack-3001` (`EMP-3001`, PENDING, version 42); per-company `policy_letter_settings` sign-off text seeded.
+**Test data:** `EMP-3001` `POST /acknowledgement-campaigns/camp-coc-2026/acknowledgements` `{ employeeId:"EMP-3001", documentVersionNo:42, consentTextSnapshot:"I confirm that I have read and understood this document completely and would like to sign off on the document", appVersion:"Chrome/126.0 (macOS)" }`, `Idempotency-Key: K-ack-1`.
+**Steps:** 1) `EMP-3001` POST the acknowledgement. 2) `GET /acknowledgement-campaigns/camp-coc-2026/acknowledgements?status=ACKNOWLEDGED`.
+**Expected:** `201` with `status="ACKNOWLEDGED"`, `acknowledgedAt` set, `documentVersionNo=42`, and the write-once non-repudiation fields captured (`consentTextSnapshot`, `appVersion`, server-captured `ipAddress`); the row is unique on `(campaignId, employeeId)`; campaign `acknowledgedCount` increments by 1 and `pendingCount` decrements by 1; a chained `document_audit` row is written on the P05 substrate.
+
+**TC-G13-121** · Traces-to: FR-G13-012 (RECON, IDOR / own-scope) · Type: Authorization-AccessControl · Priority: P1
+**Title:** An employee cannot acknowledge on behalf of another (IDOR)
+**Preconditions:** assignment `ack-3002` belongs to `EMP-3002`.
+**Test data:** `EMP-3001` `POST /acknowledgement-campaigns/camp-coc-2026/acknowledgements` `{ employeeId:"EMP-3002", documentVersionNo:42, consentTextSnapshot:"…", appVersion:"Chrome/126.0" }`.
+**Steps:** `EMP-3001` POST acknowledging `EMP-3002`'s assignment.
+**Expected:** `403` `FORBIDDEN`; `EMP-3002`'s assignment stays `PENDING` with no snapshot written; a DENIED audit row is recorded; existence of the other assignment is never leaked.
+
+**TC-G13-122** · Traces-to: FR-G13-012 (RECON `document_acknowledgements`, write-once) · Type: Negative · Priority: P2
+**Title:** Re-recording an already-acknowledged assignment is rejected (write-once)
+**Preconditions:** assignment `ack-3001` already `ACKNOWLEDGED` (TC-G13-120).
+**Test data:** `POST /document-acknowledgements/ack-3001:record` `{ consentTextSnapshot:"tampered", appVersion:"curl/8", documentVersionNo:42 }`, `Idempotency-Key: K-rec-dup`.
+**Steps:** POST the record action on the already-acknowledged row.
+**Expected:** `409` `CONFLICT`; the original `consentTextSnapshot`/`appVersion`/`acknowledgedAt` are unchanged (snapshot fields are write-once); no audit tamper.
+
+---
+
 ## 3. Traceability Matrix (FR → TC ids)
 
 | FR | Title | Test cases |
 |----|-------|------------|
 | FR-G13-001 | Upload & Ingestion | TC-G13-001, 002, 003, 004, 005, 006, 007, 008, 109 |
-| FR-G13-002 | Types / Taxonomy / Classification / Tagging | TC-G13-009, 010, 011, 012, 013, 014 |
+| FR-G13-002 | Types / Taxonomy / Classification / Tagging | TC-G13-009, 010, 011, 012, 013, 014, 111, 112 |
 | FR-G13-003 | Folders & Attach Contract | TC-G13-015, 016, 017, 018, 019, 108 |
 | FR-G13-004 | Versioning / Check-in-out / Supersede | TC-G13-020, 021, 022, 023, 024, 025, 026 |
 | FR-G13-005 | Encryption / KMS / Key-DR / Break-glass | TC-G13-027, 028, 029, 030, 031, 032 |
@@ -728,9 +825,10 @@
 | FR-G13-007 | Malware / Quarantine / Sandbox | TC-G13-041, 042, 043, 044, 045 |
 | FR-G13-008 | OCR & Permission-Aware Search | TC-G13-046, 047, 048 |
 | FR-G13-009 | Retention / Legal Hold / Disposition | TC-G13-049, 050, 051, 052, 053, 054, 055, 056, 057, 058, 059, 060, 110 |
-| FR-G13-010 | E-Signature (PAdES-LTV + RFC-3161) | TC-G13-061, 062, 063, 064, 065, 066, 109 |
+| FR-G13-010 | E-Signature (PAdES-LTV + RFC-3161) | TC-G13-061, 062, 063, 064, 065, 066, 109, 113, 114, 115, 116, 117, 118 |
 | FR-G13-011 | Watermark & Certified Copies | TC-G13-067, 068, 069 |
-| FR-G13-012 | Access Audit & Compliance | TC-G13-070, 071, 072, 073, 074, 108 |
+| FR-G13-012 | Access Audit & Compliance | TC-G13-070, 071, 072, 073, 074, 108, 119, 120, 121, 122 |
+| RECON v3.2 — Letter/document config, generation & acknowledgements | `document_categories`(+profile fields), `merge_field_catalog`, `letter_generation_requests`, `bulk_letter_jobs`, `acknowledgement_campaigns`, `document_acknowledgements` (BRD §5.2 E27–E36) | TC-G13-111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122 |
 | FR-G13-013 | Secure Sharing & Expiring Links | TC-G13-075, 076, 077, 078, 079 |
 | FR-G13-014 | WORM Storage | TC-G13-080, 081, 082, 083, 109 |
 | FR-G13-015 | Dedup / Integrity / Preview | TC-G13-084, 085, 086, 087 |
@@ -752,7 +850,7 @@
 | ERR-G13-FILE_TOO_LARGE | 422 | TC-G13-003 |
 | ERR-G13-EMPTY_FILE | 422 | TC-G13-004 |
 | ERR-G13-FETCH_INTENT_REQUIRED | 422 | TC-G13-088 |
-| ERR-G13-METADATA_INVALID | 422 | TC-G13-010 |
+| ERR-G13-METADATA_INVALID | 422 | TC-G13-010, 116 |
 | ERR-G13-MALWARE_DETECTED | 422 | TC-G13-041 |
 | ERR-G13-RENDER_RESOURCE_LIMIT | 422 | TC-G13-044 |
 | ERR-G13-INTEGRITY_FAILED | 422 | TC-G13-085 |
@@ -774,7 +872,7 @@
 | ERR-G13-SHARE_LOCKED | 429 | TC-G13-077 |
 | ERR-G13-BREAK_GLASS_LOCKED | 429 | TC-G13-031 |
 | ERR-G13-SIGNATURE_INVALID | 422 | TC-G13-064 |
-| ERR-G13-SIGNATURE_METHOD_NOT_ALLOWED | 422 | TC-G13-013, 062 |
+| ERR-G13-SIGNATURE_METHOD_NOT_ALLOWED | 422 | TC-G13-013, 062, 117 |
 | ERR-G13-SIGNATURE_LTV_REQUIRED | 422 | TC-G13-063 |
 | ERR-G13-SIGNING_SERVICE_UNAVAILABLE | 500 | TC-G13-065 |
 | ERR-G13-KEY_SERVICE_UNAVAILABLE | 500 | TC-G13-029 |
@@ -794,32 +892,32 @@ All 35 module error codes are asserted (code + HTTP status).
 
 | Type | Count | Test cases |
 |------|-------|-----------|
-| Functional | 14 | 001, 005, 008, 009, 014, 019, 025, 027, 028, 042, 048, 049, 067, 073, 103 |
+| Functional | 16 | 001, 005, 008, 009, 014, 019, 025, 027, 028, 042, 048, 049, 067, 073, 103, 111, 113 |
 | Boundary | 3 | 003, 076 (+ implicit at 026) |
-| Negative | 15 | 002, 004, 010, 013, 016, 017, 021, 022, 026, 056, 062, 065, 069, 075, 090 |
-| Authorization-AccessControl | 14 | 011, 023, 032, 033, 036, 038(func-adjacent), 043, 046, 052, 053, 057, 078, 087, 092, 096 |
+| Negative | 20 | 002, 004, 010, 013, 016, 017, 021, 022, 026, 056, 062, 065, 069, 075, 090, 112, 114, 116, 117, 122 |
+| Authorization-AccessControl | 15 | 011, 023, 032, 033, 036, 038(func-adjacent), 043, 046, 052, 053, 057, 078, 087, 092, 096, 121 |
 | Security | 12 | 007, 030, 031, 034, 035, 041, 044, 045, 047, 064, 068, 072, 079, 097, 102, 105 |
-| State-Transition | 11 | 012, 018, 020, 039, 050, 051, 054, 061, 066, 091, 093, 098, 100, 106 |
-| Data-Integrity | 13 | 006, 024, 037, 055, 058, 070, 071, 074, 081, 083, 084, 085, 086, 099, 104, 107, 110 |
+| State-Transition | 13 | 012, 018, 020, 039, 050, 051, 054, 061, 066, 091, 093, 098, 100, 106, 118, 119 |
+| Data-Integrity | 14 | 006, 024, 037, 055, 058, 070, 071, 074, 081, 083, 084, 085, 086, 099, 104, 107, 110, 120 |
 | API-Contract | 3 | 015, 088, 089 |
-| E2E-Flow | 4 | 059, 095, 108, 109 |
+| E2E-Flow | 5 | 059, 095, 108, 109, 115 |
 
-> Note: several cases legitimately carry a dominant type above; where a case exercises two concerns (e.g., an authorization denial that must also be audited), it is counted under its primary declared Type. Total distinct cases = 90.
+> Note: several cases legitimately carry a dominant type above; where a case exercises two concerns (e.g., an authorization denial that must also be audited), it is counted under its primary declared Type. Total distinct cases = 122 (110 base + 12 RECON v3.2).
 
 ### 4.2 By priority
 
 | Priority | Meaning | Count |
 |----------|---------|-------|
-| P1 | Critical (statutory custody, access control, SoD, WORM, integrity, E2E contract) | 55 |
-| P2 | High (core functional + important negatives) | 27 |
-| P3 | Medium (secondary functional / edge) | 8 |
+| P1 | Critical (statutory custody, access control, SoD, WORM, integrity, E2E contract) | 60 |
+| P2 | High (core functional + important negatives) | 33 |
+| P3 | Medium (secondary functional / edge) | 9 |
 
 ### 4.3 Totals
 
 | Metric | Value |
 |--------|-------|
-| Total test cases | 90 |
-| FRs covered | 21 of 21 (100%, 0 gaps) |
+| Total test cases | 122 |
+| FRs covered | 21 of 21 (100%, 0 gaps) + RECON v3.2 letter/config/acknowledgement surface (TC-G13-111…122) |
 | ERR-G13-* codes asserted | 35 of 35 |
 | State tables exercised | §12.1–12.9 (document, version, legal-hold, disposition, signature, share, clearance, DSR, event-inbox) |
 | Multi-tenant isolation | TC-G13-105 |

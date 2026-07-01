@@ -7,21 +7,21 @@ transitions), and `auth-matrix.yaml` (allowed vs forbidden role, PII masking, So
 
 | Module | Suite | Cases | FR coverage |
 |---|---|---|---|
-| G01 | `G01-employee-profile-tests.md` | 130 | 25/25 · 0 gaps |
-| G02 | `G02-personal-details-workflow-tests.md` | 92 | 23/23 · 0 gaps |
-| G03 | `G03-attendance-leave-tests.md` | 143 | 23/23 · 0 gaps |
+| G01 | `G01-employee-profile-tests.md` | 148 | 25/25 · 0 gaps |
+| G02 | `G02-personal-details-workflow-tests.md` | 96 | 23/23 · 0 gaps |
+| G03 | `G03-attendance-leave-tests.md` | 157 | 23/23 · 0 gaps |
 | G04 | `G04-leave-sr-integration-tests.md` | 76 | 18/18 · 0 gaps |
 | G05 | `G05-transfer-relieving-joining-tests.md` | 95 | 22/22 · 0 gaps |
 | G06 | `G06-promotion-posting-progression-tests.md` | 104 | 20/20 · 0 gaps |
 | G07 | `G07-training-skill-development-tests.md` | 93 | 24/24 · 0 gaps |
-| G08 | `G08-performance-appraisal-tests.md` | 122 | 22/22 · 0 gaps |
+| G08 | `G08-performance-appraisal-tests.md` | 138 | 22/22 · 0 gaps |
 | G09 | `G09-disciplinary-punishment-tests.md` | 110 | 28/28 · 0 gaps |
 | G10 | `G10-payroll-benefits-tests.md` | 102 | 23/23 · 0 gaps |
 | G11 | `G11-retirement-pension-tests.md` | 142 | 24/24 · 0 gaps |
 | G12 | `G12-digital-service-register-tests.md` | 106 | 21/21 · 0 gaps |
-| G13 | `G13-document-management-tests.md` | 110 | 21/21 · 0 gaps |
-| G14 | `G14-dashboard-analytics-tests.md` | 105 | 23/23 · 0 gaps |
-| **Total** | | **1,530** | **all FRs · 0 gaps** |
+| G13 | `G13-document-management-tests.md` | 122 | 21/21 · 0 gaps |
+| G14 | `G14-dashboard-analytics-tests.md` | 108 | 23/23 · 0 gaps |
+| **Total** | | **1,597** | **all FRs · 0 gaps** |
 
 ## Test-case structure
 Each case has: `TC-G##-NNN` id, **Traces-to** (FR/AC), **Type** (Functional / Boundary / Negative /

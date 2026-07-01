@@ -1009,6 +1009,48 @@
 | Expected | Original `200` result returned; no duplicate workflow instance (`ERR-DUP-INSTANCE` only for a genuine second open change). |
 | Priority | P1 |
 
+### FR-G02-012 (v3.2) — PII-tier classification on the field-sensitivity catalog
+
+| TC | TC-G02-093 |
+|---|---|
+| Traces-to | FR-G02-012; v3.2 recon R3.2-1; §5.2 E5 `field_sensitivity_catalog.pii_tier_id` |
+| Type | Functional / API-Contract |
+| Title | Org-Admin sets a field's DPDPA PII tier on the sensitivity-catalog entry |
+| Preconditions | `sysadm-sara` (Org-Admin); platform `pii_tiers` seeded (TIER_1/TIER_2/TIER_3/NON_PII) |
+| Steps | `POST /admin/field-sensitivity` `{ fieldKey:"bank_account_no", sensitivity:"FINANCIAL", piiTierId:"<TIER_1 uuid>" }`; then `GET /admin/field-sensitivity`. |
+| Expected | `201`/`200`; entry persists `piiTierId` and round-trips it on read; FK to platform `pii_tiers` honoured (unknown id → `422 VALIDATION_FAILED`; `ON DELETE RESTRICT` blocks tier deletion while referenced). |
+| Priority | P2 |
+
+| TC | TC-G02-094 |
+|---|---|
+| Traces-to | FR-G02-012; FR-G02-002; v3.2 recon note (PII tier vs routing sensitivity — orthogonality) |
+| Type | Data-Integrity / Negative |
+| Title | PII tier is orthogonal to approval routing — changing `piiTierId` does not alter the P01 route |
+| Preconditions | Catalog entry for `bank_account_no` (`sensitivity=FINANCIAL`); route resolved via `approval_matrix_rules` |
+| Steps | Capture `POST /change-requests/{id}/route-preview`; `PATCH /admin/field-sensitivity` to change only `piiTierId` (FINANCIAL sensitivity unchanged); re-run route-preview on an equivalent request. |
+| Expected | `routePreview` / `highestSensitivity` are identical before and after; P01 route stays derived from `sensitivity`/`fieldGroup`/`fieldKey` only; `piiTierId` never appears in route resolution. |
+| Priority | P1 |
+
+| TC | TC-G02-095 |
+|---|---|
+| Traces-to | FR-G02-012; FR-M01-003 prototype `sensitive-changes` screen; v3.2 recon R3.2-1 |
+| Type | Functional / API-Contract |
+| Title | A Tier-1 field surfaces correctly under the sensitive-changes PII-tier grouping |
+| Preconditions | `bank_account_no` classified `piiTierId=TIER_1`; a committed/in-review change request touches it |
+| Steps | Read the field-sensitivity catalog (and the request diff) that the `sensitive-changes` review screen consumes. |
+| Expected | The field resolves to PII Tier 1 and groups under "PII Tier 1" (distinct from Tier 2); grouping is driven by `piiTierId`, independent of the `sensitivity` value the routing uses. |
+| Priority | P2 |
+
+| TC | TC-G02-096 |
+|---|---|
+| Traces-to | FR-G02-012; v3.2 recon (add-only, nullable FK) |
+| Type | Boundary |
+| Title | `piiTierId` is optional — a NON_PII / unclassified field is accepted and not grouped as sensitive |
+| Preconditions | `sysadm-sara`; a low-sensitivity field (e.g. `preferred_name`) |
+| Steps | `POST /admin/field-sensitivity` with `piiTierId` omitted (null), then optionally set to the `NON_PII` tier. |
+| Expected | Entry accepted with `piiTierId=null` (add-only nullable column, no forced default); such fields do not surface under any "PII Tier N" sensitive-changes group. |
+| Priority | P3 |
+
 ---
 
 ## 3. Traceability Matrix (FR → TC, 0 gaps)
@@ -1026,7 +1068,7 @@
 | FR-G02-009 | Bulk HR-initiated corrections | TC-G02-035, 036, 037, 038 |
 | FR-G02-010 | Effective-dated commit to G01/M01 | TC-G02-039, 040, 041, 042, 043, 044 |
 | FR-G02-011 | G01→G12 SR posting-status tracking (G02 not writer) | TC-G02-045, 046, 047, 048, 049 |
-| FR-G02-012 | Approval-flow / sensitivity / e-sign / regex config | TC-G02-050, 051, 052, 053, 054 |
+| FR-G02-012 | Approval-flow / sensitivity / e-sign / regex config | TC-G02-050, 051, 052, 053, 054, 093 (PII tier), 094 (PII tier), 095 (PII tier), 096 (PII tier) |
 | FR-G02-013 | Delegation (role-independent) | TC-G02-055, 056 |
 | FR-G02-014 | Change-request templates | TC-G02-057, 058 |
 | FR-G02-015 | Strong e-signature (method policy) | TC-G02-059, 060, 061, 062 |
@@ -1069,24 +1111,24 @@
 
 | Type | Count |
 |---|---|
-| Functional | 14 |
+| Functional | 16 |
 | E2E-Flow | 8 |
 | State-Transition | 14 |
 | Negative | 18 |
 | Authorization | 16 |
-| Data-Integrity | 14 |
+| Data-Integrity | 15 |
 | API-Contract | 12 |
-| Boundary | 6 |
-| **Total TCs** | **92** |
+| Boundary | 7 |
+| **Total TCs** | **96** |
 
 ### By priority
 
 | Priority | Count |
 |---|---|
-| P1 (statutory / security / data-integrity critical) | 45 |
-| P2 (core functional) | 37 |
-| P3 (secondary / UX / report) | 10 |
-| **Total** | **92** |
+| P1 (statutory / security / data-integrity critical) | 46 |
+| P2 (core functional) | 39 |
+| P3 (secondary / UX / report) | 11 |
+| **Total** | **96** |
 
 ### Emphasis coverage (mandated areas)
 

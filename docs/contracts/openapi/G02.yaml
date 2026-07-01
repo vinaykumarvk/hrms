@@ -3323,6 +3323,16 @@ components:
           type: [string, 'null']
         sensitivity:
           $ref: '#/components/schemas/SensitivityClass'
+        piiTierId:
+          type: [string, 'null']
+          format: uuid
+          description: >
+            DPDPA PII-tier classification (FK -> platform `pii_tiers`, tier codes
+            TIER_1/TIER_2/TIER_3/NON_PII; `ON DELETE RESTRICT`, index `ix_fsc_pii_tier`).
+            Distinct from and orthogonal to `sensitivity`: it does NOT drive P01
+            approval-route resolution (that stays derived from `sensitivity` /
+            `fieldGroup` / `fieldKey`). It is a data-governance / display axis — the
+            `sensitive-changes` review screen groups requests by PII tier (recon v3.2).
         version:
           type: [integer, 'null']
         isAuthBearing:

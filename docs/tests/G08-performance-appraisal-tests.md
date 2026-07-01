@@ -1502,21 +1502,203 @@ Every TC carries **Traces-to** (FR + AC/BR/Edge). Negative TCs assert the exact 
 | Expected | Calibration never mutated the grade autonomously (only ratified adjustment did); post-expunction grade crosses back above benchmark; corrective SR event + updated G06 eligibility (never silent overwrite); representation chain CLOSED |
 | Priority | P1 |
 
+### v3.2 Field-Reconciliation Additions — Config masters, cycle exclusions, probation confirmations, calibration acknowledgement, goal metric/pillar/alignment
+
+> Covers the v3.2 ADD-only reconciliation (BRD §5 E24–E34 + goal/self/calibration/PIP columns; data-model Sections 3–4; OpenAPI v3.2 paths). Config/master rows are tenant-scoped with `VAL-MASTER-UNIQUE` codes and `status` ∈ DRAFT/ACTIVE/ARCHIVED. Negative TCs assert the exact wire code (8-code table) and, where a specific `ERR-G08-*` applies, that code.
+
+#### TC-G08-123
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-01, FR-G08-02 (v3.2 E24/E25) |
+| Type | Functional |
+| Title | Configure a scorecard pillar and a measurement metric (PMS config masters) |
+| Preconditions | `SYS-ADMIN`/`HR-CELL` logged in; tenant `T1` scope resolved |
+| Test data | `POST /g08/scorecard-pillars` {pillar_code:`FINANCIAL`, name:`Financial Perspective`} then `POST /g08/metrics` {metric_code:`DB_Default_Metric_Percentage`, name:`Percentage`}, both with Idempotency-Key |
+| Steps | 1. Create pillar. 2. Create metric. |
+| Expected | 201 on each; `status=ACTIVE` by default; tenant-scoped rows returned with ids; `X-Correlation-Id` echoed |
+| Priority | P1 |
+
+#### TC-G08-124
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-02 (v3.2 E24), `VAL-MASTER-UNIQUE` |
+| Type | Negative |
+| Title | Duplicate tenant-scoped pillar_code is rejected |
+| Preconditions | Pillar `FINANCIAL` from TC-G08-123 exists in `T1` |
+| Test data | `POST /g08/scorecard-pillars` {pillar_code:`FINANCIAL`, name:`Dup`} |
+| Expected | 409 `CONFLICT` (uniqueness on `(tenant_id, pillar_code)`); no second row created |
+| Priority | P2 |
+
+#### TC-G08-125
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-02 (v3.2 E28) |
+| Type | Functional |
+| Title | Configure a goal-plan master with the per-field flag matrix as jsonb |
+| Preconditions | `SYS-ADMIN`/`HR-CELL`; entity scope resolved |
+| Test data | `POST /g08/goal-plans` {goal_plan_code:`GP-OKR-2025`, name:`OKR FY25`, methodology:`OKR`, start_date, end_date (≥start), enable_goal_weightage_limits:true, min_weightage:0, max_weightage:100, field_settings:{...}} |
+| Expected | 201; `status=ACTIVE`; `field_settings` persisted verbatim (jsonb, not exploded); `end_date ≥ start_date` accepted |
+| Priority | P2 |
+
+#### TC-G08-126
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-02 (v3.2 E28), BR (date/weightage bounds) |
+| Type | Negative |
+| Title | Goal-plan with end_date before start_date is rejected |
+| Preconditions | As TC-G08-125 |
+| Test data | `POST /g08/goal-plans` {goal_plan_code:`GP-BAD`, name:`Bad`, start_date:`2025-12-01`, end_date:`2025-01-01`} |
+| Expected | 422 `VALIDATION_FAILED` (`ck_goal_plans_dates`); no row created |
+| Priority | P2 |
+
+#### TC-G08-127
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-02 (v3.2 goals.metric_id/scorecard_pillar_id/aligned_to_goal_id) |
+| Type | Functional |
+| Title | Create a goal carrying metric, scorecard pillar, timeline and alignment |
+| Preconditions | Pillar `FINANCIAL` (E24) + metric `Percentage` (E25) ACTIVE; form `GOALS_PENDING`; a parent objective goal `G-OBJ` exists for alignment |
+| Test data | `POST /g08/goals` {appraisee_id, goal_type:`KRA`, period_scope:`SINGLE_CYCLE`, title:`Cost reduction`, weightage:40, metric_id, metric_criteria:`% vs budget`, target_prefix:`INR`, timeline_start_date, timeline_end_date, scorecard_pillar_id, aligned_to_goal_id:`G-OBJ`, goal_source:`SELF`, category:`Customer`} |
+| Expected | 201; goal persists `metric_id`, `scorecard_pillar_id`, `aligned_to_goal_id`, `timeline_*`, `goal_source=SELF`, `category`; `block_edit_achievement` defaults false |
+| Priority | P1 |
+
+#### TC-G08-128
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-02 (v3.2 goals.scorecard_pillar_id), P02 scope |
+| Type | Negative |
+| Title | Goal referencing an out-of-scope scorecard pillar is not found |
+| Preconditions | Caller in `T1`; `scorecard_pillar_id` belongs to tenant `T2` |
+| Test data | `POST /g08/goals` {…, scorecard_pillar_id:`<T2 pillar>`} |
+| Expected | 404 `NOT_FOUND` (out-of-scope master indistinguishable from absent; no T2 leak); goal not created |
+| Priority | P2 |
+
+#### TC-G08-129
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-01 (v3.2 E33 appraisal_cycle_exclusions) |
+| Type | Functional |
+| Title | Manually exclude an employee from an appraisal cycle |
+| Preconditions | Cycle `APAR-2025-26` OPEN; appraisee eligible; `HR-CELL` logged in |
+| Test data | `POST /g08/cycles/{cycleId}/exclusions` {appraisee_id, exclusion_source:`MANUAL`, exclusion_reason:`On probation`, detail:`Probation ends 11 Sep 2026`, justification:`…`, reversibility:`REVERSIBLE`} |
+| Expected | 201; `status=EXCLUDED`; unique `(tenant_id, cycle_id, appraisee_id)`; appraisee omitted from cycle materialisation |
+| Priority | P1 |
+
+#### TC-G08-130
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-01 (v3.2 E33 reversibility/re-inclusion) |
+| Type | State-Transition |
+| Title | Reverse (re-include) a reversible cycle exclusion |
+| Preconditions | Exclusion from TC-G08-129 EXCLUDED, `reversibility=REVERSIBLE` |
+| Test data | `POST /g08/cycles/{cycleId}/exclusions/{exclusionId}/reverse` |
+| Expected | 200; `status=RE_INCLUDED`; `re_included_at`/`re_included_by` recorded; appraisee re-materialised into the cycle |
+| Priority | P2 |
+
+#### TC-G08-131
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-01 (v3.2 E33 unique constraint) |
+| Type | Negative |
+| Title | Excluding an already-excluded appraisee is rejected |
+| Preconditions | Appraisee already EXCLUDED on the cycle (TC-G08-129) |
+| Test data | `POST /g08/cycles/{cycleId}/exclusions` {same appraisee_id} |
+| Expected | 409 `CONFLICT` (uniqueness on `(tenant_id, cycle_id, appraisee_id)`); no duplicate |
+| Priority | P2 |
+
+#### TC-G08-132
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-01 (v3.2 E33), ERR-G08-STATE |
+| Type | Negative |
+| Title | Reversing a PERMANENT cycle exclusion is blocked |
+| Preconditions | An exclusion with `reversibility=PERMANENT`, `status=EXCLUDED` |
+| Test data | `POST /g08/cycles/{cycleId}/exclusions/{exclusionId}/reverse` |
+| Expected | 409 `CONFLICT` `ERR-G08-STATE`; remains EXCLUDED; no re-inclusion |
+| Priority | P2 |
+
+#### TC-G08-133
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-21 (v3.2 E34 probation_confirmations) |
+| Type | Functional |
+| Title | Manager recommends confirmation, HR approves → CONFIRMED |
+| Preconditions | Probation record open (`status=IN_PROBATION`); `RO1` = recommending manager; `HR-CELL` distinct approver |
+| Test data | `POST /g08/probation-confirmations` {confirmation_no:`PC-001`, appraisee_id, date_of_joining, probation_end_date} → `POST .../{id}/recommend` {manager_recommendation:`RECOMMEND_CONFIRMATION`, manager_comments} → `POST .../{id}/approve` {confirmation_effective_date, hr_approver_id} |
+| Steps | 1. Open record. 2. Manager recommends confirmation (→PENDING_HR_APPROVAL). 3. HR approves. |
+| Expected | 201 open; 200 recommend (status `PENDING_HR_APPROVAL`, recommendation stored); 200 approve (status `CONFIRMED`, `hr_approved_at` set, effective date recorded); probation-confirmation feed to G01/M02 |
+| Priority | P1 |
+
+#### TC-G08-134
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-21 (v3.2 E34 extension) |
+| Type | State-Transition |
+| Title | Manager recommends extension then probation is extended → EXTENDED |
+| Preconditions | Probation record `IN_PROBATION` / `PENDING_MANAGER` |
+| Test data | `POST .../{id}/recommend` {manager_recommendation:`RECOMMEND_EXTENSION`} → `POST .../{id}/extend` {extension_months:3, probation_end_date:`2026-12-11`} |
+| Expected | 200 on both; `status=EXTENDED`; `extension_months=3`; new `probation_end_date` recorded |
+| Priority | P2 |
+
+#### TC-G08-135
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-21 (v3.2 E34 lifecycle), ERR-G08-STATE |
+| Type | Negative |
+| Title | Approving a probation confirmation before any manager recommendation is blocked |
+| Preconditions | Probation record `IN_PROBATION` with no recommendation recorded |
+| Test data | `POST /g08/probation-confirmations/{id}/approve` {confirmation_effective_date} |
+| Expected | 409 `CONFLICT` `ERR-G08-STATE`; not approved; status unchanged |
+| Priority | P2 |
+
+#### TC-G08-136
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-21 (v3.2 E34 SoD), ERR-G08-SELFADJ |
+| Type | Negative |
+| Title | HR approver equal to the recommending manager (maker = checker) is forbidden |
+| Preconditions | Recommendation recorded by `RO1`; approver resolves to the same principal (`RO1`) |
+| Test data | `POST .../{id}/approve` with `hr_approver_id = RO1` (the recommender) |
+| Expected | 403 `FORBIDDEN` `ERR-G08-SELFADJ`; no self-approval; approval rejected |
+| Priority | P1 |
+
+#### TC-G08-137
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-09 (v3.2 calibration_recommendations employee_ack_*) |
+| Type | Functional |
+| Title | Employee acknowledges a published calibration recommendation with comments |
+| Preconditions | Recommendation RATIFIED and disclosed to the appraisee; caller is the appraisee (`EMP-APPRAISEE`) |
+| Test data | `POST /g08/calibration/recommendations/{recId}/acknowledge` {employee_ack_status:`ACKNOWLEDGED_WITH_COMMENTS`, employee_ack_comments:`Noted, request 1:1`} |
+| Expected | 200; `employee_ack_status=ACKNOWLEDGED_WITH_COMMENTS`; `employee_ack_comments` + `employee_ack_at` recorded; P05-audited |
+| Priority | P2 |
+
+#### TC-G08-138
+| Field | Value |
+|---|---|
+| Traces-to | FR-G08-09 (v3.2 ack gate), ERR-G08-STATE |
+| Type | Negative |
+| Title | Acknowledging a calibration recommendation before it is ratified/disclosed is blocked |
+| Preconditions | Recommendation in `PROPOSED`/`VOTING` (not yet ratified/disclosed) |
+| Test data | `POST /g08/calibration/recommendations/{recId}/acknowledge` {employee_ack_status:`ACKNOWLEDGED`} |
+| Expected | 409 `CONFLICT` `ERR-G08-STATE`; `employee_ack_status` remains `AWAITING` |
+| Priority | P2 |
+
 ---
 
 ## 3. Traceability Matrix (FR → TC, 0 gaps)
 
 | FR | Description | Test Cases |
 |---|---|---|
-| FR-G08-01 | Cycle & template configuration | TC-G08-001, 002, 003, 004, 005, 006, 007, 008, 009, 121 |
-| FR-G08-02 | Goal setting, weightage, snapshot-on-lock | TC-G08-010, 011, 012, 013, 014, 015, 016, 017, 119, 121 |
+| FR-G08-01 | Cycle & template configuration | TC-G08-001, 002, 003, 004, 005, 006, 007, 008, 009, 121, 129, 130, 131, 132 |
+| FR-G08-02 | Goal setting, weightage, snapshot-on-lock | TC-G08-010, 011, 012, 013, 014, 015, 016, 017, 119, 121, 123, 124, 125, 126, 127, 128 |
 | FR-G08-03 | Self-appraisal | TC-G08-018, 019, 020, 021, 121 |
 | FR-G08-04 | Reporting Officer assessment (multi-RO, DSC) | TC-G08-022, 023, 024, 025, 026, 027, 028, 066, 069, 121 |
 | FR-G08-05 | Reviewing Officer review | TC-G08-029, 030, 031, 032, 033, 034, 121 |
 | FR-G08-06 | Accepting Authority certification | TC-G08-035, 036, 037, 038, 039, 040, 041, 121, 122 |
 | FR-G08-07 | Rating scales & grade computation | TC-G08-042, 043, 044, 045, 046 |
 | FR-G08-08 | Mandatory disclosure & representation | TC-G08-047, 048, 049, 050, 051, 052, 053, 054, 055, 056, 057, 121, 122 |
-| FR-G08-09 | Calibration as ratified recommendation | TC-G08-058, 059, 060, 061, 062, 063, 122 |
+| FR-G08-09 | Calibration as ratified recommendation | TC-G08-058, 059, 060, 061, 062, 063, 122, 137, 138 |
 | FR-G08-10 | Continuous feedback & check-ins | TC-G08-064, 065, 066 |
 | FR-G08-11 | Multi-source / 360 feedback | TC-G08-067, 068, 069 |
 | FR-G08-12 | Competency assessment & G07 linkage | TC-G08-070, 071 |
@@ -1528,7 +1710,7 @@ Every TC carries **Traces-to** (FR + AC/BR/Edge). Negative TCs assert the exact 
 | FR-G08-18 | Multi-RO part-period & No-Report | TC-G08-027, 097, 098, 099, 100 |
 | FR-G08-19 | SLA auto-escalation & authoring transfer | TC-G08-101, 102, 103 |
 | FR-G08-20 | Digital signature & non-repudiation | TC-G08-026, 036, 054, 104, 105, 106, 107, 108 |
-| FR-G08-21 | Probation confirmation appraisal | TC-G08-109, 110, 111 |
+| FR-G08-21 | Probation confirmation appraisal | TC-G08-109, 110, 111, 133, 134, 135, 136 |
 | FR-G08-22 | Cycle errata / controlled correction | TC-G08-112, 113, 114 |
 | Platform (cross-cutting) | Auth, multi-tenant, API contract | TC-G08-115, 116, 117, 118, 119, 120 |
 
@@ -1541,41 +1723,41 @@ All 22 FRs covered; **0 gaps**.
 ### 4.1 By type
 | Type | Count | Test Cases |
 |---|---|---|
-| Functional | 26 | 001, 005, 007, 010, 011, 013, 018, 022, 029, 043, 047, 048, 050, 052, 053, 058, 060, 062, 070, 071, 072, 075, 085, 086, 090, 094, 098, 101, 102, 104, 112 |
+| Functional | 32 | 001, 005, 007, 010, 011, 013, 018, 022, 029, 043, 047, 048, 050, 052, 053, 058, 060, 062, 070, 071, 072, 075, 085, 086, 090, 094, 098, 101, 102, 104, 112, 123, 125, 127, 129, 133, 137 |
 | Boundary | 10 | 004, 012, 013, 020, 037, 038, 042, 044, 045, 065, 097 |
-| Negative | 25 | 003, 009, 019, 023, 024, 026, 030, 034, 036, 046, 051, 054, 056, 059, 061, 066, 068, 069, 073, 074, 077, 087, 088, 096, 108, 110, 114 |
+| Negative | 33 | 003, 009, 019, 023, 024, 026, 030, 034, 036, 046, 051, 054, 056, 059, 061, 066, 068, 069, 073, 074, 077, 087, 088, 096, 108, 110, 114, 124, 126, 128, 131, 132, 135, 136, 138 |
 | Authorization | 13 | 014, 021, 025, 031, 032, 041, 063, 081, 084, 089, 092, 095, 115, 116 |
 | PII-Confidentiality | 5 | 057, 064, 080, 086, 091 |
-| State-Transition | 8 | 006, 008, 017, 033, 049, 055, 093, 100, 103, 111 |
+| State-Transition | 10 | 006, 008, 017, 033, 049, 055, 093, 100, 103, 111, 130, 134 |
 | Data-Integrity | 11 | 002, 016, 028, 040, 076, 078, 082, 083, 099, 106, 107, 120 |
 | API-Contract | 4 | 079, 117, 118, 119 |
 | E2E-Flow | 4 | 109, 121, 122 |
 
-(Some TCs carry a primary type in the table above; a handful legitimately span two categories — the primary type is used for the count. Total distinct TCs = 122.)
+(Some TCs carry a primary type in the table above; a handful legitimately span two categories — the primary type is used for the count. Total distinct TCs = 138.)
 
 ### 4.2 Consolidated counts
 | Type (primary) | Count |
 |---|---|
-| Functional | 30 |
-| Negative | 27 |
+| Functional | 36 |
+| Negative | 35 |
 | Authorization | 14 |
 | Data-Integrity | 12 |
 | Boundary | 11 |
-| State-Transition | 10 |
+| State-Transition | 12 |
 | PII-Confidentiality | 5 |
 | API-Contract | 4 |
 | E2E-Flow | 3 |
 | Data-Integrity/Boundary overlap TCs | (counted once above) |
-| **Total** | **122** |
+| **Total** | **138** |
 
 ### 4.3 By priority
 | Priority | Count |
 |---|---|
-| P1 (statutory-critical) | 55 |
-| P2 (important) | 61 |
+| P1 (statutory-critical) | 60 |
+| P2 (important) | 72 |
 | P3 (edge/low) | 6 |
-| **Total** | **122** |
+| **Total** | **138** |
 
 ### 4.4 Error-code coverage
 All 20 ERR-G08-* codes are asserted by at least one negative TC:
-`WEIGHTAGE`(012) · `TIERCONFLICT`(031,041) · `SELFADJ`(025) · `COI`(032,063) · `STATE`(009,021,028,040,056,100) · `GRADERANGE`(020,038) · `ADVEVID`(024,034,066,069) · `REPWINDOW`(051) · `DISCLOSE`(covered via disclosure gate on 047/050) · `RATIFY`(059) · `FORCEDDIST`(061) · `SEALED`(039,077) · `CHAIN`(006) · `SIGN`(026,036,054,096,108) · `SIGNINVALID`(105) · `DUALCTRL`(084) · `TAMPER`(083) · `ERRATA`(114) · `ALREADYPOSTED`(076) · `CUSTODYORPHAN`(088).
+`WEIGHTAGE`(012) · `TIERCONFLICT`(031,041) · `SELFADJ`(025,136) · `COI`(032,063) · `STATE`(009,021,028,040,056,100,132,135,138) · `GRADERANGE`(020,038) · `ADVEVID`(024,034,066,069) · `REPWINDOW`(051) · `DISCLOSE`(covered via disclosure gate on 047/050) · `RATIFY`(059) · `FORCEDDIST`(061) · `SEALED`(039,077) · `CHAIN`(006) · `SIGN`(026,036,054,096,108) · `SIGNINVALID`(105) · `DUALCTRL`(084) · `TAMPER`(083) · `ERRATA`(114) · `ALREADYPOSTED`(076) · `CUSTODYORPHAN`(088).
