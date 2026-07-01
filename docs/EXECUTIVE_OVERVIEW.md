@@ -1,6 +1,6 @@
 # HRMS Program — Executive Overview
 
-**Prepared:** 2026-07-01 · **Status:** Specification + data model complete and validated; build-pipeline artefacts pending.
+**Prepared:** 2026-07-01 · **Status:** Complete — specification, validated data model, contracts, phased plan, and acceptance tests all delivered; reconciled to source CSVs + prototype.
 
 ## 1. What this is
 
@@ -46,7 +46,7 @@ ones a commercial HCM lacks — and even those run on the existing platform serv
 5. **Cross-module integration review + remediation (v3.1):** five integration audits found and fixed the
    seams independent authoring introduced (a single SR ingestion contract, id-namespace hygiene, no entity forks).
 6. **Consolidated data model:** a 447-table PostgreSQL schema, **validated end-to-end** against a live
-   PostgreSQL instance (1,769 foreign keys, 399 row-level-security tables, 673 enums, all seed data inserting).
+   PostgreSQL instance (1,907 foreign keys, 443 row-level-security tables, 700 enums, all seed data inserting).
 
 ## 4. Quality evidence
 
@@ -70,17 +70,21 @@ ones a commercial HCM lacks — and even those run on the existing platform serv
 | `docs/platform-grounding/` | Extracted PrimeSoft governing-document text |
 | `docs/tools/md2docx.py` | Markdown → styled .docx renderer |
 
-## 6. What remains (next increment)
+## 6. Build-pipeline artefacts (delivered)
 
-The downstream build-pipeline artefacts were not yet produced (work was interrupted by an account
-spend limit, which blocks the multi-agent generation these need):
+All downstream artefacts have now been produced and are in the repo:
 
-- **Architecture document** consolidating the 14 modules on the platform.
-- **Machine-readable contracts** (OpenAPI, auth matrix, error taxonomy, state machines) — partially already
-  embedded in the BRDs and platform foundation.
-- **Per-FR LLDs and acceptance/E2E test cases** — note each v3 BRD already embeds a low-level design table
-  and test guidance per functional requirement, so this stage is partly discharged.
-- **Dependency-ordered phased build plan** across the 14 modules.
+- **Architecture document** (`docs/architecture.md`) — 14 modules on the platform + 11 ADRs.
+- **Machine-readable contracts** (`docs/contracts/`) — OpenAPI 3.1 for all 14 modules (**1,132 paths /
+  1,306 operations**), `auth-matrix.yaml` (76 roles), `error-taxonomy.yaml` (311 codes),
+  `state-machines.yaml` (73 machines), `dependency-register.yaml`.
+- **Acceptance & E2E test suites** (`docs/tests/`) — **1,597 test cases**, every FR covered (0 gaps).
+- **Dependency-ordered phased build plan** (`docs/phased-plan.md`).
+- **Field reconciliation** (`docs/data-model/reconciliation/`) — the schema and BRDs were reconciled against
+  the 116 Darwinbox CSV field exports and the 296-screen prototype; data model grew **403 → 447 tables**;
+  BRDs synced to **v3.2**; OpenAPI + tests refreshed for the changed modules.
 
-Recommended build sequence (from the schema dependencies): platform core → G01/G12/G13 (foundational
-systems of record) → G02/G03 → G04/G05/G06/G08/G09 → G10/G11 → G14.
+## 7. Recommended build sequence
+
+From the schema dependencies: platform core → G01/G12/G13 (foundational systems of record) → G02/G03 →
+G04/G05/G06/G08/G09 → G10/G11 → G14.

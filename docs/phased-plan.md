@@ -43,7 +43,7 @@ Phase 0 Platform Core  →  G01 (Employee Master)  →  G12 (SR ingestion contra
 | G13 | Document Management | extend | 24 | **L** | Statutory doc classes/retention on M11 vault |
 | G14 | Dashboard & Analytics | extend | 26 | **L** | Read-only marts over all sources; RLS = P02 |
 
-Program totals: **447 tables · 1,769 FKs · 399 RLS tables · 673 enums** (validated end-to-end, `docs/data-model/README.md`).
+Program totals: **447 tables · 1,907 FKs · 443 RLS tables · 700 enums** (validated end-to-end, `docs/data-model/README.md`).
 
 ---
 
