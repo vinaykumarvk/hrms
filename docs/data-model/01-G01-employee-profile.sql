@@ -7,6 +7,14 @@
 --   docs/data-model/CONVENTIONS.md                  (mandatory conventions)
 --   docs/data-model/00-platform-core.sql            (the canonical tables FK'd to here)
 --
+-- RECON (2026-07-01): reconciled against ground-truth exports — CustomFields-Export.csv,
+--   National_ID-Export_1_.csv, Profile.docx. Gap report:
+--   docs/data-model/reconciliation/g01-profile-fields.md. Additive-only deltas are in
+--   SECTION 6 (RECON ADDITIONS) at the foot of this file: national_id_types config master,
+--   employee_personal_details biographical satellite, custom_field_definitions extra
+--   attributes + enum values, and employee_identity_documents type-master link. Nothing
+--   above SECTION 6 was altered; core employees/employee_dependents are NOT redefined.
+--
 -- =====================================================================================
 -- BUILD NOTES (READ BEFORE RUNNING)
 -- =====================================================================================
@@ -1255,6 +1263,179 @@ VALUES
 -- Reset session GUCs after seeding.
 RESET app.current_tenant_id;
 RESET app.is_platform_admin;
+
+-- =====================================================================================
+-- SECTION 6 — RECON ADDITIONS (2026-07-01) — additive-only reconciliation deltas
+-- =====================================================================================
+-- Source of truth: docs/data-model/reconciliation/g01-profile-fields.md.
+-- Everything here is ADD-only: new tables, ADD COLUMN, ADD VALUE, ADD CONSTRAINT. No
+-- existing DDL above this section is modified. Runs in psql autocommit (each statement
+-- commits), so ALTER TYPE ... ADD VALUE below is usable by the seeds further down.
+
+-- ---------------------------------------------------------------------------------
+-- 6.1 — national_id_types (configurable statutory-ID master; CONVENTIONS §4 master table,
+--       replacing reliance on the closed g01_identity_doc_type enum). Grounds:
+--       National_ID-Export_1_.csv (Aadhaar/PAN/Passport/DL/EPF/ESIC/PRAN/UAN…).
+-- ---------------------------------------------------------------------------------
+CREATE TABLE national_id_types (
+    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                uuid REFERENCES entities(id)         ON DELETE RESTRICT,
+    id_code                  varchar(60)  NOT NULL,               -- CSV "Code" (adhar_card_number, bank_pan_num…)
+    label                    varchar(160) NOT NULL,               -- CSV "Option"
+    applicable_for           varchar(40)  NOT NULL DEFAULT 'All Employees',  -- CSV "Applicable For" (India / All Employees)
+    is_enabled               boolean NOT NULL DEFAULT true,       -- CSV "Enable/Disable"
+    alias                    varchar(160),                        -- CSV "Alias"
+    temporary_id_enabled     boolean NOT NULL DEFAULT false,      -- CSV "Temporary ID Enable/Disable"
+    temporary_id_alias       varchar(120),                        -- CSV "Temporary ID Alias"
+    issued_from_enabled      boolean NOT NULL DEFAULT false,
+    issued_from_alias        varchar(120),
+    issued_from_mandatory    boolean NOT NULL DEFAULT false,
+    issued_till_enabled      boolean NOT NULL DEFAULT false,
+    issued_till_alias        varchar(120),
+    issued_till_mandatory    boolean NOT NULL DEFAULT false,
+    id_document_enabled      boolean NOT NULL DEFAULT false,      -- CSV "ID Document Enable/Disable"
+    id_document_alias        varchar(120),
+    id_document_mandatory    boolean NOT NULL DEFAULT false,      -- drives whether a scan is required
+    mandatory_for_activation boolean NOT NULL DEFAULT false,      -- CSV "Mandatory for Activation"
+    mandatory_for_addition   boolean NOT NULL DEFAULT false,      -- CSV "Mandatory for Addition"
+    is_unique                boolean NOT NULL DEFAULT false,      -- CSV "Is Unique"
+    masking                  varchar(40),                         -- CSV "Masking" (nullable mask pattern)
+    maps_to_doc_type         g01_identity_doc_type,               -- optional bridge to the legacy closed enum
+    display_order            smallint NOT NULL DEFAULT 0,
+    row_version              integer NOT NULL DEFAULT 1,
+    created_at               timestamptz NOT NULL DEFAULT now(),
+    updated_at               timestamptz NOT NULL DEFAULT now(),
+    created_by               uuid,
+    updated_by               uuid,
+    is_deleted               boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_national_id_types_code UNIQUE (tenant_id, id_code)
+);
+CREATE INDEX ix_national_id_types_tenant  ON national_id_types(tenant_id);
+CREATE INDEX ix_national_id_types_entity  ON national_id_types(entity_id);
+CREATE INDEX ix_national_id_types_enabled ON national_id_types(is_enabled) WHERE is_enabled;
+COMMENT ON TABLE national_id_types IS 'Tenant-configurable statutory-ID type master (G01 RECON). Per-type alias, mandatory, temporary-id, issued-from/till and document config; per-employee values live in employee_identity_documents.';
+
+-- 6.2 — extend per-employee statutory-ID storage to reference the config master + temp-ID.
+ALTER TABLE employee_identity_documents
+    ADD COLUMN national_id_type_id uuid REFERENCES national_id_types(id) ON DELETE RESTRICT,
+    ADD COLUMN is_temporary_id     boolean NOT NULL DEFAULT false,
+    ADD COLUMN temporary_id_value  varchar(60);
+CREATE INDEX ix_employee_identity_documents_type ON employee_identity_documents(national_id_type_id);
+
+-- ---------------------------------------------------------------------------------
+-- 6.3 — custom_field_definitions: add the CSV framework attributes the profile-scoped
+--       baseline lacked, and allow non-profile-section fields (CSV "Display in" targets).
+-- ---------------------------------------------------------------------------------
+ALTER TYPE g01_custom_field_type ADD VALUE IF NOT EXISTS 'DROPDOWN';
+ALTER TYPE g01_custom_field_type ADD VALUE IF NOT EXISTS 'MULTI_SELECT_DROPDOWN';
+ALTER TYPE g01_custom_field_type ADD VALUE IF NOT EXISTS 'TEXT_AREA';
+
+ALTER TABLE custom_field_definitions
+    ADD COLUMN external_field_id varchar(40),      -- CSV "Field Id" (a64902e57de4a6-style)
+    ADD COLUMN display_target    varchar(80),      -- CSV "Display in" (HR Documents, Recruitment Requisition…)
+    ADD COLUMN for_object        varchar(40),      -- CSV "FOR" (object class; e.g. Others)
+    ADD COLUMN is_editable       boolean NOT NULL DEFAULT true,   -- CSV "Is Editable"
+    ADD COLUMN allow_decimals    boolean NOT NULL DEFAULT false,  -- CSV "Allow Decimals"
+    ADD COLUMN number_separator  varchar(8);        -- CSV "Number Separator"
+ALTER TABLE custom_field_definitions ALTER COLUMN section_id DROP NOT NULL;  -- CSV fields target arbitrary HR objects, not only profile sections
+CREATE INDEX ix_custom_field_def_target   ON custom_field_definitions(display_target);
+CREATE UNIQUE INDEX uq_custom_field_def_extid
+    ON custom_field_definitions(tenant_id, external_field_id) WHERE external_field_id IS NOT NULL AND is_deleted = false;
+
+-- ---------------------------------------------------------------------------------
+-- 6.4 — employee_personal_details (1:1 biographical satellite for Profile.docx fields
+--       not present on the core employees golden record; core is NOT redefined).
+-- ---------------------------------------------------------------------------------
+CREATE TABLE employee_personal_details (
+    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                uuid NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
+    entity_id                uuid REFERENCES entities(id)           ON DELETE RESTRICT,
+    employee_id              uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    country_of_birth         varchar(80),
+    place_of_birth           varchar(120),
+    marital_status_since     date,
+    marriage_anniversary_date date,
+    father_name              varchar(160),
+    mother_name              varchar(160),
+    spouse_name              varchar(160),
+    languages_spoken         text[],
+    linkedin_id              varchar(200),
+    row_version              integer NOT NULL DEFAULT 1,
+    created_at               timestamptz NOT NULL DEFAULT now(),
+    updated_at               timestamptz NOT NULL DEFAULT now(),
+    created_by               uuid,
+    updated_by               uuid,
+    is_deleted               boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_employee_personal_details_employee UNIQUE (employee_id)
+);
+CREATE INDEX ix_employee_personal_details_tenant   ON employee_personal_details(tenant_id);
+CREATE INDEX ix_employee_personal_details_entity   ON employee_personal_details(entity_id);
+CREATE INDEX ix_employee_personal_details_employee ON employee_personal_details(employee_id);
+
+-- 6.5 — RLS for the RECON tables (CONVENTIONS §6 tenant-isolation template).
+DO $$
+DECLARE
+    t text;
+    recon_tables text[] := ARRAY['national_id_types','employee_personal_details'];
+BEGIN
+    FOREACH t IN ARRAY recon_tables LOOP
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
+        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY;', t);
+        EXECUTE format($f$
+            CREATE POLICY tenant_isolation ON %I
+            USING (
+                tenant_id = current_setting('app.current_tenant_id', true)::uuid
+                OR current_setting('app.is_platform_admin', true) = 'true'
+            )
+            WITH CHECK (
+                tenant_id = current_setting('app.current_tenant_id', true)::uuid
+                OR current_setting('app.is_platform_admin', true) = 'true'
+            );
+        $f$, t);
+    END LOOP;
+END $$;
+
+-- 6.6 — RECON sample seed rows (reuse the fixed tenant/entity/employee UUIDs from Section 5).
+SET app.is_platform_admin = 'true';
+SET app.current_tenant_id = '11111111-1111-1111-1111-111111111111';
+
+-- national_id_types (configurable statutory-ID master) --------------------------------
+INSERT INTO national_id_types (id, tenant_id, entity_id, id_code, label, applicable_for, is_enabled, alias, temporary_id_enabled, temporary_id_alias, issued_from_enabled, issued_from_alias, issued_till_enabled, issued_till_alias, id_document_enabled, mandatory_for_activation, mandatory_for_addition, is_unique, maps_to_doc_type, display_order)
+VALUES
+ ('a1d70000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','adhar_card_number','Aadhaar','India', true,'Aadhaar', true,'Temporary', false, NULL, false, NULL, false, false, false, true,'AADHAAR',1),
+ ('a1d70000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','bank_pan_num','PAN','India', true,'PAN', false, NULL, false, NULL, false, NULL, false, false, false, true,'PAN',2),
+ ('a1d70000-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','passport_number','Passport','All Employees', true,'Passport', false, NULL, true,'Issued From', true,'Issued Till', false, false, false, false,'PASSPORT',3);
+
+-- link the seeded PAN identity document to its configurable type ----------------------
+UPDATE employee_identity_documents
+   SET national_id_type_id = 'a1d70000-0000-0000-0000-000000000002'
+ WHERE id = '1d000000-0000-0000-0000-000000000002';
+UPDATE employee_identity_documents
+   SET national_id_type_id = 'a1d70000-0000-0000-0000-000000000001'
+ WHERE id = '1d000000-0000-0000-0000-000000000001';
+
+-- profile_sections + custom_field_definitions + one value (CSV framework demo) ---------
+INSERT INTO profile_sections (id, tenant_id, entity_id, section_key, label, display_order, is_system)
+VALUES ('5ec70000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','HR_DOCUMENTS','HR Documents', 10, true);
+
+INSERT INTO custom_field_definitions (id, tenant_id, entity_id, section_id, field_key, label, data_type, is_required, display_order, external_field_id, display_target, for_object, is_editable, allow_decimals, number_separator)
+VALUES
+ ('cfd00000-0000-0000-0000-000000000001'::uuid,'11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','5ec70000-0000-0000-0000-000000000001','annual_compensation','Annual Compensation','NUMBER', true, 1,'a66c4614e7f7ac','HR Documents','Others', false, true,','),
+ ('cfd00000-0000-0000-0000-000000000002'::uuid,'11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201', NULL,'reason_for_letter','Reason for letter','DROPDOWN', false, 2,'a64902e57de4a6','HR Documents','Others', false, false, NULL);
+
+INSERT INTO employee_custom_field_values (id, tenant_id, entity_id, employee_id, field_def_id, value_number)
+VALUES ('cf00a000-0000-0000-0000-000000000001'::uuid,'11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','cfd00000-0000-0000-0000-000000000001'::uuid, 1850000);
+
+-- employee_personal_details (biographical satellite) ----------------------------------
+INSERT INTO employee_personal_details (id, tenant_id, entity_id, employee_id, country_of_birth, place_of_birth, marital_status_since, father_name, languages_spoken, linkedin_id)
+VALUES
+ ('9e700000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','India','Hyderabad','2012-12-01','Ramesh Verma', ARRAY['Telugu','English','Hindi'],'in.linkedin.com/in/anjali-rao'),
+ ('9e700000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999902','India','Vijayawada', NULL,'Kotaiah Kumar', ARRAY['Telugu','English'], NULL);
+
+RESET app.current_tenant_id;
+RESET app.is_platform_admin;
+
 
 -- =====================================================================================
 -- END 01-G01-employee-profile.sql

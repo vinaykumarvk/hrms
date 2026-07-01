@@ -51,6 +51,21 @@
 --   (documents.document_type_id/folder_id/retention_assignment_id,
 --   document_versions.storage_object_id) to the module tables now that they exist.
 -- =====================================================================================
+-- RECON (2026-07 CSV reconciliation — DwnB "Additional Config" exports)
+--   Ground-truth config exports reconciled into this schema (see
+--   docs/data-model/reconciliation/g13-documents.md). SECTION F (added, self-contained)
+--   introduces the tenant-CONFIGURABLE letter/document-config masters that the closed
+--   g13_ enums and the vault tables above do NOT cover:
+--     document_categories               (DarwinBox "Document Category" — DOCCAT_N; NOT the
+--                                        closed g13_doc_category enum — this is a tenant
+--                                        master keyed by category_code)
+--     document_category_profile_fields  (category -> employee-profile-field linkage)
+--     document_template_name_formats    (generated-doc file-naming formats — DOCFORMAT_N)
+--     policy_letter_settings            (per-company HR policy sign-off / letter render cfg)
+--     self_generate_settings            (self-service letter-generation defaults — SELFGEN_N)
+--   All four exports are CONFIG (tenant/company setup), not transactional DATA. The vault
+--   tables (documents/document_versions/document_types/...) above are UNCHANGED.
+-- =====================================================================================
 
 
 -- =====================================================================================
@@ -832,6 +847,192 @@ INSERT INTO document_audit (id, tenant_id, document_id, action, actor_user_id, a
 RESET app.is_platform_admin;
 RESET app.current_tenant_id;
 
+
 -- =====================================================================================
--- END 13-G13-document-management.sql — 24 module tables (E3–E26); documents/document_versions are core.
+-- SECTION F — RECON-ADDED CONFIG MASTERS (DwnB "Additional Config" CSV reconciliation)
+-- =====================================================================================
+-- Tenant-CONFIGURABLE letter/document-config value sets (CONVENTIONS §4 → master tables
+-- with a text *_code business key, NOT Postgres enums). Self-contained: own enum, tables,
+-- RLS DO-block and seeds. Vault tables (Sections A–E) are untouched.
+-- =====================================================================================
+
+-- F-enum: config lifecycle status (CSV "Status" = Active) --------------------------------
+CREATE TYPE g13_config_status AS ENUM ('ACTIVE','INACTIVE');
+
+-- F1 document_categories (DarwinBox "Document Category" — DOCCAT_N) --------------------
+-- Distinct from the closed g13_doc_category enum: a tenant master grouping employee
+-- document/profile fields under a named category, keyed by category_code.
+CREATE TABLE document_categories (
+    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id     uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    category_code varchar(60) NOT NULL,                      -- DOCCAT_1, DOCCAT_2, ...
+    name          varchar(200) NOT NULL,                     -- "Personal Identification"
+    status        g13_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    updated_at    timestamptz NOT NULL DEFAULT now(),
+    created_by    uuid,
+    updated_by    uuid,
+    is_deleted    boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_document_categories_code UNIQUE (tenant_id, category_code)
+);
+CREATE INDEX ix_document_categories_tenant ON document_categories(tenant_id);
+CREATE INDEX ix_document_categories_status ON document_categories(status);
+
+-- F2 document_category_profile_fields (category -> employee-profile-field linkage) -----
+-- Normalises the CSV "Select Employee Profile Fields" comma-list (one row per field).
+CREATE TABLE document_category_profile_fields (
+    id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id            uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id            uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    document_category_id uuid NOT NULL REFERENCES document_categories(id) ON DELETE CASCADE,
+    profile_field_key    varchar(200) NOT NULL,              -- profile_pic / bank_aadhar_img / "BGV Report"
+    display_order        integer NOT NULL DEFAULT 0,
+    created_at           timestamptz NOT NULL DEFAULT now(),
+    updated_at           timestamptz NOT NULL DEFAULT now(),
+    created_by           uuid,
+    updated_by           uuid,
+    is_deleted           boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_doc_cat_profile_field UNIQUE (document_category_id, profile_field_key)
+);
+CREATE INDEX ix_doc_cat_profile_fields_tenant   ON document_category_profile_fields(tenant_id);
+CREATE INDEX ix_doc_cat_profile_fields_category ON document_category_profile_fields(document_category_id);
+
+-- F3 document_template_name_formats (generated-doc file-naming — DOCFORMAT_N) ----------
+CREATE TABLE document_template_name_formats (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    format_code     varchar(60) NOT NULL,                    -- DOCFORMAT_1
+    format_name     varchar(160) NOT NULL,                   -- "company custom"
+    template_folder varchar(160),                            -- CSV "Document Template Folder"
+    is_default      boolean NOT NULL DEFAULT false,          -- CSV "Default" = Yes/No
+    name_format     varchar(500) NOT NULL,                   -- "Employee Name_Employee ID_Company Letter_Generated On"
+    prefix          varchar(120),
+    suffix          varchar(120),
+    status          g13_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    created_by      uuid,
+    updated_by      uuid,
+    is_deleted      boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_doc_template_name_formats_code UNIQUE (tenant_id, format_code)
+);
+CREATE INDEX ix_doc_template_name_formats_tenant  ON document_template_name_formats(tenant_id);
+CREATE INDEX ix_doc_template_name_formats_folder  ON document_template_name_formats(template_folder);
+CREATE INDEX ix_doc_template_name_formats_default ON document_template_name_formats(is_default);
+
+-- F4 policy_letter_settings (per-company HR policy sign-off / letter render cfg) --------
+-- One settings row per company (CSV has no surrogate id — keyed by company_code).
+CREATE TABLE policy_letter_settings (
+    id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id            uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id            uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    company_code         varchar(40) NOT NULL,               -- CSV "Select Company" = PSI
+    policy_signoff_text  text NOT NULL,                      -- "HR Policy Sign-Off Text*"
+    letter_ack_text      text NOT NULL,                      -- "HR Letter Acknowledgment Text*"
+    letter_ctc_font_size varchar(20),                        -- "14px"
+    letter_ctc_font      varchar(160),                       -- "arial,latoregular, sans-serif"
+    letter_ctc_padding   varchar(20),                        -- "5px"
+    block_policy_on_mobile boolean NOT NULL DEFAULT false,   -- CSV "Block HR Policy On Mobile" Yes/No
+    created_at           timestamptz NOT NULL DEFAULT now(),
+    updated_at           timestamptz NOT NULL DEFAULT now(),
+    created_by           uuid,
+    updated_by           uuid,
+    is_deleted           boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_policy_letter_settings_company UNIQUE (tenant_id, company_code)
+);
+CREATE INDEX ix_policy_letter_settings_tenant ON policy_letter_settings(tenant_id);
+
+-- F5 self_generate_settings (self-service letter-generation defaults — SELFGEN_N) ------
+-- letter_head/signing_authority/signature refs are LOGICAL refs (varchar codes) to M11
+-- letter-head & signing-authority masters that live outside G13 scope — no FK.
+CREATE TABLE self_generate_settings (
+    id                           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                    uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                    uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    setting_code                 varchar(60) NOT NULL,       -- SELFGEN_1
+    name                         varchar(160) NOT NULL,      -- "HR Letter Generation Setting Name"
+    companies                    text[] NOT NULL DEFAULT '{}',   -- CSV "Select Company" (comma-list)
+    company_codes                text[] NOT NULL DEFAULT '{}',   -- CSV "Select Company Code"
+    user_assignment              text,                        -- CSV "User Assignment"
+    letter_generation_access     text[] NOT NULL DEFAULT '{}',   -- CSV "Letter Generation Access" (users)
+    default_letter_head_html_ref varchar(60),                 -- LETHEAD_2 (logical ref)
+    default_letter_head_docx_ref varchar(60),                 -- LETHEAD_1 (logical ref)
+    default_signing_authority_1  varchar(60),                 -- SIGNAUTH_3 (logical ref)
+    default_signing_authority_2  varchar(60),
+    default_signing_authority_3  varchar(60),
+    default_signing_authority_4  varchar(60),
+    default_signature_1          varchar(60),
+    default_signature_2          varchar(60),
+    default_signature_3          varchar(60),
+    default_signature_4          varchar(60),
+    status                       g13_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at                   timestamptz NOT NULL DEFAULT now(),
+    updated_at                   timestamptz NOT NULL DEFAULT now(),
+    created_by                   uuid,
+    updated_by                   uuid,
+    is_deleted                   boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_self_generate_settings_code UNIQUE (tenant_id, setting_code)
+);
+CREATE INDEX ix_self_generate_settings_tenant ON self_generate_settings(tenant_id);
+CREATE INDEX ix_self_generate_settings_status ON self_generate_settings(status);
+
+-- F-RLS: tenant-isolation for the RECON-added masters (CONVENTIONS §6) ------------------
+DO $rlsf$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'document_categories','document_category_profile_fields','document_template_name_formats',
+    'policy_letter_settings','self_generate_settings'
+  ] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY;', t);
+    EXECUTE format($p$
+      CREATE POLICY tenant_isolation ON %I
+        USING (
+          tenant_id = current_setting('app.current_tenant_id', true)::uuid
+          OR current_setting('app.is_platform_admin', true) = 'true'
+        )
+        WITH CHECK (
+          tenant_id = current_setting('app.current_tenant_id', true)::uuid
+          OR current_setting('app.is_platform_admin', true) = 'true'
+        );$p$, t);
+  END LOOP;
+END
+$rlsf$;
+
+-- F-seeds (illustrative; tenant GOV-STATE, entity from 00 Section 12) -------------------
+SET app.current_tenant_id = '11111111-1111-1111-1111-111111111111';
+SET app.is_platform_admin = 'true';
+
+INSERT INTO document_categories (id, tenant_id, entity_id, category_code, name, status) VALUES
+ ('dca10000-0000-0000-0000-0000000000a1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','DOCCAT_1','Personal Identification','ACTIVE'),
+ ('dca10000-0000-0000-0000-0000000000a2','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','DOCCAT_2','Employment Documents','ACTIVE'),
+ ('dca10000-0000-0000-0000-0000000000a3','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','DOCCAT_3','Education and Training Certificates','ACTIVE');
+
+INSERT INTO document_category_profile_fields (id, tenant_id, entity_id, document_category_id, profile_field_key, display_order) VALUES
+ ('dcf10000-0000-0000-0000-0000000000b1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','dca10000-0000-0000-0000-0000000000a1','profile_pic',0),
+ ('dcf10000-0000-0000-0000-0000000000b2','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','dca10000-0000-0000-0000-0000000000a1','bank_aadhar_img',1),
+ ('dcf10000-0000-0000-0000-0000000000b3','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','dca10000-0000-0000-0000-0000000000a3','Certificate Attachment',0);
+
+INSERT INTO document_template_name_formats (id, tenant_id, entity_id, format_code, format_name, template_folder, is_default, name_format, status) VALUES
+ ('df110000-0000-0000-0000-0000000000c1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','DOCFORMAT_1','company custom','company custom',true,'Employee Name_Employee ID_Company Letter_Generated On','ACTIVE'),
+ ('df110000-0000-0000-0000-0000000000c2','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','DOCFORMAT_2','Employee onboarding','Employee onboarding',true,'Employee Name_Employee ID_Onboarding Document_Generated On','ACTIVE'),
+ ('df110000-0000-0000-0000-0000000000c3','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','DOCFORMAT_4','Employee separation','Employee separation',true,'Employee Name_Employee ID_Separation Document_Generated On','ACTIVE');
+
+INSERT INTO policy_letter_settings (id, tenant_id, entity_id, company_code, policy_signoff_text, letter_ack_text, letter_ctc_font_size, letter_ctc_font, letter_ctc_padding, block_policy_on_mobile) VALUES
+ ('9011c000-0000-0000-0000-0000000000d1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','PSI','I confirm that I have read and understood this document completely and would like to sign off on the document','I confirm that I have read and understood this document completely and would like to acknowledge the document','14px','arial,latoregular, sans-serif','5px',false);
+
+INSERT INTO self_generate_settings (id, tenant_id, entity_id, setting_code, name, companies, company_codes, default_letter_head_html_ref, default_letter_head_docx_ref, default_signing_authority_1, default_signing_authority_2, default_signing_authority_3, status) VALUES
+ ('5e6f0000-0000-0000-0000-0000000000e1','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','SELFGEN_1','PSI','{PrimeSoft,"PrimeSoft IP Solutions Private Limited.","Igenero Web Solutions Private Limited"}','{"",PSI,IWSPL}','LETHEAD_2','LETHEAD_1','SIGNAUTH_3','SIGNAUTH_2','SIGNAUTH_6','ACTIVE'),
+ ('5e6f0000-0000-0000-0000-0000000000e2','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','SELFGEN_2','Tejora','{"Tejora Private Limited"}','{TPL}','LETHEAD_3','LETHEAD_4','SIGNAUTH_3','SIGNAUTH_4','SIGNAUTH_5','ACTIVE');
+
+RESET app.is_platform_admin;
+RESET app.current_tenant_id;
+
+
+-- =====================================================================================
+-- END 13-G13-document-management.sql — 24 vault module tables (E3–E26) + 5 RECON config
+-- masters (SECTION F); documents/document_versions are core (00-platform-core.sql).
 -- =====================================================================================

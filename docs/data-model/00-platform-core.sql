@@ -87,6 +87,30 @@
 --     Org Admin cross-entity reach are widened scope filters, never bypasses.
 -- =====================================================================================
 
+-- =====================================================================================
+-- RECON (CSV field reconciliation) — Organisation masters area
+-- =====================================================================================
+-- Ground-truth Darwinbox CSV exports under
+--   docs/HRMS Deliverables to Development Phase/DwnB Form Fields/Organisation/
+-- were reconciled against Section 2 (org masters). Gap report + per-CSV mapping:
+--   docs/data-model/reconciliation/organisation-masters.md
+--
+-- ADDED by this reconciliation (ADD-only; nothing existing was changed or removed):
+--   * enum separation_type (Deactivation_Reasons: Voluntary/Involuntary)
+--   * designations.effective_from            (Designation_Names "Effective From")
+--   * grades.band_id / grades.band_code       (Grade "Band Name"/"Band Code")
+--   * org_units.business_unit_code, .performance_hod_employee_id,
+--     .functional_head_employee_id, .head_hr_employee_id, .group_hr_head_employee_id
+--                                             (Department HOD/Functional-Head/Head-HR/…)
+--   * new masters: bands, regions, locations, weekly_off_patterns,
+--     notice_period_policies, probation_policies, separation_reasons, contribution_levels
+--   * RLS + deferred employee/self FKs for the above (Sections 10 & 11)
+-- Value lists (528 designations, 57 separation reasons, …) are NOT inlined — the CSVs
+-- are the migration seed source; only 2-3 sample rows appear in Section 12.
+-- Excluded here: National_ID (owned by G01), Profile_View_settings (UI/masking config),
+-- Assignment One/Two/Three (custom grouping configs, not platform-core org masters).
+-- =====================================================================================
+
 
 -- =====================================================================================
 -- SECTION 0 — EXTENSIONS
@@ -105,6 +129,7 @@ CREATE TYPE tenant_status      AS ENUM ('PROVISIONING', 'ACTIVE', 'SUSPENDED', '
 CREATE TYPE entity_status      AS ENUM ('ACTIVE', 'INACTIVE', 'MERGED', 'DISSOLVED');
 CREATE TYPE org_unit_type      AS ENUM ('DIRECTORATE', 'DEPARTMENT', 'DIVISION', 'SECTION', 'OFFICE', 'UNIT');
 CREATE TYPE geo_type           AS ENUM ('COUNTRY', 'STATE', 'DISTRICT', 'TALUK', 'CITY', 'ZONE');
+CREATE TYPE separation_type    AS ENUM ('VOLUNTARY', 'INVOLUNTARY');   -- RECON: Deactivation_Reasons
 
 -- Identity / RBAC ---------------------------------------------------------------------
 CREATE TYPE user_status        AS ENUM ('PENDING', 'ACTIVE', 'LOCKED', 'DISABLED', 'DELETED');
@@ -256,7 +281,12 @@ CREATE TABLE org_units (
     name               text NOT NULL,
     org_unit_type      org_unit_type NOT NULL DEFAULT 'DEPARTMENT',
     parent_org_unit_id uuid REFERENCES org_units(id) ON DELETE RESTRICT,  -- VAL-ORG-NOCYCLE
+    business_unit_code text,                          -- RECON: Department "Business Unit Code"
     head_employee_id   uuid,                          -- HOD; FK added in Section 10 (employees)
+    performance_hod_employee_id  uuid,                -- RECON: Department "Performance HOD"; FK in Section 10
+    functional_head_employee_id  uuid,                -- RECON: Department "Functional Head"; FK in Section 10
+    head_hr_employee_id          uuid,                -- RECON: Department "Head HR"; FK in Section 10
+    group_hr_head_employee_id    uuid,                -- RECON: Department "Group HR Head"; FK in Section 10
     cost_centre_code   text,
     depth_level        smallint NOT NULL DEFAULT 0,
     path               text,                          -- materialised path for subtree queries
@@ -272,6 +302,10 @@ CREATE INDEX ix_org_units_tenant ON org_units(tenant_id);
 CREATE INDEX ix_org_units_entity ON org_units(entity_id);
 CREATE INDEX ix_org_units_parent ON org_units(parent_org_unit_id);
 CREATE INDEX ix_org_units_head   ON org_units(head_employee_id);
+CREATE INDEX ix_org_units_perf_hod   ON org_units(performance_hod_employee_id);
+CREATE INDEX ix_org_units_func_head  ON org_units(functional_head_employee_id);
+CREATE INDEX ix_org_units_head_hr    ON org_units(head_hr_employee_id);
+CREATE INDEX ix_org_units_grp_hr     ON org_units(group_hr_head_employee_id);
 
 -- cadres ------------------------------------------------------------------------------
 CREATE TABLE cadres (
@@ -297,7 +331,9 @@ CREATE TABLE grades (
     grade_code   text NOT NULL,
     name         text NOT NULL,
     level_order  smallint NOT NULL,                   -- seniority ordering within tenant
-    pay_band     text,                                -- e.g. 'PB-3'
+    pay_band     text,                                -- e.g. 'PB-3' (govt pay-band label; distinct from Band master)
+    band_id      uuid,                                -- RECON: Grade "Band Name" -> bands.id (FK added below, after bands)
+    band_code    text,                                -- RECON: Grade "Band Code" (denormalised)
     is_active    boolean NOT NULL DEFAULT true,
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now(),
@@ -341,6 +377,7 @@ CREATE TABLE designations (
     name            text NOT NULL,
     cadre_id        uuid REFERENCES cadres(id) ON DELETE RESTRICT,
     grade_id        uuid REFERENCES grades(id) ON DELETE RESTRICT,
+    effective_from  date,                             -- RECON: Designation_Names "Effective From" (effective-dating)
     is_active       boolean NOT NULL DEFAULT true,
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
@@ -349,9 +386,214 @@ CREATE TABLE designations (
     is_deleted      boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_designations_code UNIQUE (tenant_id, designation_code)
 );
-CREATE INDEX ix_designations_tenant ON designations(tenant_id);
-CREATE INDEX ix_designations_cadre  ON designations(cadre_id);
-CREATE INDEX ix_designations_grade  ON designations(grade_id);
+CREATE INDEX ix_designations_tenant    ON designations(tenant_id);
+CREATE INDEX ix_designations_cadre     ON designations(cadre_id);
+CREATE INDEX ix_designations_grade     ON designations(grade_id);
+CREATE INDEX ix_designations_effective ON designations(effective_from);
+
+
+-- =====================================================================================
+-- SECTION 2b — ORGANISATION MASTERS EXTENSION (CSV field reconciliation)
+-- =====================================================================================
+-- Net-new tenant-configurable org masters surfaced by the Darwinbox Organisation exports
+-- (see docs/data-model/reconciliation/organisation-masters.md). All follow CONVENTIONS:
+-- uuid PK, tenant_id, audit cols, is_deleted, tenant-scoped UNIQUE business key, indexed
+-- FKs, and RLS applied in Section 11. Value lists are seeded from the CSVs (migration
+-- source), not inlined here.
+
+-- bands (Grade "Band" master; grades.band_id FKs here) --------------------------------
+-- Source CSV: Band-Export.csv (header-only export) + Grade-Export.csv Band Name/Code.
+CREATE TABLE bands (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    band_code    text NOT NULL,
+    name         text NOT NULL,
+    description  text,
+    is_active    boolean NOT NULL DEFAULT true,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    created_by   uuid,
+    updated_by   uuid,
+    is_deleted   boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_bands_code UNIQUE (tenant_id, band_code)   -- VAL-MASTER-UNIQUE
+);
+CREATE INDEX ix_bands_tenant ON bands(tenant_id);
+
+-- Resolve grades.band_id -> bands (bands created after grades to avoid reorder churn).
+ALTER TABLE grades
+    ADD CONSTRAINT fk_grades_band FOREIGN KEY (band_id) REFERENCES bands(id) ON DELETE RESTRICT;
+CREATE INDEX ix_grades_band ON grades(band_id);
+
+-- regions (Location-Region master; groups states) -------------------------------------
+-- Source CSV: Location-Region-Export.csv (Region Name / Region Code / States). Member
+-- states are seeded from geo_master(STATE); the region<->state mapping is config, not a
+-- column here. region_code is nullable (several export rows have no code) -> unique key
+-- on name within tenant.
+CREATE TABLE regions (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    region_code  text,
+    name         text NOT NULL,
+    is_active    boolean NOT NULL DEFAULT true,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    created_by   uuid,
+    updated_by   uuid,
+    is_deleted   boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_regions_name UNIQUE (tenant_id, name)
+);
+CREATE INDEX ix_regions_tenant ON regions(tenant_id);
+
+-- locations (physical office / work-location master) ----------------------------------
+-- Source CSV: Location-Export.csv. geo_master models the COUNTRY/STATE/CITY hierarchy;
+-- this is the concrete office master with full postal address, contacts and heads.
+-- Country-specific SSO/payroll fields (Thailand SSO branch) are policy config, not
+-- modelled here (see reconciliation report). location_code = Darwinbox "Work Area Code".
+CREATE TABLE locations (
+    id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                 uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                 uuid REFERENCES entities(id) ON DELETE RESTRICT,   -- Company
+    location_code             text NOT NULL,                    -- Work Area Code (business key)
+    name                      text NOT NULL,                    -- Office Area / Location Area
+    address                   text,                             -- Office Address
+    office_email              text,
+    mobile_number             text,
+    telephone_number          text,
+    pincode                   text,
+    city                      text,                             -- Office City
+    state                     text,                             -- Office State
+    country                   text,                             -- Office Country
+    city_code                 text,
+    state_code                text,
+    country_code              text,
+    city_geo_id               uuid REFERENCES geo_master(id) ON DELETE SET NULL,  -- optional geo link
+    region_id                 uuid REFERENCES regions(id) ON DELETE SET NULL,
+    parent_location_id        uuid REFERENCES locations(id) ON DELETE RESTRICT,   -- Parent Location
+    location_type             text,                             -- Location Type
+    city_type                 text,                             -- City Type
+    centre_type               text,                             -- Centre Type
+    location_head_employee_id uuid,                             -- FK added in Section 10 (employees)
+    is_registered_office      boolean NOT NULL DEFAULT false,   -- Registered Office (Yes/No)
+    is_active                 boolean NOT NULL DEFAULT true,
+    created_at                timestamptz NOT NULL DEFAULT now(),
+    updated_at                timestamptz NOT NULL DEFAULT now(),
+    created_by                uuid,
+    updated_by                uuid,
+    is_deleted                boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_locations_code UNIQUE (tenant_id, location_code)
+);
+CREATE INDEX ix_locations_tenant   ON locations(tenant_id);
+CREATE INDEX ix_locations_entity   ON locations(entity_id);
+CREATE INDEX ix_locations_city_geo ON locations(city_geo_id);
+CREATE INDEX ix_locations_region   ON locations(region_id);
+CREATE INDEX ix_locations_parent   ON locations(parent_location_id);
+CREATE INDEX ix_locations_head     ON locations(location_head_employee_id);
+
+-- weekly_off_patterns (Weekly Off master) ---------------------------------------------
+-- Source CSV: Weekly_Off-Export.csv. No code column in the export -> name is the key.
+CREATE TABLE weekly_off_patterns (
+    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id        uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    weekly_off_code  text,
+    name             text NOT NULL,                   -- Weekly Off Name
+    description      text,
+    non_working_days text,                            -- e.g. 'All Saturday, All Sunday'
+    is_active        boolean NOT NULL DEFAULT true,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+    created_by       uuid,
+    updated_by       uuid,
+    is_deleted       boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_weekly_off_patterns_name UNIQUE (tenant_id, name)
+);
+CREATE INDEX ix_weekly_off_patterns_tenant ON weekly_off_patterns(tenant_id);
+
+-- notice_period_policies (Notice master) ----------------------------------------------
+-- Source CSV: Notice-Export.csv. Duration data is columnised; the ~12 Yes/No behaviour
+-- toggles (consider weekly offs/holidays/unpaid leave, calculate-from-resignation, etc.)
+-- are policy config captured in rule_config (jsonb), not query dimensions.
+CREATE TABLE notice_period_policies (
+    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    notice_code              text,
+    name                     text NOT NULL,           -- Notice Name
+    applicable_for           text,
+    nationality_applicability text,
+    confirmation_days        smallint,
+    confirmation_months      smallint,
+    probation_days           smallint,
+    probation_months         smallint,
+    contract_days            smallint,
+    contract_months          smallint,
+    tenure_based             boolean NOT NULL DEFAULT false,
+    rule_config              jsonb,                   -- behaviour toggles (see reconciliation report)
+    is_active                boolean NOT NULL DEFAULT true,
+    created_at               timestamptz NOT NULL DEFAULT now(),
+    updated_at               timestamptz NOT NULL DEFAULT now(),
+    created_by               uuid,
+    updated_by               uuid,
+    is_deleted               boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_notice_period_policies_name UNIQUE (tenant_id, name)
+);
+CREATE INDEX ix_notice_period_policies_tenant ON notice_period_policies(tenant_id);
+
+-- probation_policies (Probation master) -----------------------------------------------
+-- Source CSV: Probation-Export.csv.
+CREATE TABLE probation_policies (
+    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    probation_code           text,
+    name                     text NOT NULL,           -- Probation Name
+    period_days              smallint,                -- Set Probation Period In (Days)
+    period_months            smallint,                -- Set Probation Period In (Months)
+    duration_months          smallint,                -- Duration of Probation
+    show_in_extension        boolean NOT NULL DEFAULT false,
+    extend_confirmation_auto boolean NOT NULL DEFAULT false,
+    start_from_assigned_date boolean NOT NULL DEFAULT false,
+    is_active                boolean NOT NULL DEFAULT true,
+    created_at               timestamptz NOT NULL DEFAULT now(),
+    updated_at               timestamptz NOT NULL DEFAULT now(),
+    created_by               uuid,
+    updated_by               uuid,
+    is_deleted               boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_probation_policies_name UNIQUE (tenant_id, name)
+);
+CREATE INDEX ix_probation_policies_tenant ON probation_policies(tenant_id);
+
+-- separation_reasons (Deactivation Reasons master) ------------------------------------
+-- Source CSV: Deactivation_Reasons-Export_1_.csv. The configurable pick-list behind the
+-- free-text employees.separation_reason on the golden record.
+CREATE TABLE separation_reasons (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    separation_type separation_type NOT NULL,         -- VOLUNTARY / INVOLUNTARY
+    reason          text NOT NULL,
+    is_active       boolean NOT NULL DEFAULT true,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    created_by      uuid,
+    updated_by      uuid,
+    is_deleted      boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_separation_reasons UNIQUE (tenant_id, separation_type, reason)
+);
+CREATE INDEX ix_separation_reasons_tenant ON separation_reasons(tenant_id);
+
+-- contribution_levels (Neev-Level master; RBAC CONTRIBUTION_LEVEL scope dimension) -----
+-- Source CSV: Neev-Level-Export_1_.csv (Darwinbox "Neev Level" == Contribution Level).
+CREATE TABLE contribution_levels (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    level_code   text NOT NULL,
+    name         text NOT NULL,
+    is_active    boolean NOT NULL DEFAULT true,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    created_by   uuid,
+    updated_by   uuid,
+    is_deleted   boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_contribution_levels_code UNIQUE (tenant_id, level_code)
+);
+CREATE INDEX ix_contribution_levels_tenant ON contribution_levels(tenant_id);
 
 
 -- =====================================================================================
@@ -1161,6 +1403,25 @@ ALTER TABLE org_units
     ADD CONSTRAINT fk_org_units_head_employee
     FOREIGN KEY (head_employee_id) REFERENCES employees(id) ON DELETE SET NULL;
 
+-- org_units department-head satellites -> employees (RECON: Department heads)
+ALTER TABLE org_units
+    ADD CONSTRAINT fk_org_units_perf_hod
+    FOREIGN KEY (performance_hod_employee_id) REFERENCES employees(id) ON DELETE SET NULL;
+ALTER TABLE org_units
+    ADD CONSTRAINT fk_org_units_func_head
+    FOREIGN KEY (functional_head_employee_id) REFERENCES employees(id) ON DELETE SET NULL;
+ALTER TABLE org_units
+    ADD CONSTRAINT fk_org_units_head_hr
+    FOREIGN KEY (head_hr_employee_id) REFERENCES employees(id) ON DELETE SET NULL;
+ALTER TABLE org_units
+    ADD CONSTRAINT fk_org_units_grp_hr
+    FOREIGN KEY (group_hr_head_employee_id) REFERENCES employees(id) ON DELETE SET NULL;
+
+-- locations.location_head_employee_id -> employees (RECON: Location "Location Head")
+ALTER TABLE locations
+    ADD CONSTRAINT fk_locations_head_employee
+    FOREIGN KEY (location_head_employee_id) REFERENCES employees(id) ON DELETE SET NULL;
+
 -- employee_dependents.proof_document_id -> documents
 ALTER TABLE employee_dependents
     ADD CONSTRAINT fk_employee_dependents_proof_doc
@@ -1209,6 +1470,8 @@ DECLARE
     t text;
     tenant_scoped_tables text[] := ARRAY[
         'segment_master','geo_master','entities','org_units','cadres','grades','pay_scales','designations',
+        'bands','regions','locations','weekly_off_patterns','notice_period_policies','probation_policies',
+        'separation_reasons','contribution_levels',
         'users','roles','role_permissions','user_roles','capability_flags','user_capability_flags',
         'individual_entitlements','employees','employee_dependents',
         'workflows','workflow_instances','workflow_actions','skip_settings','sla_settings',

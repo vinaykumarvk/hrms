@@ -63,6 +63,17 @@
 --     (deferred ALTER) because E23 is created after the tables that reference it.
 --   * Seed rows reuse the 00-core fixed UUIDs (tenant 1111…1111, entity 2222…2201,
 --     employees 9999…9901/02, org_unit 3333…3301, designation 7777…7701).
+--
+-- -- RECON (2026-07-01): Section 3 (below) is an ADD-only amendment reconciling the DarwinBox
+--   "DwnB Form Fields / Performance Management" CSV ground-truth exports against this schema.
+--   Gap report: docs/data-model/reconciliation/g08-performance.md. Adds the PMS config/masters
+--   that the reused M09 model carried but the statutory G08 core did not yet materialise:
+--   scorecard_pillars, metrics, goal_plans, normalization_settings, custom_formula_settings,
+--   calibration_settings (template vs the per-cycle calibration_sessions run), review_definitions,
+--   review_excluded_employees, performance_translations — plus 12 goal-instance fields
+--   (metric_id, metric_criteria, target_prefix, timeline_start/end_date, scorecard_pillar_id,
+--   aligned_to_goal_id/ref, achievement_mapping, block_edit_achievement, assigned_to_roles,
+--   goal_plan_master_id) and the g08_config_status enum. Existing E1..E23 content is unchanged.
 -- =====================================================================================
 
 
@@ -790,6 +801,298 @@ COMMENT ON TABLE digital_signatures IS 'G08 DSC/eSign non-repudiation (GAP). App
 
 
 -- =====================================================================================
+-- SECTION 3 — RECON: DarwinBox PMS CONFIG/MASTERS + GOAL FIELD ADDITIONS (ADD-only)
+-- =====================================================================================
+-- Reconciles the "DwnB Form Fields / Performance Management" CSV exports (see
+-- docs/data-model/reconciliation/g08-performance.md). Config/master value sets follow
+-- CONVENTIONS §4 (tenant-configurable => master tables + text codes, tenant-scoped UNIQUE),
+-- never Postgres enums; the sole closed enumeration added is g08_config_status. Large
+-- per-field enable/mandatory/editable/need-approval matrices are stored as jsonb (config
+-- consumed by the form engine), not exploded into hundreds of columns.
+
+CREATE TYPE g08_config_status AS ENUM ('DRAFT','ACTIVE','ARCHIVED');
+
+-- 3.1 scorecard_pillars [Scorecard Pillar.csv] -----------------------------------------
+CREATE TABLE scorecard_pillars (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    pillar_code        varchar(40) NOT NULL,                       -- VAL-MASTER-UNIQUE
+    name               varchar(160) NOT NULL,
+    description        text,
+    source_created_on  timestamptz,                                -- CSV Created On (provenance)
+    source_updated_on  timestamptz,                                -- CSV Updated On (provenance)
+    status             g08_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    updated_at         timestamptz NOT NULL DEFAULT now(),
+    created_by         uuid,
+    updated_by         uuid,
+    is_deleted         boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_scorecard_pillars_code UNIQUE (tenant_id, pillar_code)
+);
+CREATE INDEX ix_scorecard_pillars_tenant ON scorecard_pillars(tenant_id);
+CREATE INDEX ix_scorecard_pillars_status ON scorecard_pillars(status);
+
+-- 3.2 metrics [Metric.csv] -------------------------------------------------------------
+CREATE TABLE metrics (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    metric_code        varchar(80) NOT NULL,                       -- VAL-MASTER-UNIQUE (e.g. DB_Default_Metric_Percentage)
+    name               varchar(120) NOT NULL,                      -- Percentage / Number / ...
+    description        text,
+    source_created_on  timestamptz,
+    source_updated_on  timestamptz,
+    status             g08_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    updated_at         timestamptz NOT NULL DEFAULT now(),
+    created_by         uuid,
+    updated_by         uuid,
+    is_deleted         boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_metrics_code UNIQUE (tenant_id, metric_code)
+);
+CREATE INDEX ix_metrics_tenant ON metrics(tenant_id);
+CREATE INDEX ix_metrics_status ON metrics(status);
+
+-- 3.3 normalization_settings [Normalization.csv] ---------------------------------------
+CREATE TABLE normalization_settings (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    name               varchar(160) NOT NULL,                      -- VAL-MASTER-UNIQUE
+    scale              varchar(120),                               -- Scale
+    scale_marker       varchar(120),                               -- Scale Marker
+    scale_marks        jsonb,                                      -- Scale Marks (band definitions)
+    min_marks          numeric(8,2),
+    max_marks          numeric(8,2),
+    ideal_pct          numeric(6,2),                               -- Ideal %
+    delta_pct          numeric(6,2),                               -- Delta %
+    source_created_on  timestamptz,
+    source_updated_on  timestamptz,
+    status             g08_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    updated_at         timestamptz NOT NULL DEFAULT now(),
+    created_by         uuid,
+    updated_by         uuid,
+    is_deleted         boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_normalization_settings_name UNIQUE (tenant_id, name)
+);
+CREATE INDEX ix_normalization_settings_tenant ON normalization_settings(tenant_id);
+CREATE INDEX ix_normalization_settings_status ON normalization_settings(status);
+
+-- 3.4 custom_formula_settings [CustomFormulaSettings-Export.csv] -----------------------
+CREATE TABLE custom_formula_settings (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    name               varchar(160) NOT NULL,                      -- VAL-MASTER-UNIQUE
+    information        text,
+    methodology        varchar(120),                               -- Methodology
+    formula_for        varchar(120),                               -- Formula For (Goal Score / Overall / ...)
+    formula            text,                                       -- Formula expression
+    source_created_on  timestamptz,
+    source_updated_on  timestamptz,
+    status             g08_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    updated_at         timestamptz NOT NULL DEFAULT now(),
+    created_by         uuid,
+    updated_by         uuid,
+    is_deleted         boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_custom_formula_settings_name UNIQUE (tenant_id, name)
+);
+CREATE INDEX ix_custom_formula_settings_tenant ON custom_formula_settings(tenant_id);
+CREATE INDEX ix_custom_formula_settings_status ON custom_formula_settings(status);
+
+-- 3.5 goal_plans [GoalPlanKraSettings-Export.csv] --------------------------------------
+-- Goal-plan definition. The ~210-column per-field enable/mandatory/editable/need-approval
+-- matrix (goal + sub-goal + custom fields + check-in + cascade + notes + AI params) is
+-- stored as field_settings jsonb (tenant CONFIG consumed by the form engine).
+CREATE TABLE goal_plans (
+    id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                 uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                 uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    goal_plan_code            varchar(60) NOT NULL,                 -- Goal Plan ID (VAL-MASTER-UNIQUE)
+    name                      varchar(200) NOT NULL,
+    description               text,
+    methodology               varchar(40),                          -- OKR / KRA / ...
+    enable_sub_goals          boolean NOT NULL DEFAULT false,
+    start_date                date,
+    end_date                  date,
+    user_assignment           varchar(200),
+    exclusion_setting         varchar(200),
+    enable_goal_count_limits  boolean NOT NULL DEFAULT false,
+    min_goals                 integer,
+    max_goals                 integer,
+    enable_goal_weightage_limits boolean NOT NULL DEFAULT false,
+    min_weightage             numeric(6,2),
+    max_weightage             numeric(6,2),
+    achievement_mapping_scale varchar(120),
+    default_achievement_mapping varchar(120),
+    goal_plan_approver        varchar(120),
+    goal_plan_reviewer        varchar(120),
+    enable_cascade            boolean NOT NULL DEFAULT false,
+    scorecard_pillar_options  text,                                 -- pipe-delimited option list (as exported)
+    metric_options            text,
+    field_settings            jsonb,                                -- full per-field flag matrix (config)
+    source_created_on         timestamptz,
+    source_updated_on         timestamptz,
+    source_started_on         timestamptz,
+    source_archived_on        timestamptz,
+    status                    g08_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at                timestamptz NOT NULL DEFAULT now(),
+    updated_at                timestamptz NOT NULL DEFAULT now(),
+    created_by                uuid,
+    updated_by                uuid,
+    is_deleted                boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_goal_plans_code UNIQUE (tenant_id, goal_plan_code),
+    CONSTRAINT ck_goal_plans_dates CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date)
+);
+CREATE INDEX ix_goal_plans_tenant ON goal_plans(tenant_id);
+CREATE INDEX ix_goal_plans_entity ON goal_plans(entity_id);
+CREATE INDEX ix_goal_plans_status ON goal_plans(status);
+
+-- 3.6 review_definitions [ReviewKraSettings-Export.csv] --------------------------------
+-- A "review" inside a review cycle. The ~160-column stage/visibility/rating matrix is
+-- stored as stage_settings + field_settings jsonb (config). Rating scales resolve to the
+-- rating_scales master by name at config time; per-cycle calibration RUN is E14.
+CREATE TABLE review_definitions (
+    id                            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                     uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                     uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    review_code                   varchar(60) NOT NULL,             -- Review ID (VAL-MASTER-UNIQUE)
+    name                          varchar(200) NOT NULL,
+    description                   text,
+    cycle_id                      uuid REFERENCES appraisal_cycles(id) ON DELETE SET NULL,  -- Align to Review Cycle
+    align_to_review_cycle         varchar(200),                     -- raw label as exported
+    is_final_review               boolean NOT NULL DEFAULT false,
+    enable_exclude_employees      boolean NOT NULL DEFAULT false,
+    exclusion_setting             varchar(200),
+    goal_rating_scale             varchar(120),
+    goal_normalization_setting    varchar(160),
+    overall_rating_scale          varchar(120),
+    overall_normalization_setting varchar(160),
+    competency_normalization_setting varchar(160),
+    calibration_enabled           boolean NOT NULL DEFAULT false,
+    calibration_process           varchar(120),
+    promotion_framework           varchar(120),
+    stage_settings                jsonb,                            -- Self/Evaluator1/Evaluator2/Reviewer stage config
+    field_settings                jsonb,                            -- full per-field rating/visibility matrix (config)
+    source_updated_on             timestamptz,
+    source_started_on             timestamptz,
+    source_archived_on            timestamptz,
+    status                        g08_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at                    timestamptz NOT NULL DEFAULT now(),
+    updated_at                    timestamptz NOT NULL DEFAULT now(),
+    created_by                    uuid,
+    updated_by                    uuid,
+    is_deleted                    boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_review_definitions_code UNIQUE (tenant_id, review_code)
+);
+CREATE INDEX ix_review_definitions_tenant ON review_definitions(tenant_id);
+CREATE INDEX ix_review_definitions_entity ON review_definitions(entity_id);
+CREATE INDEX ix_review_definitions_cycle  ON review_definitions(cycle_id);
+CREATE INDEX ix_review_definitions_status ON review_definitions(status);
+
+-- 3.7 review_excluded_employees [Excluded-Employees-Export.csv] (DATA) -----------------
+CREATE TABLE review_excluded_employees (
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id             uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    review_definition_id  uuid REFERENCES review_definitions(id) ON DELETE CASCADE,  -- resolved link
+    review_code           varchar(60) NOT NULL,                    -- Review ID (raw)
+    review_name           varchar(200),                            -- Review Name (snapshot)
+    employee_id           uuid REFERENCES employees(id) ON DELETE SET NULL,          -- resolved
+    employee_external_id  varchar(40) NOT NULL,                    -- Employee ID (raw, e.g. H002)
+    employee_name         varchar(200),                            -- Employee Name (snapshot)
+    created_at            timestamptz NOT NULL DEFAULT now(),
+    updated_at            timestamptz NOT NULL DEFAULT now(),
+    created_by            uuid,
+    updated_by            uuid,
+    is_deleted            boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_review_excluded_emp UNIQUE (tenant_id, review_code, employee_external_id)
+);
+CREATE INDEX ix_review_excluded_emp_tenant ON review_excluded_employees(tenant_id);
+CREATE INDEX ix_review_excluded_emp_review ON review_excluded_employees(review_definition_id);
+CREATE INDEX ix_review_excluded_emp_emp    ON review_excluded_employees(employee_id);
+
+-- 3.8 calibration_settings [Calibration(1/2).csv] --------------------------------------
+-- The reusable calibration TEMPLATE (parameters, publish method, ideal distribution,
+-- moderation-page field matrix). Distinct from E14 calibration_sessions (the per-cycle RUN).
+CREATE TABLE calibration_settings (
+    id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                 uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                 uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    name                      varchar(160) NOT NULL,                -- Calibration Name (VAL-MASTER-UNIQUE)
+    overall_rating_enabled    boolean NOT NULL DEFAULT false,
+    overall_rating_scale      varchar(120),
+    goal_rating_enabled       boolean NOT NULL DEFAULT false,
+    goal_rating_scale         varchar(120),
+    competency_rating_enabled boolean NOT NULL DEFAULT false,
+    competency_rating_scale   varchar(120),
+    promotion_enabled         boolean NOT NULL DEFAULT false,
+    promotion_framework       varchar(120),
+    potential_enabled         boolean NOT NULL DEFAULT false,
+    potential_framework       varchar(120),
+    publish_method_overall    varchar(60),                          -- Decimal / Rounded / ...
+    publish_method_goal       varchar(60),
+    publish_method_competency varchar(60),
+    ideal_distribution        jsonb,                                -- Define Ideal Distribution Norm (per scale)
+    n_grid_enabled            boolean NOT NULL DEFAULT false,
+    lobby_group_enabled       boolean NOT NULL DEFAULT false,
+    moderation_fields         jsonb,                                -- Standard/Custom field show/use/weightage matrix
+    parameters                jsonb,                                -- remaining calibration flags (config)
+    source_created_on         timestamptz,
+    source_updated_on         timestamptz,
+    status                    g08_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at                timestamptz NOT NULL DEFAULT now(),
+    updated_at                timestamptz NOT NULL DEFAULT now(),
+    created_by                uuid,
+    updated_by                uuid,
+    is_deleted                boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_calibration_settings_name UNIQUE (tenant_id, name)
+);
+CREATE INDEX ix_calibration_settings_tenant ON calibration_settings(tenant_id);
+CREATE INDEX ix_calibration_settings_entity ON calibration_settings(entity_id);
+CREATE INDEX ix_calibration_settings_status ON calibration_settings(status);
+
+-- 3.9 performance_translations [*Framework Translation / *Translation.csv] (i18n CONFIG)
+-- Single table covering all 5 translation exports (Goal Plan, Review, Review Cycle,
+-- Scorecard Pillar, Calibration): object label localisation.
+CREATE TABLE performance_translations (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    translation_type   varchar(40) NOT NULL,                        -- Type (e.g. attribute)
+    object_type        varchar(120) NOT NULL,                       -- Object Type (e.g. PMS_Category Name)
+    default_value      varchar(300) NOT NULL,                       -- Default Value
+    language           varchar(40) NOT NULL DEFAULT '',             -- Language (blank = default locale)
+    translation        varchar(300),                                -- Translation
+    status             g08_config_status NOT NULL DEFAULT 'ACTIVE',
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    updated_at         timestamptz NOT NULL DEFAULT now(),
+    created_by         uuid,
+    updated_by         uuid,
+    is_deleted         boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_performance_translations UNIQUE (tenant_id, object_type, default_value, language)
+);
+CREATE INDEX ix_performance_translations_tenant ON performance_translations(tenant_id);
+CREATE INDEX ix_performance_translations_object ON performance_translations(object_type);
+
+-- 3.10 goals — RECON field additions [Goals-Export.csv] --------------------------------
+ALTER TABLE goals
+    ADD COLUMN metric_id             uuid REFERENCES metrics(id) ON DELETE SET NULL,             -- Metric master ref
+    ADD COLUMN metric_criteria       text,                                                       -- Measurement Criteria (free text)
+    ADD COLUMN target_prefix         varchar(24),                                                -- Target Prefix
+    ADD COLUMN timeline_start_date   date,                                                       -- Timelines Start date
+    ADD COLUMN timeline_end_date     date,                                                       -- Timelines End date
+    ADD COLUMN scorecard_pillar_id   uuid REFERENCES scorecard_pillars(id) ON DELETE SET NULL,   -- Scorecard pillar/perspective
+    ADD COLUMN aligned_to_goal_id    uuid REFERENCES goals(id) ON DELETE SET NULL,               -- Is aligned to (goal)
+    ADD COLUMN aligned_to_ref        varchar(200),                                               -- Is aligned to (free ref)
+    ADD COLUMN achievement_mapping   jsonb,                                                      -- Achievement mapping
+    ADD COLUMN block_edit_achievement boolean NOT NULL DEFAULT false,                            -- Block edit achievement
+    ADD COLUMN assigned_to_roles     jsonb,                                                      -- Assigned to Roles
+    ADD COLUMN goal_plan_master_id   uuid REFERENCES goal_plans(id) ON DELETE SET NULL;          -- Goal Plan (config master ref)
+CREATE INDEX ix_goals_metric          ON goals(metric_id);
+CREATE INDEX ix_goals_scorecard_pillar ON goals(scorecard_pillar_id);
+CREATE INDEX ix_goals_aligned_to      ON goals(aligned_to_goal_id);
+CREATE INDEX ix_goals_plan_master     ON goals(goal_plan_master_id);
+
+
+-- =====================================================================================
 -- SECTION F — DEFERRED CROSS-TABLE FOREIGN KEYS (forward references)
 -- =====================================================================================
 -- Resolved here to avoid circular create-order coupling. E1/E4 reference E2/E3; many
@@ -846,7 +1149,11 @@ DECLARE
         'continuous_feedback','feedback_360_requests','feedback_360_responses','representations',
         'calibration_sessions','calibration_adjustments','performance_improvement_plans',
         'pip_milestones','apar_disclosure_log','appraisal_report_periods','form_goal_snapshots',
-        'calibration_recommendations','coi_recusals','digital_signatures'
+        'calibration_recommendations','coi_recusals','digital_signatures',
+        -- RECON Section 3 config/masters (tenant-scoped; same tenant-isolation policy):
+        'scorecard_pillars','metrics','normalization_settings','custom_formula_settings',
+        'goal_plans','review_definitions','review_excluded_employees','calibration_settings',
+        'performance_translations'
     ];
 BEGIN
     FOREACH t IN ARRAY g08_tables LOOP
@@ -964,6 +1271,74 @@ INSERT INTO apar_disclosure_log (id, tenant_id, form_id, seq_no, event_type, act
 INSERT INTO form_goal_snapshots (id, tenant_id, form_id, source_goal_id, goal_payload, weightage, locked, snapshot_at) VALUES
  ('08e20a01-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','08f40001-0000-0000-0000-000000000001','08e50001-0000-0000-0000-000000000001','{"goal_type":"KRA","title":"Improve revenue assessment turnaround","weightage":40.00}', 40.00, true,'2026-04-01T00:00:00Z'),
  ('08e20a01-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','08f40001-0000-0000-0000-000000000001','08e50001-0000-0000-0000-000000000002','{"goal_type":"KPI","title":"Reduce pending files below 50","weightage":30.00}', 30.00, true,'2026-04-01T00:00:00Z');
+
+-- ==== RECON Section 3 seed rows (config/masters + goal-field back-fill) ==============
+
+-- scorecard_pillars (3.1) -------------------------------------------------------------
+INSERT INTO scorecard_pillars (id, tenant_id, pillar_code, name, description, status) VALUES
+ ('08a30001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','SCP1','Project Based Goals', NULL,'ACTIVE'),
+ ('08a30001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','SCP2','Development Based Goals', NULL,'ACTIVE');
+
+-- metrics (3.2) -----------------------------------------------------------------------
+INSERT INTO metrics (id, tenant_id, metric_code, name, description, status) VALUES
+ ('08a30002-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','DB_Default_Metric_Percentage','Percentage','Darwinbox default metric - Percentage','ACTIVE'),
+ ('08a30002-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','DB_Default_Metric_Number','Number','Darwinbox default metric - Number','ACTIVE');
+
+-- normalization_settings (3.3) --------------------------------------------------------
+INSERT INTO normalization_settings (id, tenant_id, name, scale, scale_marker, scale_marks, min_marks, max_marks, ideal_pct, delta_pct, status) VALUES
+ ('08a30003-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','PMS Normalization','PMS Rating Scale','Decimal','[{"label":"Outstanding","min":9,"max":10},{"label":"Good","min":6,"max":8.99}]', 1.00, 10.00, 15.00, 5.00,'ACTIVE'),
+ ('08a30003-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','Competency Normalization','Competency Scale','Decimal','[{"label":"Meets","min":3,"max":4},{"label":"Exceeds","min":4,"max":5}]', 1.00, 5.00, 20.00, 10.00,'ACTIVE');
+
+-- custom_formula_settings (3.4) -------------------------------------------------------
+INSERT INTO custom_formula_settings (id, tenant_id, name, information, methodology, formula_for, formula, status) VALUES
+ ('08a30004-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','Weighted Goal Score','Weightage-based goal score','WEIGHTED','Goal Score','(achievement_pct * weightage) / 100','ACTIVE'),
+ ('08a30004-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','Capped Achievement','Cap achievement at 100% for score','CAPPED','Overall Rating','least(achievement_pct, 100)','ACTIVE');
+
+-- goal_plans (3.5) --------------------------------------------------------------------
+INSERT INTO goal_plans (id, tenant_id, entity_id, goal_plan_code, name, methodology, enable_sub_goals, start_date, end_date, user_assignment, min_goals, max_goals, achievement_mapping_scale, goal_plan_approver, enable_cascade, scorecard_pillar_options, field_settings, status) VALUES
+ ('08a30005-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','JAN_23-24','January 2023-24','OKR', true,'2023-01-01','2023-12-31','January Appraisal', 2, 6,'0','Manager', false,'Project Based Goals|Development Based Goals','{"goal_name":{"enable":true,"mandatory":true,"editable":true,"need_approval":true},"goal_weightage":{"enable":true,"mandatory":true}}','ARCHIVED'),
+ ('08a30005-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','FEB_23-24','February 2023-24','OKR', true,'2023-02-01','2024-01-31','February Appraisal', 2, 6,'0','Manager', false,'Project Based Goals|Development Based Goals','{"goal_name":{"enable":true,"mandatory":true}}','ARCHIVED');
+
+-- review_definitions (3.6) ------------------------------------------------------------
+INSERT INTO review_definitions (id, tenant_id, entity_id, review_code, name, cycle_id, align_to_review_cycle, is_final_review, enable_exclude_employees, exclusion_setting, goal_rating_scale, overall_rating_scale, calibration_enabled, calibration_process, promotion_framework, status) VALUES
+ ('08a30006-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','JAN_23-24','January 23-24', NULL,'January 2023', false, true,'New Joinees Exclusions','PMS Rating Scale','PMS Rating Scale', true,'Calibration','Promotion Framework','ARCHIVED'),
+ ('08a30006-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','FEB-23-24','February 23-24', NULL,'February 23-24', false, true,'New Joinees Exclusions','PMS Rating Scale','PMS Rating Scale', true,'Calibration','Promotion Framework','ARCHIVED');
+
+-- review_excluded_employees (3.7) -----------------------------------------------------
+INSERT INTO review_excluded_employees (id, tenant_id, review_definition_id, review_code, review_name, employee_external_id, employee_name) VALUES
+ ('08a30007-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','08a30006-0000-0000-0000-000000000001','JAN_23-24','January 23-24','H002','Chinnaswami Ganesan'),
+ ('08a30007-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','08a30006-0000-0000-0000-000000000001','JAN_23-24','January 23-24','H010','Akshaya Shetty');
+
+-- calibration_settings (3.8) ----------------------------------------------------------
+INSERT INTO calibration_settings (id, tenant_id, entity_id, name, overall_rating_enabled, goal_rating_enabled, goal_rating_scale, promotion_enabled, promotion_framework, publish_method_overall, publish_method_goal, publish_method_competency, n_grid_enabled, lobby_group_enabled, moderation_fields, status) VALUES
+ ('08a30008-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','Calibration', false, true,'PMS Rating Scale', true,'Promotion Framework','Decimal','Decimal','Decimal', false, true,'{"designation":{"show":true},"department":{"show":true},"self_goals":{"show":true,"use":false,"weightage":0}}','ACTIVE'),
+ ('08a30008-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','Calibration New', false, true,'PMS Rating Scale - New', true,'Promotion Framework','Decimal','Decimal','Decimal', false, true,'{"designation":{"show":true},"department":{"show":true}}','ACTIVE');
+
+-- performance_translations (3.9) ------------------------------------------------------
+INSERT INTO performance_translations (id, tenant_id, translation_type, object_type, default_value, language, translation, status) VALUES
+ ('08a30009-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','attribute','PMS_Category Name','Project Based Goals','', NULL,'ACTIVE'),
+ ('08a30009-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','attribute','PMS_Goal Plan Name','January 2023-24','', NULL,'ACTIVE'),
+ ('08a30009-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111','attribute','PMS_Calibration Name','Calibration','', NULL,'ACTIVE');
+
+-- goals RECON field back-fill (attach master refs + new fields to existing seed goals) -
+UPDATE goals SET
+    metric_id           = '08a30002-0000-0000-0000-000000000001',
+    metric_criteria     = 'Percentage reduction in assessment turnaround time',
+    target_prefix       = '<=',
+    timeline_start_date = '2025-04-01',
+    timeline_end_date   = '2026-03-31',
+    scorecard_pillar_id = '08a30001-0000-0000-0000-000000000001',
+    achievement_mapping = '{"90-100":"Outstanding","70-89":"Good"}',
+    block_edit_achievement = true,
+    assigned_to_roles   = '["Manager","HRBP"]',
+    goal_plan_master_id = '08a30005-0000-0000-0000-000000000001'
+WHERE id = '08e50001-0000-0000-0000-000000000001';
+UPDATE goals SET
+    metric_id           = '08a30002-0000-0000-0000-000000000002',
+    target_prefix       = '<',
+    scorecard_pillar_id = '08a30001-0000-0000-0000-000000000001',
+    aligned_to_goal_id  = '08e50001-0000-0000-0000-000000000001'
+WHERE id = '08e50001-0000-0000-0000-000000000002';
 
 -- Reset session GUCs after seeding.
 RESET app.current_tenant_id;

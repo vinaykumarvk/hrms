@@ -15,6 +15,20 @@
 --   docs/brd/v3/G03-attendance-and-leave-management.md   (§5 entities, samples, enums, rules)
 --
 -- =====================================================================================
+-- RECON (2026-07-01) — ground-truth CSV reconciliation (Leaves + Attendance areas).
+--   Source: docs/HRMS Deliverables to Development Phase/DwnB Form Fields/{Leaves,Attendance}/*.csv
+--   Report: docs/data-model/reconciliation/g03-leave-attendance.md
+--   Added (SECTION 13b, ADD-ONLY): 4 policy/reference tables — attendance_policies,
+--     overtime_policies, attendance_networks (IP restriction), geofences — plus true DATA
+--     columns on leave_types (hourly-leave, max-per-year/month, advance-notice),
+--     shifts (WFH/OT-policy/leave-deduction-factor), holidays (recurrence/national/day-name),
+--     leave_accrual_policies (accrual_config), overtime_records/comp_off_ledger (overtime_policy_id).
+--   The vendor exports carry HUNDREDS of policy TOGGLES (hide/display flags, request-window
+--     rules, pro-rata/clubbing/prefix-suffix, hourly-leave sub-rules, OT approval routing).
+--     These are POLICY CONFIGURATION, not data attributes: they live in the existing
+--     module_config table or in the new per-policy `*_config jsonb` columns — NOT as first-class
+--     schema columns. Only genuine DATA attributes were promoted to columns.
+-- =====================================================================================
 -- BUILD NOTES (read before running)
 -- =====================================================================================
 -- ORDERING.
@@ -1106,6 +1120,202 @@ CREATE INDEX ix_anomaly_reviews_status   ON punch_anomaly_reviews(status);
 
 
 -- =====================================================================================
+-- SECTION 13b — CSV-RECON POLICY & REFERENCE MASTERS (ADD-ONLY; see RECON note at top)
+-- =====================================================================================
+-- Grounds four PrimeSoft config exports that had no schema home, plus promotes the genuine
+-- DATA attributes buried in the leave/attendance/OT policy exports. All long-tail toggles
+-- stay in `*_config jsonb` / module_config (config, not data).
+
+-- New enums (module-unique closed enumerations; g03_ prefix) ---------------------------
+CREATE TYPE g03_ot_calc_frequency  AS ENUM
+    ('DAILY','WEEKLY','BIWEEKLY','SEMI_MONTHLY','MONTHLY','QUARTERLY','YEARLY');
+CREATE TYPE g03_holiday_recurrence AS ENUM ('STATIC_DATE','DAY_OF_MONTH');
+
+-- attendance_policies (Attendance/Attendance_Policy_Export.csv; also Attendance_Settings) -
+-- Grace/buffer/absconding/edit-window/NSD are DATA; the ~230 request-config & hide/display
+-- toggles ride in policy_config jsonb (config, not data).
+CREATE TABLE attendance_policies (
+    id                            uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- attendance_policy_id
+    tenant_id                     uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                     uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    policy_code                   varchar(30) NOT NULL,                 -- ATPY_1...
+    name                          varchar(120) NOT NULL,
+    description                   text,
+    grace_in_minutes              int NOT NULL DEFAULT 0,               -- Grace time for Clockin (mins)
+    grace_out_minutes             int NOT NULL DEFAULT 0,               -- Grace time for Last Punch (mins)
+    include_grace_in_late         boolean NOT NULL DEFAULT false,
+    include_grace_in_early_out    boolean NOT NULL DEFAULT false,
+    allow_wfh_checkin             boolean NOT NULL DEFAULT false,
+    allow_outduty_checkin         boolean NOT NULL DEFAULT false,
+    mark_attendance_basis         varchar(40),                          -- Mark attendance based on
+    buffer_pre_minutes            int NOT NULL DEFAULT 0,               -- buffer before shift
+    buffer_post_minutes           int NOT NULL DEFAULT 0,               -- buffer after shift
+    backdated_edit_limit_days     int,                                  -- Restrict editing back dated attendance to (days)
+    roster_change_limit_days      int,                                  -- Restrict roster changes for past (days)
+    absconding_trigger_days       int,                                  -- Trigger Absconding Flow After (days)
+    optional_holiday_limit_days   int,                                  -- Limit availing Optional Holiday to (days)
+    auto_approve_optional_holiday boolean NOT NULL DEFAULT false,
+    night_shift_differential_enabled boolean NOT NULL DEFAULT false,
+    nsd_multiplier                numeric(4,2),                         -- Night Shift Differential Multiplier
+    policy_config                 jsonb,                                -- request windows, leave-deduction rules, hide/display flags (config)
+    status                        g03_active_status NOT NULL DEFAULT 'ACTIVE',
+    created_at                    timestamptz NOT NULL DEFAULT now(),
+    updated_at                    timestamptz NOT NULL DEFAULT now(),
+    created_by                    uuid,
+    updated_by                    uuid,
+    is_deleted                    boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_attendance_policies_code UNIQUE (tenant_id, policy_code)
+);
+CREATE INDEX ix_attendance_policies_tenant ON attendance_policies(tenant_id);
+CREATE INDEX ix_attendance_policies_entity ON attendance_policies(entity_id);
+CREATE INDEX ix_attendance_policies_status ON attendance_policies(status);
+
+-- overtime_policies (Attendance/Tenant_Leaves_Compoff_Export.csv + Overtime_Slabs/Threshold/
+-- Indexing exports). Thresholds/slabs/indexing are structured DATA kept as jsonb sets; the
+-- long tail of per-frequency approval routing rides in policy_config.
+CREATE TABLE overtime_policies (
+    id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- overtime_policy_id
+    tenant_id               uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id               uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    policy_code             varchar(30) NOT NULL,                 -- OVPY_7...
+    name                    varchar(120) NOT NULL,
+    description             text,
+    calculation_frequency   g03_ot_calc_frequency NOT NULL DEFAULT 'DAILY',
+    compensation            g03_ot_treatment NOT NULL DEFAULT 'COMP_OFF',  -- Overtime to be compensated via
+    min_ot_minutes          int NOT NULL DEFAULT 0,               -- Minimum duration to consider for Overtime
+    daily_cap_minutes       int,                                  -- Max OT per day
+    weekly_cap_minutes      int,                                  -- Max OT per week
+    monthly_cap_minutes     int,                                  -- Max OT per month
+    yearly_cap_minutes      int,                                  -- Max OT per year
+    weekday_multiplier      numeric(4,2),                         -- Weekday multiplier
+    weekly_off_multiplier   numeric(4,2),                         -- Weekly-off / off-day multiplier
+    holiday_multiplier      numeric(4,2),                         -- Holiday multiplier
+    nsd_multiplier          numeric(4,2),                         -- NSD multiplied by
+    compoff_min_minutes_full int,                                 -- Minimum duration to credit one day Comp off
+    compoff_min_minutes_half int,                                 -- Minimum duration to credit half day Comp off
+    compoff_lapse_days      int,                                  -- Comp off credited will lapse in (days)
+    compoff_max_per_month   numeric(4,2),                         -- Maximum Comp off Leave allowed in a month
+    slabs                   jsonb,                                -- [{slab_name, multiplication_factor}] (Overtime_Slabs)
+    thresholds              jsonb,                                -- {weekly_pct,monthly_pct,quarterly_pct,yearly_pct} (Overtime_Threshold)
+    indexing_rules          jsonb,                                -- standard/custom OT indexing (Overtime-Policy-Indexing-Rules)
+    policy_config           jsonb,                                -- per-frequency approval routing, rounding, deduction rules (config)
+    status                  g03_active_status NOT NULL DEFAULT 'ACTIVE',
+    created_at              timestamptz NOT NULL DEFAULT now(),
+    updated_at              timestamptz NOT NULL DEFAULT now(),
+    created_by              uuid,
+    updated_by              uuid,
+    is_deleted              boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_overtime_policies_code UNIQUE (tenant_id, policy_code)
+);
+CREATE INDEX ix_overtime_policies_tenant ON overtime_policies(tenant_id);
+CREATE INDEX ix_overtime_policies_entity ON overtime_policies(entity_id);
+CREATE INDEX ix_overtime_policies_status ON overtime_policies(status);
+
+-- attendance_networks (Attendance/Attendance_Ip_Export.csv) — IP-restriction ranges ------
+CREATE TABLE attendance_networks (
+    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- network_id
+    tenant_id     uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id     uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    network_code  varchar(30) NOT NULL,                        -- IPRS_1...
+    name          varchar(120) NOT NULL,                       -- Network Name
+    ip_from       inet NOT NULL,                               -- IP Address From
+    ip_to         inet NOT NULL,                               -- IP Address To
+    tag           varchar(60),                                 -- Tag (e.g. Hyderabad Office)
+    status        g03_active_status NOT NULL DEFAULT 'ACTIVE',
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    updated_at    timestamptz NOT NULL DEFAULT now(),
+    created_by    uuid,
+    updated_by    uuid,
+    is_deleted    boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_attendance_networks_code UNIQUE (tenant_id, network_code)
+);
+CREATE INDEX ix_attendance_networks_tenant ON attendance_networks(tenant_id);
+CREATE INDEX ix_attendance_networks_entity ON attendance_networks(entity_id);
+CREATE INDEX ix_attendance_networks_status ON attendance_networks(status);
+
+-- geofences (Attendance/Geofencing-Export.csv) — named reusable geofence locations --------
+-- Distinct from attendance_devices.geofence (per-device inline point); these are shared,
+-- named fences assignable at location/work-area level (CheckIn_Settings 'Fencing' radius).
+CREATE TABLE geofences (
+    id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- fence_id
+    tenant_id            uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id            uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    fence_code           varchar(30) NOT NULL,                        -- GFRS_1...
+    name                 varchar(120) NOT NULL,                       -- Fencing Name
+    latitude             numeric(9,6) NOT NULL,
+    longitude            numeric(9,6) NOT NULL,
+    radius_meters        int NOT NULL,                                -- Distance
+    tag                  varchar(60),                                 -- Tags
+    location_org_unit_id uuid REFERENCES org_units(id) ON DELETE SET NULL,
+    status               g03_active_status NOT NULL DEFAULT 'ACTIVE',
+    created_at           timestamptz NOT NULL DEFAULT now(),
+    updated_at           timestamptz NOT NULL DEFAULT now(),
+    created_by           uuid,
+    updated_by           uuid,
+    is_deleted           boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_geofences_code UNIQUE (tenant_id, fence_code),
+    CONSTRAINT ck_geofences_radius CHECK (radius_meters > 0)
+);
+CREATE INDEX ix_geofences_tenant ON geofences(tenant_id);
+CREATE INDEX ix_geofences_entity ON geofences(entity_id);
+CREATE INDEX ix_geofences_scope  ON geofences(location_org_unit_id);
+CREATE INDEX ix_geofences_status ON geofences(status);
+
+-- Promote genuine DATA attributes onto existing masters (ADD-ONLY) ---------------------
+-- leave_types: hourly-leave settings + max-per-year/month + advance/future notice are DATA;
+-- the ~180 pro-rata/clubbing/prefix-suffix/block-leave/future-cycle toggles ride in config.
+ALTER TABLE leave_types
+    ADD COLUMN is_hourly_leave              boolean NOT NULL DEFAULT false,  -- Is Hourly Leave?
+    ADD COLUMN hours_per_day                numeric(4,2),                    -- No of Hours in a Day
+    ADD COLUMN hourly_min_minutes           int,                             -- Min Leave Duration in One Application in Minutes
+    ADD COLUMN hourly_multiple_minutes      int,                             -- Allow Hourly Leave Only In Multiples Of (Minutes)
+    ADD COLUMN allow_hourly_across_midnight boolean NOT NULL DEFAULT false,  -- Allow Hourly Leave Across Midnight
+    ADD COLUMN max_days_per_year            numeric(6,2),                    -- Maximum Leave Allowed Per Year
+    ADD COLUMN max_availed_per_year         numeric(6,2),                    -- Maximum Leave that can be availed per year
+    ADD COLUMN max_days_per_month           numeric(6,2),                    -- Maximum Leave Allowed Per Month
+    ADD COLUMN min_advance_notice_days      int,                             -- Minimum Advance Notice for Leave Application in Days
+    ADD COLUMN max_future_apply_days        int,                             -- Max Number Of Future Days Leave Is Allowed For
+    ADD COLUMN allow_half_day               boolean NOT NULL DEFAULT true,   -- Allow half-day
+    ADD COLUMN attachment_mandatory_beyond_days int,                         -- Attachment Mandatory if Leave Application is for more than (X) days
+    ADD COLUMN is_special_leave             boolean NOT NULL DEFAULT false,  -- Is this a Special Leave
+    ADD COLUMN has_unlimited_balance        boolean NOT NULL DEFAULT false,  -- Leave With Unlimited Balance
+    ADD COLUMN leave_type_config            jsonb;                           -- long-tail policy toggles (config, not data)
+
+-- leave_accrual_policies: working-days/working-hours & custom-accrual patterns are config.
+ALTER TABLE leave_accrual_policies
+    ADD COLUMN accrual_config jsonb;  -- Leave Accrual Based On Working Days/Hours, Define Custom Accrual (config)
+
+-- shifts: WFH flag, leave-deduction factor, standard hours, and policy linkage are DATA.
+ALTER TABLE shifts
+    ADD COLUMN is_wfh_shift            boolean NOT NULL DEFAULT false,       -- Is WFH Shift?
+    ADD COLUMN leave_deduction_factor  numeric(4,2),                        -- Leave Deduction Factor
+    ADD COLUMN standard_working_minutes int,                                -- Standard Working Hours (stored as minutes)
+    ADD COLUMN attendance_policy_id    uuid REFERENCES attendance_policies(id) ON DELETE SET NULL,  -- Shift 'Policy'
+    ADD COLUMN overtime_policy_id      uuid REFERENCES overtime_policies(id) ON DELETE SET NULL,    -- Enable Overtime Policy in Shift
+    ADD COLUMN shift_config            jsonb;                               -- null-shift, alt-work-schedule, no-OT-on-day toggles (config)
+CREATE INDEX ix_shifts_att_policy ON shifts(attendance_policy_id);
+CREATE INDEX ix_shifts_ot_policy  ON shifts(overtime_policy_id);
+
+-- holidays: recurrence + national flag + day-name are DATA (all-Holiday-Export.csv).
+ALTER TABLE holidays
+    ADD COLUMN day_name          varchar(12),                              -- Day Name (Sunday...)
+    ADD COLUMN repeat_next_year  boolean NOT NULL DEFAULT false,           -- Repeat Next Year
+    ADD COLUMN is_national       boolean NOT NULL DEFAULT false,           -- Holiday Type National(2)
+    ADD COLUMN recurrence_type   g03_holiday_recurrence NOT NULL DEFAULT 'STATIC_DATE',  -- Recurring Static date(0)/Day of Month(1)
+    ADD COLUMN recurrence_config jsonb;                                    -- {occurrence, month, day} for DAY_OF_MONTH
+CREATE INDEX ix_holidays_national ON holidays(is_national);
+
+-- overtime_records / comp_off_ledger: link the governing OT policy (lineage) --------------
+ALTER TABLE overtime_records
+    ADD COLUMN overtime_policy_id uuid REFERENCES overtime_policies(id) ON DELETE SET NULL;
+CREATE INDEX ix_overtime_ot_policy ON overtime_records(overtime_policy_id);
+
+ALTER TABLE comp_off_ledger
+    ADD COLUMN overtime_policy_id uuid REFERENCES overtime_policies(id) ON DELETE SET NULL;
+CREATE INDEX ix_comp_off_ot_policy ON comp_off_ledger(overtime_policy_id);
+
+
+-- =====================================================================================
 -- SECTION 14 — ROW-LEVEL SECURITY (P02 data-scope substrate; CONVENTIONS §6)
 -- =====================================================================================
 -- Apply the canonical tenant-isolation policy to every G03-owned table (append-only
@@ -1122,7 +1332,9 @@ DECLARE
         'overtime_records','attendance_exceptions','comp_off_ledger',
         'payroll_attendance_feed','payroll_feed_adjustments','leave_encashment_requests',
         'leave_year_close_runs','leave_entitlements','module_config','approval_delegations',
-        'dependent_leave_eligibility','punch_anomaly_reviews'
+        'dependent_leave_eligibility','punch_anomaly_reviews',
+        -- SECTION 13b CSV-recon masters:
+        'attendance_policies','overtime_policies','attendance_networks','geofences'
     ];
 BEGIN
     FOREACH t IN ARRAY g03_tables LOOP
@@ -1251,10 +1463,54 @@ VALUES
  ('03a27001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111',NULL,'RESERVATION_TTL_MIN','30','2026-01-01','ACTIVE'),
  ('03a27001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111',NULL,'REGULARISATION_WINDOW_DAYS','15','2026-01-01','ACTIVE');
 
+-- SECTION 13b CSV-recon masters — sample rows --------------------------------------------
+-- attendance_policies (grace/absconding/NSD; long-tail toggles in policy_config) ----------
+INSERT INTO attendance_policies (id, tenant_id, entity_id, policy_code, name, grace_in_minutes,
+    grace_out_minutes, allow_wfh_checkin, allow_outduty_checkin, backdated_edit_limit_days,
+    roster_change_limit_days, absconding_trigger_days, optional_holiday_limit_days,
+    night_shift_differential_enabled, nsd_multiplier, policy_config, status)
+VALUES
+ ('03ab0001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  'ATPY_1','Attendance Policy CEO',0,0,false,false,30,30,NULL,1,false,NULL,
+  '{"mark_attendance_based_on":"First-Last","hide":["clockin","last_punch"]}','ACTIVE'),
+ ('03ab0001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  'ATPY_2','Standard Attendance Policy',10,10,true,true,31,32,90,0,false,NULL,
+  '{"attendance_regularization":{"future":false,"past_limit_days":32}}','ACTIVE');
+
+-- overtime_policies (comp-off conversion; slabs/thresholds as jsonb sets) -----------------
+INSERT INTO overtime_policies (id, tenant_id, entity_id, policy_code, name, calculation_frequency,
+    compensation, min_ot_minutes, weekday_multiplier, weekly_off_multiplier, holiday_multiplier,
+    compoff_min_minutes_full, compoff_min_minutes_half, compoff_lapse_days, compoff_max_per_month,
+    slabs, thresholds, status)
+VALUES
+ ('03fc0001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  'OVPY_7','Comp Off (Tejora)','DAILY','COMP_OFF',0,1.00,1.00,2.00,480,240,180,4.00,
+  '[{"slab_name":"Base","multiplication_factor":1.0}]','{"weekly_pct":0,"monthly_pct":0}','ACTIVE'),
+ ('03fc0001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  'OVPY_10','Comp Off (PrimeSoft)','DAILY','COMP_OFF',240,1.00,1.50,2.00,480,240,1000,1.00,
+  NULL,NULL,'ACTIVE');
+
+-- attendance_networks (IP-restriction ranges) --------------------------------------------
+INSERT INTO attendance_networks (id, tenant_id, entity_id, network_code, name, ip_from, ip_to, tag, status)
+VALUES
+ ('03bd0001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  'IPRS_1','Hyderabad WAN 1','111.93.10.210','111.93.10.210','Hyderabad Office','ACTIVE'),
+ ('03bd0001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  'IPRS_2','Hyderabad WAN 2','202.65.158.18','202.65.158.18','Hyderabad Office','ACTIVE');
+
+-- geofences (named reusable fences) ------------------------------------------------------
+INSERT INTO geofences (id, tenant_id, entity_id, fence_code, name, latitude, longitude, radius_meters,
+    tag, location_org_unit_id, status)
+VALUES
+ ('03ef0001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  'GFRS_1','NSDL, Prabhadevi',19.006940,72.844700,500,NULL,'33333333-3333-3333-3333-333333333301','ACTIVE'),
+ ('03ef0001-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201',
+  'GFRS_2','Axis Securities, Airoli',19.132600,73.037790,700,'Office','33333333-3333-3333-3333-333333333301','ACTIVE');
+
 -- Reset session GUCs after seeding.
 RESET app.current_tenant_id;
 RESET app.is_platform_admin;
 
 -- =====================================================================================
--- END 03-G03-attendance-leave.sql  (31 module-owned tables; load AFTER 00-platform-core.sql)
+-- END 03-G03-attendance-leave.sql  (31 base + 4 CSV-recon = 35 module-owned tables; load AFTER 00-platform-core.sql)
 -- =====================================================================================
