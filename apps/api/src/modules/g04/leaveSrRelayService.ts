@@ -6,7 +6,17 @@ import { ActorContext, FoundationError, TenantScope, nextId, requireTenantScope,
 import { ServiceRegisterService, SrEvent } from "../g12/serviceRegisterService";
 import { InMemoryLeaveSrRelayRepository, LeaveSrRelayRepository } from "./leaveSrRelayRepository";
 
-export type LeaveSrRelayStatus = "READY" | "IN_FLIGHT" | "POSTED" | "FAILED" | "DEAD_LETTERED" | "DISCARDED" | "QUARANTINED";
+export type LeaveSrRelayStatus =
+  | "READY"
+  | "IN_FLIGHT"
+  | "POSTED"
+  | "FAILED"
+  | "DEAD_LETTERED"
+  | "DISCARDED"
+  // PH-16C (FR-G04-02 AC4): the pinned sr_event_mapping disposition is EXCLUDED_NON_SR —
+  // the event is a recorded no-op; it never posts to G12.
+  | "EXCLUDED"
+  | "QUARANTINED";
 
 /** BRD G04 §8 registered error code for payload signature verification failure (VAL-G04-SIG). */
 export const ERR_G04_SIGNATURE_INVALID = "ERR-G04-SIGNATURE-INVALID";
@@ -26,9 +36,20 @@ export interface LeaveSrOutboxEvent {
   employeeId: string;
   eventTypeCode: "LEAVE_APPROVED" | "LEAVE_CANCELLED";
   eventDate: string;
+  /** G03 leave type code (EL/HPL/LWP…); the sr_event_mapping catalog match key (FR-G04-02). */
+  leaveTypeCode?: string;
   factKey: string;
   status: LeaveSrRelayStatus;
   attempts: number;
+  /**
+   * PH-16C (FR-G04-02 BR3 / leave_event_outbox.pinned_mapping_version): the sr_event_mapping
+   * version resolved ONCE at first claim and persisted; retries reuse it, never recompute.
+   */
+  pinnedMappingVersion?: number;
+  /** PH-16C (FR-G04-15 / leave_event_outbox.claimed_at): lease start of the in-flight claim. */
+  claimedAt?: string;
+  /** PH-16C (FR-G04-15 / leave_event_outbox.lease_expires_at): visibility timeout; the reaper reclaims expired IN_FLIGHT rows. */
+  leaseExpiresAt?: string;
   /** Earliest relay pick time (ISO); pushed out by exponential backoff on failure. */
   availableAt: string;
   relayIdempotencyKey: string;
@@ -135,6 +156,8 @@ interface EnqueueInput {
   eventDate: string;
   payload: Record<string, unknown>;
   leaveSpellLineageId?: string;
+  /** G03 leave type code; falls back to payload.leaveTypeCode when the caller predates the catalog. */
+  leaveTypeCode?: string;
 }
 
 export class LeaveSrRelayService {
@@ -291,14 +314,19 @@ export class LeaveSrRelayService {
    * register and persist typed findings — MISSING_SR when a ledger debit has no SR event,
    * ORPHAN_CORRECTION when a correction posted without an original to correct.
    */
-  runReconciliation(actor: ActorContext, input: { ledgerEntries: G03LeaveLedgerEntryLike[] }): { run: ReconciliationRun; findings: ReconciliationFinding[] } {
+  runReconciliation(
+    actor: ActorContext,
+    // PH-16C (FR-G04-18 AC1): a pre-pension certificate may only be generated from a completed
+    // PRE_PENSION run, so the run type is caller-selectable (default stays ON_DEMAND).
+    input: { ledgerEntries: G03LeaveLedgerEntryLike[]; runType?: ReconciliationRun["runType"] }
+  ): { run: ReconciliationRun; findings: ReconciliationFinding[] } {
     this.authorization.check(actor, "g04.relay.reconcile", actor);
     const startedAt = this.clock().toISOString();
     const run: ReconciliationRun = {
       id: nextId("g04-recon-run", this.repository.countReconciliationRuns()),
       tenantId: actor.tenantId,
       entityId: actor.entityId,
-      runType: "ON_DEMAND",
+      runType: input.runType ?? "ON_DEMAND",
       leaveRecordsExamined: input.ledgerEntries.length,
       srEntriesExamined: 0,
       findingsCount: 0,
@@ -416,6 +444,7 @@ export class LeaveSrRelayService {
       employeeId: input.employeeId,
       eventTypeCode: input.eventTypeCode,
       eventDate: input.eventDate,
+      leaveTypeCode: input.leaveTypeCode ?? (typeof payload.leaveTypeCode === "string" ? payload.leaveTypeCode : undefined),
       factKey: `G03:${input.leaveApplicationId}:${input.eventTypeCode}`,
       status: "READY",
       attempts: 0,

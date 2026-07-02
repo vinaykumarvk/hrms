@@ -119,6 +119,9 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G13-ERASURE_EXEMPTED":
     // BRD G14 FR-02 AC7: cross-version KPI aggregation without acknowledgement is 409 CONFLICT.
     case "ERR-G14-XVER-AGG":
+    // BRD G04 FR-02 AC3 (VAL-G04-MAPCOVER): overlapping PUBLISHED sr_event_mapping effective
+    // ranges for the same (leave_type_code, event_type) are rejected at publish as 409.
+    case "ERR-G04-MAPPING-OVERLAP":
       return 409;
     case "ELIGIBILITY_FAILED":
     case "WINDOW_EXPIRED":
@@ -160,6 +163,9 @@ export function statusForError(code: WireErrorCode): number {
     // mismatch on fetch (FR-015, content withheld + quarantined) are 422.
     case "ERR-G13-MALWARE_DETECTED":
     case "ERR-G13-INTEGRITY_FAILED":
+    // BRD G04 FR-02 AC6: a POST_SR mapping without its mandatory statutory_rule_ref citation
+    // is rejected fail-closed; the registered validation id is the error code (422).
+    case "VAL-G04-CITATION":
       return 422;
     case "PRECONDITION_FAILED":
     // BRD G06 §9.4: effecting blocked by an active interim stay is a 412 precondition failure.

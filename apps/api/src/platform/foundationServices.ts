@@ -14,6 +14,8 @@ import { AttendanceOpsService } from "../modules/g03/attendanceOpsService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
+import { LeaveSrCatalogService } from "../modules/g04/leaveSrCatalogService";
+import { InMemoryLeaveSrCatalogRepository } from "../modules/g04/leaveSrCatalogRepository";
 import { TransferService } from "../modules/g05/transferService";
 import { InMemoryTransferRepository } from "../modules/g05/transferRepository";
 import { PromotionService } from "../modules/g06/promotionService";
@@ -74,6 +76,7 @@ export interface FoundationServices {
   leave: LeaveService;
   attendanceOps: AttendanceOpsService;
   leaveSrRelay: LeaveSrRelayService;
+  leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
   promotion: PromotionService;
   training: TrainingService;
@@ -122,6 +125,12 @@ export interface FoundationServicesOptions {
    * Tests inject 0 to exercise the UNDO_EXPIRED fail-closed guard.
    */
   g01MergeUndoWindowDays?: number;
+  /**
+   * PH-16C: FR-G04-15 BR-15.1 lease_timeout override (default 120000 ms per the
+   * integration_config seed in docs/data-model/04-*.sql). Tests inject 0 so an IN_FLIGHT
+   * claim is immediately reapable.
+   */
+  g04LeaseTimeoutMs?: number;
 }
 
 /**
@@ -194,9 +203,24 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     personalDetailsRepository,
     new InMemoryChangeGovernanceRepository()
   );
-  const leaveSrRelay = new LeaveSrRelayService(authorization, audit, serviceRegister, notifications, new InMemoryLeaveSrRelayRepository(), {
+  // PH-16C: the catalog/lease/reaper/certificate service shares the relay repository — the
+  // claim path pins pinned_mapping_version on, and the reaper recovers, the same outbox rows.
+  const leaveSrRelayRepository = new InMemoryLeaveSrRelayRepository();
+  const leaveSrRelay = new LeaveSrRelayService(authorization, audit, serviceRegister, notifications, leaveSrRelayRepository, {
     hmacKey: resolveG04RelayHmacKey(options),
   });
+  // PH-16C: FR-G04-02 sr_event_mapping versioned catalog (DRAFT/PUBLISHED/RETIRED,
+  // ERR-G04-MAPPING-OVERLAP, VAL-G04-CITATION), FR-G04-15 relay_partition_lease +
+  // JOB-G04-REAPER, FR-G04-18 prepension_certificate behind the repository pattern
+  // (migration 0030). lease_timeout_ms is BR-15.1 configuration (integration_config seed).
+  const leaveSrCatalog = new LeaveSrCatalogService(
+    authorization,
+    audit,
+    jobs,
+    leaveSrRelayRepository,
+    new InMemoryLeaveSrCatalogRepository(),
+    { leaseTimeoutMs: options.g04LeaseTimeoutMs }
+  );
   const leaveRepository = new InMemoryLeaveRepository();
   for (const leaveType of ph03LeaveTypes()) {
     leaveRepository.saveLeaveType(leaveType);
@@ -345,6 +369,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     leave,
     attendanceOps,
     leaveSrRelay,
+    leaveSrCatalog,
     transfer,
     promotion,
     training,

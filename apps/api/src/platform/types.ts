@@ -72,6 +72,16 @@ export type G06DomainErrorCode =
  */
 export type G02DomainErrorCode = "ERR-G02-RISKBLOCK" | "ERR-G02-STATUSGATE";
 
+/**
+ * BRD G04 registered codes (docs/brd/v3/G04-leave-sr-integration.md):
+ * FR-G04-02 AC3 — two PUBLISHED sr_event_mapping versions for the same
+ * (leave_type_code, event_type) may never overlap effective ranges; publish is rejected
+ * 409 ERR-G04-MAPPING-OVERLAP (VAL-G04-MAPCOVER). FR-G04-02 AC6 — a POST_SR mapping
+ * without a statutory_rule_ref citation is rejected fail-closed 422; the registered
+ * validation id VAL-G04-CITATION surfaces as the error code.
+ */
+export type G04DomainErrorCode = "ERR-G04-MAPPING-OVERLAP" | "VAL-G04-CITATION";
+
 /** BRD G05 §8.2 named domain error codes (docs/brd/v3/G05-transfer-relieving-joining-workflow.md FR-007/011/020/022). */
 export type G05DomainErrorCode =
   | "ERR-G05-HANDOVER-DISPUTED"
@@ -171,6 +181,7 @@ export type WireErrorCode =
   | G01DomainErrorCode
   | G02DomainErrorCode
   | G03DomainErrorCode
+  | G04DomainErrorCode
   | G06DomainErrorCode
   | G05DomainErrorCode
   | G08DomainErrorCode

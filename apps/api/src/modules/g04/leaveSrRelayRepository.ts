@@ -32,6 +32,8 @@ export interface LeaveSrRelayRepository {
   countReconciliationRuns(): number;
   insertReconciliationRun(run: ReconciliationRun): void;
   updateReconciliationRun(run: ReconciliationRun): void;
+  /** PH-16C (FR-G04-18 AC1): the certificate generator verifies its source PRE_PENSION run. */
+  findReconciliationRun(scope: TenantScope, runId: string): ReconciliationRun | undefined;
   countReconciliationFindings(): number;
   insertReconciliationFinding(finding: ReconciliationFinding): void;
   listReconciliationFindings(scope: TenantScope, runId?: string): ReconciliationFinding[];
@@ -121,6 +123,10 @@ export class InMemoryLeaveSrRelayRepository implements LeaveSrRelayRepository {
       throw new FoundationError("NOT_FOUND", "Reconciliation run not found");
     }
     this.reconciliationRuns[index] = run;
+  }
+
+  findReconciliationRun(scope: TenantScope, runId: string): ReconciliationRun | undefined {
+    return this.reconciliationRuns.find((item) => item.id === runId && inScope(item, scope));
   }
 
   countReconciliationFindings(): number {

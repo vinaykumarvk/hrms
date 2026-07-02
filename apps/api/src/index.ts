@@ -14,6 +14,8 @@ export * from "./modules/g03/leaveService";
 export * from "./modules/g03/leaveRepository";
 export * from "./modules/g04/leaveSrRelayService";
 export * from "./modules/g04/leaveSrRelayRepository";
+export * from "./modules/g04/leaveSrCatalogService";
+export * from "./modules/g04/leaveSrCatalogRepository";
 export * from "./modules/g05/transferService";
 export * from "./modules/g05/transferRepository";
 export * from "./modules/g06/promotionService";
