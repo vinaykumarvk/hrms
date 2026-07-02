@@ -550,3 +550,56 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-14e.sh
     gate: human   # re-baseline 2026-07-02: board-day/no-go decision — human per gate_policy
     depends_on: [PH-14D]
+
+  # PH-15 is remediation tranche 2 (2026-07-03): the highest-priority feature-depth gaps named in
+  # docs/reviews/brd-coverage-delta-20260703.md after the PH-04..PH-10 gated rebuild. Same re-baseline
+  # rules: behavioral oracles run externally by the driver, no marker strings, at least one fail-closed
+  # negative per check, and the wave closes at a human gate with an honest content-checked verdict.
+  - id: PH-15A
+    name: PH-15 · G10 tax/TDS engine and statutory certificates
+    prompt: docs/spec/pipeline/prompts/PH-15A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-15a.sh
+    gate: auto
+    depends_on: [PH-10E]
+
+  - id: PH-15B
+    name: PH-15 · G11 pensioner lifecycle and revisions
+    prompt: docs/spec/pipeline/prompts/PH-15B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-15b.sh
+    gate: auto
+    depends_on: [PH-15A]
+
+  - id: PH-15C
+    name: PH-15 · G03 shifts, rosters, punch ingestion, comp-off
+    prompt: docs/spec/pipeline/prompts/PH-15C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-15c.sh
+    gate: auto
+    depends_on: [PH-15B]
+
+  - id: PH-15D
+    name: PH-15 · G12 §65B certificates, subscriptions, LTV
+    prompt: docs/spec/pipeline/prompts/PH-15D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-15d.sh
+    gate: auto
+    depends_on: [PH-15C]
+
+  - id: PH-15E
+    name: PH-15 · G13 KMS envelope encryption and DPDP DSR
+    prompt: docs/spec/pipeline/prompts/PH-15E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-15e.sh
+    gate: auto
+    depends_on: [PH-15D]
+
+  - id: PH-15F
+    name: PH-15 · G09 POSH/ICC, personal hearings, SLA pause + G06 rota-quota
+    prompt: docs/spec/pipeline/prompts/PH-15F.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-15f.sh
+    gate: auto
+    depends_on: [PH-15E]
+
+  - id: PH-15G
+    name: PH-15 · Tranche-2 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-15G.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-15g.sh
+    gate: human   # tranche-2 wave end — human reviews the honest verdict; only a human creates approvals/PH-15G.approved
+    depends_on: [PH-15F]
