@@ -3,6 +3,8 @@ import { optionalBoolean, optionalNumber, optionalRecord, optionalString, option
 import { pageItems } from "../http/pagination";
 import { ApiContext, ApiResponse } from "../http/apiTypes";
 import { SrEvent, SrSourceModule } from "../modules/g12/serviceRegisterService";
+import { JOB_G12_ANCHOR, JOB_G12_GAPSCAN, JOB_G12_INTEGRITY } from "../modules/g12/srIntegrityService";
+import type { SrAttestationKind, SrExtractScope, SrGapStatus, SrRedactionPolicy, SrRuleStatus, SrSeverity, SrSignatureMethod } from "../modules/g12/srIntegrityRepository";
 import { FoundationError } from "../platform/types";
 
 export const g12RouteEvidence = {
@@ -14,6 +16,13 @@ export const g12RouteEvidence = {
   resolve: "resolve",
   headers: ["X-Correlation-Id", "Idempotency-Key"],
   ledger: "append-only reversal semantic dedup idempotency",
+  // PH-10B integrity pillars (BRD G12 FR-04/07/10/17)
+  integrityVerify: "/api/v1/sr/employees/{id}/integrity/verify",
+  integrityJob: JOB_G12_INTEGRITY,
+  anchorJob: JOB_G12_ANCHOR,
+  gapScanJob: JOB_G12_GAPSCAN,
+  attestations: "/api/v1/sr/attestations",
+  certifiedExtracts: "/api/v1/sr/extracts",
 };
 
 export function registerG12Routes(kernel: ApiKernel): void {
@@ -132,6 +141,194 @@ export function registerG12Routes(kernel: ApiKernel): void {
     unsafe: true,
     requiresIdempotencyKey: true,
     handler: (context) => appendAnnotation(context, requiredParam(context.params, "id"), "DISPUTE_RESOLUTION"),
+  });
+
+  // ------------------------------------------------------------------------------------
+  // PH-10B integrity pillars (BRD G12 FR-04/07/10/17)
+  // ------------------------------------------------------------------------------------
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/employees/{id}/integrity/verify",
+    operationId: "g12.verifyServiceRegisterIntegrity",
+    protected: true,
+    permission: "g12.sr.integrity.verify",
+    handler: (context) =>
+      // FR-04: recompute the content chain + status sub-chain from stored content and
+      // report OK/FAIL with the first broken link.
+      ok(context.services.srIntegrity.verifyEmployee(context.scope, requiredParam(context.params, "id"))),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/integrity/run",
+    operationId: "g12.runServiceRegisterIntegrityJob",
+    protected: true,
+    permission: "g12.sr.integrity.run",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      // JOB-G12-INTEGRITY: the scheduled recompute drives the same verify code path.
+      accepted(context.services.srIntegrity.runIntegrityJob(context.scope, requiredString({ key: context.idempotencyKey }, "key"))),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/anchors/run",
+    operationId: "g12.runServiceRegisterAnchorJob",
+    protected: true,
+    permission: "g12.sr.anchor.run",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created(
+        context.services.srIntegrity.runAnchorJob(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
+          periodFrom: optionalString(body, "periodFrom"),
+          periodTo: optionalString(body, "periodTo"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/anchors",
+    operationId: "g12.listServiceRegisterAnchors",
+    protected: true,
+    permission: "g12.sr.anchor.read",
+    list: { defaultLimit: 25, maxLimit: 100 },
+    handler: (context) => ok(pageItems(context.services.srIntegrity.listAnchors(context.scope), context.pagination ?? { limit: 25 })),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/expected-event-rules",
+    operationId: "g12.createSrExpectedEventRule",
+    protected: true,
+    permission: "g12.sr.gap.rule.manage",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created(
+        context.services.srIntegrity.createExpectedEventRule(context.scope, {
+          ruleCode: requiredString(body, "ruleCode"),
+          expectedEventCategory: requiredString(body, "expectedEventCategory"),
+          cadence: optionalRecord(body, "cadence"),
+          suppressedByCategories: optionalStringArray(body, "suppressedByCategories"),
+          appliesToCadre: optionalStringArray(body, "appliesToCadre"),
+          sourceRuleRef: optionalString(body, "sourceRuleRef"),
+          severity: optionalString(body, "severity") as SrSeverity | undefined,
+          status: optionalString(body, "status") as SrRuleStatus | undefined,
+          effectiveFrom: requiredString(body, "effectiveFrom"),
+          effectiveTo: optionalString(body, "effectiveTo"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/gap-scan/run",
+    operationId: "g12.runSrGapScanJob",
+    protected: true,
+    permission: "g12.sr.gap.scan",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      // JOB-G12-GAPSCAN: expected-vs-recorded reconciliation appends GAP_FLAGGED rows.
+      return accepted(
+        context.services.srIntegrity.runGapScan(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
+          periodFrom: requiredString(body, "periodFrom"),
+          periodTo: requiredString(body, "periodTo"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/employees/{id}/gaps",
+    operationId: "g12.listSrGapRegister",
+    protected: true,
+    permission: "g12.sr.gap.read",
+    list: { defaultLimit: 25, maxLimit: 100 },
+    handler: (context) =>
+      ok(pageItems(context.services.srIntegrity.listGaps(context.scope, requiredParam(context.params, "id")), context.pagination ?? { limit: 25 })),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/gaps/{id}/resolve",
+    operationId: "g12.resolveSrGap",
+    protected: true,
+    permission: "g12.sr.gap.resolve",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return ok(
+        context.services.srIntegrity.resolveGap(context.scope, requiredParam(context.params, "id"), {
+          gapStatus: requiredString(body, "gapStatus") as SrGapStatus,
+          explanationCode: optionalString(body, "explanationCode"),
+          resolvedEventId: optionalString(body, "resolvedEventId"),
+          corroboratedBy: optionalString(body, "corroboratedBy"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/attestations",
+    operationId: "g12.createSrAttestation",
+    protected: true,
+    permission: "g12.sr.attest",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created(
+        context.services.srIntegrity.attestChainHead(context.scope, {
+          employeeId: requiredString(body, "employeeId"),
+          attestationKind: requiredString(body, "attestationKind") as SrAttestationKind,
+          attestedRole: requiredString(body, "attestedRole"),
+          signatureMethod: requiredString(body, "signatureMethod") as SrSignatureMethod,
+          certificateSerial: optionalString(body, "certificateSerial"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/extracts",
+    operationId: "g12.issueSrCertifiedExtract",
+    protected: true,
+    permission: "g12.sr.extract.issue",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      // FR-10: certified extract with purpose-driven redaction via the P02 field mask.
+      return created(
+        context.services.srIntegrity.issueCertifiedExtract(context.actor, context.scope, {
+          employeeId: requiredString(body, "employeeId"),
+          scope: optionalString(body, "scope") as SrExtractScope | undefined,
+          redactionPolicy: optionalString(body, "redactionPolicy") as SrRedactionPolicy | undefined,
+          issuedTo: requiredString(body, "issuedTo"),
+          purpose: optionalString(body, "purpose"),
+          periodFrom: optionalString(body, "periodFrom"),
+          periodTo: optionalString(body, "periodTo"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/extracts/{id}",
+    operationId: "g12.getSrCertifiedExtract",
+    protected: true,
+    permission: "g12.sr.extract.read",
+    handler: (context) => {
+      const extract = context.services.srIntegrity.getExtract(context.scope, requiredParam(context.params, "id"));
+      if (!extract) {
+        throw new FoundationError("NOT_FOUND", "Certified extract not found");
+      }
+      return ok({ extract });
+    },
   });
 }
 

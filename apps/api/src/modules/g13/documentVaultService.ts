@@ -1,5 +1,16 @@
 import { AuditService } from "../../platform/audit/auditService";
-import { FoundationError, TenantScope, inScope, nextId, pseudoHash64, requireTenantScope } from "../../platform/types";
+import { FoundationError, TenantScope, inScope, nextId, requireTenantScope, sha256Hex, sha256HexBytes } from "../../platform/types";
+import {
+  DispositionRecord,
+  DocumentAuditRecord,
+  DocumentSecurityRepository,
+  G13AccessAuditAction,
+  G13DispositionAction,
+  InMemoryDocumentSecurityRepository,
+  RetentionClassRecord,
+  ScanResultRecord,
+  SecurityClearanceRecord,
+} from "./documentSecurityRepository";
 
 export interface DocumentLink {
   moduleCode: string;
@@ -15,12 +26,14 @@ export interface DocumentRecord {
   docNo: string;
   title: string;
   ownerEmployeeId?: string;
-  status: "DRAFT" | "ACTIVE" | "SUPERSEDED" | "ORPHANED" | "DELETED" | "DISPOSED" | "QUARANTINED";
+  status: "DRAFT" | "PENDING_SCAN" | "ACTIVE" | "SUPERSEDED" | "ORPHANED" | "DELETED" | "DISPOSED" | "QUARANTINED";
   classification: "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "SECRET" | "TOP_SECRET";
   currentVersionNo: number;
   contentHash: string;
   isWorm: boolean;
   legalHold: boolean;
+  /** E8/E9 retention class binding — disposition eligibility (FR-009). */
+  retentionClassCode?: string;
   links: DocumentLink[];
 }
 
@@ -38,6 +51,37 @@ export interface DocumentVersionView {
   versionNo: number;
   contentHash: string;
   status: DocumentRecord["status"];
+}
+
+/**
+ * BRD G13 E2 `document_versions` — append-only immutable version history (DI-2). checkIn APPENDS a
+ * new row; existing rows are frozen and there is no update or delete path for them.
+ */
+export interface DocumentVersionRecord {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  documentId: string;
+  versionNo: number;
+  title: string;
+  contentHash: string;
+  versionKind: "ORIGINAL" | "CHECKIN";
+  /** Server-assigned append timestamp. */
+  recordedAt: string;
+  createdBy?: string;
+}
+
+/** BRD G13 E14 `checkout_locks` — one ACTIVE lock per document (DI-7); release is explicit. */
+export interface CheckoutLockRecord {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  documentId: string;
+  lockedBy: string;
+  lockedAt: string;
+  expiresAt: string;
+  intentNote?: string;
+  status: "ACTIVE" | "RELEASED" | "EXPIRED" | "FORCE_RELEASED";
 }
 
 export type DocumentFetchIntent = "VIEW" | "DOWNLOAD";
@@ -68,30 +112,117 @@ export interface DocumentDownloadGrant {
   };
 }
 
+// --- DI-11 scan gate seam (BRD G13 FR-007) -------------------------------------------------
+
+export interface ScanRequest {
+  tenantId: string;
+  documentId: string;
+  versionNo: number;
+  bytes: Buffer;
+}
+
+export interface ScanOutcome {
+  verdict: "CLEAN" | "INFECTED" | "PENDING";
+  engine: string;
+  threatName?: string;
+}
+
+/**
+ * DI-11 injectable malware-scan seam: new content enters PENDING_SCAN and only a scan-CLEAN
+ * result promotes it to ACTIVE; INFECTED quarantines. Tests inject a deterministic fake;
+ * production binds a real scanner behind this interface.
+ */
+export interface ScanProvider {
+  scan(request: ScanRequest): ScanOutcome;
+}
+
+/** EICAR standard anti-virus test string (industry marker for scanner verification). */
+const EICAR_SIGNATURE = "EICAR-STANDARD-ANTIVIRUS-TEST-FILE";
+
+/**
+ * Deterministic stub ScanProvider — flags only the EICAR test signature, clearly marked
+ * non-production. INTEGRATION DEBT (DI-11): production must bind a real scan engine behind
+ * the ScanProvider seam; this stub is not a malware scanner.
+ */
+export class StubScanProvider implements ScanProvider {
+  scan(request: ScanRequest): ScanOutcome {
+    const infected = request.bytes.includes(EICAR_SIGNATURE);
+    return infected
+      ? { verdict: "INFECTED", engine: "stub-scan-provider (non-production)", threatName: "EICAR-Test-File" }
+      : { verdict: "CLEAN", engine: "stub-scan-provider (non-production)" };
+  }
+}
+
+// BRD G13 FR-006 classification lattice: deny-by-default applies from CONFIDENTIAL upward.
+const CLASSIFICATION_RANK: Record<DocumentRecord["classification"], number> = {
+  PUBLIC: 0,
+  INTERNAL: 1,
+  CONFIDENTIAL: 2,
+  SECRET: 3,
+  TOP_SECRET: 4,
+};
+const CLEARANCE_GATED_RANK = CLASSIFICATION_RANK.CONFIDENTIAL;
+
 // DI-14 (BRD G13 FR-014 BR-1): a DELETED, DISPOSED, or ORPHANED document can never be attached.
 const NOT_ATTACHABLE_STATUSES: ReadonlyArray<DocumentRecord["status"]> = ["DELETED", "DISPOSED", "ORPHANED"];
 
 const VIEW_RENDER_TTL_SECONDS = 300;
 
+/** Checkout locks auto-expire (BRD G13 E14 `expires_at`, e.g. +8h) to prevent stuck locks. */
+const CHECKOUT_LOCK_TTL_MS = 8 * 60 * 60 * 1000;
+
 export class DocumentVaultService {
   private readonly documents: DocumentRecord[];
+  // Append-only sub-ledger of immutable version rows (document_versions) — rows are frozen on
+  // append and this class exposes no update/delete path for an existing version row.
+  private readonly versions: DocumentVersionRecord[] = [];
+  private readonly checkoutLocks: CheckoutLockRecord[] = [];
   private readonly retentionExtensions = new Map<string, string>();
+  private dispositionSeq = 0;
 
-  constructor(initial: DocumentRecord[], private readonly audit: AuditService) {
+  constructor(
+    initial: DocumentRecord[],
+    private readonly audit: AuditService,
+    private readonly security: DocumentSecurityRepository = new InMemoryDocumentSecurityRepository(),
+    private readonly scanProvider: ScanProvider = new StubScanProvider()
+  ) {
     this.documents = initial.map((doc) => ({ ...doc, links: [...doc.links] }));
+    for (const document of this.documents) {
+      this.appendVersionRow(document, "ORIGINAL", undefined);
+    }
   }
 
+  /**
+   * BRD G13 FR-005/FR-007 ingest. Two paths:
+   *   - `content` (raw bytes as UTF-8 text): the REAL ingest path. content_hash is computed
+   *     server-side as SHA-256 over the actual bytes — a caller-supplied hash is never trusted —
+   *     and the document enters PENDING_SCAN; only a scan-CLEAN verdict promotes it to ACTIVE
+   *     (DI-11); INFECTED quarantines it.
+   *   - `contentHash` without bytes: the pre-scanned/migrated registration seam (documents whose
+   *     bytes live outside this substrate — module attachments, seed/migration rows). These
+   *     register as ACTIVE with PRE_SCANNED provenance recorded on the audit trail.
+   */
   createDocument(
     scope: TenantScope,
     input: {
       title: string;
       ownerEmployeeId?: string;
       classification: DocumentRecord["classification"];
-      contentHash: string;
+      contentHash?: string;
+      content?: string;
       isWorm?: boolean;
     }
   ): DocumentRecord {
     requireTenantScope(scope);
+    const bytes = input.content !== undefined ? Buffer.from(input.content, "utf8") : undefined;
+    if (!bytes && !input.contentHash) {
+      throw new FoundationError("VALIDATION_FAILED", "Provide content bytes or, for pre-scanned registration, a contentHash", {
+        field: "content",
+      });
+    }
+    // FR-G13-005: on the byte-ingest path the service computes the hash itself; any hash the
+    // caller sent alongside the bytes is ignored, never trusted.
+    const contentHash = bytes ? sha256HexBytes(bytes) : (input.contentHash as string);
     const document: DocumentRecord = {
       id: nextId("doc", this.documents.length),
       tenantId: scope.tenantId,
@@ -99,17 +230,103 @@ export class DocumentVaultService {
       docNo: `DOC/PH03/${String(this.documents.length + 1).padStart(4, "0")}`,
       title: input.title,
       ownerEmployeeId: input.ownerEmployeeId,
-      status: "ACTIVE",
+      // DI-11 scan gate: byte ingest is fail-closed — PENDING_SCAN until a CLEAN verdict.
+      status: bytes ? "PENDING_SCAN" : "ACTIVE",
       classification: input.classification,
       currentVersionNo: 1,
-      contentHash: input.contentHash,
+      contentHash,
       isWorm: Boolean(input.isWorm),
       legalHold: false,
       links: [],
     };
     this.documents.push(document);
-    this.audit.recordMutation(scope, { action: "G13_DOCUMENT_CREATE", subjectRef: `documents:${document.id}`, metadata: { classification: document.classification } });
+    this.appendVersionRow(document, "ORIGINAL", scope.actorUserId);
+    this.audit.recordMutation(scope, {
+      action: "G13_DOCUMENT_CREATE",
+      subjectRef: `documents:${document.id}`,
+      metadata: { classification: document.classification, provenance: bytes ? "BYTE_INGEST" : "PRE_SCANNED" },
+    });
+    if (bytes) {
+      this.security.putContent(document.id, document.currentVersionNo, bytes);
+      this.runScan(scope, document, bytes);
+    }
     return this.clone(document);
+  }
+
+  /**
+   * Re-runs the DI-11 scan for a document still in PENDING_SCAN (job seam JOB-G13-SCAN retry).
+   * Only a CLEAN verdict promotes to ACTIVE; INFECTED quarantines.
+   */
+  rescan(scope: TenantScope, documentId: string): DocumentRecord {
+    const document = this.requireDocument(scope, documentId);
+    if (document.status !== "PENDING_SCAN") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only a PENDING_SCAN document can be rescanned", {
+        details: { status: document.status },
+      });
+    }
+    const bytes = this.security.getContent(document.id, document.currentVersionNo);
+    if (!bytes) {
+      throw new FoundationError("PRECONDITION_FAILED", "No stored content available to scan");
+    }
+    this.runScan(scope, document, bytes);
+    return this.clone(document);
+  }
+
+  /** DI-11 scan execution: verdict row appended to E15 scan_results; state promoted fail-closed. */
+  private runScan(scope: TenantScope, document: DocumentRecord, bytes: Buffer): void {
+    let outcome: ScanOutcome;
+    try {
+      outcome = this.scanProvider.scan({
+        tenantId: document.tenantId,
+        documentId: document.id,
+        versionNo: document.currentVersionNo,
+        bytes,
+      });
+    } catch {
+      // Fail-closed: a scanner fault keeps the document PENDING_SCAN (unfetchable), never ACTIVE.
+      this.audit.recordSecurity(scope, {
+        eventType: "G13_DOCUMENT_SCAN_FAILED",
+        result: "FAILED",
+        metadata: { documentId: document.id, versionNo: document.currentVersionNo },
+      });
+      return;
+    }
+    this.security.appendScanResult({
+      tenantId: document.tenantId,
+      entityId: document.entityId,
+      documentId: document.id,
+      versionNo: document.currentVersionNo,
+      engine: outcome.engine,
+      verdict: outcome.verdict,
+      threatName: outcome.threatName,
+      integrityVerified: sha256HexBytes(bytes) === document.contentHash,
+    });
+    if (outcome.verdict === "CLEAN") {
+      // DI-11: only a scan-CLEAN result promotes PENDING_SCAN content to ACTIVE.
+      document.status = "ACTIVE";
+      this.audit.recordMutation(scope, {
+        action: "G13_DOCUMENT_SCAN_CLEAN",
+        subjectRef: `documents:${document.id}`,
+        metadata: { versionNo: document.currentVersionNo, engine: outcome.engine },
+      });
+      return;
+    }
+    if (outcome.verdict === "INFECTED") {
+      // BRD G13 FR-007: infected files are QUARANTINED, hidden, and Security is notified
+      // (MSG-G13-QUARANTINE); fetch is blocked with ERR-G13-MALWARE_DETECTED.
+      document.status = "QUARANTINED";
+      this.audit.recordSecurity(scope, {
+        eventType: "G13_DOCUMENT_QUARANTINED",
+        result: "DENIED",
+        metadata: {
+          documentId: document.id,
+          versionNo: document.currentVersionNo,
+          messageId: "MSG-G13-QUARANTINE",
+          threatName: outcome.threatName,
+        },
+      });
+    }
+    // PENDING: remains PENDING_SCAN — fail-closed until a definitive verdict arrives.
   }
 
   attach(scope: TenantScope, documentId: string, link: DocumentLink): DocumentRecord {
@@ -133,27 +350,110 @@ export class DocumentVaultService {
 
   listVersions(scope: TenantScope, documentId: string): DocumentVersionView[] {
     const document = this.requireDocument(scope, documentId);
-    return [
-      {
+    return this.versions
+      .filter((version) => version.documentId === document.id)
+      .sort((left, right) => left.versionNo - right.versionNo)
+      .map((version) => ({
         documentId: document.id,
-        versionNo: document.currentVersionNo,
-        contentHash: document.contentHash,
+        versionNo: version.versionNo,
+        contentHash: version.contentHash,
         status: document.status,
-      },
-    ];
+      }));
   }
 
-  checkIn(scope: TenantScope, documentId: string, input: { contentHash: string; title?: string }): DocumentRecord {
+  /** Full append-only version rows (immutable — each row is frozen on append). */
+  listVersionRows(scope: TenantScope, documentId: string): readonly DocumentVersionRecord[] {
+    const document = this.requireDocument(scope, documentId);
+    return this.versions.filter((version) => version.documentId === document.id).sort((left, right) => left.versionNo - right.versionNo);
+  }
+
+  /**
+   * BRD G13 FR-004 checkout: acquires the exclusive edit lock. A document checked out by another
+   * actor rejects a conflicting checkout with ERR-G13-DOCUMENT_LOCKED (409). Release is explicit.
+   */
+  checkout(scope: TenantScope, documentId: string, intentNote?: string): CheckoutLockRecord {
+    const document = this.requireDocument(scope, documentId);
+    const actor = this.requireActor(scope);
+    const active = this.activeLock(document.id);
+    if (active) {
+      if (active.lockedBy !== actor) {
+        throw this.documentLockedError(document.id, active);
+      }
+      return { ...active };
+    }
+    const now = Date.now();
+    const lock: CheckoutLockRecord = {
+      id: nextId("lock", this.checkoutLocks.length),
+      tenantId: document.tenantId,
+      entityId: document.entityId,
+      documentId: document.id,
+      lockedBy: actor,
+      lockedAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + CHECKOUT_LOCK_TTL_MS).toISOString(),
+      intentNote,
+      status: "ACTIVE",
+    };
+    this.checkoutLocks.push(lock);
+    this.audit.recordMutation(scope, { action: "G13_DOCUMENT_CHECKOUT", subjectRef: `documents:${document.id}`, metadata: { lockId: lock.id } });
+    return { ...lock };
+  }
+
+  /** Explicit lock release by the holder — locks are never silently dropped by checkIn. */
+  releaseCheckout(scope: TenantScope, documentId: string): CheckoutLockRecord {
+    const document = this.requireDocument(scope, documentId);
+    const actor = this.requireActor(scope);
+    const active = this.activeLock(document.id);
+    if (!active) {
+      throw new FoundationError("PRECONDITION_FAILED", "Document is not checked out");
+    }
+    if (active.lockedBy !== actor) {
+      throw new FoundationError("FORBIDDEN", "Only the checkout holder may release the lock", {
+        details: { documentId: document.id },
+      });
+    }
+    active.status = "RELEASED";
+    this.audit.recordMutation(scope, { action: "G13_DOCUMENT_CHECKOUT_RELEASE", subjectRef: `documents:${document.id}`, metadata: { lockId: active.id } });
+    return { ...active };
+  }
+
+  getCheckoutLock(scope: TenantScope, documentId: string): CheckoutLockRecord | null {
+    const document = this.requireDocument(scope, documentId);
+    const active = this.activeLock(document.id);
+    return active ? { ...active } : null;
+  }
+
+  checkIn(scope: TenantScope, documentId: string, input: { contentHash?: string; content?: string; title?: string }): DocumentRecord {
     const document = this.requireDocument(scope, documentId);
     if (document.legalHold) {
       throw new FoundationError("PRECONDITION_FAILED", "Legal hold blocks document checkin");
     }
+    // BRD G13 FR-004: a document checked out by another actor rejects conflicting writes.
+    const active = this.activeLock(document.id);
+    if (active && active.lockedBy !== (scope.actorUserId ?? "")) {
+      throw this.documentLockedError(document.id, active);
+    }
+    const bytes = input.content !== undefined ? Buffer.from(input.content, "utf8") : undefined;
+    if (!bytes && !input.contentHash) {
+      throw new FoundationError("VALIDATION_FAILED", "Provide content bytes or, for pre-scanned registration, a contentHash", {
+        field: "content",
+      });
+    }
+    // Append-only version history: checkIn APPENDS a new immutable version row; the prior rows
+    // are never mutated or deleted — the document header only advances its current pointer.
     document.currentVersionNo += 1;
-    document.contentHash = input.contentHash;
+    // FR-G13-005: byte check-ins hash server-side (caller hash never trusted) and re-enter the
+    // DI-11 scan gate; hash-only check-ins remain the pre-scanned registration seam.
+    document.contentHash = bytes ? sha256HexBytes(bytes) : (input.contentHash as string);
     if (input.title) {
       document.title = input.title;
     }
+    this.appendVersionRow(document, "CHECKIN", scope.actorUserId);
     this.audit.recordMutation(scope, { action: "G13_DOCUMENT_CHECKIN", subjectRef: `documents:${document.id}`, metadata: { versionNo: document.currentVersionNo } });
+    if (bytes) {
+      this.security.putContent(document.id, document.currentVersionNo, bytes);
+      document.status = "PENDING_SCAN";
+      this.runScan(scope, document, bytes);
+    }
     return this.clone(document);
   }
 
@@ -211,8 +511,9 @@ export class DocumentVaultService {
   }
 
   // FR-G13-016 R2: intent-resolved fetch. VIEW and DOWNLOAD return structurally different bodies and
-  // each emits its own access-audit event.
-  fetch(scope: TenantScope, documentId: string, intent: DocumentFetchIntent): DocumentViewDescriptor | DocumentDownloadGrant {
+  // each lands its own access-audit event in the append-only E12 document_audit ledger.
+  // Gate order (all fail-closed): lifecycle -> DI-11 scan gate -> FR-006 clearance -> FR-005 integrity.
+  fetch(scope: TenantScope & { roles?: string[] }, documentId: string, intent: DocumentFetchIntent): DocumentViewDescriptor | DocumentDownloadGrant {
     const document = this.requireDocument(scope, documentId);
     if (document.status === "DISPOSED" || document.status === "DELETED") {
       // Taxonomy ERR-G13-DOCUMENT_DISPOSED: fetch of a disposed document surfaces as NOT_FOUND.
@@ -220,8 +521,26 @@ export class DocumentVaultService {
         details: { messageId: "ERR-G13-DOCUMENT_DISPOSED", status: document.status },
       });
     }
+    if (document.status === "PENDING_SCAN") {
+      // DI-11 fail-closed: content awaiting a scan verdict is not fetchable for normal intents.
+      this.appendAccessAudit(scope, document, intent, "DENIED", "SCAN_PENDING");
+      throw new FoundationError("PRECONDITION_FAILED", "Document content is pending malware scan; retry after the scan completes", {
+        details: { status: "PENDING_SCAN" },
+      });
+    }
+    if (document.status === "QUARANTINED") {
+      // BRD G13 FR-007: quarantined (infected) content is hidden and unfetchable.
+      this.appendAccessAudit(scope, document, intent, "DENIED", "ERR-G13-MALWARE_DETECTED");
+      throw new FoundationError("ERR-G13-MALWARE_DETECTED", "Document is quarantined and cannot be fetched", {
+        details: { messageId: "ERR-G13-MALWARE_DETECTED", status: document.status },
+      });
+    }
+    this.requireClearance(scope, document, intent);
+    this.verifyContentIntegrity(scope, document, intent);
+    // FR-G13-015/016: the access event (actor, document, version, intent) lands in document_audit.
+    this.appendAccessAudit(scope, document, intent, "SUCCESS");
     const sessionSeed = `${document.id}:${document.currentVersionNo}:${intent}:${scope.actorUserId ?? ""}:${scope.correlationId ?? ""}`;
-    const grantToken = pseudoHash64(sessionSeed).slice(0, 32);
+    const grantToken = sha256Hex(sessionSeed).slice(0, 32);
     if (intent === "VIEW") {
       this.audit.recordSecurity(scope, {
         eventType: "G13_DOCUMENT_FETCH_VIEW",
@@ -258,6 +577,296 @@ export class DocumentVaultService {
     };
   }
 
+  /**
+   * BRD G13 FR-006 (E21 security_clearances): DENY-BY-DEFAULT classification gate. Access to a
+   * CONFIDENTIAL+ document requires an ACTIVE clearance row at or above the document's
+   * classification level for the acting user (or one of their roles). Absence of a row denies —
+   * it never defaults to allow.
+   */
+  private requireClearance(scope: TenantScope & { roles?: string[] }, document: DocumentRecord, intent: DocumentFetchIntent): void {
+    if (CLASSIFICATION_RANK[document.classification] < CLEARANCE_GATED_RANK) {
+      return;
+    }
+    const now = Date.now();
+    const roles = scope.roles ?? [];
+    const cleared = this.security.listClearances(document.tenantId).some((clearance) => {
+      if (clearance.status !== "ACTIVE") {
+        return false;
+      }
+      if (clearance.validUntil && Date.parse(clearance.validUntil) < now) {
+        return false;
+      }
+      const principalMatch =
+        (clearance.principalType === "USER" && clearance.principalRef === scope.actorUserId) ||
+        (clearance.principalType === "ROLE" && roles.includes(clearance.principalRef));
+      return principalMatch && CLASSIFICATION_RANK[clearance.clearanceLevel] >= CLASSIFICATION_RANK[document.classification];
+    });
+    if (!cleared) {
+      this.appendAccessAudit(scope, document, intent, "DENIED", "ERR-G13-CLEARANCE_INSUFFICIENT");
+      this.audit.recordSecurity(scope, {
+        eventType: "G13_DOCUMENT_CLEARANCE_DENIED",
+        result: "DENIED",
+        metadata: { documentId: document.id, classification: document.classification, intent },
+      });
+      throw new FoundationError("ERR-G13-CLEARANCE_INSUFFICIENT", "Security clearance is insufficient for this document's classification", {
+        details: { messageId: "ERR-G13-CLEARANCE_INSUFFICIENT", classification: document.classification },
+      });
+    }
+  }
+
+  /**
+   * BRD G13 FR-005/FR-015: every fetch recomputes SHA-256 over the stored bytes and compares it
+   * to the recorded content_hash BEFORE returning content. A mismatch withholds the content,
+   * quarantines the document, and raises a security audit event.
+   */
+  private verifyContentIntegrity(scope: TenantScope, document: DocumentRecord, intent: DocumentFetchIntent): void {
+    const bytes = this.security.getContent(document.id, document.currentVersionNo);
+    if (!bytes) {
+      // Pre-scanned/migrated registrations keep their bytes outside this substrate; their hash
+      // provenance was recorded at ingest and cannot be re-verified here.
+      return;
+    }
+    const recomputed = sha256HexBytes(bytes);
+    if (recomputed !== document.contentHash) {
+      document.status = "QUARANTINED";
+      this.appendAccessAudit(scope, document, intent, "DENIED", "ERR-G13-INTEGRITY_FAILED");
+      this.audit.recordSecurity(scope, {
+        eventType: "G13_DOCUMENT_INTEGRITY_FAILED",
+        result: "FAILED",
+        metadata: { documentId: document.id, versionNo: document.currentVersionNo, intent },
+      });
+      throw new FoundationError("ERR-G13-INTEGRITY_FAILED", "Stored content failed SHA-256 integrity verification; content withheld", {
+        details: { messageId: "ERR-G13-INTEGRITY_FAILED", documentId: document.id },
+      });
+    }
+  }
+
+  /** Appends one E12 document_audit row (append-only, hash-chained; repository owns the chain). */
+  private appendAccessAudit(
+    scope: TenantScope,
+    document: DocumentRecord,
+    action: G13AccessAuditAction,
+    result: "SUCCESS" | "DENIED",
+    denialReason?: string
+  ): DocumentAuditRecord {
+    return this.security.appendAccessAudit({
+      tenantId: document.tenantId,
+      entityId: document.entityId,
+      documentId: document.id,
+      versionNo: document.currentVersionNo,
+      action,
+      actorUserId: scope.actorUserId ?? "",
+      correlationId: scope.correlationId,
+      result,
+      denialReason,
+    });
+  }
+
+  /** Read model over the append-only E12 access ledger (VIEW/DOWNLOAD events, R5 chain). */
+  listAccessAudit(scope: TenantScope, documentId: string): DocumentAuditRecord[] {
+    const document = this.requireDocument(scope, documentId);
+    return this.security.listAccessAudit(document.id);
+  }
+
+  /** Read model over the append-only E15 scan_results ledger. */
+  listScanResults(scope: TenantScope, documentId: string): ScanResultRecord[] {
+    const document = this.requireDocument(scope, documentId);
+    return this.security.listScanResults(document.id);
+  }
+
+  /**
+   * BRD G13 FR-006/FR-017 (E21): grant a security clearance. DI-16 SoD: the approving checker
+   * must differ from the granting maker; without a distinct approver the row stays
+   * PENDING_APPROVAL, which the deny-by-default gate ignores.
+   */
+  grantSecurityClearance(
+    scope: TenantScope,
+    input: {
+      principalType: "USER" | "ROLE";
+      principalRef: string;
+      clearanceLevel: DocumentRecord["classification"];
+      justification: string;
+      approvedBy?: string;
+      validUntil?: string;
+    }
+  ): SecurityClearanceRecord {
+    const grantedBy = this.requireActor(scope);
+    if (input.approvedBy && input.approvedBy === grantedBy) {
+      // DI-16 (ck_clearance_sod): approver must differ from granter.
+      throw new FoundationError("ERR-G13-SOD_VIOLATION", "Clearance approval requires a checker different from the granting maker", {
+        details: { messageId: "ERR-G13-SOD_VIOLATION" },
+      });
+    }
+    const clearance = this.security.saveClearance({
+      tenantId: scope.tenantId,
+      entityId: scope.entityId,
+      principalType: input.principalType,
+      principalRef: input.principalRef,
+      clearanceLevel: input.clearanceLevel,
+      status: input.approvedBy ? "ACTIVE" : "PENDING_APPROVAL",
+      justification: input.justification,
+      grantedBy,
+      approvedBy: input.approvedBy,
+      validFrom: new Date().toISOString(),
+      validUntil: input.validUntil,
+    });
+    this.audit.recordSecurity(scope, {
+      eventType: "G13_CLEARANCE_GRANTED",
+      result: "SUCCESS",
+      metadata: {
+        clearanceId: clearance.id,
+        principalType: clearance.principalType,
+        principalRef: clearance.principalRef,
+        clearanceLevel: clearance.clearanceLevel,
+        status: clearance.status,
+      },
+    });
+    return clearance;
+  }
+
+  /** BRD G13 FR-009 (E8): define a tenant retention class (binds disposition eligibility). */
+  defineRetentionClass(
+    scope: TenantScope,
+    input: { code: string; name: string; retentionPeriodMonths?: number; isPermanent?: boolean; dispositionAction: G13DispositionAction }
+  ): RetentionClassRecord {
+    requireTenantScope(scope);
+    const record = this.security.saveRetentionClass({
+      tenantId: scope.tenantId,
+      code: input.code,
+      name: input.name,
+      retentionPeriodMonths: input.retentionPeriodMonths,
+      isPermanent: Boolean(input.isPermanent),
+      dispositionAction: input.dispositionAction,
+    });
+    this.audit.recordMutation(scope, { action: "G13_RETENTION_CLASS_DEFINE", subjectRef: `retention_classes:${record.code}` });
+    return record;
+  }
+
+  /** BRD G13 FR-009 (E9): bind a document to a retention class — prerequisite for disposition. */
+  assignRetentionClass(scope: TenantScope, documentId: string, retentionClassCode: string): DocumentRecord {
+    const document = this.requireDocument(scope, documentId);
+    if (!this.security.getRetentionClass(document.tenantId, retentionClassCode)) {
+      throw new FoundationError("NOT_FOUND", "Retention class not found", { field: "retentionClassCode" });
+    }
+    document.retentionClassCode = retentionClassCode;
+    this.audit.recordMutation(scope, {
+      action: "G13_RETENTION_CLASS_ASSIGN",
+      subjectRef: `documents:${document.id}`,
+      metadata: { retentionClassCode },
+    });
+    return this.clone(document);
+  }
+
+  /**
+   * BRD G13 FR-009 (E18 disposition_records): the maker proposes disposition of a document whose
+   * retention class makes it eligible. Execution is separately gated on checker approval and hold state.
+   */
+  proposeDisposition(scope: TenantScope, documentId: string, action?: G13DispositionAction): DispositionRecord {
+    const document = this.requireDocument(scope, documentId);
+    const proposedBy = this.requireActor(scope);
+    if (!document.retentionClassCode) {
+      throw new FoundationError("PRECONDITION_FAILED", "Document has no retention class; disposition eligibility is undefined", {
+        details: { documentId: document.id },
+      });
+    }
+    const retentionClass = this.security.getRetentionClass(document.tenantId, document.retentionClassCode);
+    if (!retentionClass) {
+      throw new FoundationError("PRECONDITION_FAILED", "Bound retention class no longer exists", {
+        details: { retentionClassCode: document.retentionClassCode },
+      });
+    }
+    if (retentionClass.isPermanent) {
+      // Taxonomy ERR-G13-RETENTION_PERMANENT: permanent-class records are never disposition-eligible.
+      throw new FoundationError("CONFLICT", "A permanent retention class blocks disposition", {
+        details: { messageId: "ERR-G13-RETENTION_PERMANENT", retentionClassCode: retentionClass.code },
+      });
+    }
+    const disposition = this.security.saveDisposition({
+      id: nextId("disp", this.dispositionSeq++),
+      tenantId: document.tenantId,
+      entityId: document.entityId,
+      documentId: document.id,
+      retentionClassCode: retentionClass.code,
+      action: action ?? retentionClass.dispositionAction,
+      proposedBy,
+      status: "PROPOSED",
+    });
+    this.audit.recordMutation(scope, {
+      action: "G13_DISPOSITION_PROPOSE",
+      subjectRef: `disposition_records:${disposition.id}`,
+      metadata: { documentId: document.id, action: disposition.action },
+    });
+    return disposition;
+  }
+
+  /**
+   * BRD G13 FR-009 SoD (DI-10): the approving checker must differ from the proposing maker —
+   * self-approval is rejected with ERR-G13-SOD_VIOLATION (403).
+   */
+  approveDisposition(scope: TenantScope, dispositionId: string): DispositionRecord {
+    const checker = this.requireActor(scope);
+    const disposition = this.requireDisposition(scope, dispositionId);
+    if (disposition.status !== "PROPOSED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only a PROPOSED disposition can be approved", {
+        details: { status: disposition.status },
+      });
+    }
+    if (disposition.proposedBy === checker) {
+      throw new FoundationError("ERR-G13-SOD_VIOLATION", "Disposition approval requires a checker different from the proposing maker", {
+        details: { messageId: "ERR-G13-SOD_VIOLATION", dispositionId: disposition.id },
+      });
+    }
+    disposition.approvedBy = checker;
+    disposition.status = "APPROVED";
+    this.security.saveDisposition(disposition);
+    this.audit.recordMutation(scope, {
+      action: "G13_DISPOSITION_APPROVE",
+      subjectRef: `disposition_records:${disposition.id}`,
+      metadata: { documentId: disposition.documentId },
+    });
+    return { ...disposition };
+  }
+
+  /** Execution: still fail-closed on legal hold / WORM (FR-013) even after checker approval. */
+  executeDisposition(scope: TenantScope, dispositionId: string): DispositionRecord {
+    this.requireActor(scope);
+    const disposition = this.requireDisposition(scope, dispositionId);
+    if (disposition.status !== "APPROVED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only an APPROVED disposition can be executed", {
+        details: { status: disposition.status },
+      });
+    }
+    const document = this.requireDocument(scope, disposition.documentId);
+    if (document.legalHold || document.isWorm) {
+      disposition.status = "BLOCKED_HOLD";
+      this.security.saveDisposition(disposition);
+      throw new FoundationError("PRECONDITION_FAILED", "Legal hold or WORM retention blocks disposition execution", {
+        details: { messageId: "ERR-G13-LEGAL_HOLD_ACTIVE", documentId: document.id },
+      });
+    }
+    document.status = "DISPOSED";
+    disposition.status = "EXECUTED";
+    disposition.executedAt = new Date().toISOString();
+    disposition.evidenceHash = document.contentHash;
+    this.security.saveDisposition(disposition);
+    this.appendAccessAudit(scope, document, "DISPOSE", "SUCCESS");
+    this.audit.recordMutation(scope, {
+      action: "G13_DISPOSITION_EXECUTE",
+      subjectRef: `disposition_records:${disposition.id}`,
+      metadata: { documentId: document.id, evidenceHash: disposition.evidenceHash },
+    });
+    return { ...disposition };
+  }
+
+  private requireDisposition(scope: TenantScope, dispositionId: string): DispositionRecord {
+    requireTenantScope(scope);
+    const disposition = this.security.getDisposition(dispositionId);
+    if (!disposition || disposition.tenantId !== scope.tenantId) {
+      throw new FoundationError("NOT_FOUND", "Disposition record not found");
+    }
+    return disposition;
+  }
+
   get(scope: TenantScope, documentId: string): DocumentRecord | null {
     const document = this.documents.find((item) => inScope(item, scope) && item.id === documentId);
     return document ? this.clone(document) : null;
@@ -281,6 +890,45 @@ export class DocumentVaultService {
       throw new FoundationError("NOT_FOUND", "Document not found");
     }
     return document;
+  }
+
+  /** Appends one frozen document_versions row for the document's current pointer. */
+  private appendVersionRow(document: DocumentRecord, versionKind: DocumentVersionRecord["versionKind"], createdBy: string | undefined): void {
+    this.versions.push(
+      Object.freeze({
+        id: nextId("docver", this.versions.length),
+        tenantId: document.tenantId,
+        entityId: document.entityId,
+        documentId: document.id,
+        versionNo: document.currentVersionNo,
+        title: document.title,
+        contentHash: document.contentHash,
+        versionKind,
+        recordedAt: new Date().toISOString(),
+        createdBy,
+      })
+    );
+  }
+
+  private activeLock(documentId: string): CheckoutLockRecord | undefined {
+    const now = Date.now();
+    return this.checkoutLocks.find((lock) => lock.documentId === documentId && lock.status === "ACTIVE" && Date.parse(lock.expiresAt) > now);
+  }
+
+  private requireActor(scope: TenantScope): string {
+    requireTenantScope(scope);
+    if (!scope.actorUserId) {
+      throw new FoundationError("UNAUTHENTICATED", "Checkout requires an authenticated actor");
+    }
+    return scope.actorUserId;
+  }
+
+  /** Taxonomy ERR-G13-DOCUMENT_LOCKED (409): checked out by another user (BRD G13 error catalogue). */
+  private documentLockedError(documentId: string, lock: CheckoutLockRecord): FoundationError {
+    return new FoundationError("ERR-G13-DOCUMENT_LOCKED", "Document is checked out by another user", {
+      field: "documentId",
+      details: { messageId: "ERR-G13-DOCUMENT_LOCKED", documentId, lockedBy: lock.lockedBy, expiresAt: lock.expiresAt },
+    });
   }
 
   private clone(document: DocumentRecord): DocumentRecord {

@@ -238,10 +238,12 @@ test("PH-04C G12 reversal consumes the is_reversal envelope and appends without 
   assert.equal(reversal.body.event.reversalOfEventId, original.body.event.id);
   assert.equal(reversal.body.event.payload.reverses_source_reference_id, "employee:identity:rev:1");
 
-  // Append-only: the original event is untouched and both entries remain on the timeline.
+  // Append-only: the original event's CONTENT is untouched (entryHash unchanged) and both entries
+  // remain on the timeline. Its status is a projection of the hash-chained sr_status_events
+  // sub-ledger (PH-10A), where the reversal appended a SUPERSESSION transition — no field update.
   const originalAfter = call(api, { method: "GET", path: `/api/v1/sr/events/${original.body.event.id}` });
   assert.equal(originalAfter.status, 200);
-  assert.equal(originalAfter.body.event.status, "ACTIVE");
+  assert.equal(originalAfter.body.event.status, "SUPERSEDED");
   assert.equal(originalAfter.body.event.entryHash, original.body.event.entryHash);
   const timeline = call(api, { method: "GET", path: `/api/v1/sr/employees/${ph03Ids.employee}/timeline` });
   assert.equal(timeline.body.items.length, 2);
@@ -276,6 +278,23 @@ test("PH-04C G13 :fetch requires intent and returns structurally different VIEW 
   });
   assert.equal(created.status, 201);
   const documentId = created.body.document.id;
+
+  // PH-10C FR-006: fetching a CONFIDENTIAL document now requires an ACTIVE security clearance
+  // (deny-by-default). Grant one to the fixture actor; the DI-16 checker differs from the granter.
+  const clearance = call(api, {
+    method: "POST",
+    path: "/api/v1/security-clearances",
+    headers: { "Idempotency-Key": "idem-g13-fetch-clearance-001" },
+    body: {
+      principalType: "USER",
+      principalRef: "user-ph04-g12-g13",
+      clearanceLevel: "CONFIDENTIAL",
+      justification: "Route-conformance fixture clearance",
+      approvedBy: "user-ph04-clearance-checker",
+    },
+  });
+  assert.equal(clearance.status, 201);
+  assert.equal(clearance.body.clearance.status, "ACTIVE");
 
   const missingIntent = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch` });
   assert.equal(missingIntent.status, 400);

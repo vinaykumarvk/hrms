@@ -34,8 +34,13 @@ import { InMemoryPensionRuleRepository } from "../modules/g11/pensionRuleReposit
 import { PensionBenefitService } from "../modules/g11/pensionBenefitService";
 import { InMemoryPensionBenefitRepository } from "../modules/g11/pensionBenefitRepository";
 import { ServiceRegisterService } from "../modules/g12/serviceRegisterService";
-import { DocumentVaultService } from "../modules/g13/documentVaultService";
+import { SrIntegrityService, TimestampAuthority } from "../modules/g12/srIntegrityService";
+import { InMemorySrIntegrityRepository } from "../modules/g12/srIntegrityRepository";
+import { DocumentVaultService, ScanProvider, StubScanProvider } from "../modules/g13/documentVaultService";
+import { InMemoryDocumentSecurityRepository } from "../modules/g13/documentSecurityRepository";
 import { AnalyticsService } from "../modules/g14/analyticsService";
+import { AnalyticsEngineService } from "../modules/g14/analyticsEngineService";
+import { InMemoryAnalyticsEngineRepository } from "../modules/g14/analyticsEngineRepository";
 import { NotificationService } from "../notifications/notificationService";
 import { ph03AuthorityFacts, ph03Documents, ph03Employees, ph03Ids, ph03LeaveTypes } from "../seed/ph03Seed";
 import { AuditService } from "./audit/auditService";
@@ -65,8 +70,10 @@ export interface FoundationServices {
   pensionRules: PensionRuleService;
   pensionBenefits: PensionBenefitService;
   serviceRegister: ServiceRegisterService;
+  srIntegrity: SrIntegrityService;
   documentVault: DocumentVaultService;
   analytics: AnalyticsService;
+  analyticsEngine: AnalyticsEngineService;
   workflow: HrmsWorkflowService;
   jobs: JobService;
   notifications: NotificationService;
@@ -78,6 +85,10 @@ export interface FoundationServicesOptions {
   g04RelayHmacKey?: string;
   /** PH-08E: G09 due-process repository override (e.g. the file-backed impl for DI-21 tamper checks). */
   g09DueProcessRepository?: G09DueProcessRepository;
+  /** PH-10B: RFC 3161 TSA override for G12 anchoring/attestation (a fake in tests; a licensed-CA client in production). */
+  g12TimestampAuthority?: TimestampAuthority;
+  /** PH-10C: DI-11 malware-scan seam override for the G13 vault (a deterministic fake in tests; a real engine in production). */
+  g13ScanProvider?: ScanProvider;
 }
 
 /**
@@ -101,7 +112,15 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const authorization = new AuthorizationService();
   const serviceRegister = new ServiceRegisterService(audit);
   const employeeMaster = new EmployeeMasterService(ph03Employees(), authorization, audit, serviceRegister, new InMemoryEmployeeProfileRepository());
-  const documentVault = new DocumentVaultService(ph03Documents(), audit);
+  // PH-10C: G13 hardening entities (E15 scan_results, E21 security_clearances, E12 document_audit,
+  // E8 retention classes, E18 disposition_records) behind the repository pattern; the DI-11 scan
+  // seam is injectable (fake in tests; the stub is recorded integration debt, not a scanner).
+  const documentVault = new DocumentVaultService(
+    ph03Documents(),
+    audit,
+    new InMemoryDocumentSecurityRepository(),
+    options.g13ScanProvider ?? new StubScanProvider()
+  );
   const authorityResolution = new AuthorityResolutionService(ph03AuthorityFacts());
   const notifications = new NotificationService();
   const workflow = new HrmsWorkflowService(authorityResolution, audit, notifications);
@@ -125,6 +144,8 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
+  // PH-10D: shared with the G14 engine as the MART_ESTABLISHMENT contracted read source.
+  const establishmentQslRepository = new InMemoryEstablishmentQslRepository();
   const promotion = new PromotionService(
     employeeMaster,
     authorization,
@@ -133,7 +154,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     serviceRegister,
     documentVault,
     notifications,
-    new InMemoryEstablishmentQslRepository(),
+    establishmentQslRepository,
     new InMemoryPromotionDepthRepository()
   );
   // PH-08D: G07 taxonomy/gap-contract/campaign + G08 cycle/goal/disclosure/part-period depth
@@ -199,7 +220,18 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   // PH-09D: G11 FR-14 pre-credit account verification gate (E42) — disbursement fails
   // closed without an ACTIVE PASSED verification (ERR-G11-ACCOUNT-VERIFY, IR16).
   const pensionDisbursement = new PensionDisbursementService(authorization, audit, pension, new InMemoryPensionDisbursementRepository());
+  // PH-10B: G12 integrity pillars — verify + JOB-G12-INTEGRITY, Merkle anchors behind the
+  // injectable RFC 3161 TSA seam (JOB-G12-ANCHOR), gap register (JOB-G12-GAPSCAN),
+  // attestations, and P02-redacted certified extracts — behind the repository pattern.
+  const srIntegrity = new SrIntegrityService(authorization, audit, serviceRegister, jobs, new InMemorySrIntegrityRepository(), options.g12TimestampAuthority);
   const analytics = new AnalyticsService(employeeMaster, workflow, serviceRegister, documentVault, disciplinary, payroll, pension, authorization, audit);
+  // PH-10D: the real G14 analytics engine (migration 0021) — governed/versioned kpi_definitions,
+  // append-only bitemporal kpi_snapshots (FR-23), JOB-G14-MART-* refresh over the seeded
+  // analytics_datamarts with datamart_refresh_logs (FR-03), k-anonymity suppression_policies
+  // (FR-17, default k=5), and maker-checker analytics_scope_policies (FR-04) — behind the
+  // repository pattern. The seeded substrate comes from the BRD, not invented per-domain.
+  const analyticsEngine = new AnalyticsEngineService(authorization, audit, jobs, leave, apar, establishmentQslRepository, new InMemoryAnalyticsEngineRepository());
+  analyticsEngine.seedTenantDefaults({ tenantId: ph03Ids.tenant, entityId: ph03Ids.entity });
   const migrationStaging = new MigrationStagingService(employeeMaster);
   return {
     audit,
@@ -223,8 +255,10 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     pensionRules,
     pensionBenefits,
     serviceRegister,
+    srIntegrity,
     documentVault,
     analytics,
+    analyticsEngine,
     workflow,
     jobs,
     notifications,

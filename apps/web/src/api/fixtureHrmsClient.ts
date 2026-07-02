@@ -15,7 +15,11 @@ import {
   EmployeeDependentRecord,
   EmployeeProfileView,
   EmployeeSummary,
+  AnalyticsAggregateCell,
+  AnalyticsAggregateResult,
+  AnalyticsKpiDefinitionView,
   AnalyticsSliceSummary,
+  MartRefreshLogView,
   AparSliceSummary,
   DisciplinarySliceSummary,
   HrmsApiError,
@@ -237,6 +241,179 @@ const analyticsSlice: AnalyticsSliceSummary = {
   migrationMarker: "MIGRATION_DRY_RUN",
   uatMarker: "UAT_ACCEPTANCE_PACK",
 };
+
+// ---- PH-10E: G14 analytics engine fixtures (KPIs, suppression-aware aggregates, refresh logs) ----
+
+const FIXTURE_MIN_CELL_SIZE_K = 5;
+
+/** Governed E03 kpi_definitions rows: ACTIVE versions compute; the DRAFT row must be filtered out. */
+const analyticsKpis: AnalyticsKpiDefinitionView[] = [
+  {
+    id: "kpi-fixture-000001",
+    kpiCode: "KPI_LEAVE_APPLICATIONS",
+    name: "Leave applications",
+    description: "Leave applications recorded in the leave read model",
+    domain: "LEAVE",
+    version: 2,
+    definitionHash: "f1x7u4e-kpi-leave-hash",
+    sourceMartCode: "MART_LEAVE",
+    expression: "COUNT(*)",
+    unit: "applications",
+    grain: "ORG_UNIT",
+    sensitivity: "INTERNAL",
+    status: "ACTIVE",
+  },
+  {
+    id: "kpi-fixture-000002",
+    kpiCode: "KPI_ATTENDANCE_DAYS",
+    name: "Attendance days",
+    description: "Attendance day records in the attendance read model",
+    domain: "ATTENDANCE",
+    version: 1,
+    definitionHash: "f1x7u4e-kpi-attendance-hash",
+    sourceMartCode: "MART_ATTENDANCE",
+    expression: "COUNT(*)",
+    unit: "days",
+    grain: "ORG_UNIT",
+    sensitivity: "INTERNAL",
+    status: "ACTIVE",
+  },
+  {
+    id: "kpi-fixture-000003",
+    kpiCode: "KPI_SANCTIONED_POSTS",
+    name: "Sanctioned posts",
+    description: "Sanctioned posts in the establishment read model",
+    domain: "ESTABLISHMENT",
+    version: 1,
+    definitionHash: "f1x7u4e-kpi-establishment-hash",
+    sourceMartCode: "MART_ESTABLISHMENT",
+    expression: "COUNT(*)",
+    unit: "posts",
+    grain: "ORG_UNIT",
+    sensitivity: "INTERNAL",
+    status: "ACTIVE",
+  },
+  {
+    id: "kpi-fixture-000004",
+    kpiCode: "KPI_APPRAISAL_FORMS",
+    name: "Appraisal forms",
+    description: "APAR forms in the appraisal read model (not yet activated)",
+    domain: "APPRAISAL",
+    version: 1,
+    definitionHash: "f1x7u4e-kpi-appraisal-hash",
+    sourceMartCode: "MART_APPRAISAL",
+    expression: "COUNT(*)",
+    unit: "forms",
+    grain: "ORG_UNIT",
+    sensitivity: "RESTRICTED",
+    status: "DRAFT",
+  },
+];
+
+/**
+ * Raw cohort member counts per mart/dimension. These stay INTERNAL to the fixture: the
+ * aggregate read applies the same fail-closed k-anonymity mirror as the engine, so any
+ * count below k leaves this module only as a suppressed cell with value=null.
+ * MART_ESTABLISHMENT/cadreId carries the deliberate small cohort (CADRE_RESERVED = 3 < k)
+ * used by the PH-10E negative rendering test.
+ */
+const martDimensionCounts: Record<string, Record<string, Record<string, number>>> = {
+  MART_LEAVE: {
+    leaveTypeId: { CL: 7, EL: 9 },
+    status: { APPROVED: 9, SUBMITTED: 7 },
+  },
+  MART_ATTENDANCE: {
+    status: { ON_LEAVE: 6, PRESENT: 22 },
+  },
+  MART_ESTABLISHMENT: {
+    cadreId: { CADRE_FIELD: 8, CADRE_RESERVED: 3, CADRE_SECRETARIAT: 12 },
+    orgUnitId: { "org-unit-0001": 14, "org-unit-0002": 9 },
+    status: { SANCTIONED: 18, VACANT: 5 },
+  },
+  MART_APPRAISAL: {},
+};
+
+/**
+ * Mirror of AnalyticsEngineService.queryAggregate (FR-17): cells below k are suppressed
+ * (ERR-G14-SMALL-CELL, value null); a lone suppressed cell pulls the smallest visible cell
+ * with it (ERR-G14-COMP-SUPPRESS); any suppression withholds the total.
+ */
+function suppressFixtureCells(groups: Record<string, number>): { cells: AnalyticsAggregateCell[]; total: number | null; suppressedCells: number } {
+  const entries = Object.entries(groups).sort((left, right) => left[0].localeCompare(right[0]));
+  const cells: AnalyticsAggregateCell[] = entries.map(([key, count]) =>
+    count < FIXTURE_MIN_CELL_SIZE_K
+      ? { key, value: null, suppressed: true, suppressionReason: "ERR-G14-SMALL-CELL" as const }
+      : { key, value: count, suppressed: false }
+  );
+  const primarySuppressed = cells.filter((cell) => cell.suppressed).length;
+  if (primarySuppressed === 1) {
+    const visible = cells.filter((cell) => !cell.suppressed);
+    if (visible.length > 0) {
+      const smallest = visible.reduce((min, cell) => ((cell.value ?? 0) < (min.value ?? 0) ? cell : min));
+      smallest.value = null;
+      smallest.suppressed = true;
+      smallest.suppressionReason = "ERR-G14-COMP-SUPPRESS";
+    }
+  }
+  const suppressedCells = cells.filter((cell) => cell.suppressed).length;
+  const total = suppressedCells > 0 ? null : entries.reduce((sum, [, count]) => sum + count, 0);
+  return { cells, total, suppressedCells };
+}
+
+function isoMinutesAgo(minutes: number): string {
+  return new Date(Date.now() - minutes * 60000).toISOString();
+}
+
+/**
+ * Append-only E10 datamart_refresh_logs rows: MART_LEAVE/MART_ATTENDANCE are fresh,
+ * MART_APPRAISAL FAILED its last run, and MART_ESTABLISHMENT last succeeded well past
+ * the 60-minute freshness SLA — both must surface as stale in the freshness panel.
+ */
+function buildMartRefreshLogs(): MartRefreshLogView[] {
+  return [
+    {
+      id: "mrl-fixture-000001",
+      martCode: "MART_LEAVE",
+      runType: "SCHEDULED",
+      startedAt: isoMinutesAgo(6),
+      finishedAt: isoMinutesAgo(5),
+      rowsRead: 16,
+      rowsWritten: 16,
+      status: "SUCCESS",
+    },
+    {
+      id: "mrl-fixture-000002",
+      martCode: "MART_ATTENDANCE",
+      runType: "SCHEDULED",
+      startedAt: isoMinutesAgo(12),
+      finishedAt: isoMinutesAgo(10),
+      rowsRead: 28,
+      rowsWritten: 28,
+      status: "SUCCESS",
+    },
+    {
+      id: "mrl-fixture-000003",
+      martCode: "MART_APPRAISAL",
+      runType: "SCHEDULED",
+      startedAt: isoMinutesAgo(31),
+      finishedAt: isoMinutesAgo(30),
+      rowsRead: 0,
+      rowsWritten: 0,
+      status: "FAILED",
+      errorDetail: "Source contract g08.v_apar_forms_v3 fetch failed",
+    },
+    {
+      id: "mrl-fixture-000004",
+      martCode: "MART_ESTABLISHMENT",
+      runType: "MANUAL",
+      startedAt: isoMinutesAgo(26 * 60 + 2),
+      finishedAt: isoMinutesAgo(26 * 60),
+      rowsRead: 23,
+      rowsWritten: 23,
+      status: "SUCCESS",
+    },
+  ];
+}
 
 const fixtureLeaveTypes: LeaveTypeOption[] = [
   { leaveTypeId: "EL", name: "Earned Leave", status: "ACTIVE" },
@@ -802,6 +979,26 @@ export function createFixtureHrmsClient(): HrmsClient {
       return Promise.resolve<PensionCaseActionResult>({ pensionCase: clonePensionCase(pensionCase) });
     },
     getAnalyticsSlice: () => Promise.resolve({ ...analyticsSlice }),
+    listAnalyticsKpis: (kpiCode?: string) =>
+      Promise.resolve(page(analyticsKpis.filter((kpi) => !kpiCode || kpi.kpiCode === kpiCode).map((kpi) => ({ ...kpi })))),
+    queryKpiAggregate: (martCode: string, dimension: string) => {
+      const dimensions = martDimensionCounts[martCode];
+      if (!dimensions) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture datamart ${martCode} is not registered`));
+      }
+      const groups = dimensions[dimension] ?? {};
+      const { cells, total, suppressedCells } = suppressFixtureCells(groups);
+      const result: AnalyticsAggregateResult = {
+        martCode,
+        dimension,
+        minCellSizeK: FIXTURE_MIN_CELL_SIZE_K,
+        cells,
+        total,
+        suppressedCells,
+      };
+      return Promise.resolve(result);
+    },
+    listMartRefreshLogs: () => Promise.resolve(page(buildMartRefreshLogs())),
     openDisciplinaryCase: (input: DisciplinaryCaseOpenInput) => {
       if (input.chargedEmployeeId === input.disciplinaryAuthorityId) {
         // Mirrors the API's G09_AUTHORITY_COMPETENCE self-authority block.

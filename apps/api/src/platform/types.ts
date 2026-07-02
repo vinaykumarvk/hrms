@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export type CanonicalErrorCode =
   | "VALIDATION_FAILED"
   | "UNAUTHENTICATED"
@@ -82,6 +84,34 @@ export type G11DomainErrorCode =
   | "ERR-G11-INVALID-ACCOUNT"
   | "ERR-G11-ACCOUNT-VERIFY";
 
+/**
+ * BRD G13 §10.3 named domain error codes (docs/brd/v3/G13-document-management-secure-storage.md):
+ * 409 checked out by another user; 422 stored-bytes SHA-256 mismatch on fetch (FR-015, content
+ * withheld + quarantined); 422 infected upload (FR-007/DI-11, QUARANTINED); 403 deny-by-default
+ * classification gate miss (FR-006, E21 security_clearances); 403 maker==checker SoD breach on
+ * disposition/clearance approval (FR-009/FR-017, DI-10/DI-16).
+ */
+export type G13DomainErrorCode =
+  | "ERR-G13-DOCUMENT_LOCKED"
+  | "ERR-G13-INTEGRITY_FAILED"
+  | "ERR-G13-MALWARE_DETECTED"
+  | "ERR-G13-CLEARANCE_INSUFFICIENT"
+  | "ERR-G13-SOD_VIOLATION";
+
+/**
+ * BRD G14 §8.3 named domain error codes (docs/brd/v3/G14-dashboard-and-analytics.md
+ * FR-02/04/16/17/23): 403 small-cell suppression on a below-k cohort (FR-17, k-anonymity)
+ * and its complementary suppression; 403 maker==checker scope-policy activation (FR-04 AC7);
+ * 409 cross-version KPI aggregation without acknowledgement (FR-02 AC7); 404 as-of-knowledge
+ * read with no snapshot known at the requested knowledge_time (FR-23).
+ */
+export type G14DomainErrorCode =
+  | "ERR-G14-SMALL-CELL"
+  | "ERR-G14-COMP-SUPPRESS"
+  | "ERR-G14-SCOPE-CHECKER"
+  | "ERR-G14-XVER-AGG"
+  | "ERR-G14-ASOF-NA";
+
 export type WireErrorCode =
   | CanonicalErrorCode
   | G03DomainErrorCode
@@ -90,7 +120,9 @@ export type WireErrorCode =
   | G08DomainErrorCode
   | G09DomainErrorCode
   | G10DomainErrorCode
-  | G11DomainErrorCode;
+  | G11DomainErrorCode
+  | G13DomainErrorCode
+  | G14DomainErrorCode;
 
 export interface TenantScope {
   tenantId: string;
@@ -178,6 +210,23 @@ export function stableStringify(value: unknown): string {
     .sort()
     .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
     .join(",")}}`;
+}
+
+/**
+ * Real SHA-256 (node:crypto createHash) over the exact input bytes, hex-encoded.
+ * This is the integrity-substrate hash for the G12 ledger chains and G13 tokens (PH-10A):
+ * sha256Hex("abc") === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".
+ */
+export function sha256Hex(input: string): string {
+  return createHash("sha256").update(input, "utf8").digest("hex");
+}
+
+/**
+ * Real SHA-256 over raw bytes (G13 FR-005: content_hash is computed by the service from the
+ * actual stored bytes — never trusted from the caller — and re-verified on every fetch).
+ */
+export function sha256HexBytes(input: Uint8Array): string {
+  return createHash("sha256").update(input).digest("hex");
 }
 
 export function pseudoHash64(input: string): string {

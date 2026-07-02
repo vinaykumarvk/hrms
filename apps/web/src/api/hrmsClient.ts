@@ -28,6 +28,11 @@ export const HRMS_API_ROUTES = {
   pensionSummary: "/api/v1/pension/summary",
   pensionCases: "/api/v1/pension/cases",
   analyticsSummary: "/api/v1/analytics/summary",
+  // PH-10E: the PH-10D analytics engine reads the dashboard binds to (live KPI values,
+  // suppression-aware aggregates, and datamart_refresh_logs freshness).
+  analyticsKpis: "/api/v1/analytics/kpis",
+  analyticsAggregate: "/api/v1/analytics/aggregate",
+  analyticsRefreshLogs: "/api/v1/analytics/datamarts/refresh-logs",
   srIngest: "/api/v1/sr/ingest",
   srEmployees: "/api/v1/sr/employees",
   documents: "/api/v1/documents",
@@ -378,6 +383,61 @@ export interface PensionEstimateInput {
 /** 201/202 body of the g11 case routes. */
 export interface PensionCaseActionResult {
   pensionCase: PensionCaseView;
+}
+
+// ---- PH-10E: G14 dashboard bound to the PH-10D analytics engine ----
+
+/** One governed E03 kpi_definitions row as GET /api/v1/analytics/kpis returns it. */
+export interface AnalyticsKpiDefinitionView {
+  id: string;
+  kpiCode: string;
+  name: string;
+  description: string;
+  domain: string;
+  version: number;
+  definitionHash: string;
+  sourceMartCode: string;
+  expression: string;
+  unit: string;
+  grain: string;
+  sensitivity: "PUBLIC" | "INTERNAL" | "RESTRICTED";
+  status: "DRAFT" | "ACTIVE" | "RETIRED";
+}
+
+/**
+ * One aggregate cell from the engine's k-anonymity query boundary (FR-17). `value` is null
+ * whenever `suppressed` is true — the raw small count never crosses the wire, so the UI
+ * cannot leak it even by mistake.
+ */
+export interface AnalyticsAggregateCell {
+  key: string;
+  value: number | null;
+  suppressed: boolean;
+  suppressionReason?: "ERR-G14-SMALL-CELL" | "ERR-G14-COMP-SUPPRESS";
+}
+
+/** GET /api/v1/analytics/aggregate result with suppression applied server-side. */
+export interface AnalyticsAggregateResult {
+  martCode: string;
+  dimension: string;
+  minCellSizeK: number;
+  cells: AnalyticsAggregateCell[];
+  /** Withheld (null) whenever any cell is suppressed so subtraction cannot recover it. */
+  total: number | null;
+  suppressedCells: number;
+}
+
+/** One append-only E10 datamart_refresh_logs row from GET /api/v1/analytics/datamarts/refresh-logs. */
+export interface MartRefreshLogView {
+  id: string;
+  martCode: string;
+  runType: "SCHEDULED" | "MANUAL" | "BACKFILL";
+  startedAt: string;
+  finishedAt?: string;
+  rowsRead?: number;
+  rowsWritten?: number;
+  status: "RUNNING" | "SUCCESS" | "PARTIAL" | "FAILED";
+  errorDetail?: string;
 }
 
 export interface AnalyticsSliceSummary {
@@ -836,6 +896,10 @@ export interface HrmsClient {
   verifyPensionService(caseId: string, input: PensionServiceVerifyInput, idempotencyKey: string): Promise<PensionCaseActionResult>;
   estimatePensionBenefits(caseId: string, input: PensionEstimateInput, idempotencyKey: string): Promise<PensionCaseActionResult>;
   getAnalyticsSlice(): Promise<AnalyticsSliceSummary>;
+  // PH-10E G14: live dashboard reads against the PH-10D analytics engine.
+  listAnalyticsKpis(kpiCode?: string): Promise<PageResult<AnalyticsKpiDefinitionView>>;
+  queryKpiAggregate(martCode: string, dimension: string): Promise<AnalyticsAggregateResult>;
+  listMartRefreshLogs(page?: PageQuery): Promise<PageResult<MartRefreshLogView>>;
   ingestServiceRegister(input: ServiceRegisterIngestInput, idempotencyKey: string): Promise<unknown>;
 }
 
@@ -1094,6 +1158,21 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
       const summary = await request<Omit<AnalyticsSliceSummary, "migrationMarker" | "uatMarker">>(HRMS_API_ROUTES.analyticsSummary);
       return { ...summary, migrationMarker: "MIGRATION_DRY_RUN", uatMarker: "UAT_ACCEPTANCE_PACK" };
     },
+    listAnalyticsKpis: (kpiCode) =>
+      request<PageResult<AnalyticsKpiDefinitionView>>(
+        `${HRMS_API_ROUTES.analyticsKpis}${kpiCode ? `?kpiCode=${encodeURIComponent(kpiCode)}` : ""}`
+      ),
+    queryKpiAggregate: async (martCode, dimension) => {
+      const params = new URLSearchParams({ martCode, dimension });
+      // The route pages the cells (list route); the client flattens them back onto the
+      // engine's aggregate shape. Suppressed cells arrive with value=null and stay null.
+      const result = await request<Omit<AnalyticsAggregateResult, "cells"> & { cells: PageResult<AnalyticsAggregateCell> }>(
+        `${HRMS_API_ROUTES.analyticsAggregate}?${params.toString()}`
+      );
+      return { ...result, cells: result.cells.items };
+    },
+    listMartRefreshLogs: (page = {}) =>
+      request<PageResult<MartRefreshLogView>>(`${HRMS_API_ROUTES.analyticsRefreshLogs}${toPageQueryString(page)}`),
     openDisciplinaryCase: (input, idempotencyKey) =>
       postWithIdempotency<DisciplinaryCaseResult>(HRMS_API_ROUTES.disciplinaryCases, input, idempotencyKey),
     serveDisciplinaryCharge: (caseId, input, idempotencyKey) =>

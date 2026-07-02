@@ -1,5 +1,5 @@
 import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
-import { optionalBoolean, optionalRecord, optionalString, readBodyRecord, requiredString } from "../http/body";
+import { optionalBoolean, optionalNumber, optionalRecord, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { pageItems } from "../http/pagination";
 import { DocumentFetchIntent, DocumentRecord } from "../modules/g13/documentVaultService";
 import { FoundationError } from "../platform/types";
@@ -27,12 +27,15 @@ export function registerG13Routes(kernel: ApiKernel): void {
     requiresIdempotencyKey: true,
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
+      // FR-G13-005/007: `content` is the gated byte-ingest path (server-side SHA-256 +
+      // PENDING_SCAN); `contentHash` alone is the pre-scanned registration seam.
       return created({
         document: context.services.documentVault.createDocument(context.scope, {
           title: requiredString(body, "title"),
           ownerEmployeeId: optionalString(body, "ownerEmployeeId"),
           classification: readClassification(body),
-          contentHash: requiredString(body, "contentHash"),
+          contentHash: optionalString(body, "contentHash"),
+          content: optionalString(body, "content"),
           isWorm: optionalBoolean(body, "isWorm"),
         }),
       });
@@ -88,7 +91,8 @@ export function registerG13Routes(kernel: ApiKernel): void {
       const body = readBodyRecord(context.request.body);
       return accepted({
         document: context.services.documentVault.checkIn(context.scope, requiredParam(context.params, "id"), {
-          contentHash: requiredString(body, "contentHash"),
+          contentHash: optionalString(body, "contentHash"),
+          content: optionalString(body, "content"),
           title: optionalString(body, "title"),
         }),
       });
@@ -148,7 +152,9 @@ export function registerG13Routes(kernel: ApiKernel): void {
         // FR-G13-016 AC6: the file grant is served ONLY with the distinct DOWNLOAD right.
         context.services.authorization.check(context.actor, "g13.document.download", context.scope);
       }
-      return ok({ fetch: context.services.documentVault.fetch(context.scope, requiredParam(context.params, "id"), intent) });
+      // FR-G13-006/015: the actor (with roles) feeds the deny-by-default clearance gate and the
+      // VIEW/DOWNLOAD access-audit event on the E12 document_audit ledger.
+      return ok({ fetch: context.services.documentVault.fetch(context.actor, requiredParam(context.params, "id"), intent) });
     },
   });
   kernel.register({
@@ -204,6 +210,144 @@ export function registerG13Routes(kernel: ApiKernel): void {
       return accepted({ document: context.services.documentVault.releaseLegalHold(context.scope, requiredParam(context.params, "id"), optionalString(body, "reason") ?? "Released") });
     },
   });
+  // FR-G13-006/017 (E21 security_clearances): grant path for the deny-by-default gate.
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/security-clearances",
+    operationId: "g13.grantSecurityClearance",
+    protected: true,
+    permission: "g13.clearance.grant",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        clearance: context.services.documentVault.grantSecurityClearance(context.scope, {
+          principalType: readPrincipalType(body),
+          principalRef: requiredString(body, "principalRef"),
+          clearanceLevel: readClearanceLevel(body),
+          justification: requiredString(body, "justification"),
+          approvedBy: optionalString(body, "approvedBy"),
+          validUntil: optionalString(body, "validUntil"),
+        }),
+      });
+    },
+  });
+  // FR-G13-009 (E8 document_retention_policies): tenant retention classes.
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/retention-classes",
+    operationId: "g13.defineRetentionClass",
+    protected: true,
+    permission: "g13.retention.class.define",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        retentionClass: context.services.documentVault.defineRetentionClass(context.scope, {
+          code: requiredString(body, "code"),
+          name: requiredString(body, "name"),
+          retentionPeriodMonths: optionalNumber(body, "retentionPeriodMonths"),
+          isPermanent: optionalBoolean(body, "isPermanent"),
+          dispositionAction: readDispositionAction(body),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/documents/{id}:assign-retention-class",
+    operationId: "g13.assignRetentionClass",
+    protected: true,
+    permission: "g13.retention.assign",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted({
+        document: context.services.documentVault.assignRetentionClass(
+          context.scope,
+          requiredParam(context.params, "id"),
+          requiredString(body, "retentionClassCode")
+        ),
+      });
+    },
+  });
+  // FR-G13-009 (E18 disposition_records): maker proposes; a DIFFERENT checker approves (DI-10).
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/documents/{id}:propose-disposition",
+    operationId: "g13.proposeDisposition",
+    protected: true,
+    permission: "g13.disposition.propose",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        disposition: context.services.documentVault.proposeDisposition(
+          context.scope,
+          requiredParam(context.params, "id"),
+          optionalString(body, "action") ? readDispositionAction(body, "action") : undefined
+        ),
+      });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/dispositions/{id}:approve",
+    operationId: "g13.approveDisposition",
+    protected: true,
+    permission: "g13.disposition.approve",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => accepted({ disposition: context.services.documentVault.approveDisposition(context.scope, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/dispositions/{id}:execute",
+    operationId: "g13.executeDisposition",
+    protected: true,
+    permission: "g13.disposition.execute",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => accepted({ disposition: context.services.documentVault.executeDisposition(context.scope, requiredParam(context.params, "id")) }),
+  });
+}
+
+function readPrincipalType(body: Record<string, unknown>): "USER" | "ROLE" {
+  const value = optionalString(body, "principalType") ?? "USER";
+  if (value === "USER" || value === "ROLE") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", "principalType must be USER or ROLE", { field: "principalType" });
+}
+
+function readClearanceLevel(body: Record<string, unknown>): DocumentRecord["classification"] {
+  const value = requiredString(body, "clearanceLevel");
+  switch (value) {
+    case "PUBLIC":
+    case "INTERNAL":
+    case "CONFIDENTIAL":
+    case "SECRET":
+    case "TOP_SECRET":
+      return value;
+    default:
+      throw new FoundationError("VALIDATION_FAILED", "Unsupported clearance level", { field: "clearanceLevel" });
+  }
+}
+
+function readDispositionAction(body: Record<string, unknown>, field = "dispositionAction"): "DESTROY" | "ARCHIVE_TRANSFER" | "REVIEW" {
+  const value = requiredString(body, field);
+  switch (value) {
+    case "DESTROY":
+    case "ARCHIVE_TRANSFER":
+    case "REVIEW":
+      return value;
+    default:
+      throw new FoundationError("VALIDATION_FAILED", "Unsupported disposition action", { field });
+  }
 }
 
 function readFetchIntent(value: string | undefined): DocumentFetchIntent {

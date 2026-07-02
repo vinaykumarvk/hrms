@@ -18,8 +18,19 @@ export function statusForError(code: WireErrorCode): number {
     case "UNAUTHENTICATED":
       return 401;
     case "FORBIDDEN":
+    // BRD G13 §10.3: deny-by-default clearance gate miss (FR-006) and maker==checker
+    // SoD violations on disposition/clearance approval (FR-009/FR-017) are 403.
+    case "ERR-G13-CLEARANCE_INSUFFICIENT":
+    case "ERR-G13-SOD_VIOLATION":
+    // BRD G14 §8.3: a below-k cohort read (FR-17 k-anonymity, incl. its complementary
+    // suppression) and a maker==checker scope-policy activation (FR-04 AC7) are 403.
+    case "ERR-G14-SMALL-CELL":
+    case "ERR-G14-COMP-SUPPRESS":
+    case "ERR-G14-SCOPE-CHECKER":
       return 403;
     case "NOT_FOUND":
+    // BRD G14 FR-23: no snapshot known at the requested knowledge_time is 404.
+    case "ERR-G14-ASOF-NA":
       return 404;
     case "CONFLICT":
     case "LEAVE_OVERLAP":
@@ -73,6 +84,10 @@ export function statusForError(code: WireErrorCode): number {
     // Rule 9 proceeding is still ACTIVE are 409 CONFLICT.
     case "ERR-G11-SCHEME-MISMATCH":
     case "ERR-G11-PROVISIONAL-PENDING":
+    // BRD G13 error catalogue: document checked out by another user is 409 CONFLICT.
+    case "ERR-G13-DOCUMENT_LOCKED":
+    // BRD G14 FR-02 AC7: cross-version KPI aggregation without acknowledgement is 409 CONFLICT.
+    case "ERR-G14-XVER-AGG":
       return 409;
     case "ELIGIBILITY_FAILED":
     case "WINDOW_EXPIRED":
@@ -98,6 +113,10 @@ export function statusForError(code: WireErrorCode): number {
     // verification (IR16 fail-closed gate) are 422.
     case "ERR-G11-INVALID-ACCOUNT":
     case "ERR-G11-ACCOUNT-VERIFY":
+    // BRD G13 §10.3: infected content (FR-007, quarantined) and a stored-bytes SHA-256
+    // mismatch on fetch (FR-015, content withheld + quarantined) are 422.
+    case "ERR-G13-MALWARE_DETECTED":
+    case "ERR-G13-INTEGRITY_FAILED":
       return 422;
     case "PRECONDITION_FAILED":
     // BRD G06 §9.4: effecting blocked by an active interim stay is a 412 precondition failure.

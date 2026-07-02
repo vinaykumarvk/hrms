@@ -1,5 +1,8 @@
 import { AuditService } from "../../platform/audit/auditService";
-import { FoundationError, TenantScope, nextId, pseudoHash64, requireTenantScope, stableStringify } from "../../platform/types";
+import { FoundationError, TenantScope, nextId, requireTenantScope, sha256Hex, stableStringify } from "../../platform/types";
+
+/** Explicit genesis previous-hash convention for both the content chain and the status sub-ledger chain. */
+const GENESIS_HASH = "0".repeat(64);
 
 export type SrSourceModule = "G01" | "G04" | "G05" | "G06" | "G07" | "G08" | "G09" | "G10" | "G11" | "G12_MANUAL";
 
@@ -32,9 +35,41 @@ export interface SrEvent {
   payload: Record<string, unknown>;
   documentIds: string[];
   reversalOfEventId?: string;
+  /** Trusted-time commit stamp (BRD G12 §5.6 `recorded_at`) — server-assigned at append, part of the hashed content; distinct from the legal `eventDate`. */
+  recordedAt: string;
   previousHash: string;
   entryHash: string;
-  status: "ACTIVE" | "SUPERSEDED" | "ANNOTATED";
+  /** Derived projection of the latest `sr_status_events` row for this entry — read-only at the application layer (BRD G12 E8/E19 v2). */
+  status: SrEntryStatus;
+}
+
+export type SrEntryStatus = "ACTIVE" | "SUPERSEDED" | "ANNOTATED";
+
+export type SrStatusTransitionKind = "ENTRY_STATUS" | "SUPERSESSION";
+
+/**
+ * BRD G12 E19 `sr_status_events` — append-only, hash-chained status/supersession sub-ledger,
+ * chained per (tenant, employee). Status changes are chained appends, never field updates;
+ * `SrEvent.status` is only a projection of the latest row targeting that entry.
+ */
+export interface SrStatusEvent {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  employeeId: string;
+  targetEventId: string;
+  statusSequenceNo: number;
+  transitionKind: SrStatusTransitionKind;
+  fromValue: SrEntryStatus | null;
+  toValue: SrEntryStatus;
+  relatedEventId?: string;
+  actor: string;
+  /** SHA-256 of the prior status-chain entry (GENESIS_HASH for the first). */
+  prevStatusHash: string;
+  /** SHA-256 over the canonical status content including prevStatusHash. */
+  statusHash: string;
+  /** Trusted-time commit stamp, server-assigned at append and part of the hashed content. */
+  recordedAt: string;
 }
 
 export interface SrIngestResult {
@@ -50,8 +85,12 @@ interface IdempotencyRecord {
 
 const canonicalWriters: SrSourceModule[] = ["G01", "G04", "G05", "G06", "G07", "G08", "G09", "G10", "G11", "G12_MANUAL"];
 
+/** Annotation event types that mark their target entry ANNOTATED via the status sub-ledger. */
+const ANNOTATION_EVENT_TYPES = ["CORRIGENDUM", "DISPUTE", "DISPUTE_RESOLUTION"];
+
 export class ServiceRegisterService {
   private readonly events: SrEvent[] = [];
+  private readonly statusEvents: SrStatusEvent[] = [];
   private readonly idempotency = new Map<string, IdempotencyRecord>();
 
   constructor(private readonly audit: AuditService) {}
@@ -64,7 +103,7 @@ export class ServiceRegisterService {
     if (!canonicalWriters.includes(request.sourceModule)) {
       throw new FoundationError("FORBIDDEN", "Source module is not an SR writer", { details: { sourceModule: request.sourceModule } });
     }
-    const payloadHash = pseudoHash64(stableStringify(request));
+    const payloadHash = sha256Hex(stableStringify(request));
     const idemKey = `${scope.tenantId}:${idempotencyKey}`;
     const existingIdem = this.idempotency.get(idemKey);
     if (existingIdem) {
@@ -82,7 +121,7 @@ export class ServiceRegisterService {
     );
     if (syntactic) {
       this.idempotency.set(idemKey, { payloadHash, eventId: syntactic.id });
-      return { event: { ...syntactic, payload: { ...syntactic.payload }, documentIds: [...syntactic.documentIds] }, replayed: false, semanticDuplicate: true };
+      return { event: this.toView(syntactic), replayed: false, semanticDuplicate: true };
     }
     if (request.factKey) {
       const semantic = this.events.find(
@@ -90,14 +129,17 @@ export class ServiceRegisterService {
       );
       if (semantic) {
         this.idempotency.set(idemKey, { payloadHash, eventId: semantic.id });
-        return { event: { ...semantic, payload: { ...semantic.payload }, documentIds: [...semantic.documentIds] }, replayed: false, semanticDuplicate: true };
+        return { event: this.toView(semantic), replayed: false, semanticDuplicate: true };
       }
     }
     const previous = this.events
       .filter((event) => event.tenantId === scope.tenantId && event.employeeId === request.employeeId)
       .sort((left, right) => right.sequenceNo - left.sequenceNo)[0];
     const sequenceNo = (previous?.sequenceNo ?? 0) + 1;
-    const previousHash = previous?.entryHash ?? "0".repeat(64);
+    const previousHash = previous?.entryHash ?? GENESIS_HASH;
+    // Trusted time: recorded_at is assigned by the service clock at append time — callers cannot
+    // supply or overwrite it — and is part of the hashed content (distinct from the legal eventDate).
+    const recordedAt = new Date().toISOString();
     const eventWithoutHash = {
       tenantId: scope.tenantId,
       entityId: scope.entityId,
@@ -112,18 +154,34 @@ export class ServiceRegisterService {
       payload: request.payload,
       documentIds: request.documentIds ?? [],
       reversalOfEventId: request.reversalOfEventId,
+      recordedAt,
       previousHash,
     };
     const event: SrEvent = {
       id: nextId("sr", this.events.length),
       ...eventWithoutHash,
-      entryHash: pseudoHash64(stableStringify(eventWithoutHash)),
+      entryHash: sha256Hex(stableStringify(eventWithoutHash)),
       status: "ACTIVE",
     };
     this.events.push(Object.freeze({ ...event, payload: Object.freeze({ ...event.payload }), documentIds: Object.freeze([...event.documentIds]) as string[] }));
     this.idempotency.set(idemKey, { payloadHash, eventId: event.id });
+    // Status sub-ledger: the new entry's ACTIVE status is itself a chained append (E19), and a
+    // reversal/annotation transitions its target entry via further appends — never a field update.
+    this.appendStatusEvent(scope, event, "ENTRY_STATUS", "ACTIVE");
+    if (request.reversalOfEventId) {
+      const reversed = this.events.find((item) => item.tenantId === scope.tenantId && item.id === request.reversalOfEventId);
+      if (reversed) {
+        this.appendStatusEvent(scope, reversed, "SUPERSESSION", "SUPERSEDED", event.id);
+      }
+    } else if (ANNOTATION_EVENT_TYPES.includes(request.eventTypeCode)) {
+      const originalEventId = typeof request.payload.originalEventId === "string" ? request.payload.originalEventId : undefined;
+      const annotated = originalEventId ? this.events.find((item) => item.tenantId === scope.tenantId && item.id === originalEventId) : undefined;
+      if (annotated && this.projectStatus(annotated) === "ACTIVE") {
+        this.appendStatusEvent(scope, annotated, "ENTRY_STATUS", "ANNOTATED", event.id);
+      }
+    }
     this.audit.recordMutation(scope, { action: "G12_SR_INGEST", subjectRef: `service_register_events:${event.id}`, metadata: { sourceModule: request.sourceModule } });
-    return { event: { ...event, payload: { ...event.payload }, documentIds: [...event.documentIds] }, replayed: false, semanticDuplicate: false };
+    return { event: this.toView(event), replayed: false, semanticDuplicate: false };
   }
 
   reverseFromSource(scope: TenantScope, idempotencyKey: string, originalEventId: string, reason: string): SrIngestResult {
@@ -179,13 +237,56 @@ export class ServiceRegisterService {
     return this.events
       .filter((event) => event.tenantId === scope.tenantId && (!scope.entityId || event.entityId === scope.entityId) && event.employeeId === employeeId)
       .sort((left, right) => left.sequenceNo - right.sequenceNo)
-      .map((event) => ({ ...event, payload: { ...event.payload }, documentIds: [...event.documentIds] }));
+      .map((event) => this.toView(event));
   }
 
   getEvent(scope: TenantScope, eventId: string): SrEvent | null {
     requireTenantScope(scope);
     const event = this.events.find((item) => item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId) && item.id === eventId);
-    return event ? { ...event, payload: { ...event.payload }, documentIds: [...event.documentIds] } : null;
+    return event ? this.toView(event) : null;
+  }
+
+  /** Append-only, hash-chained E19 sub-ledger rows for one employee, in chain order. */
+  getStatusEvents(scope: TenantScope, employeeId: string): SrStatusEvent[] {
+    requireTenantScope(scope);
+    return this.statusEvents
+      .filter((row) => row.tenantId === scope.tenantId && (!scope.entityId || row.entityId === scope.entityId) && row.employeeId === employeeId)
+      .sort((left, right) => left.statusSequenceNo - right.statusSequenceNo)
+      .map((row) => ({ ...row }));
+  }
+
+  /**
+   * PH-10B integrity accessors. Chains are built per (tenant, employee) — the same axis
+   * ingest/appendStatusEvent chain on — so verification walks the COMPLETE chain
+   * regardless of any entity narrowing on the caller's scope.
+   */
+  listChainEmployees(scope: TenantScope): string[] {
+    requireTenantScope(scope);
+    const employees = new Set<string>();
+    for (const event of this.events) {
+      if (event.tenantId === scope.tenantId) {
+        employees.add(event.employeeId);
+      }
+    }
+    return [...employees].sort();
+  }
+
+  /** Full content chain for one employee in chain order (raw stored content, no projection). */
+  getEntryChain(scope: TenantScope, employeeId: string): SrEvent[] {
+    requireTenantScope(scope);
+    return this.events
+      .filter((event) => event.tenantId === scope.tenantId && event.employeeId === employeeId)
+      .sort((left, right) => left.sequenceNo - right.sequenceNo)
+      .map((event) => ({ ...event, payload: { ...event.payload }, documentIds: [...event.documentIds] }));
+  }
+
+  /** Full sr_status_events sub-chain for one employee in chain order. */
+  getStatusChain(scope: TenantScope, employeeId: string): SrStatusEvent[] {
+    requireTenantScope(scope);
+    return this.statusEvents
+      .filter((row) => row.tenantId === scope.tenantId && row.employeeId === employeeId)
+      .sort((left, right) => left.statusSequenceNo - right.statusSequenceNo)
+      .map((row) => ({ ...row }));
   }
 
   count(scope: TenantScope): number {
@@ -198,6 +299,49 @@ export class ServiceRegisterService {
     if (!event) {
       throw new FoundationError("NOT_FOUND", "SR event not found");
     }
-    return { ...event, payload: { ...event.payload }, documentIds: [...event.documentIds] };
+    return this.toView(event);
+  }
+
+  /**
+   * Appends one hash-chained sr_status_events row (per tenant+employee chain). This is the ONLY
+   * writer of status transitions; there is deliberately no mutator that edits status in place.
+   */
+  private appendStatusEvent(scope: TenantScope, target: SrEvent, transitionKind: SrStatusTransitionKind, toValue: SrEntryStatus, relatedEventId?: string): void {
+    const previous = this.statusEvents
+      .filter((row) => row.tenantId === scope.tenantId && row.employeeId === target.employeeId)
+      .sort((left, right) => right.statusSequenceNo - left.statusSequenceNo)[0];
+    const recordedAt = new Date().toISOString();
+    const rowWithoutHash = {
+      tenantId: scope.tenantId,
+      entityId: scope.entityId,
+      employeeId: target.employeeId,
+      targetEventId: target.id,
+      statusSequenceNo: (previous?.statusSequenceNo ?? 0) + 1,
+      transitionKind,
+      fromValue: transitionKind === "ENTRY_STATUS" && toValue === "ACTIVE" ? null : this.projectStatus(target),
+      toValue,
+      relatedEventId,
+      actor: scope.actorUserId ?? "system",
+      recordedAt,
+      prevStatusHash: previous?.statusHash ?? GENESIS_HASH,
+    };
+    const row: SrStatusEvent = {
+      id: nextId("sr-status", this.statusEvents.length),
+      ...rowWithoutHash,
+      statusHash: sha256Hex(stableStringify(rowWithoutHash)),
+    };
+    this.statusEvents.push(Object.freeze(row));
+  }
+
+  /** SrEvent.status is a read-time projection of the latest sub-ledger row targeting the entry. */
+  private projectStatus(event: SrEvent): SrEntryStatus {
+    const latest = this.statusEvents
+      .filter((row) => row.tenantId === event.tenantId && row.targetEventId === event.id)
+      .sort((left, right) => right.statusSequenceNo - left.statusSequenceNo)[0];
+    return latest?.toValue ?? "ACTIVE";
+  }
+
+  private toView(event: SrEvent): SrEvent {
+    return { ...event, status: this.projectStatus(event), payload: { ...event.payload }, documentIds: [...event.documentIds] };
   }
 }
