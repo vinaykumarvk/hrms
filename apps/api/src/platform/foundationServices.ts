@@ -3,8 +3,10 @@ import { MigrationStagingService } from "../migration/staging/migrationStagingSe
 import { EmployeeMasterService } from "../modules/g01/employeeMasterService";
 import { PersonalDetailsService } from "../modules/g02/personalDetailsService";
 import { LeaveService } from "../modules/g03/leaveService";
+import { InMemoryLeaveRepository } from "../modules/g03/leaveRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { TransferService } from "../modules/g05/transferService";
+import { InMemoryTransferRepository } from "../modules/g05/transferRepository";
 import { PromotionService } from "../modules/g06/promotionService";
 import { TrainingService } from "../modules/g07/trainingService";
 import { AparService } from "../modules/g08/aparService";
@@ -15,7 +17,7 @@ import { ServiceRegisterService } from "../modules/g12/serviceRegisterService";
 import { DocumentVaultService } from "../modules/g13/documentVaultService";
 import { AnalyticsService } from "../modules/g14/analyticsService";
 import { NotificationService } from "../notifications/notificationService";
-import { ph03AuthorityFacts, ph03Documents, ph03Employees } from "../seed/ph03Seed";
+import { ph03AuthorityFacts, ph03Documents, ph03Employees, ph03LeaveTypes } from "../seed/ph03Seed";
 import { AuditService } from "./audit/auditService";
 import { AuthorityResolutionService } from "./authority-resolution/authorityResolutionService";
 import { AuthorizationService } from "./authorization/authorizationService";
@@ -57,8 +59,12 @@ export function createFoundationServices(): FoundationServices {
   const jobs = new JobService();
   const personalDetails = new PersonalDetailsService(employeeMaster, authorization, audit, workflow, documentVault, notifications);
   const leaveSrRelay = new LeaveSrRelayService(authorization, audit, serviceRegister, notifications);
-  const leave = new LeaveService(employeeMaster, authorization, audit, workflow, leaveSrRelay, jobs, notifications);
-  const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications);
+  const leaveRepository = new InMemoryLeaveRepository();
+  for (const leaveType of ph03LeaveTypes()) {
+    leaveRepository.saveLeaveType(leaveType);
+  }
+  const leave = new LeaveService(employeeMaster, authorization, audit, workflow, leaveSrRelay, jobs, notifications, leaveRepository);
+  const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   const promotion = new PromotionService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications);
   const training = new TrainingService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications);
   const apar = new AparService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications);

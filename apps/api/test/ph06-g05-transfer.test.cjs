@@ -42,6 +42,16 @@ function transferInput(extra = {}) {
   };
 }
 
+// Clear or deem every configured clearance branch: all but the first are completed, the
+// first is deemed after its SLA due date so the DEEMED_CLEARED path stays exercised.
+function clearAll(services, orderId, order, completedOn, deemedOn) {
+  const codes = order.clearanceItems.map((item) => item.code);
+  for (const code of codes.slice(1)) {
+    services.transfer.completeClearance(actor(), orderId, code, completedOn);
+  }
+  return services.transfer.deemClearance(actor(), orderId, codes[0], deemedOn);
+}
+
 test("PH-06 G05 transfer uses POSITION_AUTHORITY, SoD-safe delegation, parallel clearance, deemed clearance, documents, SR, audit, and notification", () => {
   const services = createFoundationServices();
   const initiated = services.transfer.initiate(actor(), transferInput());
@@ -49,16 +59,17 @@ test("PH-06 G05 transfer uses POSITION_AUTHORITY, SoD-safe delegation, parallel 
   assert.equal(initiated.order.resolverType, "POSITION_AUTHORITY");
   assert.equal(initiated.order.resolverEvidence.sodBlockedDelegation, true);
 
-  const approved = services.transfer.approve(actor(), initiated.order.id);
+  const approved = services.transfer.approve(actor(), initiated.order.id, { idempotencyKey: "idem-ph06-g05-approve-001" });
   assert.equal(approved.order.status, "APPROVED");
   assert.match(approved.document.id, /^doc-/);
-  assert.equal(approved.order.clearanceItems.length, 3);
+  // Clearance branches come from the per-office configuration (seeded 7-department catalog).
+  assert.equal(approved.order.clearanceItems.length, 7);
   assert.equal(approved.clearanceWorkflow.instance.workflowCode, "WF-G05-CLEARANCE-PARALLEL_ALL_OF");
+  assert.match(approved.srEventId, /^sr-/);
 
-  services.transfer.completeClearance(actor(), initiated.order.id, "HR", "2026-07-10");
-  services.transfer.completeClearance(actor(), initiated.order.id, "ESTATE", "2026-07-10");
-  const deemed = services.transfer.deemClearance(actor(), initiated.order.id, "VIGILANCE", "2026-07-12");
-  assert.equal(deemed.clearanceItems.find((item) => item.code === "VIGILANCE").status, "DEEMED_CLEARED");
+  const deemedCode = approved.order.clearanceItems[0].code;
+  const deemed = clearAll(services, initiated.order.id, approved.order, "2026-07-10", "2026-07-12");
+  assert.equal(deemed.clearanceItems.find((item) => item.code === deemedCode).status, "DEEMED_CLEARED");
 
   const joined = services.transfer.relieveAndJoin(actor(), initiated.order.id, {
     relievingDate: "2026-07-12",
@@ -68,16 +79,18 @@ test("PH-06 G05 transfer uses POSITION_AUTHORITY, SoD-safe delegation, parallel 
   assert.equal(joined.order.status, "JOINED");
   assert.match(joined.srEventId, /^sr-/);
   assert.match(joined.document.id, /^doc-/);
+  assert.equal(joined.relievingOrder.lastWorkingDay, "2026-07-12");
+  assert.equal(joined.joiningReport.status, "JOINED_CONFIRMED");
 
   const docs = services.documentVault.listByModuleRef(actor(), "G05", initiated.order.id);
   assert.equal(docs.length, 2);
+  // Frozen G12 catalog codes: TRANSFER on issue, RELIEVING on relief, JOINING on join.
   const timeline = services.serviceRegister.getTimeline(actor(), ph03Ids.employee);
-  assert.equal(timeline.length, 1);
-  assert.equal(timeline[0].sourceModule, "G05");
-  assert.equal(timeline[0].eventTypeCode, "TRANSFER_JOINED");
-  assert.equal(timeline[0].documentIds.length, 2);
+  assert.deepEqual(timeline.map((event) => event.eventTypeCode), ["TRANSFER", "RELIEVING", "JOINING"]);
+  assert.ok(timeline.every((event) => event.sourceModule === "G05"));
+  assert.equal(timeline[2].documentIds.length, 2);
   assert.ok(services.audit.listAudit(actor()).some((entry) => entry.action === "G05_TRANSFER_RELIEVE_JOIN"));
-  assert.ok(services.notifications.list(actor()).some((message) => message.messageId === "G05_TRANSFER_JOINED"));
+  assert.ok(services.notifications.list(actor()).some((message) => message.messageId === "G05_JOINING_CONFIRMED"));
 });
 
 test("PH-06 G05 validates transfer dates and deemed-clearance SLA", () => {
@@ -87,9 +100,9 @@ test("PH-06 G05 validates transfer dates and deemed-clearance SLA", () => {
     (error) => error instanceof FoundationError && error.code === "VALIDATION_FAILED"
   );
   const initiated = services.transfer.initiate(actor(), transferInput());
-  services.transfer.approve(actor(), initiated.order.id);
+  const approved = services.transfer.approve(actor(), initiated.order.id, { idempotencyKey: "idem-ph06-g05-approve-002" });
   assert.throws(
-    () => services.transfer.deemClearance(actor(), initiated.order.id, "VIGILANCE", "2026-07-10"),
+    () => services.transfer.deemClearance(actor(), initiated.order.id, approved.order.clearanceItems[0].code, "2026-07-10"),
     (error) => error instanceof FoundationError && error.code === "PRECONDITION_FAILED"
   );
 });
@@ -113,9 +126,10 @@ test("PH-06 G05 routes drive transfer order approval, clearance, and joining", (
     body: {},
   });
   assert.equal(approved.status, 202);
-  assert.equal(approved.body.order.clearanceItems.length, 3);
+  assert.equal(approved.body.order.clearanceItems.length, 7);
 
-  for (const code of ["HR", "ESTATE"]) {
+  const codes = approved.body.order.clearanceItems.map((item) => item.code);
+  for (const code of codes.slice(1)) {
     const completed = call(api, {
       method: "POST",
       path: `/api/v1/transfers/orders/${initiated.body.order.id}/clearances/${code}:complete`,
@@ -127,7 +141,7 @@ test("PH-06 G05 routes drive transfer order approval, clearance, and joining", (
 
   const deemed = call(api, {
     method: "POST",
-    path: `/api/v1/transfers/orders/${initiated.body.order.id}/clearances/VIGILANCE:deem`,
+    path: `/api/v1/transfers/orders/${initiated.body.order.id}/clearances/${codes[0]}:deem`,
     headers: { "Idempotency-Key": "idem-ph06-g05-deem-route-001" },
     body: { deemedOn: "2026-07-12" },
   });

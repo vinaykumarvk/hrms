@@ -6,8 +6,41 @@ import { ActorContext, FoundationError, TenantScope, nextId, requireTenantScope 
 import { EmployeeMasterService } from "../g01/employeeMasterService";
 import { LeaveSrOutboxEvent, LeaveSrRelayService } from "../g04/leaveSrRelayService";
 import { JobRun, JobService } from "../../jobs/jobService";
+import { LeaveRepository } from "./leaveRepository";
 
 export type LeaveApplicationStatus = "SUBMITTED" | "APPROVED" | "REJECTED" | "WITHDRAWN" | "CANCELLED";
+
+/**
+ * FR-10 leave-type + accrual-policy configuration (BRD G03 §5.2 E12 leave_types / E13
+ * leave_accrual_policies). Submission validation, opening balances, holiday counting,
+ * eligibility, and entitlement caps are all driven from this catalog — not hardcoded.
+ */
+export interface LeaveTypeConfig {
+  tenantId: string;
+  entityId?: string;
+  leaveTypeId: string;
+  name: string;
+  /** Sandwich behavior per type: when false, holidays are excluded from totalDays (FR-02). */
+  countsHolidays: boolean;
+  /** Opening balance credited when a leave-year balance is first created. */
+  openingBalance: number;
+  /** E13 leave_accrual_policies projection consumed by accrue(). */
+  accrualPolicy: { frequency: "MONTHLY" | "HALF_YEARLY" | "YEARLY"; unitsPerPeriod: number };
+  /** Minimum completed service (months, as of the leave start date) to be eligible. */
+  eligibility?: { minServiceMonths: number };
+  /** Sanction-based entitlement cap per leave year (reserved + debited may not exceed it). */
+  entitlementCapDays?: number;
+  status: "ACTIVE" | "INACTIVE";
+}
+
+/** FR-02 holiday calendar entry (BRD G03 §5.2 E3/E4 holiday_calendars / holidays). */
+export interface HolidayEntry {
+  tenantId: string;
+  entityId?: string;
+  calendarId: string;
+  holidayDate: string;
+  name: string;
+}
 
 export interface LeaveBalance {
   tenantId: string;
@@ -81,9 +114,6 @@ export interface PayrollSignal {
 }
 
 export class LeaveService {
-  private readonly applications: LeaveApplication[] = [];
-  private readonly balances: LeaveBalance[] = [];
-  private readonly ledger: LeaveLedgerEntry[] = [];
   private readonly attendance: AttendanceRecord[] = [];
   private readonly payrollSignals: PayrollSignal[] = [];
 
@@ -94,7 +124,8 @@ export class LeaveService {
     private readonly workflow: HrmsWorkflowService,
     private readonly leaveSrRelay: LeaveSrRelayService,
     private readonly jobs: JobService,
-    private readonly notifications: NotificationService
+    private readonly notifications: NotificationService,
+    private readonly repository: LeaveRepository
   ) {}
 
   submit(
@@ -103,12 +134,28 @@ export class LeaveService {
   ): { application: LeaveApplication; workflow: { instance: WorkflowInstance; taskId: string }; balance: LeaveBalance } {
     this.authorization.check(actor, "g03.leave.submit", actor);
     this.requireEmployee(actor, input.employeeId);
-    const totalDays = inclusiveDays(input.fromDate, input.toDate);
+    const config = this.requireLeaveType(actor, input.leaveTypeId);
+    this.assertEligibility(actor, input.employeeId, config, input.fromDate);
+    const totalDays = this.countLeaveDays(actor, input.fromDate, input.toDate, config);
+    if (totalDays <= 0) {
+      throw new FoundationError("VALIDATION_FAILED", "Requested spell falls entirely on holidays", { field: "fromDate" });
+    }
+    this.assertNoOverlap(actor, input.employeeId, input.fromDate, input.toDate);
     const balance = this.getOrCreateBalance(actor, input.employeeId, input.leaveTypeId, yearOf(input.fromDate));
     if (balance.availableBalance < totalDays) {
-      throw new FoundationError("CONFLICT", "Leave balance is insufficient", { details: { availableBalance: balance.availableBalance, requested: totalDays } });
+      throw new FoundationError("INSUFFICIENT_BALANCE", "Available leave balance (after reservations) is less than requested", {
+        field: "days",
+        details: { availableBalance: balance.availableBalance, requested: totalDays },
+      });
     }
-    const applicationId = nextId("leave-app", this.applications.length);
+    if (config.entitlementCapDays !== undefined && balance.reserved + balance.debited + totalDays > config.entitlementCapDays) {
+      throw new FoundationError("ENTITLEMENT_EXCEEDED", "Requested spell exceeds the sanctioned entitlement for this leave type", {
+        field: "days",
+        details: { entitlementCapDays: config.entitlementCapDays, consumed: balance.reserved + balance.debited, requested: totalDays },
+      });
+    }
+    const applicationSequence = this.repository.countApplications();
+    const applicationId = nextId("leave-app", applicationSequence);
     const started = this.workflow.start(actor, {
       workflowCode: "WF-G03-LEAVE",
       subjectRef: `g03_leave_applications:${applicationId}`,
@@ -119,8 +166,9 @@ export class LeaveService {
     balance.reserved += totalDays;
     balance.availableBalance = balance.currentBalance - balance.reserved - balance.debited;
     balance.version += 1;
-    this.ledger.push({
-      id: nextId("leave-ledger", this.ledger.length),
+    this.repository.saveBalance(balance);
+    this.repository.appendLedgerEntry({
+      id: nextId("leave-ledger", this.repository.countLedgerEntries()),
       employeeId: input.employeeId,
       leaveApplicationId: applicationId,
       entryType: "RESERVATION",
@@ -131,7 +179,7 @@ export class LeaveService {
       id: applicationId,
       tenantId: actor.tenantId,
       entityId: actor.entityId,
-      applicationNo: `LA/${yearOf(input.fromDate)}/${String(this.applications.length + 1).padStart(5, "0")}`,
+      applicationNo: `LA/${yearOf(input.fromDate)}/${String(applicationSequence + 1).padStart(5, "0")}`,
       employeeId: input.employeeId,
       leaveTypeId: input.leaveTypeId,
       fromDate: input.fromDate,
@@ -143,7 +191,7 @@ export class LeaveService {
       resolverType: "REPORTING_CHAIN",
       resolverEvidence: { ...started.task.resolution.evidence },
     };
-    this.applications.push(application);
+    this.repository.insertApplication(application);
     this.audit.recordMutation(actor, {
       action: "G03_LEAVE_SUBMIT",
       subjectRef: `g03_leave_applications:${application.id}`,
@@ -171,6 +219,7 @@ export class LeaveService {
     }
     const action = this.workflow.actOnInstance(actor, { instanceId: application.workflowInstanceId, action: "DELEGATE" });
     application.delegatedToEmployeeId = delegateEmployeeId;
+    this.repository.updateApplication(application);
     this.audit.recordMutation(actor, {
       action: "G03_LEAVE_DELEGATE",
       subjectRef: `g03_leave_applications:${application.id}`,
@@ -186,7 +235,7 @@ export class LeaveService {
     return { application: this.cloneApplication(application), action };
   }
 
-  approve(actor: ActorContext, leaveApplicationId: string, idempotencyKey: string): LeaveApprovalResult {
+  approve(actor: ActorContext, leaveApplicationId: string, idempotencyKey: string, expectedVersion?: number): LeaveApprovalResult {
     this.authorization.check(actor, "g03.leave.approve", actor);
     const application = this.requireApplication(actor, leaveApplicationId);
     if (application.status === "APPROVED" && application.g04OutboxEventId) {
@@ -197,14 +246,16 @@ export class LeaveService {
     if (application.status !== "SUBMITTED") {
       throw new FoundationError("PRECONDITION_FAILED", "Only submitted leave can be approved");
     }
-    const action = this.workflow.actOnInstance(actor, { instanceId: application.workflowInstanceId, action: "APPROVE" });
     const balance = this.getOrCreateBalance(actor, application.employeeId, application.leaveTypeId, yearOf(application.fromDate));
+    this.assertBalanceVersion(balance, expectedVersion);
+    const action = this.workflow.actOnInstance(actor, { instanceId: application.workflowInstanceId, action: "APPROVE" });
     balance.reserved -= application.totalDays;
     balance.debited += application.totalDays;
     balance.availableBalance = balance.currentBalance - balance.reserved - balance.debited;
     balance.version += 1;
-    this.ledger.push({
-      id: nextId("leave-ledger", this.ledger.length),
+    this.repository.saveBalance(balance);
+    this.repository.appendLedgerEntry({
+      id: nextId("leave-ledger", this.repository.countLedgerEntries()),
       employeeId: application.employeeId,
       leaveApplicationId: application.id,
       entryType: "DEBIT",
@@ -228,6 +279,7 @@ export class LeaveService {
     const postedOutbox = this.leaveSrRelay.relayEvent(actor, readyOutbox.id);
     application.srEventId = postedOutbox.srEventId;
     application.g04OutboxEventId = postedOutbox.id;
+    this.repository.updateApplication(application);
     this.payrollSignals.push({
       id: nextId("payroll-signal", this.payrollSignals.length),
       employeeId: application.employeeId,
@@ -252,19 +304,21 @@ export class LeaveService {
     return { application: this.cloneApplication(application), action, srEventId: postedOutbox.srEventId, outboxEvent: postedOutbox };
   }
 
-  cancelApproved(actor: ActorContext, leaveApplicationId: string, idempotencyKey: string, cancelDate: string): LeaveApprovalResult {
+  cancelApproved(actor: ActorContext, leaveApplicationId: string, idempotencyKey: string, cancelDate: string, expectedVersion?: number): LeaveApprovalResult {
     this.authorization.check(actor, "g03.leave.cancel", actor);
     const application = this.requireApplication(actor, leaveApplicationId);
     if (application.status !== "APPROVED") {
       throw new FoundationError("PRECONDITION_FAILED", "Only approved leave can be cancelled");
     }
-    const action = this.workflow.actOnInstance(actor, { instanceId: application.workflowInstanceId, action: "CANCEL" });
     const balance = this.getOrCreateBalance(actor, application.employeeId, application.leaveTypeId, yearOf(application.fromDate));
+    this.assertBalanceVersion(balance, expectedVersion);
+    const action = this.workflow.actOnInstance(actor, { instanceId: application.workflowInstanceId, action: "CANCEL" });
     balance.debited -= application.totalDays;
     balance.availableBalance = balance.currentBalance - balance.reserved - balance.debited;
     balance.version += 1;
-    this.ledger.push({
-      id: nextId("leave-ledger", this.ledger.length),
+    this.repository.saveBalance(balance);
+    this.repository.appendLedgerEntry({
+      id: nextId("leave-ledger", this.repository.countLedgerEntries()),
       employeeId: application.employeeId,
       leaveApplicationId: application.id,
       entryType: "CANCELLATION_CREDIT",
@@ -272,6 +326,7 @@ export class LeaveService {
       balanceAfter: balance.availableBalance,
     });
     application.status = "CANCELLED";
+    this.repository.updateApplication(application);
     const readyOutbox = this.leaveSrRelay.enqueueLeaveCancellation(actor, {
       leaveApplicationId: application.id,
       employeeId: application.employeeId,
@@ -296,21 +351,152 @@ export class LeaveService {
     return { application: this.cloneApplication(application), action, srEventId: postedOutbox.srEventId, outboxEvent: postedOutbox };
   }
 
-  accrue(actor: ActorContext, input: { employeeId: string; leaveTypeId: string; leaveYear: number; units: number; effectiveDate: string }): LeaveBalance {
-    this.authorization.check(actor, "g03.leave.accrue", actor);
-    const balance = this.getOrCreateBalance(actor, input.employeeId, input.leaveTypeId, input.leaveYear);
-    balance.currentBalance += input.units;
+  /**
+   * FR-13: applicant withdrawal of a SUBMITTED spell. WITHDRAWN is reachable only from
+   * SUBMITTED; the reservation is released and a RELEASE ledger entry is emitted.
+   */
+  withdraw(actor: ActorContext, leaveApplicationId: string, expectedVersion?: number): { application: LeaveApplication; action: WorkflowAction; balance: LeaveBalance } {
+    this.authorization.check(actor, "g03.leave.withdraw", actor);
+    const application = this.requireApplication(actor, leaveApplicationId);
+    if (application.status !== "SUBMITTED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only submitted leave can be withdrawn");
+    }
+    const balance = this.getOrCreateBalance(actor, application.employeeId, application.leaveTypeId, yearOf(application.fromDate));
+    this.assertBalanceVersion(balance, expectedVersion);
+    const action = this.workflow.actOnInstance(actor, { instanceId: application.workflowInstanceId, action: "CANCEL" });
+    balance.reserved -= application.totalDays;
     balance.availableBalance = balance.currentBalance - balance.reserved - balance.debited;
     balance.version += 1;
-    this.ledger.push({
-      id: nextId("leave-ledger", this.ledger.length),
+    this.repository.saveBalance(balance);
+    this.repository.appendLedgerEntry({
+      id: nextId("leave-ledger", this.repository.countLedgerEntries()),
+      employeeId: application.employeeId,
+      leaveApplicationId: application.id,
+      entryType: "RELEASE",
+      units: application.totalDays,
+      balanceAfter: balance.availableBalance,
+    });
+    application.status = "WITHDRAWN";
+    this.repository.updateApplication(application);
+    this.audit.recordMutation(actor, {
+      action: "G03_LEAVE_WITHDRAW",
+      subjectRef: `g03_leave_applications:${application.id}`,
+      metadata: { workflowActionId: action.id },
+    });
+    this.notifications.publish(actor, {
+      recipientEmployeeId: application.employeeId,
+      messageId: "G03_LEAVE_WITHDRAWN",
+      channel: "IN_APP",
+      relatedRef: `g03_leave_applications:${application.id}`,
+      mergeFields: { applicationNo: application.applicationNo },
+    });
+    return { application: this.cloneApplication(application), action, balance: this.cloneBalance(balance) };
+  }
+
+  /**
+   * FR-13: partial cancellation of an APPROVED spell from cancelFromDate onwards. The
+   * remaining (holiday-aware) days are credited back via CANCELLATION_CREDIT, the spell is
+   * shortened, and a corrected LEAVE_CANCELLED fact is relayed to G04/G12-SR.
+   */
+  cancelApprovedPartial(
+    actor: ActorContext,
+    leaveApplicationId: string,
+    idempotencyKey: string,
+    input: { cancelFromDate: string; expectedVersion?: number }
+  ): { application: LeaveApplication; srEventId?: string; outboxEvent: LeaveSrOutboxEvent; balance: LeaveBalance; cancelledDays: number } {
+    this.authorization.check(actor, "g03.leave.cancel", actor);
+    const application = this.requireApplication(actor, leaveApplicationId);
+    if (application.status !== "APPROVED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only approved leave can be partially cancelled");
+    }
+    if (!dateOnly(input.cancelFromDate)) {
+      throw new FoundationError("VALIDATION_FAILED", "cancelFromDate must use YYYY-MM-DD", { field: "cancelFromDate" });
+    }
+    if (input.cancelFromDate <= application.fromDate || input.cancelFromDate > application.toDate) {
+      throw new FoundationError("VALIDATION_FAILED", "cancelFromDate must fall inside the approved spell (after its first day)", { field: "cancelFromDate" });
+    }
+    const config = this.requireLeaveType(actor, application.leaveTypeId);
+    const cancelledDays = this.countLeaveDays(actor, input.cancelFromDate, application.toDate, config);
+    if (cancelledDays <= 0) {
+      throw new FoundationError("VALIDATION_FAILED", "No debitable days remain after the requested partial cancellation date", { field: "cancelFromDate" });
+    }
+    const balance = this.getOrCreateBalance(actor, application.employeeId, application.leaveTypeId, yearOf(application.fromDate));
+    this.assertBalanceVersion(balance, input.expectedVersion);
+    balance.debited -= cancelledDays;
+    balance.availableBalance = balance.currentBalance - balance.reserved - balance.debited;
+    balance.version += 1;
+    this.repository.saveBalance(balance);
+    this.repository.appendLedgerEntry({
+      id: nextId("leave-ledger", this.repository.countLedgerEntries()),
+      employeeId: application.employeeId,
+      leaveApplicationId: application.id,
+      entryType: "CANCELLATION_CREDIT",
+      units: cancelledDays,
+      balanceAfter: balance.availableBalance,
+    });
+    const revisedToDate = dayBefore(input.cancelFromDate);
+    application.toDate = revisedToDate;
+    application.totalDays -= cancelledDays;
+    this.repository.updateApplication(application);
+    const readyOutbox = this.leaveSrRelay.enqueueLeaveCancellation(actor, {
+      leaveApplicationId: application.id,
+      employeeId: application.employeeId,
+      eventDate: input.cancelFromDate,
+      payload: {
+        applicationNo: application.applicationNo,
+        partial: true,
+        cancelFromDate: input.cancelFromDate,
+        cancelledDays,
+        revisedToDate,
+        revisedTotalDays: application.totalDays,
+        idempotencyKey,
+      },
+    });
+    const postedOutbox = this.leaveSrRelay.relayEvent(actor, readyOutbox.id);
+    this.payrollSignals.push({
+      id: nextId("payroll-signal", this.payrollSignals.length),
+      employeeId: application.employeeId,
+      period: periodOf(input.cancelFromDate),
+      signalType: "LEAVE_REVERSAL",
+      sourceRef: `g03_leave_applications:${application.id}`,
+      units: cancelledDays,
+      status: "READY_FOR_G10",
+    });
+    this.audit.recordMutation(actor, {
+      action: "G03_LEAVE_PARTIAL_CANCEL",
+      subjectRef: `g03_leave_applications:${application.id}`,
+      metadata: { cancelFromDate: input.cancelFromDate, cancelledDays, srEventId: postedOutbox.srEventId },
+    });
+    return {
+      application: this.cloneApplication(application),
+      srEventId: postedOutbox.srEventId,
+      outboxEvent: postedOutbox,
+      balance: this.cloneBalance(balance),
+      cancelledDays,
+    };
+  }
+
+  accrue(actor: ActorContext, input: { employeeId: string; leaveTypeId: string; leaveYear: number; units?: number; effectiveDate: string }): LeaveBalance {
+    this.authorization.check(actor, "g03.leave.accrue", actor);
+    const config = this.requireLeaveType(actor, input.leaveTypeId);
+    const units = input.units ?? config.accrualPolicy.unitsPerPeriod;
+    if (units <= 0) {
+      throw new FoundationError("VALIDATION_FAILED", "Accrual units must be positive", { field: "units" });
+    }
+    const balance = this.getOrCreateBalance(actor, input.employeeId, input.leaveTypeId, input.leaveYear);
+    balance.currentBalance += units;
+    balance.availableBalance = balance.currentBalance - balance.reserved - balance.debited;
+    balance.version += 1;
+    this.repository.saveBalance(balance);
+    this.repository.appendLedgerEntry({
+      id: nextId("leave-ledger", this.repository.countLedgerEntries()),
       employeeId: input.employeeId,
       leaveApplicationId: `accrual:${input.effectiveDate}`,
       entryType: "ACCRUAL",
-      units: input.units,
+      units,
       balanceAfter: balance.availableBalance,
     });
-    this.audit.recordMutation(actor, { action: "G03_LEAVE_ACCRUAL", subjectRef: `employees:${input.employeeId}`, metadata: { units: input.units } });
+    this.audit.recordMutation(actor, { action: "G03_LEAVE_ACCRUAL", subjectRef: `employees:${input.employeeId}`, metadata: { units, accrualFrequency: config.accrualPolicy.frequency } });
     return this.cloneBalance(balance);
   }
 
@@ -385,8 +571,9 @@ export class LeaveService {
     balance.reserved -= application.totalDays;
     balance.availableBalance = balance.currentBalance - balance.reserved - balance.debited;
     balance.version += 1;
-    this.ledger.push({
-      id: nextId("leave-ledger", this.ledger.length),
+    this.repository.saveBalance(balance);
+    this.repository.appendLedgerEntry({
+      id: nextId("leave-ledger", this.repository.countLedgerEntries()),
       employeeId: application.employeeId,
       leaveApplicationId: application.id,
       entryType: "RELEASE",
@@ -394,13 +581,14 @@ export class LeaveService {
       balanceAfter: balance.availableBalance,
     });
     application.status = "REJECTED";
+    this.repository.updateApplication(application);
     this.audit.recordMutation(actor, { action: "G03_LEAVE_REJECT", subjectRef: `g03_leave_applications:${application.id}`, metadata: { workflowActionId: action.id } });
     return { application: this.cloneApplication(application), action, balance: this.cloneBalance(balance) };
   }
 
   listApplications(scope: TenantScope): LeaveApplication[] {
     requireTenantScope(scope);
-    return this.applications.filter((item) => item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId)).map((item) => this.cloneApplication(item));
+    return this.repository.listApplications(scope).map((item) => this.cloneApplication(item));
   }
 
   getBalance(scope: TenantScope, employeeId: string, leaveTypeId = "EL", leaveYear = 2026): LeaveBalance {
@@ -416,7 +604,7 @@ export class LeaveService {
   listLedger(scope: TenantScope): LeaveLedgerEntry[] {
     requireTenantScope(scope);
     const leaveIds = new Set(this.listApplications(scope).map((item) => item.id));
-    return this.ledger.filter((item) => leaveIds.has(item.leaveApplicationId)).map((item) => ({ ...item }));
+    return this.repository.listLedgerEntries().filter((item) => leaveIds.has(item.leaveApplicationId)).map((item) => ({ ...item }));
   }
 
   listAttendance(scope: TenantScope): AttendanceRecord[] {
@@ -430,6 +618,71 @@ export class LeaveService {
     return this.payrollSignals.filter((signal) => employeeIds.has(signal.employeeId)).map((signal) => ({ ...signal }));
   }
 
+  /** FR-10: create or replace a leave type (with its accrual policy) in the tenant catalog. */
+  configureLeaveType(
+    actor: ActorContext,
+    input: {
+      leaveTypeId: string;
+      name: string;
+      countsHolidays: boolean;
+      openingBalance: number;
+      accrualPolicy: { frequency: "MONTHLY" | "HALF_YEARLY" | "YEARLY"; unitsPerPeriod: number };
+      eligibility?: { minServiceMonths: number };
+      entitlementCapDays?: number;
+    }
+  ): LeaveTypeConfig {
+    this.authorization.check(actor, "g03.leave.configure", actor);
+    if (!input.leaveTypeId || input.openingBalance < 0 || input.accrualPolicy.unitsPerPeriod < 0) {
+      throw new FoundationError("VALIDATION_FAILED", "Leave type configuration is invalid", { field: "leaveTypeId" });
+    }
+    const config: LeaveTypeConfig = {
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      leaveTypeId: input.leaveTypeId,
+      name: input.name,
+      countsHolidays: input.countsHolidays,
+      openingBalance: input.openingBalance,
+      accrualPolicy: { ...input.accrualPolicy },
+      eligibility: input.eligibility ? { ...input.eligibility } : undefined,
+      entitlementCapDays: input.entitlementCapDays,
+      status: "ACTIVE",
+    };
+    this.repository.saveLeaveType(config);
+    this.audit.recordMutation(actor, { action: "G03_LEAVE_TYPE_CONFIGURE", subjectRef: `leave_types:${config.leaveTypeId}`, metadata: { openingBalance: config.openingBalance } });
+    return this.cloneLeaveType(config);
+  }
+
+  listLeaveTypes(scope: TenantScope): LeaveTypeConfig[] {
+    requireTenantScope(scope);
+    return this.repository.listLeaveTypes(scope).map((config) => this.cloneLeaveType(config));
+  }
+
+  /** FR-02: register a holiday so non-holiday-counting leave types exclude it from totalDays. */
+  addHoliday(actor: ActorContext, input: { holidayDate: string; name: string; calendarId?: string }): HolidayEntry {
+    this.authorization.check(actor, "g03.holiday.configure", actor);
+    if (!dateOnly(input.holidayDate)) {
+      throw new FoundationError("VALIDATION_FAILED", "holidayDate must use YYYY-MM-DD", { field: "holidayDate" });
+    }
+    if (this.repository.listHolidays(actor).some((entry) => entry.holidayDate === input.holidayDate)) {
+      throw new FoundationError("CONFLICT", "Holiday already exists for this date");
+    }
+    const entry: HolidayEntry = {
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      calendarId: input.calendarId ?? "default",
+      holidayDate: input.holidayDate,
+      name: input.name,
+    };
+    this.repository.saveHoliday(entry);
+    this.audit.recordMutation(actor, { action: "G03_HOLIDAY_ADD", subjectRef: `holidays:${entry.holidayDate}`, metadata: { calendarId: entry.calendarId } });
+    return { ...entry };
+  }
+
+  listHolidays(scope: TenantScope): HolidayEntry[] {
+    requireTenantScope(scope);
+    return this.repository.listHolidays(scope).map((entry) => ({ ...entry }));
+  }
+
   private requireEmployee(scope: TenantScope, employeeId: string): void {
     if (!this.employeeMaster.getById(scope, employeeId)) {
       throw new FoundationError("NOT_FOUND", "Employee not found");
@@ -437,7 +690,7 @@ export class LeaveService {
   }
 
   private requireApplication(scope: TenantScope, leaveApplicationId: string): LeaveApplication {
-    const application = this.applications.find((item) => item.id === leaveApplicationId && item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId));
+    const application = this.repository.findApplication(scope, leaveApplicationId);
     if (!application) {
       throw new FoundationError("NOT_FOUND", "Leave application not found");
     }
@@ -460,32 +713,96 @@ export class LeaveService {
     return attendance;
   }
 
+  private requireLeaveType(scope: TenantScope, leaveTypeId: string): LeaveTypeConfig {
+    requireTenantScope(scope);
+    const config = this.repository.findLeaveType(scope, leaveTypeId);
+    if (!config || config.status !== "ACTIVE") {
+      throw new FoundationError("VALIDATION_FAILED", "Unknown or inactive leave type", { field: "leaveTypeId", details: { leaveTypeId } });
+    }
+    return config;
+  }
+
+  /** ELIGIBILITY_FAILED gate: completed service (months, as of the leave start) vs the type's minimum. */
+  private assertEligibility(scope: TenantScope, employeeId: string, config: LeaveTypeConfig, asOfDate: string): void {
+    const minServiceMonths = config.eligibility?.minServiceMonths ?? 0;
+    if (minServiceMonths <= 0) {
+      return;
+    }
+    const employee = this.employeeMaster.getById(scope, employeeId);
+    const serviceMonths = employee?.dateOfJoining ? monthsBetween(employee.dateOfJoining, asOfDate) : 0;
+    if (serviceMonths < minServiceMonths) {
+      throw new FoundationError("ELIGIBILITY_FAILED", "Employee does not meet the minimum service requirement for this leave type", {
+        field: "leaveTypeId",
+        details: { minServiceMonths, serviceMonths },
+      });
+    }
+  }
+
+  /** LEAVE_OVERLAP gate: reject date-overlapping SUBMITTED/APPROVED spells of the same employee. */
+  private assertNoOverlap(scope: TenantScope, employeeId: string, fromDate: string, toDate: string): void {
+    const overlapping = this.repository
+      .listApplications(scope)
+      .find(
+        (item) =>
+          item.employeeId === employeeId &&
+          (item.status === "SUBMITTED" || item.status === "APPROVED") &&
+          item.fromDate <= toDate &&
+          fromDate <= item.toDate
+      );
+    if (overlapping) {
+      throw new FoundationError("LEAVE_OVERLAP", "Requested spell overlaps an existing leave application", {
+        field: "fromDate",
+        details: { conflictingApplicationId: overlapping.id, conflictingApplicationNo: overlapping.applicationNo },
+      });
+    }
+  }
+
+  /** FR-02: holiday-aware day count — holidays excluded unless the type counts them (sandwich). */
+  private countLeaveDays(scope: TenantScope, fromDate: string, toDate: string, config: LeaveTypeConfig): number {
+    const total = inclusiveDays(fromDate, toDate);
+    if (config.countsHolidays) {
+      return total;
+    }
+    const holidays = new Set(this.repository.listHolidays(scope).map((entry) => entry.holidayDate));
+    let days = 0;
+    for (let ts = Date.parse(`${fromDate}T00:00:00Z`); ts <= Date.parse(`${toDate}T00:00:00Z`); ts += 86_400_000) {
+      if (!holidays.has(new Date(ts).toISOString().slice(0, 10))) {
+        days += 1;
+      }
+    }
+    return days;
+  }
+
+  /** OPTIMISTIC_LOCK_CONFLICT gate: balance mutations may assert the leave_balances.version they read. */
+  private assertBalanceVersion(balance: LeaveBalance, expectedVersion?: number): void {
+    if (expectedVersion !== undefined && balance.version !== expectedVersion) {
+      throw new FoundationError("OPTIMISTIC_LOCK_CONFLICT", "Leave balance was modified concurrently; re-read and retry", {
+        field: "expectedVersion",
+        details: { expectedVersion, currentVersion: balance.version },
+      });
+    }
+  }
+
   private getOrCreateBalance(scope: TenantScope, employeeId: string, leaveTypeId: string, leaveYear: number): LeaveBalance {
     requireTenantScope(scope);
-    const existing = this.balances.find(
-      (item) =>
-        item.tenantId === scope.tenantId &&
-        (!scope.entityId || item.entityId === scope.entityId) &&
-        item.employeeId === employeeId &&
-        item.leaveTypeId === leaveTypeId &&
-        item.leaveYear === leaveYear
-    );
+    const existing = this.repository.findBalance(scope, employeeId, leaveTypeId, leaveYear);
     if (existing) {
       return existing;
     }
+    const config = this.requireLeaveType(scope, leaveTypeId);
     const balance: LeaveBalance = {
       tenantId: scope.tenantId,
       entityId: scope.entityId,
       employeeId,
       leaveTypeId,
       leaveYear,
-      currentBalance: 30,
+      currentBalance: config.openingBalance,
       reserved: 0,
       debited: 0,
-      availableBalance: 30,
+      availableBalance: config.openingBalance,
       version: 1,
     };
-    this.balances.push(balance);
+    this.repository.saveBalance(balance);
     return balance;
   }
 
@@ -495,6 +812,14 @@ export class LeaveService {
 
   private cloneBalance(balance: LeaveBalance): LeaveBalance {
     return { ...balance };
+  }
+
+  private cloneLeaveType(config: LeaveTypeConfig): LeaveTypeConfig {
+    return {
+      ...config,
+      accrualPolicy: { ...config.accrualPolicy },
+      eligibility: config.eligibility ? { ...config.eligibility } : undefined,
+    };
   }
 
   private cloneOutbox(outbox: LeaveSrOutboxEvent): LeaveSrOutboxEvent {
@@ -524,4 +849,21 @@ function periodOf(date: string): string {
 
 function dateOnly(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function dayBefore(date: string): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+}
+
+function monthsBetween(fromDate: string, toDate: string): number {
+  if (!dateOnly(fromDate) || !dateOnly(toDate) || toDate < fromDate) {
+    return 0;
+  }
+  const from = { year: Number.parseInt(fromDate.slice(0, 4), 10), month: Number.parseInt(fromDate.slice(5, 7), 10), day: Number.parseInt(fromDate.slice(8, 10), 10) };
+  const to = { year: Number.parseInt(toDate.slice(0, 4), 10), month: Number.parseInt(toDate.slice(5, 7), 10), day: Number.parseInt(toDate.slice(8, 10), 10) };
+  let months = (to.year - from.year) * 12 + (to.month - from.month);
+  if (to.day < from.day) {
+    months -= 1;
+  }
+  return Math.max(months, 0);
 }

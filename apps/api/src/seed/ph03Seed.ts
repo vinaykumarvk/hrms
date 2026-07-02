@@ -1,4 +1,5 @@
 import { EmployeeRecord } from "../modules/g01/employeeMasterService";
+import { LeaveTypeConfig } from "../modules/g03/leaveService";
 import { AuthorityAssignment, AuthorityDelegation, Committee, EmployeeAssignment, OrgUnit, Position } from "../platform/authority-resolution/authorityResolutionService";
 import { DocumentRecord } from "../modules/g13/documentVaultService";
 
@@ -153,6 +154,63 @@ export function ph03AuthorityFacts(): {
       },
     ],
   };
+}
+
+/**
+ * FR-10 seed catalog: leave_types + leave_accrual_policies projections consumed by
+ * LeaveService (BRD G03 §5.2 E12/E13). Tenant-wide (entityId omitted), grounded on the
+ * public-sector leave catalog in docs/brd/v3/G03-attendance-and-leave-management.md.
+ */
+export function ph03LeaveTypes(): LeaveTypeConfig[] {
+  return [
+    {
+      tenantId: ph03Ids.tenant,
+      leaveTypeId: "EL",
+      name: "Earned Leave",
+      countsHolidays: true,
+      openingBalance: 30,
+      accrualPolicy: { frequency: "HALF_YEARLY", unitsPerPeriod: 15 },
+      status: "ACTIVE",
+    },
+    {
+      tenantId: ph03Ids.tenant,
+      leaveTypeId: "CL",
+      name: "Casual Leave",
+      countsHolidays: false,
+      openingBalance: 8,
+      accrualPolicy: { frequency: "YEARLY", unitsPerPeriod: 8 },
+      status: "ACTIVE",
+    },
+    {
+      tenantId: ph03Ids.tenant,
+      leaveTypeId: "HPL",
+      name: "Half Pay Leave",
+      countsHolidays: true,
+      openingBalance: 20,
+      accrualPolicy: { frequency: "HALF_YEARLY", unitsPerPeriod: 10 },
+      status: "ACTIVE",
+    },
+    {
+      tenantId: ph03Ids.tenant,
+      leaveTypeId: "SL",
+      name: "Study Leave",
+      countsHolidays: true,
+      openingBalance: 24,
+      accrualPolicy: { frequency: "YEARLY", unitsPerPeriod: 0 },
+      eligibility: { minServiceMonths: 60 },
+      status: "ACTIVE",
+    },
+    {
+      tenantId: ph03Ids.tenant,
+      leaveTypeId: "CCL",
+      name: "Child Care Leave",
+      countsHolidays: true,
+      openingBalance: 60,
+      accrualPolicy: { frequency: "YEARLY", unitsPerPeriod: 0 },
+      entitlementCapDays: 15,
+      status: "ACTIVE",
+    },
+  ];
 }
 
 export function ph03Documents(): DocumentRecord[] {

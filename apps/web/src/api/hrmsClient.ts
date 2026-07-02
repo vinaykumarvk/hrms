@@ -4,6 +4,7 @@ export const HRMS_API_ROUTES = {
   employees: "/api/v1/employees",
   personalDetailChanges: "/api/v1/personal-details/change-requests",
   leaveApplications: "/api/v1/atl/leave-applications",
+  leaveTypes: "/api/v1/atl/leave-types",
   leaveOutbox: "/api/v1/atl/leave-sr-outbox",
   payrollSignals: "/api/v1/atl/payroll-signals",
   leaveSrOutbox: "/api/v1/leave-sr/outbox",
@@ -127,7 +128,7 @@ export interface LeaveSrRelaySliceSummary {
 
 export interface ClearanceSummary {
   code: string;
-  status: "CLEARED" | "DEEMED_CLEARED";
+  status: "OPEN" | "CLEARED" | "DEEMED_CLEARED";
 }
 
 export interface TransferSliceSummary {
@@ -220,10 +221,47 @@ export interface AnalyticsSliceSummary {
   uatMarker: "UAT_ACCEPTANCE_PACK";
 }
 
-interface LeaveApplicationApiSummary {
+/** One row of GET /api/v1/atl/leave-applications as the G03 routes project it to the web layer. */
+export interface LeaveApplicationRecord {
+  id: string;
   applicationNo: string;
-  status: "SUBMITTED" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+  employeeId: string;
+  leaveTypeId: string;
+  fromDate: string;
+  toDate: string;
+  totalDays: number;
+  status: "SUBMITTED" | "APPROVED" | "REJECTED" | "WITHDRAWN" | "CANCELLED";
   resolverType: "REPORTING_CHAIN";
+}
+
+/** Request body for POST /api/v1/atl/leave-applications (g03.submitLeaveApplication). */
+export interface LeaveApplicationSubmitInput {
+  employeeId: string;
+  leaveTypeId: string;
+  fromDate: string;
+  toDate: string;
+  reason?: string;
+}
+
+/** 201 body of POST /api/v1/atl/leave-applications: the created application plus the reserved balance. */
+export interface LeaveApplicationSubmitResult {
+  application: LeaveApplicationRecord;
+  balance: { availableBalance: number };
+}
+
+/** Approver verbs supported by the G03 leave-apply/inbox demo UI on POST .../{id}/decision. */
+export type LeaveDecisionVerb = "APPROVE" | "REJECT";
+
+/** 202 body of POST /api/v1/atl/leave-applications/{id}/decision for APPROVE/REJECT. */
+export interface LeaveDecisionResult {
+  application: LeaveApplicationRecord;
+}
+
+/** One row of GET /api/v1/atl/leave-types (g03.listLeaveTypes) the apply form offers as options. */
+export interface LeaveTypeOption {
+  leaveTypeId: string;
+  name: string;
+  status: "ACTIVE" | "INACTIVE";
 }
 
 interface LeaveOutboxApiSummary {
@@ -251,13 +289,35 @@ interface LeaveSrReconciliationApiSummary {
   };
 }
 
-interface TransferOrderApiSummary {
+/** One row of GET /api/v1/transfers/orders as the G05 routes project it to the web layer. */
+export interface TransferOrderRecord {
+  id: string;
   orderNo: string;
-  status: "PENDING_APPROVAL" | "APPROVED" | "RELIEVED" | "JOINED";
+  employeeId: string;
+  fromOrgUnitId: string;
+  toOrgUnitId: string;
+  orderDate: string;
+  effectiveDate: string;
+  status: "PENDING_APPROVAL" | "APPROVED" | "RELIEVED" | "JOINED" | "RETAINED" | "CANCELLED" | "DEEMED_RELIEVED";
   resolverType: "POSITION_AUTHORITY";
   clearanceItems: ClearanceSummary[];
   orderDocumentId?: string;
   joiningDocumentId?: string;
+}
+
+/** Request body for POST /api/v1/transfers/orders (g05.initiateTransferOrder). */
+export interface TransferInitiateInput {
+  employeeId: string;
+  fromOrgUnitId: string;
+  toOrgUnitId: string;
+  orderDate: string;
+  effectiveDate: string;
+  reason?: string;
+}
+
+/** 201 body of POST /api/v1/transfers/orders: the created PENDING_APPROVAL order. */
+export interface TransferInitiateResult {
+  order: TransferOrderRecord;
 }
 
 export interface ServiceRegisterIngestInput {
@@ -289,6 +349,12 @@ export interface HrmsClient {
   getEmployeeProfile(employeeId: string): Promise<EmployeeProfileView>;
   getServiceRegisterTimeline(employeeId: string, page?: PageQuery): Promise<PageResult<SrTimelineEntry>>;
   listDocuments(): Promise<PageResult<DocumentSummary>>;
+  listLeaveApplications(): Promise<PageResult<LeaveApplicationRecord>>;
+  submitLeaveApplication(input: LeaveApplicationSubmitInput, idempotencyKey: string): Promise<LeaveApplicationSubmitResult>;
+  decideLeaveApplication(applicationId: string, decision: LeaveDecisionVerb, idempotencyKey: string): Promise<LeaveDecisionResult>;
+  listLeaveTypes(): Promise<PageResult<LeaveTypeOption>>;
+  listTransferOrders(): Promise<PageResult<TransferOrderRecord>>;
+  initiateTransferOrder(input: TransferInitiateInput, idempotencyKey: string): Promise<TransferInitiateResult>;
   getLeaveSlice(): Promise<LeaveSliceSummary>;
   getPersonalDetailsSlice(): Promise<PersonalDetailsSliceSummary>;
   getLeaveSrRelaySlice(): Promise<LeaveSrRelaySliceSummary>;
@@ -372,8 +438,35 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
         `${HRMS_API_ROUTES.srEmployees}/${encodeURIComponent(employeeId)}/timeline${toPageQueryString(page)}`
       ),
     listDocuments: () => request<PageResult<DocumentSummary>>(HRMS_API_ROUTES.documents),
+    listLeaveApplications: () => request<PageResult<LeaveApplicationRecord>>(HRMS_API_ROUTES.leaveApplications),
+    submitLeaveApplication: (input, idempotencyKey) =>
+      request<LeaveApplicationSubmitResult>(HRMS_API_ROUTES.leaveApplications, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
+    decideLeaveApplication: (applicationId, decision, idempotencyKey) =>
+      request<LeaveDecisionResult>(`${HRMS_API_ROUTES.leaveApplications}/${encodeURIComponent(applicationId)}/decision`, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify({ decision }),
+      }),
+    listLeaveTypes: () => request<PageResult<LeaveTypeOption>>(HRMS_API_ROUTES.leaveTypes),
+    listTransferOrders: () => request<PageResult<TransferOrderRecord>>(HRMS_API_ROUTES.transferOrders),
+    initiateTransferOrder: (input, idempotencyKey) =>
+      request<TransferInitiateResult>(HRMS_API_ROUTES.transferOrders, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
     getLeaveSlice: async () => {
-      const applications = await request<PageResult<LeaveApplicationApiSummary>>(HRMS_API_ROUTES.leaveApplications);
+      const applications = await request<PageResult<LeaveApplicationRecord>>(HRMS_API_ROUTES.leaveApplications);
       const outbox = await request<PageResult<LeaveOutboxApiSummary>>(HRMS_API_ROUTES.leaveOutbox);
       const payrollSignals = await request<PageResult<PayrollSignalApiSummary>>(HRMS_API_ROUTES.payrollSignals);
       const selected = requireFirst(applications.items, "Leave application");
@@ -407,7 +500,7 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
       return { ...summary.report, relayOwner: "G04" };
     },
     getTransferSlice: async () => {
-      const orders = await request<PageResult<TransferOrderApiSummary>>(HRMS_API_ROUTES.transferOrders);
+      const orders = await request<PageResult<TransferOrderRecord>>(HRMS_API_ROUTES.transferOrders);
       const selected = requireFirst(orders.items, "Transfer order");
       return {
         orderNo: selected.orderNo,

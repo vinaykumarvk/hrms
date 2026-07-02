@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { HrmsClient, TransferSliceSummary } from "../../api/hrmsClient";
 import { OperationalState } from "../../app/OperationalStates";
 import { loadSliceView, SliceViewState } from "../sliceViewState";
+import { TransferInitiateForm } from "./TransferInitiateForm";
+import { TransferOrdersList } from "./TransferOrdersList";
 
 export type TransferViewState = SliceViewState<TransferSliceSummary>;
 
@@ -16,8 +18,15 @@ export interface TransferWorkspaceProps {
   initialState?: TransferViewState;
 }
 
+/**
+ * PH-06D G05 workspace: the initiate-transfer form and orders list are the working
+ * demo surfaces; the vertical-slice evidence panel keeps the PH-06 proof visible.
+ */
 export function TransferWorkspace({ client, initialState }: TransferWorkspaceProps) {
   const [state, setState] = useState<TransferViewState>(initialState ?? { kind: "loading" });
+  const [refreshToken, setRefreshToken] = useState(0);
+
+  const refresh = useCallback(() => setRefreshToken((token) => token + 1), []);
 
   useEffect(() => {
     let mounted = true;
@@ -30,8 +39,18 @@ export function TransferWorkspace({ client, initialState }: TransferWorkspacePro
     return () => {
       mounted = false;
     };
-  }, [client]);
+  }, [client, refreshToken]);
 
+  return (
+    <div className="module-workspace" aria-label="G05 transfer workspace">
+      <TransferInitiateForm client={client} onInitiated={refresh} />
+      <TransferOrdersList client={client} refreshToken={refreshToken} />
+      <TransferEvidencePanel state={state} />
+    </div>
+  );
+}
+
+function TransferEvidencePanel({ state }: { state: TransferViewState }) {
   if (state.kind === "loading") {
     return <OperationalState kind="loading" title="Loading Transfers" detail="Fetching the G05 transfer order summary." />;
   }

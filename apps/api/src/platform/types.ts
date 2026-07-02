@@ -1,4 +1,4 @@
-export type WireErrorCode =
+export type CanonicalErrorCode =
   | "VALIDATION_FAILED"
   | "UNAUTHENTICATED"
   | "FORBIDDEN"
@@ -7,6 +7,16 @@ export type WireErrorCode =
   | "PRECONDITION_FAILED"
   | "RATE_LIMITED"
   | "INTERNAL";
+
+/** BRD G03 §8 named domain error codes (docs/brd/v3/G03-attendance-and-leave-management.md). */
+export type G03DomainErrorCode =
+  | "LEAVE_OVERLAP"
+  | "INSUFFICIENT_BALANCE"
+  | "OPTIMISTIC_LOCK_CONFLICT"
+  | "ELIGIBILITY_FAILED"
+  | "ENTITLEMENT_EXCEEDED";
+
+export type WireErrorCode = CanonicalErrorCode | G03DomainErrorCode;
 
 export interface TenantScope {
   tenantId: string;

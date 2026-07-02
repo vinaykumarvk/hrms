@@ -6,9 +6,14 @@ import {
   AparSliceSummary,
   DisciplinarySliceSummary,
   HrmsClient,
+  LeaveApplicationRecord,
+  LeaveApplicationSubmitInput,
   LeaveSliceSummary,
   LeaveSrRelaySliceSummary,
+  LeaveTypeOption,
   PageResult,
+  TransferInitiateInput,
+  TransferOrderRecord,
   PayrollSliceSummary,
   PensionSliceSummary,
   PersonalDetailsSliceSummary,
@@ -203,8 +208,95 @@ const analyticsSlice: AnalyticsSliceSummary = {
   uatMarker: "UAT_ACCEPTANCE_PACK",
 };
 
+const fixtureLeaveTypes: LeaveTypeOption[] = [
+  { leaveTypeId: "EL", name: "Earned Leave", status: "ACTIVE" },
+  { leaveTypeId: "CL", name: "Casual Leave", status: "ACTIVE" },
+];
+
 export function createFixtureHrmsClient(): HrmsClient {
+  // Interactive PH-06D fixtures are stateful per client so submitted applications
+  // and initiated orders show up in subsequent list calls, like the real API.
+  const leaveApplications: LeaveApplicationRecord[] = [
+    {
+      id: "leave-fixture-000001",
+      applicationNo: "LA/2026/00002",
+      employeeId: employees[0].id,
+      leaveTypeId: "EL",
+      fromDate: "2026-08-03",
+      toDate: "2026-08-05",
+      totalDays: 3,
+      status: "SUBMITTED",
+      resolverType: "REPORTING_CHAIN",
+    },
+  ];
+  const transferOrders: TransferOrderRecord[] = [
+    {
+      id: "transfer-fixture-000001",
+      orderNo: transferSlice.orderNo,
+      employeeId: employees[0].id,
+      fromOrgUnitId: "org-unit-0001",
+      toOrgUnitId: "org-unit-0002",
+      orderDate: "2026-07-01",
+      effectiveDate: "2026-07-15",
+      status: "JOINED",
+      resolverType: "POSITION_AUTHORITY",
+      clearanceItems: transferSlice.clearances.map((clearance) => ({ ...clearance })),
+    },
+  ];
+  let fixtureSequence = 2;
+
   return {
+    listLeaveApplications: () => Promise.resolve(page(leaveApplications.map((application) => ({ ...application })))),
+    submitLeaveApplication: (input: LeaveApplicationSubmitInput) => {
+      const application: LeaveApplicationRecord = {
+        id: `leave-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        applicationNo: `LA/2026/${String(fixtureSequence + 1).padStart(5, "0")}`,
+        employeeId: input.employeeId,
+        leaveTypeId: input.leaveTypeId,
+        fromDate: input.fromDate,
+        toDate: input.toDate,
+        totalDays: 1,
+        status: "SUBMITTED",
+        resolverType: "REPORTING_CHAIN",
+      };
+      fixtureSequence += 1;
+      leaveApplications.push(application);
+      return Promise.resolve({ application: { ...application }, balance: { availableBalance: leaveSlice.balanceAvailable } });
+    },
+    decideLeaveApplication: (applicationId, decision) => {
+      const application = leaveApplications.find((candidate) => candidate.id === applicationId);
+      if (!application) {
+        return Promise.reject(new Error(`Fixture leave application ${applicationId} not found`));
+      }
+      application.status = decision === "APPROVE" ? "APPROVED" : "REJECTED";
+      return Promise.resolve({ application: { ...application } });
+    },
+    listLeaveTypes: () => Promise.resolve(page(fixtureLeaveTypes.map((leaveType) => ({ ...leaveType })))),
+    listTransferOrders: () =>
+      Promise.resolve(
+        page(transferOrders.map((order) => ({ ...order, clearanceItems: order.clearanceItems.map((item) => ({ ...item })) })))
+      ),
+    initiateTransferOrder: (input: TransferInitiateInput) => {
+      const order: TransferOrderRecord = {
+        id: `transfer-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        orderNo: `TO/2026/${String(fixtureSequence + 1).padStart(5, "0")}`,
+        employeeId: input.employeeId,
+        fromOrgUnitId: input.fromOrgUnitId,
+        toOrgUnitId: input.toOrgUnitId,
+        orderDate: input.orderDate,
+        effectiveDate: input.effectiveDate,
+        status: "PENDING_APPROVAL",
+        resolverType: "POSITION_AUTHORITY",
+        clearanceItems: [
+          { code: "HR", status: "OPEN" },
+          { code: "VIGILANCE", status: "OPEN" },
+          { code: "ESTATE", status: "OPEN" },
+        ],
+      };
+      fixtureSequence += 1;
+      transferOrders.push(order);
+      return Promise.resolve({ order: { ...order, clearanceItems: order.clearanceItems.map((item) => ({ ...item })) } });
+    },
     listWorkflowTasks: () => Promise.resolve(page(workflowTasks)),
     actOnWorkflowTask: (taskId, verb, body, idempotencyKey) =>
       Promise.resolve({ accepted: true, fixture: true, taskId, verb, reason: body.reason ?? null, toUserId: body.toUserId ?? null, idempotencyKey }),

@@ -61,7 +61,12 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted(context.services.transfer.approve(context.actor, requiredParam(context.params, "id"))),
+      handler: (context) =>
+        accepted(
+          context.services.transfer.approve(context.actor, requiredParam(context.params, "id"), {
+            idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+          })
+        ),
     },
     {
       method: "GET",

@@ -1,3 +1,5 @@
+export * from "./db/pool";
+export * from "./db/migrate";
 export * from "./jobs/jobService";
 export * from "./http";
 export * from "./migration/staging/migrationStagingService";
@@ -5,8 +7,10 @@ export * from "./migration/ph10MigrationDryRun";
 export * from "./modules/g01/employeeMasterService";
 export * from "./modules/g02/personalDetailsService";
 export * from "./modules/g03/leaveService";
+export * from "./modules/g03/leaveRepository";
 export * from "./modules/g04/leaveSrRelayService";
 export * from "./modules/g05/transferService";
+export * from "./modules/g05/transferRepository";
 export * from "./modules/g06/promotionService";
 export * from "./modules/g07/trainingService";
 export * from "./modules/g08/aparService";

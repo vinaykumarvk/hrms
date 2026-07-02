@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { HrmsClient, LeaveSliceSummary } from "../../api/hrmsClient";
 import { OperationalState } from "../../app/OperationalStates";
 import { loadSliceView, SliceViewState } from "../sliceViewState";
+import { LeaveApplyForm } from "./LeaveApplyForm";
+import { LeaveApproverInbox } from "./LeaveApproverInbox";
 
 export type LeaveViewState = SliceViewState<LeaveSliceSummary>;
 
@@ -16,8 +18,15 @@ export interface LeaveWorkspaceProps {
   initialState?: LeaveViewState;
 }
 
+/**
+ * PH-06D G03 workspace: the leave-apply form and approver inbox are the working
+ * demo surfaces; the vertical-slice evidence panel keeps the PH-06 proof visible.
+ */
 export function LeaveWorkspace({ client, initialState }: LeaveWorkspaceProps) {
   const [state, setState] = useState<LeaveViewState>(initialState ?? { kind: "loading" });
+  const [refreshToken, setRefreshToken] = useState(0);
+
+  const refresh = useCallback(() => setRefreshToken((token) => token + 1), []);
 
   useEffect(() => {
     let mounted = true;
@@ -30,8 +39,18 @@ export function LeaveWorkspace({ client, initialState }: LeaveWorkspaceProps) {
     return () => {
       mounted = false;
     };
-  }, [client]);
+  }, [client, refreshToken]);
 
+  return (
+    <div className="module-workspace" aria-label="G03 attendance and leave workspace">
+      <LeaveApplyForm client={client} onSubmitted={refresh} />
+      <LeaveApproverInbox client={client} onDecided={refresh} refreshToken={refreshToken} />
+      <LeaveEvidencePanel state={state} />
+    </div>
+  );
+}
+
+function LeaveEvidencePanel({ state }: { state: LeaveViewState }) {
   if (state.kind === "loading") {
     return <OperationalState kind="loading" title="Loading Leave" detail="Fetching the G03 leave application and relay summary." />;
   }

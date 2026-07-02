@@ -21,6 +21,8 @@
     "@hrms-workflow/workflow-postgres": "file:../workflow-platform/packages/workflow-postgres",
     "@hrms-workflow/workflow-resolvers": "file:../workflow-platform/packages/workflow-resolvers",
     "@hrms-workflow/workflow-test-kit": "file:../workflow-platform/packages/workflow-test-kit",
+    "@types/pg": "^8.20.0",
+    "pg": "^8.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

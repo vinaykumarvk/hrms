@@ -41,7 +41,7 @@ export interface OutboxEvent {
   tenantId: string;
   entityId?: string;
   sequenceNo: number;
-  eventType: "PROFILE_CREATED" | "GOVERNED_CHANGE_REQUESTED" | "GOVERNED_CHANGE_APPROVED" | "GOVERNED_CHANGE_REJECTED" | "IDENTITY_CHANGE_COMMITTED";
+  eventType: "PROFILE_CREATED" | "GOVERNED_CHANGE_REQUESTED" | "GOVERNED_CHANGE_APPROVED" | "GOVERNED_CHANGE_REJECTED" | "IDENTITY_CHANGE_COMMITTED" | "POSTING_UPDATED";
   aggregateType: "employees" | "governed_changes";
   aggregateId: string;
   employeeId: string;
@@ -375,6 +375,51 @@ export class EmployeeMasterService {
       });
     }
     return { employee: { ...employee }, srEventId: sr.event.id };
+  }
+
+  /**
+   * G05 FR-G05-010 / POSTING_UPDATE: G01 owns the org-placement change. On a confirmed transfer
+   * joining, G05 calls this single authoritative update — the employee's org unit moves to the
+   * destination, the row version advances, and the change is outboxed and audited. No other
+   * module mutates org placement directly.
+   */
+  applyTransferPosting(
+    actor: ActorContext,
+    input: { employeeId: string; toOrgUnitId: string; transferOrderId: string; orderNo: string; effectiveDate: string }
+  ): { employee: EmployeeRecord; previousOrgUnitId: string } {
+    this.authz.check(actor, "g01.employee.posting.update", actor);
+    if (!input.toOrgUnitId || !input.toOrgUnitId.trim()) {
+      throw new FoundationError("VALIDATION_FAILED", "toOrgUnitId is required", { field: "toOrgUnitId" });
+    }
+    const employee = this.getMutable(actor, input.employeeId);
+    const previousOrgUnitId = employee.orgUnitId;
+    employee.orgUnitId = input.toOrgUnitId;
+    employee.rowVersion += 1;
+    this.appendOutbox(actor, {
+      eventType: "POSTING_UPDATED",
+      aggregateType: "employees",
+      aggregateId: employee.id,
+      employeeId: employee.id,
+      eventDate: input.effectiveDate,
+      payload: {
+        orgUnitId: input.toOrgUnitId,
+        previousOrgUnitId,
+        transferOrderId: input.transferOrderId,
+        orderNo: input.orderNo,
+      },
+    });
+    this.audit.recordMutation(actor, {
+      action: "G01_TRANSFER_POSTING_APPLIED",
+      subjectRef: `employees:${employee.id}`,
+      metadata: {
+        transferOrderId: input.transferOrderId,
+        orderNo: input.orderNo,
+        fromOrgUnitId: previousOrgUnitId,
+        toOrgUnitId: input.toOrgUnitId,
+        effectiveDate: input.effectiveDate,
+      },
+    });
+    return { employee: { ...employee }, previousOrgUnitId };
   }
 
   count(scope: TenantScope): number {

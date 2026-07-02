@@ -22,7 +22,13 @@ export function statusForError(code: WireErrorCode): number {
     case "NOT_FOUND":
       return 404;
     case "CONFLICT":
+    case "LEAVE_OVERLAP":
+    case "INSUFFICIENT_BALANCE":
+    case "OPTIMISTIC_LOCK_CONFLICT":
+    case "ENTITLEMENT_EXCEEDED":
       return 409;
+    case "ELIGIBILITY_FAILED":
+      return 422;
     case "PRECONDITION_FAILED":
       return 412;
     case "RATE_LIMITED":
