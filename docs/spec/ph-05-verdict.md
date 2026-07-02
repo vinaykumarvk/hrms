@@ -1,52 +1,100 @@
-# PH-05 Verdict - Core UI Shell and Minimum Workflow Operations UI
+# PH-05 Verdict — UI Conformance and Review Packet (re-baselined)
 
-Status: GREEN by machine evidence; pending PH-05E human UI/demo freeze approval.
+Status: machine evidence GREEN; awaiting the PH-05E human UI/demo freeze decision.
 
-## Verdict
+Re-baselined 2026-07-02 after `docs/reviews/brd-coverage-audit-20260702.md`. The prior verdict
+marker-matched words such as "accessibility" while module UIs were read-only metric cards behind a
+wildcard grant and a fixture client. This packet reports what the re-baselined oracle
+(`docs/spec/pipeline/checks/ph-05e.sh`) actually counted, per module, and names what is still missing.
 
-PH-05 has produced the first usable HRMS shell over the frozen PH-04 API surface. The UI is intentionally fixture-backed at this stage, but the fixture adapter mirrors the PH-04 route families and response envelope names used by the typed client.
+## Oracle-computed state coverage
 
-Recommended disposition: approve the PH-05E human gate if the workspace information architecture and fixture-mode caveats are acceptable for PH-06 vertical-slice development.
+state_coverage: 14/14
 
-## Implemented Surface
+The count above is copied verbatim from the oracle's own sweep: all 14 module surfaces under
+`apps/web/src/modules/g01..g14` implement the canonical loading/error/empty branches. During this
+sub-phase, 11 surfaces (G02–G11, G14) were converted from prop-drilled metric cards to the canonical
+pattern already used by G01/G12/G13: injected `HrmsClient`, per-view state union
+(loading/error/empty/ready via `modules/sliceViewState.ts`), and `OperationalState` rendering. Each
+conversion traces to an oracle RED line from the pre-change run (g02..g11, g14 all RED on
+"missing state branch(es): loading error empty").
 
-HRMS shell: `apps/web/src/app/AppShell.tsx` provides the operational layout, primary navigation, route guard, and standard operational states.
+## Per-module surface status
 
-Workspace behavior: `apps/web/src/app/WorkspaceSwitcher.tsx` exposes Me, My Team, and Admin workspaces.
+| Module | Surface | States implemented | API-backed | Guarded |
+|---|---|---|---|---|
+| G01 | EmployeeProfile.tsx | loading, error, empty, ready (masked-PII ready view) | GET /api/v1/employees + /employees/{id}/profile-360 | g01.employee.read |
+| G02 | PersonalDetailsWorkspace.tsx | loading, error, empty, ready | GET /api/v1/personal-details/change-requests (NOT_FOUND maps to empty) | g02.change.read |
+| G03 | LeaveWorkspace.tsx | loading, error, empty, ready | GET /api/v1/atl/leave-applications + leave-sr-outbox + payroll-signals | g03.leave.read |
+| G04 | LeaveSrRelayWorkspace.tsx | loading, error, empty (total=0), ready | GET /api/v1/leave-sr/reconciliation | g04.relay.read |
+| G05 | TransferWorkspace.tsx | loading, error, empty, ready | GET /api/v1/transfers/orders (NOT_FOUND maps to empty) | g05.transfer.read |
+| G06 | PromotionWorkspace.tsx | loading, error, empty (zero counters), ready | GET /api/v1/promotions/summary | g06.promotion.read |
+| G07 | TrainingWorkspace.tsx | loading, error, empty (sessions=0), ready | GET /api/v1/training/summary | g07.training.read |
+| G08 | AparWorkspace.tsx | loading, error, empty (forms=0), ready | GET /api/v1/apar/summary | g08.apar.read |
+| G09 | DisciplinaryWorkspace.tsx | loading, error, empty (cases=0), ready | GET /api/v1/disciplinary/summary | g09.case.read |
+| G10 | PayrollWorkspace.tsx | loading, error, empty (structures=runs=0), ready | GET /api/v1/payroll/summary | g10.payroll.read |
+| G11 | PensionWorkspace.tsx | loading, error, empty (cases=0), ready | GET /api/v1/pension/summary | g11.pension.read |
+| G12 | ServiceRegisterTimeline.tsx | loading, error, empty, ready (cursor-paged load-more) | GET /api/v1/sr/employees/{id}/timeline | g12.sr.read |
+| G13 | DocumentVaultView.tsx | loading, error, empty, ready | GET /api/v1/documents | g13.document.read |
+| G14 | AnalyticsWorkspace.tsx | loading, error, empty (dashboards=cards=0), ready | GET /api/v1/analytics/summary | g14.analytics.read |
 
-P01 inbox and task operations: `apps/web/src/workflow/Inbox.tsx`, `TaskDetail.tsx`, and `TaskActionPanel.tsx` cover inbox, task detail, approve, reject, send-back, delegate, cancel, query, advance, mandatory reason enforcement, and audit history.
+No-permission is handled one level up: `App.tsx` wraps every workspace in `RouteGuard` with a
+module-specific permission (15 injected-client surfaces, 14+ `requiredPermission` guards, no
+wildcard grant — `ph05-shell.test.cjs` asserts both). The fixture client exists only under
+`src/api/` and tests; the composition root builds the real fetch client with the session-token
+provider.
 
-Workflow config: `apps/web/src/workflow/WorkflowConfigConsole.tsx` and `workflowConfigModel.ts` provide a YAML-backed workflow config surface for validate, simulate, submit for review, publish, maker-checker, and evidence export.
+## Workflow inbox status
 
-G01: `apps/web/src/modules/g01/EmployeeProfile.tsx` shows profile-360 with masked PII and fieldGrants evidence.
+`workflow/WorkflowWorkspace.tsx` + `inboxState.ts` load GET /api/v1/workflow/tasks through the
+injected client with loading/error/empty branches (oracle: all three ok). Task detail and action
+panel cover approve/reject/send-back/delegate/cancel/query/advance with mandatory-reason
+enforcement and Idempotency-Key headers on POST actions.
 
-G12: `apps/web/src/modules/g12/ServiceRegisterTimeline.tsx` shows append-only sequence, hash, and provenance cues.
+## Accessibility findings (what was actually checked)
 
-G13: `apps/web/src/modules/g13/DocumentVaultView.tsx` shows document attachment, versions-oriented state, legal hold, WORM, retention, and fail-closed disposal messaging.
+Checked by source inspection and grep this run — not aspirational:
+
+- Keyboard operability: every interactive control found is a native `<button type="button">`,
+  `<button type="submit">`, or labelled `<input>`; no click handlers on non-interactive elements,
+  no positive `tabIndex`, no custom focus traps (`tabIndex|autoFocus|.focus(` grep: zero hits).
+- Form labelling: the login access-token input is bound via `label htmlFor="hrms-access-token"`.
+- ARIA structure: workspace switcher uses `role="tablist"`/`role="tab"` with `aria-selected`;
+  inbox rows use `aria-current`; action buttons use `aria-pressed`; every module article/section
+  carries an `aria-label` (verified per file).
+- State announcements: `OperationalState` sets `aria-live="assertive"` for error branches and
+  `polite` for loading/empty, so branch transitions are announced without focus moves.
+- Not done this phase (named honestly): no programmatic focus move to the error region on failure
+  (aria-live compensates); no automated WCAG AA contrast audit of `styles.css` was run — contrast
+  remains visually plausible but machine-unverified.
+
+## Remaining gaps (named, with owning phases)
+
+This wave is UI conformance, not module depth — the following are deliberately NOT closed here:
+
+- G02–G11 and G14 remain read-only summary/proof panels. There are no create/edit forms (no leave
+  application form, no transfer initiation, no APAR entry, no payroll run controls). Owning phases:
+  PH-06 (G03/G05 vertical slices), PH-07 (G02/G04 employee wave), PH-08 (G06–G09 statutory wave),
+  PH-09 (G10/G11 compensation wave), PH-10 (G14 analytics/release).
+- G06–G11 and G14 have only a summary endpoint today; their states-conformant summary view is the
+  accepted PH-05E shape. Per-record list/detail routes and their UIs are PH-08/PH-09/PH-10 scope.
+- Empty state for summary-only modules is inferred from zero counts (not a distinct API signal).
+- Single-page workspace layout: no per-module deep-linking/router yet; all surfaces render under
+  one shell page behind guards.
+- Automated contrast audit and focus-management polish, as noted above.
 
 ## Evidence
 
-- Web typecheck/build/tests: `npm run web:check`.
-- API regression: `npm run check`.
-- PH-05D oracle: `bash docs/spec/pipeline/checks/ph-05d.sh`.
-- PH-05E oracle: `bash docs/spec/pipeline/checks/ph-05e.sh`.
+- Oracle: `bash docs/spec/pipeline/checks/ph-05e.sh` — GREEN, including this packet's honesty check.
+- Suites (all green this run): `npm run typecheck`, `npm test` (API, 133 pass),
+  `npm run web:typecheck`, `npm run web:test` (57 pass, includes the extended
+  `ph05-ui-conformance.test.cjs` asserting canonical branches per module surface and client injection).
 
-The current web test suite covers API-client route markers, fixture envelope shape, shell navigation, workspace controls, route guard metadata, P01 action markers, workflow config lifecycle markers, G01/G12/G13 record view markers, and accessibility attributes through `aria-label` checks.
+## Recommendation to the human gate
 
-## Fixture Mode
-
-The UI is in fixture mode for PH-05. This is deliberate: PH-06 will prove live G03/G05 vertical slices after the UI shell and operations surface are accepted. The fixture adapter must be replaced or backed by live route calls as PH-06 introduces end-to-end flows.
-
-## Accessibility And UX Notes
-
-The shell and primary panels include semantic landmarks, buttons, labels, and `aria-label` coverage. The layout uses responsive grids so text and controls collapse to single-column mobile views.
-
-## Residual Risks Before PH-06
-
-- The web app does not yet run against a live HTTP server; it consumes the typed PH-04 route contract and fixture adapter.
-- Advanced visual workflow graph editing remains deferred; the PH-05 workflow config surface is YAML-backed.
-- PH-06 must replace fixture task/employee/SR/document data with live G03/G05 vertical-slice calls.
-
-## Gate
-
-PH-05E is a human UI/demo freeze gate. Approval means PH-06 can build G03 and G05 vertical slices on top of this shell, workflow operations UI, workflow config surface, and G01/G12/G13 foundation views.
+Approve the PH-05E UI freeze. Traceable basis: all 14 module surfaces implement real, API-backed
+loading/error/empty branches behind per-module permission guards (state_coverage 14/14, fail-closed
+negatives all green); the workflow inbox is operational end-to-end. The freeze should carry the
+explicit caveat that G02–G11/G14 are read-only conformant surfaces whose transactional depth
+(forms, per-record views) is owned by PH-06..PH-10, and that contrast/focus polish is an open
+accessibility item for the module-depth waves.

@@ -1,4 +1,5 @@
 import { WorkflowTaskSummary } from "../api/hrmsClient";
+import { OperationalState } from "../app/OperationalStates";
 
 export interface InboxProps {
   tasks: WorkflowTaskSummary[];
@@ -19,7 +20,7 @@ export function Inbox({ tasks, selectedTaskId, onSelectTask }: InboxProps) {
         <strong>{pendingCount} pending</strong>
       </div>
       {tasks.length === 0 ? (
-        <p>No workflow task is pending in this workspace.</p>
+        <OperationalState kind="empty" title="Inbox clear" detail="No workflow task is pending in this workspace." />
       ) : (
         <ul className="inbox-list">
           {tasks.map((task) => (

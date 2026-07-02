@@ -1,10 +1,54 @@
-import { LeaveSliceSummary } from "../../api/hrmsClient";
+import { useEffect, useState } from "react";
+import { HrmsClient, LeaveSliceSummary } from "../../api/hrmsClient";
+import { OperationalState } from "../../app/OperationalStates";
+import { loadSliceView, SliceViewState } from "../sliceViewState";
 
-export interface LeaveWorkspaceProps {
-  slice: LeaveSliceSummary;
+export type LeaveViewState = SliceViewState<LeaveSliceSummary>;
+
+/** Loads the G03 leave slice from GET /api/v1/atl/* (applications, outbox, payroll signals) via the injected client. */
+export function loadLeaveView(client: HrmsClient): Promise<LeaveViewState> {
+  return loadSliceView(() => client.getLeaveSlice());
 }
 
-export function LeaveWorkspace({ slice }: LeaveWorkspaceProps) {
+export interface LeaveWorkspaceProps {
+  client: HrmsClient;
+  /** Pre-resolved view state for tests/server rendering; the live fetch replaces it on mount. */
+  initialState?: LeaveViewState;
+}
+
+export function LeaveWorkspace({ client, initialState }: LeaveWorkspaceProps) {
+  const [state, setState] = useState<LeaveViewState>(initialState ?? { kind: "loading" });
+
+  useEffect(() => {
+    let mounted = true;
+    setState({ kind: "loading" });
+    void loadLeaveView(client).then((next) => {
+      if (mounted) {
+        setState(next);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [client]);
+
+  if (state.kind === "loading") {
+    return <OperationalState kind="loading" title="Loading Leave" detail="Fetching the G03 leave application and relay summary." />;
+  }
+  if (state.kind === "error") {
+    return (
+      <OperationalState
+        kind="error"
+        title="Could not load Leave"
+        detail={`The G03 leave fetch failed with error code ${state.errorCode}.`}
+      />
+    );
+  }
+  if (state.kind === "empty") {
+    return <OperationalState kind="empty" title="No leave applications" detail="No G03 leave applications are in scope." />;
+  }
+
+  const slice = state.slice;
   return (
     <article
       className="record-panel vertical-slice-panel"

@@ -75,6 +75,7 @@ export interface EmployeeProfileView {
   employmentStatus: string;
   orgUnitId: string;
   designation?: string;
+  dateOfJoining?: string;
   pan?: string;
   aadhaarMasked?: string;
   category?: string;
@@ -453,6 +454,7 @@ export class EmployeeMasterService {
       employmentStatus: employee.employmentStatus,
       orgUnitId: employee.orgUnitId,
       designation: employee.designation,
+      dateOfJoining: employee.dateOfJoining,
       pan: this.authz.canSeeField(actor, "employee.pan") ? employee.pan : "[HIDDEN]",
       aadhaarMasked: this.authz.canSeeField(actor, "employee.aadhaar") ? employee.aadhaarMasked : "[HIDDEN]",
       category: this.authz.canSeeField(actor, "employee.category") ? employee.category : "[HIDDEN]",

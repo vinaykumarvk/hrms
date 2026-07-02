@@ -1,18 +1,22 @@
 import { ReactNode, useMemo, useState } from "react";
-import { primaryNavigation, WorkspaceId } from "./navigation";
-import { RouteGuard } from "./RouteGuard";
+import { canAccess, primaryNavigation, WorkspaceId } from "./navigation";
 import { StandardOperationalStates } from "./OperationalStates";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export interface AppShellProps {
+  /** Session-derived permission grants; never a hardcoded wildcard. */
   permissions: readonly string[];
+  /** Display name of the signed-in user, shown in the top bar. */
+  sessionUser?: string;
+  /** Ends the current session and returns the shell to the sign-in state. */
+  onSignOut?: () => void;
   children: ReactNode;
 }
 
-export function AppShell({ permissions, children }: AppShellProps) {
+export function AppShell({ permissions, sessionUser, onSignOut, children }: AppShellProps) {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>("me");
   const visibleNavigation = useMemo(
-    () => primaryNavigation.filter((item) => permissions.includes("*") || permissions.includes(item.requiredPermission)),
+    () => primaryNavigation.filter((item) => canAccess(permissions, item.requiredPermission)),
     [permissions]
   );
 
@@ -24,6 +28,16 @@ export function AppShell({ permissions, children }: AppShellProps) {
           <h1>Operations Workspace</h1>
         </div>
         <WorkspaceSwitcher activeWorkspace={activeWorkspace} onWorkspaceChange={setActiveWorkspace} />
+        {sessionUser ? (
+          <div className="session-status">
+            <span>Signed in as {sessionUser}</span>
+            {onSignOut ? (
+              <button type="button" onClick={onSignOut}>
+                Sign out
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       <div className="layout-grid">
@@ -38,9 +52,7 @@ export function AppShell({ permissions, children }: AppShellProps) {
         </aside>
         <section className="content-surface">
           <p className="workspace-label">Workspace: {labelForWorkspace(activeWorkspace)}</p>
-          <RouteGuard permissions={permissions} requiredPermission="p01.workflow.read">
-            {children}
-          </RouteGuard>
+          {children}
           <StandardOperationalStates />
         </section>
       </div>

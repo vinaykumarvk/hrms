@@ -1,17 +1,30 @@
-import { WorkflowTaskSummary } from "../api/hrmsClient";
-import { TaskAction, TaskActionPanel } from "./TaskActionPanel";
+import { useState } from "react";
+import { HrmsClient, WorkflowTaskSummary } from "../api/hrmsClient";
+import { TaskActionPanel } from "./TaskActionPanel";
+import { submitTaskAction, TaskActionInput } from "./taskActions";
 
 export interface TaskDetailProps {
   task: WorkflowTaskSummary;
+  client: HrmsClient;
+  onActionComplete: () => void;
 }
 
-export function TaskDetail({ task }: TaskDetailProps) {
-  function recordAction(action: TaskAction, reason: string): void {
-    window.dispatchEvent(
-      new CustomEvent("hrms-task-action", {
-        detail: { taskId: task.id, action, reason },
-      })
-    );
+export function TaskDetail({ task, client, onActionComplete }: TaskDetailProps) {
+  const [submitting, setSubmitting] = useState(false);
+  const [submitErrorCode, setSubmitErrorCode] = useState<string | null>(null);
+
+  async function handleSubmitAction(input: TaskActionInput): Promise<void> {
+    setSubmitting(true);
+    setSubmitErrorCode(null);
+    const result = await submitTaskAction(client, task, input, crypto.randomUUID());
+    setSubmitting(false);
+    if (result.kind === "failed") {
+      setSubmitErrorCode(result.errorCode);
+      return;
+    }
+    if (result.kind === "submitted") {
+      onActionComplete();
+    }
   }
 
   return (
@@ -35,7 +48,14 @@ export function TaskDetail({ task }: TaskDetailProps) {
         <h3>Audit history</h3>
         <p>Created from P01 task evidence and action history.</p>
       </section>
-      <TaskActionPanel taskId={task.id} onAction={recordAction} />
+      <TaskActionPanel
+        onSubmitAction={(input) => {
+          void handleSubmitAction(input);
+        }}
+        submitErrorCode={submitErrorCode}
+        submitting={submitting}
+        taskId={task.id}
+      />
     </article>
   );
 }

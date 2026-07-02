@@ -39,9 +39,12 @@ test("PH-10 workspace renders G14 analytics and release readiness panel", () => 
 });
 
 test("PH-10 app loads analytics slice with existing wave slices", () => {
-  for (const marker of ["client.getAnalyticsSlice()", "setAnalyticsSlice", "analyticsSlice ? <AnalyticsWorkspace"]) {
-    assert.equal(appSource.includes(marker), true, marker);
+  // PH-05E canonical pattern: the workspace receives the injected client and
+  // resolves its own loading/error/empty/ready state from the G14 summary route.
+  for (const marker of ['client.getAnalyticsSlice()', 'kind === "loading"', 'kind === "error"', 'kind === "empty"']) {
+    assert.equal(g14Source.includes(marker), true, marker);
   }
+  assert.equal(appSource.includes("<AnalyticsWorkspace client={client}"), true);
   assert.equal(g14Source.includes("ANALYTICS_READ_AUDITED"), true);
   assert.equal(g14Source.includes("PII_SUPPRESSION"), true);
 });

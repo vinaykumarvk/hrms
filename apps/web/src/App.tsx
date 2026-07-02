@@ -1,25 +1,10 @@
-import { createFixtureHrmsClient } from "./api/fixtureHrmsClient";
-import {
-  AnalyticsSliceSummary,
-  AparSliceSummary,
-  DisciplinarySliceSummary,
-  DocumentSummary,
-  EmployeeSummary,
-  LeaveSliceSummary,
-  LeaveSrRelaySliceSummary,
-  PageResult,
-  PayrollSliceSummary,
-  PensionSliceSummary,
-  PersonalDetailsSliceSummary,
-  PromotionSliceSummary,
-  TrainingSliceSummary,
-  TransferSliceSummary,
-  WorkflowTaskSummary,
-} from "./api/hrmsClient";
+import { createHrmsClient } from "./api/hrmsClient";
 import { AppShell } from "./app/AppShell";
-import { useEffect, useState } from "react";
-import { Inbox } from "./workflow/Inbox";
-import { TaskDetail } from "./workflow/TaskDetail";
+import { LoginPanel } from "./app/LoginPanel";
+import { RouteGuard } from "./app/RouteGuard";
+import { endSession, HrmsSession, readStoredSession, startSession } from "./app/session";
+import { useCallback, useState } from "react";
+import { WorkflowWorkspace } from "./workflow/WorkflowWorkspace";
 import { WorkflowConfigConsole } from "./workflow/WorkflowConfigConsole";
 import { EmployeeProfile } from "./modules/g01/EmployeeProfile";
 import { PersonalDetailsWorkspace } from "./modules/g02/PersonalDetailsWorkspace";
@@ -36,123 +21,108 @@ import { AnalyticsWorkspace } from "./modules/g14/AnalyticsWorkspace";
 import { ServiceRegisterTimeline } from "./modules/g12/ServiceRegisterTimeline";
 import { DocumentVaultView } from "./modules/g13/DocumentVaultView";
 
-const client = createFixtureHrmsClient();
+// Composition root: the real fetch client. Base URL comes from Vite env
+// configuration (empty string = same-origin). The token provider reads the
+// session token persisted by the PH-05B login flow (app/session.ts); requests
+// go out unauthenticated when no session exists. Every module workspace
+// receives this client and resolves its own loading/error/empty/ready state
+// (the canonical PH-05E pattern).
+const client = createHrmsClient({
+  baseUrl: (import.meta.env.VITE_HRMS_API_BASE_URL as string | undefined) ?? "",
+  tokenProvider: () => window.sessionStorage.getItem("hrms.session.token"),
+});
 
 export function App() {
-  const [tasks, setTasks] = useState<PageResult<WorkflowTaskSummary> | null>(null);
-  const [employees, setEmployees] = useState<PageResult<EmployeeSummary> | null>(null);
-  const [documents, setDocuments] = useState<PageResult<DocumentSummary> | null>(null);
-  const [leaveSlice, setLeaveSlice] = useState<LeaveSliceSummary | null>(null);
-  const [personalDetailsSlice, setPersonalDetailsSlice] = useState<PersonalDetailsSliceSummary | null>(null);
-  const [leaveSrRelaySlice, setLeaveSrRelaySlice] = useState<LeaveSrRelaySliceSummary | null>(null);
-  const [transferSlice, setTransferSlice] = useState<TransferSliceSummary | null>(null);
-  const [promotionSlice, setPromotionSlice] = useState<PromotionSliceSummary | null>(null);
-  const [trainingSlice, setTrainingSlice] = useState<TrainingSliceSummary | null>(null);
-  const [aparSlice, setAparSlice] = useState<AparSliceSummary | null>(null);
-  const [disciplinarySlice, setDisciplinarySlice] = useState<DisciplinarySliceSummary | null>(null);
-  const [payrollSlice, setPayrollSlice] = useState<PayrollSliceSummary | null>(null);
-  const [pensionSlice, setPensionSlice] = useState<PensionSliceSummary | null>(null);
-  const [analyticsSlice, setAnalyticsSlice] = useState<AnalyticsSliceSummary | null>(null);
+  const [session, setSession] = useState<HrmsSession | null>(() => readStoredSession(window.sessionStorage));
 
-  useEffect(() => {
-    let mounted = true;
-    Promise.all([
-      client.listWorkflowTasks(),
-      client.listEmployees(),
-      client.listDocuments(),
-      client.getLeaveSlice(),
-      client.getPersonalDetailsSlice(),
-      client.getLeaveSrRelaySlice(),
-      client.getTransferSlice(),
-      client.getPromotionSlice(),
-      client.getTrainingSlice(),
-      client.getAparSlice(),
-      client.getDisciplinarySlice(),
-      client.getPayrollSlice(),
-      client.getPensionSlice(),
-      client.getAnalyticsSlice(),
-    ]).then(
-      ([
-        nextTasks,
-        nextEmployees,
-        nextDocuments,
-        nextLeaveSlice,
-        nextPersonalDetailsSlice,
-        nextLeaveSrRelaySlice,
-        nextTransferSlice,
-        nextPromotionSlice,
-        nextTrainingSlice,
-        nextAparSlice,
-        nextDisciplinarySlice,
-        nextPayrollSlice,
-        nextPensionSlice,
-        nextAnalyticsSlice,
-      ]) => {
-        if (mounted) {
-          setTasks(nextTasks);
-          setEmployees(nextEmployees);
-          setDocuments(nextDocuments);
-          setLeaveSlice(nextLeaveSlice);
-          setPersonalDetailsSlice(nextPersonalDetailsSlice);
-          setLeaveSrRelaySlice(nextLeaveSrRelaySlice);
-          setTransferSlice(nextTransferSlice);
-          setPromotionSlice(nextPromotionSlice);
-          setTrainingSlice(nextTrainingSlice);
-          setAparSlice(nextAparSlice);
-          setDisciplinarySlice(nextDisciplinarySlice);
-          setPayrollSlice(nextPayrollSlice);
-          setPensionSlice(nextPensionSlice);
-          setAnalyticsSlice(nextAnalyticsSlice);
-        }
-      }
-    );
-    return () => {
-      mounted = false;
-    };
+  const handleSignIn = useCallback((token: string): boolean => {
+    const nextSession = startSession(window.sessionStorage, token);
+    if (nextSession) {
+      setSession(nextSession);
+    }
+    return nextSession !== null;
   }, []);
 
+  const handleSignOut = useCallback(() => {
+    endSession(window.sessionStorage);
+    setSession(null);
+  }, []);
+
+  if (!session) {
+    return (
+      <main className="hrms-app hrms-login" aria-label="HRMS sign in">
+        <header className="hrms-topbar">
+          <div>
+            <p className="eyebrow">Government HRMS</p>
+            <h1>Operations Workspace</h1>
+          </div>
+        </header>
+        <LoginPanel onSignIn={handleSignIn} />
+      </main>
+    );
+  }
+
+  const permissions = session.permissions;
+
   return (
-    <AppShell permissions={["*"]}>
-      <div className="workflow-grid">
-        <Inbox tasks={tasks?.items ?? []} selectedTaskId={tasks?.items[0]?.id} onSelectTask={() => undefined} />
-        {tasks?.items[0] ? <TaskDetail task={tasks.items[0]} /> : null}
-        <WorkflowConfigConsole />
-      </div>
+    <AppShell permissions={permissions} sessionUser={session.displayName} onSignOut={handleSignOut}>
+      <RouteGuard permissions={permissions} requiredPermission="p01.workflow.read" routeLabel="Workflow inbox">
+        <div className="workflow-grid">
+          <WorkflowWorkspace client={client} />
+          <WorkflowConfigConsole />
+        </div>
+      </RouteGuard>
       <section className="workspace-grid" aria-label="Phase 06 vertical slices">
-        {personalDetailsSlice ? <PersonalDetailsWorkspace slice={personalDetailsSlice} /> : null}
-        {leaveSlice ? <LeaveWorkspace slice={leaveSlice} /> : null}
-        {leaveSrRelaySlice ? <LeaveSrRelayWorkspace slice={leaveSrRelaySlice} /> : null}
-        {transferSlice ? <TransferWorkspace slice={transferSlice} /> : null}
+        <RouteGuard permissions={permissions} requiredPermission="g02.change.read" routeLabel="Personal Details workspace (G02)">
+          <PersonalDetailsWorkspace client={client} />
+        </RouteGuard>
+        <RouteGuard permissions={permissions} requiredPermission="g03.leave.read" routeLabel="Attendance & Leave workspace (G03)">
+          <LeaveWorkspace client={client} />
+        </RouteGuard>
+        <RouteGuard permissions={permissions} requiredPermission="g04.relay.read" routeLabel="Leave-SR Relay workspace (G04)">
+          <LeaveSrRelayWorkspace client={client} />
+        </RouteGuard>
+        <RouteGuard permissions={permissions} requiredPermission="g05.transfer.read" routeLabel="Transfers workspace (G05)">
+          <TransferWorkspace client={client} />
+        </RouteGuard>
       </section>
       <section className="workspace-grid" aria-label="Phase 08 statutory administration wave">
-        {promotionSlice ? <PromotionWorkspace slice={promotionSlice} /> : null}
-        {trainingSlice ? <TrainingWorkspace slice={trainingSlice} /> : null}
-        {aparSlice ? <AparWorkspace slice={aparSlice} /> : null}
-        {disciplinarySlice ? <DisciplinaryWorkspace slice={disciplinarySlice} /> : null}
+        <RouteGuard permissions={permissions} requiredPermission="g06.promotion.read" routeLabel="Promotions workspace (G06)">
+          <PromotionWorkspace client={client} />
+        </RouteGuard>
+        <RouteGuard permissions={permissions} requiredPermission="g07.training.read" routeLabel="Training workspace (G07)">
+          <TrainingWorkspace client={client} />
+        </RouteGuard>
+        <RouteGuard permissions={permissions} requiredPermission="g08.apar.read" routeLabel="APAR workspace (G08)">
+          <AparWorkspace client={client} />
+        </RouteGuard>
+        <RouteGuard permissions={permissions} requiredPermission="g09.case.read" routeLabel="Disciplinary workspace (G09)">
+          <DisciplinaryWorkspace client={client} />
+        </RouteGuard>
       </section>
       <section className="workspace-grid" aria-label="Phase 09 compensation wave">
-        {payrollSlice ? <PayrollWorkspace slice={payrollSlice} /> : null}
-        {pensionSlice ? <PensionWorkspace slice={pensionSlice} /> : null}
+        <RouteGuard permissions={permissions} requiredPermission="g10.payroll.read" routeLabel="Payroll workspace (G10)">
+          <PayrollWorkspace client={client} />
+        </RouteGuard>
+        <RouteGuard permissions={permissions} requiredPermission="g11.pension.read" routeLabel="Pension & Retirement workspace (G11)">
+          <PensionWorkspace client={client} />
+        </RouteGuard>
       </section>
       <section className="workspace-grid" aria-label="Phase 10 analytics and release readiness">
-        {analyticsSlice ? <AnalyticsWorkspace slice={analyticsSlice} /> : null}
+        <RouteGuard permissions={permissions} requiredPermission="g14.analytics.read" routeLabel="Analytics workspace (G14)">
+          <AnalyticsWorkspace client={client} />
+        </RouteGuard>
       </section>
-      <section className="workspace-grid" aria-label="Phase 05A contract smoke">
-        {employees?.items[0] ? <EmployeeProfile employee={employees.items[0]} fieldGrants={[]} /> : null}
-        <ServiceRegisterTimeline
-          items={[
-            {
-              id: "sr-fixture-000001",
-              sequenceNo: 1,
-              eventTypeCode: "IDENTITY_CHANGE",
-              eventDate: "2026-07-02",
-              sourceModule: "G01",
-              entryHash: "aaaa1111bbbb2222",
-              previousHash: "0000000000000000",
-            },
-          ]}
-        />
-        <DocumentVaultView documents={documents?.items ?? []} legalHold={true} retentionUntil="2031-07-02" />
+      <section className="workspace-grid" aria-label="Phase 05D foundation record views">
+        <RouteGuard permissions={permissions} requiredPermission="g01.employee.read" routeLabel="Employees workspace (G01)">
+          <EmployeeProfile client={client} />
+        </RouteGuard>
+        <RouteGuard permissions={permissions} requiredPermission="g12.sr.read" routeLabel="Service Register workspace (G12)">
+          <ServiceRegisterTimeline client={client} />
+        </RouteGuard>
+        <RouteGuard permissions={permissions} requiredPermission="g13.document.read" routeLabel="Documents workspace (G13)">
+          <DocumentVaultView client={client} />
+        </RouteGuard>
       </section>
     </AppShell>
   );

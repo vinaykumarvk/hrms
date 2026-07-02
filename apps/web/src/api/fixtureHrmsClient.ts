@@ -1,5 +1,6 @@
 import {
   DocumentSummary,
+  EmployeeProfileView,
   EmployeeSummary,
   AnalyticsSliceSummary,
   AparSliceSummary,
@@ -13,6 +14,7 @@ import {
   PersonalDetailsSliceSummary,
   PromotionSliceSummary,
   ServiceRegisterIngestInput,
+  SrTimelineEntry,
   TrainingSliceSummary,
   TransferSliceSummary,
   WorkflowTaskSummary,
@@ -44,6 +46,37 @@ const documents: DocumentSummary[] = [
     title: "Aadhaar Proof - GOV-100245",
     status: "ACTIVE",
     classification: "CONFIDENTIAL",
+    currentVersionNo: 2,
+    isWorm: true,
+    legalHold: true,
+  },
+];
+
+const employeeProfile: EmployeeProfileView = {
+  id: "99999999-9999-9999-9999-999999999901",
+  serviceNo: "GOV-100245",
+  displayName: "Ananya Rao",
+  employmentStatus: "ACTIVE",
+  orgUnitId: "org-unit-0001",
+  designation: "Deputy Collector",
+  dateOfJoining: "2014-06-16",
+  pan: "[HIDDEN]",
+  aadhaarMasked: "xxxx-xxxx-1234",
+  category: "[HIDDEN]",
+  rowVersion: 1,
+};
+
+const srTimeline: SrTimelineEntry[] = [
+  {
+    id: "sr-fixture-000001",
+    sequenceNo: 1,
+    employeeId: employeeProfile.id,
+    sourceModule: "G01",
+    eventTypeCode: "IDENTITY_CHANGE",
+    eventDate: "2026-07-02",
+    entryHash: "aaaa1111bbbb2222",
+    previousHash: "0000000000000000",
+    status: "ACTIVE",
   },
 ];
 
@@ -173,7 +206,13 @@ const analyticsSlice: AnalyticsSliceSummary = {
 export function createFixtureHrmsClient(): HrmsClient {
   return {
     listWorkflowTasks: () => Promise.resolve(page(workflowTasks)),
+    actOnWorkflowTask: (taskId, verb, body, idempotencyKey) =>
+      Promise.resolve({ accepted: true, fixture: true, taskId, verb, reason: body.reason ?? null, toUserId: body.toUserId ?? null, idempotencyKey }),
+    actOnWorkflowInstance: (instanceId, verb, body, idempotencyKey) =>
+      Promise.resolve({ accepted: true, fixture: true, instanceId, verb, reason: body.reason ?? null, idempotencyKey }),
     listEmployees: () => Promise.resolve(page(employees)),
+    getEmployeeProfile: () => Promise.resolve({ ...employeeProfile }),
+    getServiceRegisterTimeline: () => Promise.resolve(page(srTimeline)),
     listDocuments: () => Promise.resolve(page(documents)),
     getLeaveSlice: () => Promise.resolve({ ...leaveSlice }),
     getPersonalDetailsSlice: () => Promise.resolve({ ...personalDetailsSlice }),

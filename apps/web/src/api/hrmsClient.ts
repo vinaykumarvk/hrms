@@ -17,6 +17,7 @@ export const HRMS_API_ROUTES = {
   pensionSummary: "/api/v1/pension/summary",
   analyticsSummary: "/api/v1/analytics/summary",
   srIngest: "/api/v1/sr/ingest",
+  srEmployees: "/api/v1/sr/employees",
   documents: "/api/v1/documents",
 } as const;
 
@@ -29,6 +30,12 @@ export interface PageResult<TItem> {
   items: TItem[];
   limit: number;
   next_cursor: string | null;
+}
+
+/** Cursor-paged reads shipped in PH-04C: limit + next_cursor echoed back as `cursor`. */
+export interface PageQuery {
+  limit?: number;
+  cursor?: string;
 }
 
 export interface WorkflowTaskSummary {
@@ -46,12 +53,47 @@ export interface EmployeeSummary {
   designation?: string;
 }
 
+/**
+ * GET /api/v1/employees/{id}/profile-360 response. Governed PII (pan/aadhaarMasked/category)
+ * arrives pre-masked by the API per the actor's P02 fieldGrants — "[HIDDEN]" without a grant,
+ * the stored masked form (e.g. xxxx-xxxx-1234 for Aadhaar) with one. The client never unmasks.
+ */
+export interface EmployeeProfileView {
+  id: string;
+  serviceNo: string;
+  displayName: string;
+  employmentStatus: string;
+  orgUnitId: string;
+  designation?: string;
+  dateOfJoining?: string;
+  pan?: string;
+  aadhaarMasked?: string;
+  category?: string;
+  rowVersion: number;
+}
+
+/** One G12 ledger entry from GET /api/v1/sr/employees/{id}/timeline (append-only, hash-chained). */
+export interface SrTimelineEntry {
+  id: string;
+  sequenceNo: number;
+  employeeId: string;
+  sourceModule: string;
+  eventTypeCode: string;
+  eventDate: string;
+  entryHash: string;
+  previousHash: string;
+  status: "ACTIVE" | "SUPERSEDED" | "ANNOTATED";
+}
+
 export interface DocumentSummary {
   id: string;
   docNo: string;
   title: string;
   status: string;
   classification: string;
+  currentVersionNo: number;
+  isWorm: boolean;
+  legalHold: boolean;
 }
 
 export interface LeaveSliceSummary {
@@ -228,9 +270,24 @@ export interface ServiceRegisterIngestInput {
   payload: Record<string, unknown>;
 }
 
+/** Task-grain action routes shipped in PH-04B: POST /workflow/tasks/{task_id}/{verb}. */
+export type WorkflowTaskActionVerb = "claim" | "approve" | "reject" | "delegate";
+
+/** Instance-grain action routes from P01: POST /workflow/instances/{instance_id}/{verb}. */
+export type WorkflowInstanceActionVerb = "advance" | "approve" | "reject" | "send-back" | "delegate" | "cancel" | "query";
+
+export interface WorkflowActionRequestBody {
+  reason?: string;
+  toUserId?: string;
+}
+
 export interface HrmsClient {
   listWorkflowTasks(): Promise<PageResult<WorkflowTaskSummary>>;
+  actOnWorkflowTask(taskId: string, verb: WorkflowTaskActionVerb, body: WorkflowActionRequestBody, idempotencyKey: string): Promise<unknown>;
+  actOnWorkflowInstance(instanceId: string, verb: WorkflowInstanceActionVerb, body: WorkflowActionRequestBody, idempotencyKey: string): Promise<unknown>;
   listEmployees(): Promise<PageResult<EmployeeSummary>>;
+  getEmployeeProfile(employeeId: string): Promise<EmployeeProfileView>;
+  getServiceRegisterTimeline(employeeId: string, page?: PageQuery): Promise<PageResult<SrTimelineEntry>>;
   listDocuments(): Promise<PageResult<DocumentSummary>>;
   getLeaveSlice(): Promise<LeaveSliceSummary>;
   getPersonalDetailsSlice(): Promise<PersonalDetailsSliceSummary>;
@@ -248,16 +305,25 @@ export interface HrmsClient {
 
 export type HrmsFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+/**
+ * Supplies the current session's bearer token. Injected by the composition
+ * root (login/session management lands in PH-05B); returning null/undefined
+ * sends the request unauthenticated.
+ */
+export type HrmsTokenProvider = () => string | null | undefined | Promise<string | null | undefined>;
+
 export interface HrmsClientOptions {
   baseUrl?: string;
   correlationId?: string;
   fetcher?: HrmsFetch;
+  tokenProvider?: HrmsTokenProvider;
 }
 
 export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
   const baseUrl = trimTrailingSlash(options.baseUrl ?? "");
   const correlationId = options.correlationId ?? "corr-web-ph05";
   const fetcher = options.fetcher ?? fetch;
+  const tokenProvider = options.tokenProvider;
 
   async function request<TResponse>(route: string, init: RequestInit = {}): Promise<TResponse> {
     const headers = new Headers(init.headers);
@@ -265,6 +331,10 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
     headers.set("Accept", "application/json");
     if (init.body && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
+    }
+    const token = tokenProvider ? await tokenProvider() : null;
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
     }
     const response = await fetcher(`${baseUrl}${route}`, { ...init, headers });
     const parsed = (await response.json()) as TResponse;
@@ -274,9 +344,33 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
     return parsed;
   }
 
+  function workflowAction(route: string, body: WorkflowActionRequestBody, idempotencyKey: string): Promise<unknown> {
+    return request<unknown>(route, {
+      method: "POST",
+      headers: {
+        [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
   return {
     listWorkflowTasks: () => request<PageResult<WorkflowTaskSummary>>(HRMS_API_ROUTES.workflowTasks),
+    actOnWorkflowTask: (taskId, verb, body, idempotencyKey) =>
+      workflowAction(`${HRMS_API_ROUTES.workflowTasks}/${encodeURIComponent(taskId)}/${verb}`, body, idempotencyKey),
+    actOnWorkflowInstance: (instanceId, verb, body, idempotencyKey) =>
+      workflowAction(`${HRMS_API_ROUTES.workflowInstances}/${encodeURIComponent(instanceId)}/${verb}`, body, idempotencyKey),
     listEmployees: () => request<PageResult<EmployeeSummary>>(HRMS_API_ROUTES.employees),
+    getEmployeeProfile: async (employeeId) => {
+      const result = await request<{ profile: EmployeeProfileView }>(
+        `${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/profile-360`
+      );
+      return result.profile;
+    },
+    getServiceRegisterTimeline: (employeeId, page = {}) =>
+      request<PageResult<SrTimelineEntry>>(
+        `${HRMS_API_ROUTES.srEmployees}/${encodeURIComponent(employeeId)}/timeline${toPageQueryString(page)}`
+      ),
     listDocuments: () => request<PageResult<DocumentSummary>>(HRMS_API_ROUTES.documents),
     getLeaveSlice: async () => {
       const applications = await request<PageResult<LeaveApplicationApiSummary>>(HRMS_API_ROUTES.leaveApplications);
@@ -373,15 +467,41 @@ function requireFirst<TItem>(items: TItem[], label: string): TItem {
 }
 
 export class HrmsApiError extends Error {
+  readonly code: string;
+
   constructor(
     readonly status: number,
     readonly body: unknown
   ) {
-    super("HRMS API request failed");
+    const code = extractEnvelopeCode(body);
+    super(`HRMS API request failed (${code})`);
     this.name = "HrmsApiError";
+    this.code = code;
   }
+}
+
+function extractEnvelopeCode(body: unknown): string {
+  if (body && typeof body === "object" && "error" in body) {
+    const envelope = (body as { error?: { code?: unknown } }).error;
+    if (envelope && typeof envelope.code === "string") {
+      return envelope.code;
+    }
+  }
+  return "UNKNOWN_ERROR";
 }
 
 function trimTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+function toPageQueryString(page: PageQuery): string {
+  const params = new URLSearchParams();
+  if (page.limit !== undefined) {
+    params.set("limit", String(page.limit));
+  }
+  if (page.cursor) {
+    params.set("cursor", page.cursor);
+  }
+  const encoded = params.toString();
+  return encoded ? `?${encoded}` : "";
 }
