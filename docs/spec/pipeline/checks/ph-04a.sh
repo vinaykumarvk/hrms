@@ -1,73 +1,91 @@
 #!/usr/bin/env bash
-# PH-04A oracle: API kernel and contract harness.
+# PH-04A oracle: API kernel and contract harness — asserts REAL build outcomes.
+# Re-baselined 2026-07-02 after docs/reviews/brd-coverage-audit-20260702.md showed the previous
+# check passed on marker strings and plan-file existence. This oracle asserts: route registry
+# covering all 14 modules, explicit public/protected auth on every route (fail-closed count),
+# sanitized error envelope (no stack traces), a working Idempotency-Key replay store, a computed
+# cursor pagination helper, and a green typecheck + test run. bash 3.2 / BSD grep compatible.
 set -uo pipefail
 cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || echo /Users/n15318/hrms)"
+fail=0; red(){ echo "  RED  $*"; fail=1; }; grn(){ echo "  ok   $*"; }
+echo "== PH-04A exit-criteria (API kernel and contract harness) =="
 
-fail=0
-red(){ echo "  RED  $*"; fail=1; }
-grn(){ echo "  ok   $*"; }
-need_file(){ if [ -s "$1" ] && [ "$(wc -c < "$1")" -ge "${2:-1}" ]; then grn "$1"; else red "missing/too-small: $1"; fi; }
-has_ts(){ [ -d "$1" ] && find "$1" -name '*.ts' -print -quit 2>/dev/null | grep -q .; }
+# --- 1. Route registry covers all 14 modules + P01 workflow -------------------------------------
+for n in 01 02 03 04 05 06 07 08 09 10 11 12 13 14; do
+  grep -qE "registerG${n}Routes|g${n}\.routes" apps/api/src/routes/index.ts 2>/dev/null \
+    && grn "registry wires module g${n}" || red "route registry missing module g${n}"
+done
+grep -qiE "p01|workflow" apps/api/src/routes/index.ts 2>/dev/null \
+  && grn "registry wires P01 workflow routes" || red "registry missing P01 workflow routes"
 
-echo "== PH-04A exit-criteria (API kernel) =="
-
-need_file docs/spec/ph-04-api-contract-implementation-plan.md 2000
-need_file docs/spec/pipeline/prompts/PH-04A.md 1000
-
-has_ts apps/api/src/http && grn "apps/api/src/http present" || red "missing API kernel: apps/api/src/http"
-has_ts apps/api/src/openapi && grn "apps/api/src/openapi present" || red "missing OpenAPI registry: apps/api/src/openapi"
-need_file apps/api/test/ph04-api-kernel.test.cjs 1000
-
-kernel="$(find apps/api/src/http apps/api/src/openapi -name '*.ts' -print0 2>/dev/null | xargs -0 cat 2>/dev/null || true)"
-echo "$kernel" | grep -q "/api/v1" && grn "base path /api/v1 present" || red "base path /api/v1 missing"
-echo "$kernel" | grep -qiE "protected|public|isPublic|requiresAuth|permission" && grn "explicit route protection metadata present" || red "route protection metadata missing"
-echo "$kernel" | grep -qiE "Authorization\\.check|authorization\\.check|authz\\.check|permission" && grn "P02 authorization hook present" || red "P02 authorization hook missing"
-echo "$kernel" | grep -q "X-Correlation-Id" && grn "correlation-id handling present" || red "X-Correlation-Id handling missing"
-echo "$kernel" | grep -q "Idempotency-Key" && grn "idempotency-key handling present" || red "Idempotency-Key handling missing"
-echo "$kernel" | grep -qiE "limit|cursor|next_cursor" && echo "$kernel" | grep -q "100" && grn "cursor pagination bound present" || red "cursor pagination bound missing"
-for code in VALIDATION_FAILED UNAUTHENTICATED FORBIDDEN NOT_FOUND CONFLICT PRECONDITION_FAILED RATE_LIMITED INTERNAL; do
-  echo "$kernel" | grep -q "$code" && grn "error code $code" || red "missing canonical error code: $code"
+# --- 2. FAIL-CLOSED: every route explicitly protected:true or protected:false -------------------
+for f in apps/api/src/routes/*.routes.ts; do
+  [ -f "$f" ] || { red "no route files under apps/api/src/routes"; break; }
+  ops=$(grep -c 'operationId:' "$f" 2>/dev/null); [ -n "$ops" ] || ops=0
+  auth=$(grep -cE 'protected: (true|false)' "$f" 2>/dev/null); [ -n "$auth" ] || auth=0
+  prot=$(grep -c 'protected: true' "$f" 2>/dev/null); [ -n "$prot" ] || prot=0
+  perm=$(grep -c 'permission:' "$f" 2>/dev/null); [ -n "$perm" ] || perm=0
+  if [ "$ops" -gt 0 ] && [ "$ops" -eq "$auth" ]; then grn "auth explicit on all ${ops} routes: $f"
+  else red "route lacks explicit public/protected declaration (${auth}/${ops}): $f"; fi
+  if [ "$perm" -ge "$prot" ]; then grn "permission declared for every protected route: $f"
+  else red "protected route without permission (${perm} permissions / ${prot} protected): $f"; fi
 done
 
-python3 - <<'PY' && grn "P01/G01/G12/G13 OpenAPI contracts parse" || red "OpenAPI parse failed"
-import yaml
-for path in [
-    "docs/contracts/openapi/P01-workflow.yaml",
-    "docs/contracts/openapi/G01.yaml",
-    "docs/contracts/openapi/G12.yaml",
-    "docs/contracts/openapi/G13.yaml",
-    "docs/contracts/error-taxonomy.yaml",
-]:
-    yaml.safe_load(open(path))
-PY
+# --- 3. Kernel enforces auth + correlation -------------------------------------------------------
+k=apps/api/src/http/apiKernel.ts
+grep -qE '\.protected|isPublic' "$k" 2>/dev/null && grn "kernel branches on route protection" || red "kernel does not branch on route protection"
+grep -q 'unauthenticatedError\|UNAUTHENTICATED' "$k" apps/api/src/http/errors.ts 2>/dev/null \
+  && grn "unauthenticated rejection path present" || red "no UNAUTHENTICATED rejection path"
+grep -qiE 'authorization\.check|authz' "$k" 2>/dev/null && grn "P02 authorization hook invoked in dispatch" || red "P02 authorization hook not invoked in dispatch"
+grep -q 'X-Correlation-Id' apps/api/src/http/correlation.ts 2>/dev/null && grn "correlation header handled" || red "X-Correlation-Id not handled"
 
-python3 - <<'PY' && grn "pipeline manifest wires PH-04A after PH-03C" || red "PH-04A missing from pipeline"
-import yaml, sys
-phase = {p.get("id"): p for p in yaml.safe_load(open("docs/spec/pipeline/phases.yaml")).get("phases", [])}.get("PH-04A")
-if not phase or phase.get("gate") != "auto" or phase.get("depends_on") != ["PH-03C"]:
-    sys.exit(1)
-if phase.get("exit_criteria") != "bash docs/spec/pipeline/checks/ph-04a.sh":
-    sys.exit(1)
-PY
+# --- 4. Sanitized error envelope ------------------------------------------------------------------
+while IFS= read -r code; do
+  [ -z "$code" ] && continue
+  grep -q "$code" apps/api/src/http/errors.ts 2>/dev/null && grn "canonical error code: $code" || red "missing canonical error code: $code"
+done <<'EOF'
+VALIDATION_FAILED
+UNAUTHENTICATED
+FORBIDDEN
+NOT_FOUND
+CONFLICT
+PRECONDITION_FAILED
+RATE_LIMITED
+INTERNAL
+EOF
+if grep -rn '\.stack' apps/api/src/http 2>/dev/null | grep -q .; then
+  red "stack trace referenced in HTTP layer — envelope must never carry stacks"
+else grn "no stack-trace leakage in HTTP layer"; fi
 
-if rg -n "\\bany\\b|as any|console\\.log" apps/api/src/http apps/api/src/openapi apps/api/test/ph04-api-kernel.test.cjs >/tmp/ph04a-hygiene.log 2>&1; then
-  red "TypeScript hygiene failed in PH-04A files"
-  sed -n '1,80p' /tmp/ph04a-hygiene.log
+# --- 5. Working Idempotency-Key replay store (audit: presence-check only, no replay) --------------
+idem=apps/api/src/http/idempotency.ts
+grep -qE 'new Map|Map<' "$idem" 2>/dev/null && grn "idempotency replay store exists" || red "no replay store in $idem (presence-check stub)"
+grep -qi 'replay' "$idem" 2>/dev/null && grn "replay path implemented in store" || red "no replay path in $idem"
+grep -qi 'replay' "$k" 2>/dev/null && grn "kernel consults replay store on unsafe routes" || red "kernel dispatch never consults the replay store"
+
+# --- 6. Real cursor pagination helper (audit: next_cursor placeholder) ----------------------------
+pg=apps/api/src/http/pagination.ts
+grep -q 'MAX_LIMIT' "$pg" 2>/dev/null && grep -q '100' "$pg" && grn "limit clamp (max 100) present" || red "no bounded limit clamp in $pg"
+grep -qE 'next_cursor|nextCursor' "$pg" 2>/dev/null && grn "pagination helper emits next_cursor" || red "pagination helper missing next_cursor"
+if grep -rn 'next_cursor: null' apps/api/src/http 2>/dev/null | grep -q .; then
+  red "hardcoded 'next_cursor: null' literal remains in HTTP layer"
+else grn "no hardcoded next_cursor:null in HTTP layer"; fi
+
+# --- 7. Behavioural tests exist AND the suite passes ----------------------------------------------
+t=apps/api/test/ph04-api-kernel.test.cjs
+if [ -s "$t" ]; then
+  grn "kernel test file present: $t"
+  grep -qi 'replay' "$t" && grn "kernel test covers idempotency replay" || red "kernel test does not exercise replay (same key -> same response)"
+  grep -q 'UNAUTHENTICATED' "$t" && grn "kernel test covers unauthenticated rejection" || red "kernel test does not exercise UNAUTHENTICATED"
+  grep -qiE 'public|protected' "$t" && grn "kernel test covers public vs protected routes" || red "kernel test does not exercise public/protected split"
+else red "missing kernel behaviour test: $t"; fi
+
+# --- 8. Toolchain oracle: RED on fail, RED if deps absent (code phase) ----------------------------
+if [ -d node_modules ]; then
+  npm run -s typecheck >/dev/null 2>&1 && grn "npm typecheck passes" || red "npm typecheck failed"
+  npm test >/dev/null 2>&1 && grn "npm test passes (API suite)" || red "npm test failed"
 else
-  grn "PH-04A hygiene scan clean"
+  red "node_modules absent — PH-04A is a code phase; run npm install, then typecheck+test must pass"
 fi
 
-if npm run check; then
-  grn "npm run check passed"
-else
-  red "npm run check failed"
-fi
-
-python3 - <<'PY' && grn "manifest records PH-04A" || red "manifest missing PH-04A"
-import json, sys
-phase = json.load(open("docs/spec/manifest.json")).get("phases", {}).get("PH-04A")
-sys.exit(0 if isinstance(phase, dict) and {"status", "artifacts", "tests"}.issubset(phase) else 1)
-PY
-
-echo "== $([ "$fail" -eq 0 ] && echo 'GREEN - PH-04A met' || echo 'RED - PH-04A not complete') =="
-exit "$fail"
+echo "== $([ $fail -eq 0 ] && echo 'GREEN — PH-04A met' || echo 'RED — PH-04A not complete') =="; exit $fail

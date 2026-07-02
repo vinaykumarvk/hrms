@@ -1,47 +1,71 @@
 #!/usr/bin/env bash
-# PH-09E oracle: compensation wave UI, conformance, manifest, and full regression.
+# PH-09E oracle (human gate): real payroll/pension UI — payslip with masked PAN/account, run console
+# lifecycle, pension estimator, canonical states, full api+web suites, honest verdict delta.
+# Fails closed while the stub marker cards ("evidence-line") are still the UI.
 set -uo pipefail
 cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || echo /Users/n15318/hrms)"
+fail=0; red(){ echo "  RED  $*"; fail=1; }; grn(){ echo "  ok   $*"; }
+must(){ local spec="$1"; shift; local label="${spec%%::*}"; local pat="${spec#*::}"
+  if grep -rqE "$pat" "$@" 2>/dev/null; then grn "$label"; else red "missing: $label"; fi; }
+W10=apps/web/src/modules/g10
+W11=apps/web/src/modules/g11
+WAPI=apps/web/src/api
+WT=apps/web/test
+T=apps/api/test
+V=docs/spec/ph-09-verdict.md
 
-fail=0
-red(){ echo "  RED  $*"; fail=1; }
-grn(){ echo "  ok   $*"; }
-need_file(){ if [ -s "$1" ] && [ "$(wc -c < "$1")" -ge "${2:-1}" ]; then grn "$1"; else red "missing/too-small: $1"; fi; }
+echo "== PH-09E exit-criteria (compensation UI + conformance; human gate) =="
 
-echo "== PH-09E exit-criteria (payroll/pension conformance) =="
+[ -d node_modules ] || red "node_modules absent — toolchain oracle cannot run; refusing GREEN without it"
 
-bash docs/spec/pipeline/checks/ph-09a.sh && grn "PH-09A regression passed" || red "PH-09A regression failed"
-bash docs/spec/pipeline/checks/ph-09b.sh && grn "PH-09B regression passed" || red "PH-09B regression failed"
-bash docs/spec/pipeline/checks/ph-09c.sh && grn "PH-09C regression passed" || red "PH-09C regression failed"
-bash docs/spec/pipeline/checks/ph-09d.sh && grn "PH-09D regression passed" || red "PH-09D regression failed"
+# 1) anti-skeleton, fail-closed: the audited stub marker card must be gone from G10/G11 web modules
+if grep -rq "evidence-line" "$W10" "$W11" 2>/dev/null; then
+  red "stub marker card (evidence-line) still present in g10/g11 web modules — UI not rebuilt"
+else grn "stub marker cards removed from g10/g11 web modules"; fi
 
-need_file apps/web/src/modules/g10/PayrollWorkspace.tsx 1000
-need_file apps/web/src/modules/g11/PensionWorkspace.tsx 1000
-need_file apps/web/test/ph09-compensation-wave.test.cjs 1500
-need_file docs/spec/ph-09-verdict.md 1800
+# 2) real UI behavior in web source
+for spec in \
+  "payslip surface present::[Pp]ayslip" \
+  "PAN rendered masked::PAN" \
+  "masking applied in payslip view::mask" \
+  "run console lifecycle: compute::compute" \
+  "run console lifecycle: reconcile::reconcil" \
+  "run console lifecycle: approve::approve" \
+  "run console lifecycle: disburse::disburs" \
+  "interactive actions wired (onClick/onSubmit)::onClick|onSubmit" \
+  "loading state::[Ll]oading" \
+  "error state::[Ee]rror" \
+  "empty state::[Ee]mpty|[Nn]o (data|records|payslips)"
+do must "$spec" "$W10"; done
+for spec in \
+  "pension case surface::[Cc]ase" \
+  "estimator form present::[Ee]stimat" \
+  "estimator submits (onSubmit/<form)::onSubmit|<form" \
+  "loading/error states::[Ll]oading|[Ee]rror"
+do must "$spec" "$W11"; done
+must "client exposes run-lifecycle + payslip routes::payslip" "$WAPI"
+must "client exposes estimator route::estimat" "$WAPI"
 
-if rg -n "\\bany\\b|as any|console\\.log|localhost" apps/web >/tmp/ph09e-web-hygiene.log 2>&1; then
-  red "PH-09E web hygiene failed"
-  sed -n '1,80p' /tmp/ph09e-web-hygiene.log
-else
-  grn "PH-09E web hygiene scan clean"
+# 3) executed web tests: masked PAN must be asserted (raw value absent), lifecycle + estimator covered
+for spec in \
+  "NEGATIVE: masked PAN asserted in web suite::PAN" \
+  "masking assertion present::mask" \
+  "run lifecycle exercised in web suite::compute|approve|disburs" \
+  "estimator round-trip exercised::estimat"
+do must "$spec" "$WT"; done
+
+# 4) honest verdict delta (content-checked, not existence-checked)
+must "verdict references the audit baseline::brd-coverage-audit-20260702" "$V"
+must "verdict tabulates G10 and G11::G10" "$V"
+must "verdict names remaining gaps (no 100% claim)::NOT_FOUND|remaining|still open|open gap" "$V"
+
+# 5) full suites — api AND web, RED on any failure
+if [ -d node_modules ]; then
+  npm run -s typecheck >/dev/null 2>&1 && grn "api typecheck green" || red "api typecheck failed"
+  npm test >/dev/null 2>&1 && grn "api suite green" || red "npm test failed"
+  npm run -s web:typecheck >/dev/null 2>&1 && grn "web typecheck green" || red "web typecheck failed"
+  npm run -s web:test >/dev/null 2>&1 && grn "web suite green" || red "web tests failed"
 fi
 
-if npm run check && npm run web:check; then grn "full API/web checks passed"; else red "full API/web checks failed"; fi
-
-for marker in G10 G11 PAYROLL_TRACE RULE_VERSION_SNAPSHOT SR_VERIFICATION_GATE PPO_ISSUED SR conformance; do
-  grep -q "$marker" docs/spec/ph-09-verdict.md 2>/dev/null && grn "verdict marker: $marker" || red "missing verdict marker: $marker"
-done
-
-python3 - <<'PY' && grn "manifest records PH-09 through PH-09E" || red "manifest missing PH-09 evidence"
-import json, sys
-phases = json.load(open("docs/spec/manifest.json")).get("phases", {})
-for key in ["PH-09", "PH-09A", "PH-09B", "PH-09C", "PH-09D", "PH-09E"]:
-    phase = phases.get(key)
-    if not isinstance(phase, dict) or "status" not in phase or "tests" not in phase:
-        sys.exit(1)
-sys.exit(0)
-PY
-
-echo "== $([ "$fail" -eq 0 ] && echo 'GREEN - PH-09E met' || echo 'RED - PH-09E not complete') =="
+echo "== $([ "$fail" -eq 0 ] && echo 'GREEN - PH-09E met (await HUMAN gate review)' || echo 'RED - PH-09E not complete') =="
 exit "$fail"

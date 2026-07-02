@@ -274,7 +274,7 @@ phases:
     name: PH-07 · Employee wave UI and conformance
     prompt: docs/spec/pipeline/prompts/PH-07E.md
     exit_criteria: bash docs/spec/pipeline/checks/ph-07e.sh
-    gate: auto
+    gate: human   # re-baseline 2026-07-02: wave-end BRD-coverage gate — human reviews the wave verdict
     depends_on: [PH-07D]
 
   # PH-08 builds the statutory-administration module wave after PH-07 employee facts are stable.
@@ -319,7 +319,7 @@ phases:
     name: PH-08 · Statutory wave UI and conformance
     prompt: docs/spec/pipeline/prompts/PH-08F.md
     exit_criteria: bash docs/spec/pipeline/checks/ph-08f.sh
-    gate: auto
+    gate: human   # re-baseline 2026-07-02: statutory wave (DPC/disciplinary due process) — human gate
     depends_on: [PH-08E]
 
   # PH-09 builds the compensation wave after upstream employee, leave, transfer, promotion,
@@ -357,7 +357,7 @@ phases:
     name: PH-09 · Payroll/pension UI and conformance
     prompt: docs/spec/pipeline/prompts/PH-09E.md
     exit_criteria: bash docs/spec/pipeline/checks/ph-09e.sh
-    gate: auto
+    gate: human   # re-baseline 2026-07-02: money wave (payroll/pension) — human gate per gate_policy
     depends_on: [PH-09D]
 
   # PH-10 closes the current build with read-only G14 analytics and release-readiness evidence.
@@ -395,7 +395,7 @@ phases:
     name: PH-10 · Analytics UI and release conformance
     prompt: docs/spec/pipeline/prompts/PH-10E.md
     exit_criteria: bash docs/spec/pipeline/checks/ph-10e.sh
-    gate: auto
+    gate: human   # re-baseline 2026-07-02: release-conformance gate before UAT governance — human
     depends_on: [PH-10D]
 
   # PH-11 rehearses UAT/cutover governance after PH-10 release readiness.
@@ -434,7 +434,7 @@ phases:
     name: PH-11 · Governance verdict and full conformance
     prompt: docs/spec/pipeline/prompts/PH-11E.md
     exit_criteria: bash docs/spec/pipeline/checks/ph-11e.sh
-    gate: auto
+    gate: human   # re-baseline 2026-07-02: UAT governance verdict — human per gate_policy (UAT/go-live)
     depends_on: [PH-11D]
 
   # PH-12 prepares the human release-board package after PH-11 governance rehearsal.
@@ -472,7 +472,7 @@ phases:
     name: PH-12 · Release-board readiness verdict and conformance
     prompt: docs/spec/pipeline/prompts/PH-12E.md
     exit_criteria: bash docs/spec/pipeline/checks/ph-12e.sh
-    gate: auto
+    gate: human   # re-baseline 2026-07-02: release-board readiness — human per gate_policy
     depends_on: [PH-12D]
 
   # PH-13 seals the release-candidate evidence package and prepares approval intake.
@@ -496,7 +496,7 @@ phases:
     name: PH-13 · Human approval intake guardrails
     prompt: docs/spec/pipeline/prompts/PH-13C.md
     exit_criteria: bash docs/spec/pipeline/checks/ph-13c.sh
-    gate: auto
+    gate: human   # re-baseline 2026-07-02: approval INTAKE is by definition a human action — never auto
     depends_on: [PH-13B]
 
   - id: PH-13D
@@ -510,7 +510,7 @@ phases:
     name: PH-13 · Release-candidate seal verdict and conformance
     prompt: docs/spec/pipeline/prompts/PH-13E.md
     exit_criteria: bash docs/spec/pipeline/checks/ph-13e.sh
-    gate: auto
+    gate: human   # re-baseline 2026-07-02: release-candidate seal — human per gate_policy
     depends_on: [PH-13D]
 
   # PH-14 watches the sealed release candidate for drift and prepares board-day readiness.
@@ -548,5 +548,5 @@ phases:
     name: PH-14 · Post-seal drift-watch verdict and conformance
     prompt: docs/spec/pipeline/prompts/PH-14E.md
     exit_criteria: bash docs/spec/pipeline/checks/ph-14e.sh
-    gate: auto
+    gate: human   # re-baseline 2026-07-02: board-day/no-go decision — human per gate_policy
     depends_on: [PH-14D]
