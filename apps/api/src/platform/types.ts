@@ -10,6 +10,23 @@ export type CanonicalErrorCode =
   | "RATE_LIMITED"
   | "INTERNAL";
 
+/**
+ * BRD G01 named domain error codes (docs/brd/v3/G01-employee-profile-management.md,
+ * FR-EPM-015/017/018 failure handling): 403 maker==checker on a 4-eyes merge or separation
+ * approval; 409 merge of conflicting ACTIVE statutory states without override; 409 merge
+ * undo past the configurable window; 409 invalid §10.1 status transition (also reused for
+ * promote-active with remaining STRICT gaps — the BRD registers only the 409 status there);
+ * 409 archive attempted under an ACTIVE legal hold; 409 separation with open blocking
+ * obligations and no override.
+ */
+export type G01DomainErrorCode =
+  | "SOD_VIOLATION"
+  | "MERGE_CONFLICT"
+  | "UNDO_EXPIRED"
+  | "INVALID_STATE"
+  | "LEGAL_HOLD_ACTIVE"
+  | "BLOCKING_OBLIGATIONS";
+
 /** BRD G03 §8 named domain error codes (docs/brd/v3/G03-attendance-and-leave-management.md). */
 export type G03DomainErrorCode =
   | "LEAVE_OVERLAP"
@@ -143,6 +160,7 @@ export type G14DomainErrorCode =
 
 export type WireErrorCode =
   | CanonicalErrorCode
+  | G01DomainErrorCode
   | G03DomainErrorCode
   | G06DomainErrorCode
   | G05DomainErrorCode

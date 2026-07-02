@@ -22,6 +22,8 @@ export function statusForError(code: WireErrorCode): number {
     // SoD violations on disposition/clearance approval (FR-009/FR-017) are 403.
     case "ERR-G13-CLEARANCE_INSUFFICIENT":
     case "ERR-G13-SOD_VIOLATION":
+    // BRD G01 FR-EPM-015/018: maker == checker on a 4-eyes merge or separation approval is 403.
+    case "SOD_VIOLATION":
     // BRD G03 FR-03: punches from unregistered/inactive devices fail closed as 403.
     case "DEVICE_NOT_AUTHORIZED":
     // BRD G14 §8.3: a below-k cohort read (FR-17 k-anonymity, incl. its complementary
@@ -35,6 +37,15 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G14-ASOF-NA":
       return 404;
     case "CONFLICT":
+    // BRD G01 FR-EPM-015/017/018 failure handling: conflicting-ACTIVE-state merge without
+    // override, merge undo past the window, invalid §10.1 lifecycle transition (incl.
+    // promote-active with gaps), archive under an ACTIVE legal hold, and separation with
+    // open blocking obligations are all 409 CONFLICT.
+    case "MERGE_CONFLICT":
+    case "UNDO_EXPIRED":
+    case "INVALID_STATE":
+    case "LEGAL_HOLD_ACTIVE":
+    case "BLOCKING_OBLIGATIONS":
     case "LEAVE_OVERLAP":
     // BRD G03 FR-01/FR-09: overlapping PUBLISHED rosters and comp-off over-balance are 409 CONFLICT.
     case "VAL-G03-ROSTER-OVERLAP":

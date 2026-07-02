@@ -19,6 +19,8 @@ export const g01RouteEvidence = {
   outboxFeed: "GET /api/v1/employees/changes reads the g01 outbox through pageItems cursor pagination",
   satellites:
     "PH-07A: /employees/{id}/contacts|addresses|dependents CRUD + /attribute-history timeline; every satellite mutation appends employee_attribute_history and an outbox row in the same unit of work (FR-EPM-003/004/011)",
+  identityOps:
+    "PH-16A: /dedup/* queue + 4-eyes alias merge (employee_id_aliases, merge_snapshot, RECORDS_MERGED, windowed undo), /imports/* PROVISIONAL glide path with /remediation-queue and :promote-active, and lifecycle :separate/:reactivate/:archive with §10.1 guards (FR-EPM-015/017/018)",
 };
 
 export function registerG01Routes(kernel: ApiKernel): void {
@@ -48,6 +50,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
         orgUnitId: requiredString(body, "orgUnitId"),
         designation: optionalString(body, "designation"),
         dateOfJoining: requiredString(body, "dateOfJoining"),
+        dob: optionalString(body, "dob"),
         serviceNo: optionalString(body, "serviceNo"),
         category: optionalString(body, "category"),
         pan: optionalString(body, "pan"),
@@ -292,6 +295,256 @@ export function registerG01Routes(kernel: ApiKernel): void {
       });
       return accepted(result);
     },
+  });
+
+  // ===================================================================================
+  // PH-16A — FR-EPM-015 duplicate detection & alias-based merge
+  // ===================================================================================
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/dedup/scan",
+    operationId: "g01.runDedupScan",
+    protected: true,
+    permission: "g01.dedup.scan",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => created(context.services.employeeIdentityOps.scanForDuplicates(context.actor)),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/dedup/candidates",
+    operationId: "g01.listDedupCandidates",
+    protected: true,
+    permission: "g01.dedup.read",
+    list: { defaultLimit: 25, maxLimit: 100 },
+    handler: (context) =>
+      ok(
+        pageItems(
+          context.services.employeeIdentityOps.listDedupCandidates(
+            context.scope,
+            context.request.query?.status as "OPEN" | "MERGED" | "DISMISSED" | undefined
+          ),
+          context.pagination ?? { limit: 25 }
+        )
+      ),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/dedup/candidates/{id}:merge",
+    operationId: "g01.requestDedupMerge",
+    protected: true,
+    permission: "g01.dedup.merge",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted(
+        context.services.employeeIdentityOps.requestMerge(context.actor, {
+          candidateId: requiredParam(context.params, "id"),
+          survivorId: requiredString(body, "survivorId"),
+          override: optionalBoolean(body, "override"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/dedup/candidates/{id}:merge-approve",
+    operationId: "g01.approveDedupMerge",
+    protected: true,
+    permission: "g01.dedup.merge.approve",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted(context.services.employeeIdentityOps.approveMerge(context.actor, { candidateId: requiredParam(context.params, "id") })),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/dedup/candidates/{id}:dismiss",
+    operationId: "g01.dismissDedupCandidate",
+    protected: true,
+    permission: "g01.dedup.dismiss",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted(context.services.employeeIdentityOps.dismissCandidate(context.actor, { candidateId: requiredParam(context.params, "id") })),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/dedup/merges/{aliasId}:undo",
+    operationId: "g01.undoDedupMerge",
+    protected: true,
+    permission: "g01.dedup.undo",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted(context.services.employeeIdentityOps.undoMerge(context.actor, { aliasId: requiredParam(context.params, "aliasId") })),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees/{id}/resolve",
+    operationId: "g01.resolveEmployeeId",
+    protected: true,
+    permission: "g01.employee.read",
+    handler: (context) => ok(context.services.employeeIdentityOps.resolveEmployeeId(context.scope, requiredParam(context.params, "id"))),
+  });
+
+  // ===================================================================================
+  // PH-16A — FR-EPM-017 bulk import (PROVISIONAL glide path)
+  // ===================================================================================
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/imports",
+    operationId: "g01.createImportBatch",
+    protected: true,
+    permission: "g01.import.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created(
+        context.services.employeeIdentityOps.createImportBatch(context.actor, {
+          templateVersion: requiredString(body, "templateVersion"),
+          validationProfile: (optionalString(body, "validationProfile") ?? "STRICT") as "STRICT" | "MIGRATION",
+          rows: (body.rows ?? []) as Record<string, unknown>[],
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/imports/{batchId}:validate",
+    operationId: "g01.validateImportBatch",
+    protected: true,
+    permission: "g01.import.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted(context.services.employeeIdentityOps.validateImportBatch(context.actor, { batchId: requiredParam(context.params, "batchId") })),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/imports/{batchId}/report",
+    operationId: "g01.getImportBatchReport",
+    protected: true,
+    permission: "g01.import.read",
+    handler: (context) => ok(context.services.employeeIdentityOps.getImportReport(context.scope, requiredParam(context.params, "batchId"))),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/imports/{batchId}:commit",
+    operationId: "g01.commitImportBatch",
+    protected: true,
+    permission: "g01.import.commit",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted(context.services.employeeIdentityOps.commitImportBatch(context.actor, { batchId: requiredParam(context.params, "batchId") })),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/remediation-queue",
+    operationId: "g01.listRemediationQueue",
+    protected: true,
+    permission: "g01.import.read",
+    list: { defaultLimit: 25, maxLimit: 100 },
+    handler: (context) =>
+      ok(
+        pageItems(
+          context.services.employeeIdentityOps.listRemediationQueue(
+            context.scope,
+            (context.request.query?.state as "QUEUED" | "RESOLVED" | undefined) ?? "QUEUED"
+          ),
+          context.pagination ?? { limit: 25 }
+        )
+      ),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}:promote-active",
+    operationId: "g01.promoteEmployeeActive",
+    protected: true,
+    permission: "g01.import.commit",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted(
+        context.services.employeeIdentityOps.promoteActive(context.actor, {
+          employeeId: requiredParam(context.params, "id"),
+          fixes: {
+            dob: optionalString(body, "dob"),
+            dateOfJoining: optionalString(body, "dateOfJoining"),
+            pan: optionalString(body, "pan"),
+          },
+        })
+      );
+    },
+  });
+
+  // ===================================================================================
+  // PH-16A — FR-EPM-018 lifecycle :separate / :reactivate / :archive
+  // ===================================================================================
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}:separate",
+    operationId: "g01.initiateEmployeeSeparation",
+    protected: true,
+    permission: "g01.employee.lifecycle",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted(
+        context.services.employeeIdentityOps.initiateSeparation(context.actor, {
+          employeeId: requiredParam(context.params, "id"),
+          targetStatus: requiredString(body, "targetStatus") as "RETIRED" | "RESIGNED" | "TERMINATED" | "DECEASED",
+          separationDate: requiredString(body, "separationDate"),
+          separationReason: requiredString(body, "separationReason"),
+          overrideObligations: optionalBoolean(body, "overrideObligations"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/separation:approve",
+    operationId: "g01.approveEmployeeSeparation",
+    protected: true,
+    permission: "g01.employee.lifecycle.approve",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted(context.services.employeeIdentityOps.approveSeparation(context.actor, { employeeId: requiredParam(context.params, "id") })),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}:reactivate",
+    operationId: "g01.reactivateEmployee",
+    protected: true,
+    permission: "g01.employee.lifecycle",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted(
+        context.services.employeeIdentityOps.reactivate(context.actor, {
+          employeeId: requiredParam(context.params, "id"),
+          effectiveDate: requiredString(body, "effectiveDate"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}:archive",
+    operationId: "g01.archiveEmployee",
+    protected: true,
+    permission: "g01.employee.lifecycle",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted(context.services.employeeIdentityOps.archive(context.actor, { employeeId: requiredParam(context.params, "id") })),
   });
 }
 

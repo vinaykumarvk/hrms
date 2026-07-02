@@ -36,6 +36,23 @@ export interface EmployeeProfileRepository {
   countDependents(): number;
   insertDependent(dependent: EmployeeDependent): void;
   listDependents(scope: TenantScope, employeeId: string): EmployeeDependent[];
+  /**
+   * FR-EPM-015 AC3 (PH-16A): consolidate every non-deleted G01 satellite row under the
+   * surviving employee_id during a merge. Returns the moved row ids so the alias
+   * merge_snapshot can restore them verbatim on undo. G01-owned tables ONLY — a merge never
+   * re-points another module's foreign keys.
+   */
+  repointSatellitesForMerge(
+    scope: TenantScope,
+    fromEmployeeId: string,
+    toEmployeeId: string
+  ): { contactIds: string[]; addressIds: string[]; dependentIds: string[] };
+  /** Merge-undo counterpart: re-points exactly the snapshot-listed rows back to the restored loser. */
+  repointSatelliteRows(
+    scope: TenantScope,
+    rowIds: { contactIds: string[]; addressIds: string[]; dependentIds: string[] },
+    toEmployeeId: string
+  ): void;
   // employee_attribute_history (append-only spine; closing a window updates effective_to only)
   countAttributeHistory(): number;
   appendAttributeHistory(entry: EmployeeAttributeHistoryEntry): void;
@@ -129,6 +146,55 @@ export class InMemoryEmployeeProfileRepository implements EmployeeProfileReposit
 
   listDependents(scope: TenantScope, employeeId: string): EmployeeDependent[] {
     return this.dependents.filter((item) => inScope(item, scope) && item.employeeId === employeeId && !item.isDeleted);
+  }
+
+  repointSatellitesForMerge(
+    scope: TenantScope,
+    fromEmployeeId: string,
+    toEmployeeId: string
+  ): { contactIds: string[]; addressIds: string[]; dependentIds: string[] } {
+    const moved = { contactIds: [] as string[], addressIds: [] as string[], dependentIds: [] as string[] };
+    for (const contact of this.contacts) {
+      if (inScope(contact, scope) && contact.employeeId === fromEmployeeId && !contact.isDeleted) {
+        contact.employeeId = toEmployeeId;
+        moved.contactIds.push(contact.id);
+      }
+    }
+    for (const address of this.addresses) {
+      if (inScope(address, scope) && address.employeeId === fromEmployeeId && !address.isDeleted) {
+        address.employeeId = toEmployeeId;
+        moved.addressIds.push(address.id);
+      }
+    }
+    for (const dependent of this.dependents) {
+      if (inScope(dependent, scope) && dependent.employeeId === fromEmployeeId && !dependent.isDeleted) {
+        dependent.employeeId = toEmployeeId;
+        moved.dependentIds.push(dependent.id);
+      }
+    }
+    return moved;
+  }
+
+  repointSatelliteRows(
+    scope: TenantScope,
+    rowIds: { contactIds: string[]; addressIds: string[]; dependentIds: string[] },
+    toEmployeeId: string
+  ): void {
+    for (const contact of this.contacts) {
+      if (inScope(contact, scope) && rowIds.contactIds.includes(contact.id)) {
+        contact.employeeId = toEmployeeId;
+      }
+    }
+    for (const address of this.addresses) {
+      if (inScope(address, scope) && rowIds.addressIds.includes(address.id)) {
+        address.employeeId = toEmployeeId;
+      }
+    }
+    for (const dependent of this.dependents) {
+      if (inScope(dependent, scope) && rowIds.dependentIds.includes(dependent.id)) {
+        dependent.employeeId = toEmployeeId;
+      }
+    }
   }
 
   countAttributeHistory(): number {

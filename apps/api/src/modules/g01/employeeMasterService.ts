@@ -4,6 +4,9 @@ import { ActorContext, FoundationError, TenantScope, inScope, nextId, requireTen
 import { ServiceRegisterService } from "../g12/serviceRegisterService";
 import { EmployeeProfileRepository, InMemoryEmployeeProfileRepository } from "./employeeProfileRepository";
 
+/** §10.1 record_state machine (FR-EPM-017/018/021). Undefined is read as ACTIVE (pre-PH-16A rows). */
+export type EmployeeRecordState = "PROVISIONAL" | "ACTIVE" | "ARCHIVED" | "PURGE_PENDING";
+
 export interface EmployeeRecord {
   id: string;
   tenantId: string;
@@ -16,9 +19,21 @@ export interface EmployeeRecord {
   orgUnitId: string;
   designation?: string;
   dateOfJoining?: string;
+  dob?: string;
   pan?: string;
   aadhaarMasked?: string;
   category?: string;
+  /** FR-EPM-017/018: PROVISIONAL (migration glide path) / ACTIVE / ARCHIVED / PURGE_PENDING. */
+  recordState?: EmployeeRecordState;
+  /** FR-EPM-018 AC1/AC2 separation fields; FR-EPM-017 AC5 login-disabled PROVISIONAL rows. */
+  separationDate?: string;
+  separationReason?: string;
+  loginDisabled?: boolean;
+  /** FR-EPM-017 BR: migrated records carry source_system/legacy_id. */
+  sourceSystem?: string;
+  legacyId?: string;
+  /** FR-EPM-015 AC3: a merged loser is soft-deleted, never hard-removed (alias keeps identity). */
+  isDeleted?: boolean;
   rowVersion: number;
 }
 
@@ -30,6 +45,7 @@ export interface EmployeeCreateInput {
   orgUnitId: string;
   designation?: string;
   dateOfJoining: string;
+  dob?: string;
   serviceNo?: string;
   category?: string;
   pan?: string;
@@ -51,8 +67,14 @@ export interface OutboxEvent {
     | "POSTING_UPDATED"
     | "CONTACT_UPDATED"
     | "ADDRESS_UPDATED"
-    | "DEPENDENT_UPDATED";
-  aggregateType: "employees" | "governed_changes" | "employee_contacts" | "employee_addresses" | "employee_dependents";
+    | "DEPENDENT_UPDATED"
+    // PH-16A FR-EPM-015 AC4/AC7 + FR-EPM-018 AC3/AC5 change-feed events.
+    | "RECORDS_MERGED"
+    | "MERGE_UNDONE"
+    | "SEPARATION"
+    | "DEATH"
+    | "REACTIVATION";
+  aggregateType: "employees" | "governed_changes" | "employee_contacts" | "employee_addresses" | "employee_dependents" | "employee_id_aliases";
   aggregateId: string;
   employeeId: string;
   eventDate: string;
@@ -194,6 +216,13 @@ export class EmployeeMasterService {
 
   private readonly governedChanges: GovernedChangeRequest[] = [];
 
+  /**
+   * FR-EPM-015 AC4 / FR-EPM-019 AC4: alias-transparent identity resolution. Set by the
+   * identity-ops sibling once employee_id_aliases exists; any merged loser_id supplied to a
+   * read is collapsed to its ultimate survivor_id before lookup.
+   */
+  private aliasResolver?: (scope: TenantScope, employeeId: string) => string;
+
   constructor(
     employees: EmployeeRecord[],
     private readonly authz: AuthorizationService,
@@ -204,24 +233,139 @@ export class EmployeeMasterService {
     this.employees = employees.map((employee) => ({ ...employee }));
   }
 
+  setAliasResolver(resolver: (scope: TenantScope, employeeId: string) => string): void {
+    this.aliasResolver = resolver;
+  }
+
   getById(scope: TenantScope, employeeId: string): EmployeeRecord | null {
     requireTenantScope(scope);
-    const employee = this.employees.find((item) => inScope(item, scope) && item.id === employeeId);
+    // Alias-transparent read (FR-EPM-015 AC4): a merged loser_id resolves to the survivor row.
+    const resolvedId = this.aliasResolver ? this.aliasResolver(scope, employeeId) : employeeId;
+    const employee = this.employees.find((item) => inScope(item, scope) && item.id === resolvedId && !item.isDeleted);
     return employee ? { ...employee } : null;
   }
 
   getByServiceNo(scope: TenantScope, serviceNo: string): EmployeeRecord | null {
     requireTenantScope(scope);
-    const employee = this.employees.find((item) => inScope(item, scope) && item.serviceNo === serviceNo);
+    const employee = this.employees.find((item) => inScope(item, scope) && item.serviceNo === serviceNo && !item.isDeleted);
     return employee ? { ...employee } : null;
   }
 
   list(scope: TenantScope): EmployeeRecord[] {
     requireTenantScope(scope);
     return this.employees
-      .filter((employee) => inScope(employee, scope))
+      .filter((employee) => inScope(employee, scope) && !employee.isDeleted)
       .sort((left, right) => left.serviceNo.localeCompare(right.serviceNo))
       .map((employee) => ({ ...employee }));
+  }
+
+  /**
+   * G01-internal seam for the identity-ops sibling (FR-EPM-015/017/018): live mutable master
+   * row, optionally including a soft-deleted (merged-loser) row for undo restoration. Never
+   * exposed through a route handler.
+   */
+  getLiveRecordForIdentityOps(scope: TenantScope, employeeId: string, includeDeleted = false): EmployeeRecord | null {
+    requireTenantScope(scope);
+    const employee = this.employees.find(
+      (item) => inScope(item, scope) && item.id === employeeId && (includeDeleted || !item.isDeleted)
+    );
+    return employee ?? null;
+  }
+
+  /** G01-internal seam: scan projection over non-deleted rows (FR-EPM-015 matcher input). */
+  listLiveRecordsForIdentityOps(scope: TenantScope): EmployeeRecord[] {
+    requireTenantScope(scope);
+    return this.employees.filter((item) => inScope(item, scope) && !item.isDeleted);
+  }
+
+  /** G01-internal seam: change-feed append for the identity-ops sibling (same outbox backbone). */
+  appendChangeFeedEvent(
+    scope: TenantScope,
+    input: Omit<OutboxEvent, "id" | "tenantId" | "entityId" | "sequenceNo">
+  ): OutboxEvent {
+    return this.appendOutbox(scope, input);
+  }
+
+  /**
+   * FR-EPM-017 AC5/AC7 — bulk-import creation path. Unlike create(), MIGRATION-profile rows may
+   * arrive without dob/date_of_joining and are committed as record_state=PROVISIONAL with the
+   * login disabled; STRICT-valid rows commit as ACTIVE. Every committed record emits
+   * PROFILE_CREATED via the outbox in the same unit of work and carries source_system/legacy_id.
+   */
+  createFromImport(
+    actor: ActorContext,
+    input: {
+      firstName: string;
+      lastName?: string;
+      displayName?: string;
+      orgUnitId: string;
+      designation?: string;
+      dateOfJoining?: string;
+      dob?: string;
+      serviceNo?: string;
+      category?: string;
+      pan?: string;
+      recordState: "ACTIVE" | "PROVISIONAL";
+      loginDisabled: boolean;
+      sourceSystem: string;
+      legacyId?: string;
+    }
+  ): { employee: EmployeeRecord; outboxEvent: OutboxEvent } {
+    this.authz.check(actor, "g01.import.commit", actor);
+    if (!input.firstName || !input.firstName.trim() || !input.orgUnitId || !input.orgUnitId.trim()) {
+      throw new FoundationError("VALIDATION_FAILED", "firstName and orgUnitId are required even under MIGRATION");
+    }
+    if (input.pan && !PAN_PATTERN.test(input.pan)) {
+      throw new FoundationError("VALIDATION_FAILED", "PAN format is invalid", { field: "pan" });
+    }
+    if (input.serviceNo && this.getByServiceNo(actor, input.serviceNo)) {
+      throw new FoundationError("CONFLICT", "service_no already exists", {
+        field: "serviceNo",
+        details: { reason: "DUPLICATE_SERVICE_NO", messageId: "ERR-G01-STATE" },
+      });
+    }
+    const employee: EmployeeRecord = {
+      id: nextId("emp", this.employees.length),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      serviceNo: input.serviceNo ?? this.nextServiceNo(actor),
+      displayName: input.displayName ?? [input.firstName, input.lastName].filter(Boolean).join(" "),
+      firstName: input.firstName,
+      lastName: input.lastName,
+      employmentStatus: "ACTIVE",
+      orgUnitId: input.orgUnitId,
+      designation: input.designation,
+      dateOfJoining: input.dateOfJoining,
+      dob: input.dob,
+      pan: input.pan,
+      category: input.category,
+      recordState: input.recordState,
+      loginDisabled: input.loginDisabled,
+      sourceSystem: input.sourceSystem,
+      legacyId: input.legacyId,
+      rowVersion: 1,
+    };
+    this.employees.push(employee);
+    const outboxEvent = this.appendOutbox(actor, {
+      eventType: "PROFILE_CREATED",
+      aggregateType: "employees",
+      aggregateId: employee.id,
+      employeeId: employee.id,
+      eventDate: input.dateOfJoining ?? todayIso(),
+      payload: {
+        serviceNo: employee.serviceNo,
+        displayName: employee.displayName,
+        orgUnitId: employee.orgUnitId,
+        recordState: employee.recordState,
+        sourceSystem: employee.sourceSystem,
+      },
+    });
+    this.audit.recordMutation(actor, {
+      action: "G01_EMPLOYEE_IMPORTED",
+      subjectRef: `employees:${employee.id}`,
+      metadata: { serviceNo: employee.serviceNo, recordState: employee.recordState, outboxEventId: outboxEvent.id },
+    });
+    return { employee: { ...employee }, outboxEvent };
   }
 
   /**
@@ -268,9 +412,11 @@ export class EmployeeMasterService {
       orgUnitId: input.orgUnitId,
       designation: input.designation,
       dateOfJoining: input.dateOfJoining,
+      dob: input.dob,
       pan: input.pan,
       aadhaarMasked: input.aadhaarMasked,
       category: input.category,
+      recordState: "ACTIVE",
       rowVersion: 1,
     };
     // Unit of work: master row + HIRE attribute-history seed + PROFILE_CREATED outbox row + audit
@@ -897,9 +1043,12 @@ export class EmployeeMasterService {
       }));
   }
 
+  /** FR-EPM-017 AC5: PROVISIONAL rows (and merged soft-deleted losers) are excluded from active rollups. */
   count(scope: TenantScope): number {
     requireTenantScope(scope);
-    return this.employees.filter((employee) => inScope(employee, scope)).length;
+    return this.employees.filter(
+      (employee) => inScope(employee, scope) && !employee.isDeleted && employee.recordState !== "PROVISIONAL"
+    ).length;
   }
 
   private getRequired(scope: TenantScope, employeeId: string): EmployeeRecord {
@@ -911,7 +1060,7 @@ export class EmployeeMasterService {
   }
 
   private getMutable(scope: TenantScope, employeeId: string): EmployeeRecord {
-    const employee = this.employees.find((item) => inScope(item, scope) && item.id === employeeId);
+    const employee = this.employees.find((item) => inScope(item, scope) && item.id === employeeId && !item.isDeleted);
     if (!employee) {
       throw new FoundationError("NOT_FOUND", "Employee not found");
     }

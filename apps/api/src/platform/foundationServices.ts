@@ -2,6 +2,8 @@ import { JobService } from "../jobs/jobService";
 import { MigrationStagingService } from "../migration/staging/migrationStagingService";
 import { EmployeeMasterService } from "../modules/g01/employeeMasterService";
 import { InMemoryEmployeeProfileRepository } from "../modules/g01/employeeProfileRepository";
+import { EmployeeIdentityOpsService } from "../modules/g01/identityOpsService";
+import { InMemoryEmployeeIdentityOpsRepository } from "../modules/g01/identityOpsRepository";
 import { PersonalDetailsService } from "../modules/g02/personalDetailsService";
 import { InMemoryPersonalDetailsRepository, defaultG02WorkflowConfig } from "../modules/g02/personalDetailsRepository";
 import { LeaveService } from "../modules/g03/leaveService";
@@ -64,6 +66,7 @@ export interface FoundationServices {
   authorization: AuthorizationService;
   authorityResolution: AuthorityResolutionService;
   employeeMaster: EmployeeMasterService;
+  employeeIdentityOps: EmployeeIdentityOpsService;
   personalDetails: PersonalDetailsService;
   leave: LeaveService;
   attendanceOps: AttendanceOpsService;
@@ -111,6 +114,11 @@ export interface FoundationServicesOptions {
    * production binds a real KMS/HSM client behind the same KeyProvider interface.
    */
   g13KeyProvider?: KeyProvider;
+  /**
+   * PH-16A: FR-EPM-015 AC5 configurable merge-undo window (default 7 days per the BRD).
+   * Tests inject 0 to exercise the UNDO_EXPIRED fail-closed guard.
+   */
+  g01MergeUndoWindowDays?: number;
 }
 
 /**
@@ -133,7 +141,20 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const audit = new AuditService();
   const authorization = new AuthorizationService();
   const serviceRegister = new ServiceRegisterService(audit);
-  const employeeMaster = new EmployeeMasterService(ph03Employees(), authorization, audit, serviceRegister, new InMemoryEmployeeProfileRepository());
+  const employeeProfileRepository = new InMemoryEmployeeProfileRepository();
+  const employeeMaster = new EmployeeMasterService(ph03Employees(), authorization, audit, serviceRegister, employeeProfileRepository);
+  // PH-16A: G01 dedup/alias-merge (E19/E21), bulk import (E20a/E20b), and lifecycle
+  // :separate/:reactivate/:archive behind the repository pattern (migration 0028). The alias
+  // resolver makes every master read alias-transparent (FR-EPM-015 AC4 / FR-EPM-019 AC4).
+  const employeeIdentityOps = new EmployeeIdentityOpsService(
+    employeeMaster,
+    authorization,
+    audit,
+    employeeProfileRepository,
+    new InMemoryEmployeeIdentityOpsRepository(),
+    { mergeUndoWindowDays: options.g01MergeUndoWindowDays }
+  );
+  employeeMaster.setAliasResolver((scope, employeeId) => employeeIdentityOps.resolveEmployeeId(scope, employeeId).employeeId);
   // PH-10C: G13 hardening entities (E15 scan_results, E21 security_clearances, E12 document_audit,
   // E8 retention classes, E18 disposition_records) behind the repository pattern; the DI-11 scan
   // seam is injectable (fake in tests; the stub is recorded integration debt, not a scanner).
@@ -302,6 +323,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     authorization,
     authorityResolution,
     employeeMaster,
+    employeeIdentityOps,
     personalDetails,
     leave,
     attendanceOps,

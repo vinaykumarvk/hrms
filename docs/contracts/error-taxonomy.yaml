@@ -195,6 +195,13 @@ module_codes:
       - { code: ERR-G01-MERGE,     http: CONFLICT,            message_id: ERR-G01-MERGE,     meaning: "Conflicting merge state / rollback past undo window." }
       - { code: ERR-G01-STALE,     http: CONFLICT,            message_id: ERR-G01-STALE,     meaning: "Optimistic-lock row_version mismatch." }
       - { code: ERR-G01-HOLD,      http: CONFLICT,            message_id: ERR-G01-HOLD,      meaning: "Purge/erasure blocked by an active legal hold (FR-021)." }
+      # FR-EPM-015/017/018 failure-handling wire codes (BRD v3 G01 LLD "Failure Handling" rows):
+      - { code: SOD_VIOLATION,        http: FORBIDDEN, message_id: "-", meaning: "Maker == checker on a 4-eyes merge or separation approval (FR-EPM-015/018)." }
+      - { code: MERGE_CONFLICT,       http: CONFLICT,  message_id: "-", meaning: "Merge of conflicting ACTIVE statutory states without explicit override (FR-EPM-015)." }
+      - { code: UNDO_EXPIRED,         http: CONFLICT,  message_id: "-", meaning: "Merge/batch undo attempted after the configurable reversal window (FR-EPM-015/017)." }
+      - { code: INVALID_STATE,        http: CONFLICT,  message_id: "-", meaning: "Invalid §10.1 status transition; also promote-active with remaining STRICT gaps (FR-EPM-017/018)." }
+      - { code: LEGAL_HOLD_ACTIVE,    http: CONFLICT,  message_id: "-", meaning: "Archive blocked by an ACTIVE employee legal hold (FR-EPM-018/021)." }
+      - { code: BLOCKING_OBLIGATIONS, http: CONFLICT,  message_id: "-", meaning: "Separation with open blocking obligations and no override (FR-EPM-018)." }
       - { code: ERR-G01-HEIR,      http: PRECONDITION_FAILED, message_id: ERR-G01-HEIR,      meaning: "DECEASED handoff attempted without an heir." }
       - { code: ERR-G01-CAP,       http: RATE_LIMITED,        message_id: ERR-G01-CAP,       meaning: "Break-glass volume cap reached (FR-013)." }
 
