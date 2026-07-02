@@ -10,6 +10,8 @@ import {
   G11ProvisionalOutcome,
   NpsBenefitEvent,
 } from "../modules/g11/pensionBenefitRepository";
+import { G11DeathSource, G11LcMethod } from "../modules/g11/pensionerLifecycleRepository";
+import { G11RevisionType } from "../modules/g11/pensionRevisionRepository";
 import { FoundationError } from "../platform/types";
 import { ph03Ids } from "../seed/ph03Seed";
 
@@ -29,7 +31,29 @@ export const g11RouteEvidence = {
   familyPensionCompute: "/api/v1/pension/cases/{id}/family-pension:compute",
   provisionalPension: "/api/v1/pension/cases/{id}/provisional-pension",
   provisionalConclude: "/api/v1/pension/provisional-pension/{id}:conclude",
-  markers: ["SR_VERIFICATION_GATE", "QUALIFYING_SERVICE_LOCKED", "PENSION_CALC_TRACE", "PPO_ISSUED", "G11_SR_POSTED"],
+  // PH-15B / BRD FR-G11-12: pen_pensioners lifecycle (created on PPO authorisation) with
+  // pen_life_certificates (SUSPENDED_NO_LC on lapse; release-with-arrear on submission)
+  // and death -> family-pension conversion (CONVERTED_TO_FAMILY).
+  pensioner: "/api/v1/pension/pensioners/{id}",
+  lifeCertificate: "/api/v1/pension/pensioners/{id}/life-certificate",
+  reportDeath: "/api/v1/pension/pensioners/{id}:report-death",
+  lifeCertificateEvaluate: "/api/v1/pension/life-certificates:evaluate",
+  familyMembers: "/api/v1/pension/family-members",
+  // PH-15B / BRD FR-G11-13: pen_revisions DA / pay-commission batches — deterministic
+  // deltas + arrears, P01 approval before APPLY, immutable once applied.
+  revisions: "/api/v1/pension/revisions",
+  revisionCompute: "/api/v1/pension/revisions/{id}:compute",
+  revisionApprove: "/api/v1/pension/revisions/{id}:approve",
+  revisionApply: "/api/v1/pension/revisions/{id}:apply",
+  markers: [
+    "SR_VERIFICATION_GATE",
+    "QUALIFYING_SERVICE_LOCKED",
+    "PENSION_CALC_TRACE",
+    "PPO_ISSUED",
+    "G11_SR_POSTED",
+    "SUSPENDED_NO_LC",
+    "CONVERTED_TO_FAMILY",
+  ],
 };
 
 export function registerG11Routes(kernel: ApiKernel): void {
@@ -237,6 +261,173 @@ export function registerG11Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g11.pension.read",
       handler: (context) => ok(context.services.pension.summary(context.scope)),
+    },
+    // ---- PH-15B / FR-G11-12: pensioner master & lifecycle (pen_pensioners, E14) ----
+    {
+      method: "GET",
+      path: "/api/v1/pension/pensioners/{id}",
+      operationId: "g11.getPensioner",
+      protected: true,
+      permission: "g11.pension.read",
+      handler: (context) => ok({ pensioner: context.services.pensionerLifecycle.getPensioner(context.scope, requiredParam(context.params, "id")) }),
+    },
+    // ---- PH-15B / FR-G11-12 E26: statutory family register consumed by conversion ----
+    {
+      method: "POST",
+      path: "/api/v1/pension/family-members",
+      operationId: "g11.registerFamilyMember",
+      protected: true,
+      permission: "g11.pensioner.maintain",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          familyMember: context.services.pensionerLifecycle.registerFamilyMember(context.actor, {
+            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+            memberName: requiredString(body, "memberName"),
+            relation: requiredString(body, "relation"),
+            statutoryRank: requiredNumber(body, "statutoryRank"),
+            dateOfBirth: optionalString(body, "dateOfBirth"),
+          }),
+        });
+      },
+    },
+    // ---- PH-15B / FR-G11-12 AC1: LC due/grace sweep (JOB-G11-LC-REMIND surface) ----
+    {
+      method: "POST",
+      path: "/api/v1/pension/life-certificates:evaluate",
+      operationId: "g11.evaluateLifeCertificates",
+      protected: true,
+      permission: "g11.pensioner.maintain",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          suspended: context.services.pensionerLifecycle.evaluateLifeCertificates(context.actor, {
+            asOf: requiredString(body, "asOf"),
+            graceDays: optionalNumber(body, "graceDays"),
+          }),
+        });
+      },
+    },
+    // ---- PH-15B / FR-G11-12 AC2: LC submission (reactivates + releases with arrear) ----
+    {
+      method: "POST",
+      path: "/api/v1/pension/pensioners/{id}/life-certificate",
+      operationId: "g11.submitLifeCertificate",
+      protected: true,
+      permission: "g11.pensioner.maintain",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          submission: context.services.pensionerLifecycle.submitLifeCertificate(context.actor, requiredParam(context.params, "id"), {
+            certificateYear: requiredNumber(body, "certificateYear"),
+            method: readLcMethod(requiredString(body, "method")),
+            submittedOn: requiredString(body, "submittedOn"),
+            jeevanPramaanId: optionalString(body, "jeevanPramaanId"),
+          }),
+        });
+      },
+    },
+    // ---- PH-15B / FR-G11-12 AC4: death -> family-pension conversion (E26 hierarchy) ----
+    {
+      method: "POST",
+      path: "/api/v1/pension/pensioners/{id}:report-death",
+      operationId: "g11.reportPensionerDeath",
+      protected: true,
+      permission: "g11.pensioner.maintain",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          conversion: context.services.pensionerLifecycle.reportDeath(context.actor, requiredParam(context.params, "id"), {
+            dateOfDeath: requiredString(body, "dateOfDeath"),
+            source: readDeathSource(optionalString(body, "source")),
+          }),
+        });
+      },
+    },
+    // ---- PH-15B / FR-G11-13: revision batches (create -> compute -> approve -> apply) ----
+    {
+      method: "POST",
+      path: "/api/v1/pension/revisions",
+      operationId: "g11.createRevisionBatch",
+      protected: true,
+      permission: "g11.revision.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          revisionBatch: context.services.pensionRevisions.createBatch(context.actor, {
+            revisionType: readRevisionType(requiredString(body, "revisionType")),
+            effectiveDate: requiredString(body, "effectiveDate"),
+            fitmentFactorTenThousandths: optionalNumber(body, "fitmentFactorTenThousandths"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/pension/revisions/{id}",
+      operationId: "g11.getRevisionBatch",
+      protected: true,
+      permission: "g11.pension.read",
+      handler: (context) =>
+        ok({
+          revisionBatch: context.services.pensionRevisions.getBatch(context.scope, requiredParam(context.params, "id")),
+          lines: context.services.pensionRevisions.listLines(context.scope, requiredParam(context.params, "id")),
+        }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/pension/revisions/{id}:compute",
+      operationId: "g11.computeRevisionBatch",
+      protected: true,
+      permission: "g11.revision.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          lines: context.services.pensionRevisions.computeBatch(context.actor, requiredParam(context.params, "id"), {
+            asOf: requiredString(body, "asOf"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/pension/revisions/{id}:approve",
+      operationId: "g11.approveRevisionBatch",
+      protected: true,
+      permission: "g11.revision.approve",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ revisionBatch: context.services.pensionRevisions.approveBatch(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/pension/revisions/{id}:apply",
+      operationId: "g11.applyRevisionBatch",
+      protected: true,
+      permission: "g11.revision.approve",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          revisionBatch: context.services.pensionRevisions.applyBatch(context.actor, requiredParam(context.params, "id"), {
+            appliedOn: requiredString(body, "appliedOn"),
+            jobRunRef: optionalString(body, "jobRunRef"),
+          }),
+        });
+      },
     },
     // ---- PH-09A / FR-G11-19: rule tables E30-E36 (create DRAFT->EFFECTIVE row) ----
     {
@@ -451,6 +642,30 @@ function readProceedingsType(value: string): G11ProceedingsType {
     return value;
   }
   throw new FoundationError("VALIDATION_FAILED", `Unsupported proceedingsType ${value}`, { field: "proceedingsType" });
+}
+
+function readLcMethod(value: string): G11LcMethod {
+  if (value === "JEEVAN_PRAMAAN_DLC" || value === "PHYSICAL" || value === "VIDEO_KYC" || value === "BANK_CERTIFIED") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported life-certificate method ${value}`, { field: "method" });
+}
+
+function readDeathSource(value: string | undefined): G11DeathSource | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "REPORTED" || value === "DEATH_REGISTRY" || value === "DBT_ANOMALY" || value === "LC_FAILURE") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported death source ${value}`, { field: "source" });
+}
+
+function readRevisionType(value: string): G11RevisionType {
+  if (value === "DA" || value === "PAY_COMMISSION" || value === "RESTORATION" || value === "AGE_INCREMENT") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported revisionType ${value}`, { field: "revisionType" });
 }
 
 function readProvisionalOutcome(value: string): G11ProvisionalOutcome {

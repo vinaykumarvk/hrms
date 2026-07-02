@@ -12,6 +12,14 @@ import {
 import { PensionService } from "./pensionService";
 
 /**
+ * PH-15B FR-12 AC1 / FR-14 BR3 seam: the pensioner-lifecycle LC gate consulted before any
+ * pension credit — SUSPENDED_NO_LC throws ERR-G11-LC-SUSPENDED (409, fail closed).
+ */
+export interface PensionerLcGate {
+  assertDisbursable(scope: TenantScope, caseId: string): void;
+}
+
+/**
  * PH-09D — G11 FR-14 pre-credit account verification gate (E42, IR16, R15):
  *
  * Before ANY first-credit disbursement line (FIRST_PENSION / GRATUITY / COMMUTED_VALUE /
@@ -38,7 +46,9 @@ export class PensionDisbursementService {
     private readonly authorization: AuthorizationService,
     private readonly audit: AuditService,
     private readonly pension: PensionService,
-    private readonly repository: PensionDisbursementRepository
+    private readonly repository: PensionDisbursementRepository,
+    /** PH-15B: optional FR-12 life-certificate suspension gate (fails closed when wired). */
+    private readonly pensionerLcGate?: PensionerLcGate
   ) {}
 
   /**
@@ -122,6 +132,10 @@ export class PensionDisbursementService {
     if (pensionCase.status !== "PPO_ISSUED" && pensionCase.status !== "SETTLED") {
       throw new FoundationError("PRECONDITION_FAILED", "Pension disbursement requires an issued PPO");
     }
+    // PH-15B FR-12 AC1 / FR-14 BR3: monthly pension respects LC suspension — a
+    // SUSPENDED_NO_LC pensioner's credit is HELD (ERR-G11-LC-SUSPENDED, 409) until the
+    // LC submission releases the hold with arrear.
+    this.pensionerLcGate?.assertDisbursable(actor, input.caseId);
     const verification = this.repository.findActiveVerification(actor, input.caseId, input.accountNoMasked, input.ifsc);
     if (!verification || verification.result !== "PASSED") {
       // IR16 fail-closed gate: no ACTIVE PASSED E42 row => the credit is blocked, full stop.

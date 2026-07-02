@@ -35,6 +35,10 @@ import { PensionRuleService } from "../modules/g11/pensionRuleService";
 import { InMemoryPensionRuleRepository } from "../modules/g11/pensionRuleRepository";
 import { PensionBenefitService } from "../modules/g11/pensionBenefitService";
 import { InMemoryPensionBenefitRepository } from "../modules/g11/pensionBenefitRepository";
+import { PensionerLifecycleService } from "../modules/g11/pensionerLifecycleService";
+import { InMemoryPensionerLifecycleRepository } from "../modules/g11/pensionerLifecycleRepository";
+import { PensionRevisionService } from "../modules/g11/pensionRevisionService";
+import { InMemoryPensionRevisionRepository } from "../modules/g11/pensionRevisionRepository";
 import { ServiceRegisterService } from "../modules/g12/serviceRegisterService";
 import { SrIntegrityService, TimestampAuthority } from "../modules/g12/srIntegrityService";
 import { InMemorySrIntegrityRepository } from "../modules/g12/srIntegrityRepository";
@@ -72,6 +76,8 @@ export interface FoundationServices {
   pensionDisbursement: PensionDisbursementService;
   pensionRules: PensionRuleService;
   pensionBenefits: PensionBenefitService;
+  pensionerLifecycle: PensionerLifecycleService;
+  pensionRevisions: PensionRevisionService;
   serviceRegister: ServiceRegisterService;
   srIntegrity: SrIntegrityService;
   documentVault: DocumentVaultService;
@@ -227,9 +233,29 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const pensionBenefitRepository = new InMemoryPensionBenefitRepository();
   const pension = new PensionService(employeeMaster, payroll, authorization, audit, serviceRegister, documentVault, pensionRules, pensionBenefitRepository);
   const pensionBenefits = new PensionBenefitService(authorization, audit, pension, pensionRules, payroll, disciplinary, pensionBenefitRepository);
+  // PH-15B: G11 FR-12 pensioner master & lifecycle (E14/E15/E26) + FR-13 revision engine
+  // (E16) behind the repository pattern (migration 0023). The pen_pensioners row is created
+  // ON PPO AUTHORISATION via the PensionService hook; a lapsed LC suspends the lifecycle to
+  // SUSPENDED_NO_LC and holds disbursement (ERR-G11-LC-SUSPENDED); death of a SELF pensioner
+  // converts to family pension through the E26 hierarchy (CONVERTED_TO_FAMILY); DA /
+  // pay-commission batches compute deterministic old/new/arrear deltas and are immutable
+  // once applied (ERR-G11-REVISION-IMMUTABLE).
+  const pensionerLifecycleRepository = new InMemoryPensionerLifecycleRepository();
+  const pensionerLifecycle = new PensionerLifecycleService(authorization, audit, pension, pensionBenefits, pensionerLifecycleRepository);
+  pension.onPpoIssued((hookActor, issuedCase) => {
+    pensionerLifecycle.enrolFromPpo(hookActor, issuedCase);
+  });
+  const pensionRevisions = new PensionRevisionService(
+    authorization,
+    audit,
+    pensionRules,
+    pensionerLifecycleRepository,
+    new InMemoryPensionRevisionRepository((row) => pensionerLifecycleRepository.savePensioner(row))
+  );
   // PH-09D: G11 FR-14 pre-credit account verification gate (E42) — disbursement fails
-  // closed without an ACTIVE PASSED verification (ERR-G11-ACCOUNT-VERIFY, IR16).
-  const pensionDisbursement = new PensionDisbursementService(authorization, audit, pension, new InMemoryPensionDisbursementRepository());
+  // closed without an ACTIVE PASSED verification (ERR-G11-ACCOUNT-VERIFY, IR16); PH-15B
+  // adds the FR-12 life-certificate suspension gate ahead of it.
+  const pensionDisbursement = new PensionDisbursementService(authorization, audit, pension, new InMemoryPensionDisbursementRepository(), pensionerLifecycle);
   // PH-10B: G12 integrity pillars — verify + JOB-G12-INTEGRITY, Merkle anchors behind the
   // injectable RFC 3161 TSA seam (JOB-G12-ANCHOR), gap register (JOB-G12-GAPSCAN),
   // attestations, and P02-redacted certified extracts — behind the repository pattern.
@@ -265,6 +291,8 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     pensionDisbursement,
     pensionRules,
     pensionBenefits,
+    pensionerLifecycle,
+    pensionRevisions,
     serviceRegister,
     srIntegrity,
     documentVault,

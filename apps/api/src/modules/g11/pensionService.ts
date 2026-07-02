@@ -86,8 +86,12 @@ export interface PensionSummary {
   ppoMarker: "PPO_ISSUED";
 }
 
+/** PH-15B FR-G11-12: fired ON PPO AUTHORISATION so the pensioner master is created from the PPO. */
+export type PpoIssuedListener = (actor: ActorContext, pensionCase: PensionCase) => void;
+
 export class PensionService {
   private readonly cases: PensionCase[] = [];
+  private readonly ppoIssuedListeners: PpoIssuedListener[] = [];
 
   constructor(
     private readonly employeeMaster: EmployeeMasterService,
@@ -343,7 +347,18 @@ export class PensionService {
       subjectRef: `g11_pension_cases:${pensionCase.id}`,
       metadata: { marker: "PPO_ISSUED", srMarker: "G11_SR_POSTED", srEventIds: pensionCase.ppo.srEventIds },
     });
+    // PH-15B FR-12: PPO authorisation is the ONLY event that creates the pen_pensioners
+    // master row — the lifecycle service subscribes here (never hand-keyed off a PPO).
+    const issued = this.cloneCase(pensionCase);
+    for (const listener of this.ppoIssuedListeners) {
+      listener(actor, issued);
+    }
     return this.cloneCase(pensionCase);
+  }
+
+  /** Subscribe to PPO authorisation (PH-15B: pensioner enrolment on PPO issue). */
+  onPpoIssued(listener: PpoIssuedListener): void {
+    this.ppoIssuedListeners.push(listener);
   }
 
   summary(scope: TenantScope): PensionSummary {

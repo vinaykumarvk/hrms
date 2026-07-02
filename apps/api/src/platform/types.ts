@@ -88,7 +88,11 @@ export type G11DomainErrorCode =
   | "ERR-G11-COMMUTATION-LIMIT"
   | "ERR-G11-PROVISIONAL-PENDING"
   | "ERR-G11-INVALID-ACCOUNT"
-  | "ERR-G11-ACCOUNT-VERIFY";
+  | "ERR-G11-ACCOUNT-VERIFY"
+  // FR-12 AC1: disbursement to a SUSPENDED_NO_LC pensioner is held (409, fail closed).
+  | "ERR-G11-LC-SUSPENDED"
+  // FR-13 AC4/P05: applied revision batches are immutable; corrections create a new batch.
+  | "ERR-G11-REVISION-IMMUTABLE";
 
 /**
  * BRD G13 §10.3 named domain error codes (docs/brd/v3/G13-document-management-secure-storage.md):

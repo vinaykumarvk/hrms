@@ -87,6 +87,10 @@ export function statusForError(code: WireErrorCode): number {
     // Rule 9 proceeding is still ACTIVE are 409 CONFLICT.
     case "ERR-G11-SCHEME-MISMATCH":
     case "ERR-G11-PROVISIONAL-PENDING":
+    // BRD G11 §12: disbursement held for a lapsed life certificate (FR-12 AC1) and mutation
+    // of an APPLIED revision batch (FR-13 AC4/P05) are 409 CONFLICT.
+    case "ERR-G11-LC-SUSPENDED":
+    case "ERR-G11-REVISION-IMMUTABLE":
     // BRD G13 error catalogue: document checked out by another user is 409 CONFLICT.
     case "ERR-G13-DOCUMENT_LOCKED":
     // BRD G14 FR-02 AC7: cross-version KPI aggregation without acknowledgement is 409 CONFLICT.
