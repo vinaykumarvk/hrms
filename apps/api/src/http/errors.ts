@@ -72,6 +72,12 @@ export function statusForError(code: WireErrorCode): number {
     // BRD G05 §8.2: handover not accepted/under-protest and relieving before proof-of-service are 409 CONFLICT.
     case "ERR-G05-HANDOVER-DISPUTED":
     case "ERR-G05-NOT-SERVED":
+    // BRD G05 §8.2 (PH-16D, rules 5/6 + FR-019): allotment/join to a filled vacancy (incl. the
+    // join-time transactional re-check), a counselling choice attempted out of turn, and
+    // asymmetric mutual completion are 409 CONFLICT.
+    case "ERR-G05-VACANCY-FULL":
+    case "ERR-G05-COUNSEL-TURN":
+    case "ERR-G05-MUTUAL-PAIR":
     // BRD G08 §9: representation window elapsed (condonation required) is 409 CONFLICT.
     case "ERR-G08-REPWINDOW":
     // BRD G09 §10.3: due-process gate violations (Art. 311(1) competence, pending consultation,

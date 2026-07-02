@@ -18,6 +18,8 @@ import { LeaveSrCatalogService } from "../modules/g04/leaveSrCatalogService";
 import { InMemoryLeaveSrCatalogRepository } from "../modules/g04/leaveSrCatalogRepository";
 import { TransferService } from "../modules/g05/transferService";
 import { InMemoryTransferRepository } from "../modules/g05/transferRepository";
+import { TransferCounsellingService } from "../modules/g05/counsellingVacancyService";
+import { InMemoryCounsellingVacancyRepository } from "../modules/g05/counsellingVacancyRepository";
 import { PromotionService } from "../modules/g06/promotionService";
 import { InMemoryEstablishmentQslRepository } from "../modules/g06/establishmentQslRepository";
 import { InMemoryPromotionDepthRepository } from "../modules/g06/promotionDepthRepository";
@@ -78,6 +80,7 @@ export interface FoundationServices {
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
+  transferCounselling: TransferCounsellingService;
   promotion: PromotionService;
   training: TrainingService;
   apar: AparService;
@@ -131,6 +134,11 @@ export interface FoundationServicesOptions {
    * claim is immediately reapable.
    */
   g04LeaseTimeoutMs?: number;
+  /**
+   * PH-16D: injectable clock for the G05 counselling turn engine so JOB-G05-COUNSEL-TIMEOUT
+   * (AUTO_PASS_TIMEOUT after turn_timeout_seconds) is testable without busy-waiting.
+   */
+  g05CounsellingClock?: () => Date;
 }
 
 /**
@@ -249,6 +257,21 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     notifications,
     establishmentQslRepository,
     new InMemoryPromotionDepthRepository()
+  );
+  // PH-16D: G05 FR-003/019 + BRD rules 5/6 — vacancy_positions/vacancy_reservations with the
+  // strength READ-THROUGH from the PH-08A sanctioned-posts kernel above (G05 never owns a
+  // strength counter), ranked transfer_preferences, the interactive counselling turn engine
+  // (current_turn_employee_id vacancy lock, append-only counselling_choices,
+  // ERR-G05-COUNSEL-TURN, AUTO_PASS_TIMEOUT via the injectable clock), and MUTUAL_TRANSFER
+  // coupled pairing (ERR-G05-MUTUAL-PAIR) behind the repository pattern (migration 0031).
+  const transferCounselling = new TransferCounsellingService(
+    employeeMaster,
+    authorization,
+    audit,
+    serviceRegister,
+    establishmentQslRepository,
+    new InMemoryCounsellingVacancyRepository(),
+    { clock: options.g05CounsellingClock }
   );
   // PH-08D: G07 taxonomy/gap-contract/campaign + G08 cycle/goal/disclosure/part-period depth
   // entities behind the same repository pattern.
@@ -371,6 +394,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
+    transferCounselling,
     promotion,
     training,
     apar,

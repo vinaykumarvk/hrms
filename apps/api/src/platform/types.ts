@@ -82,12 +82,17 @@ export type G02DomainErrorCode = "ERR-G02-RISKBLOCK" | "ERR-G02-STATUSGATE";
  */
 export type G04DomainErrorCode = "ERR-G04-MAPPING-OVERLAP" | "VAL-G04-CITATION";
 
-/** BRD G05 §8.2 named domain error codes (docs/brd/v3/G05-transfer-relieving-joining-workflow.md FR-007/011/020/022). */
+/** BRD G05 §8.2 named domain error codes (docs/brd/v3/G05-transfer-relieving-joining-workflow.md FR-003/007/011/019/020/022 + rules 5/6). */
 export type G05DomainErrorCode =
   | "ERR-G05-HANDOVER-DISPUTED"
   | "ERR-G05-DEPUTATION-CAP"
   | "ERR-G05-NOT-SERVED"
-  | "ERR-G05-QUARTER-OVERSTAY";
+  | "ERR-G05-QUARTER-OVERSTAY"
+  // PH-16D — BRD G05 §8.2: allotment/join to a filled vacancy (incl. join-time re-check),
+  // out-of-turn counselling choice, and asymmetric mutual completion are 409 CONFLICT.
+  | "ERR-G05-VACANCY-FULL"
+  | "ERR-G05-COUNSEL-TURN"
+  | "ERR-G05-MUTUAL-PAIR";
 
 /** BRD G08 §9 named domain error codes (docs/brd/v3/G08-performance-appraisal-management.md error catalogue). */
 export type G08DomainErrorCode =

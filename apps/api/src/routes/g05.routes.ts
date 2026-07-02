@@ -2,6 +2,8 @@ import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalNumber, optionalRecord, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import type { ChargePhase, ChargeType, DeemedServiceBasis, DeliveryChannel } from "../modules/g05/transferService";
+import type { CounsellingChoiceAction, TurnOrderMethod } from "../modules/g05/counsellingVacancyService";
+import { FoundationError } from "../platform/types";
 import { ph03Ids } from "../seed/ph03Seed";
 
 export const g05RouteEvidence = {
@@ -25,6 +27,17 @@ export const g05RouteEvidence = {
   repatriate: "/api/v1/deputations/{id}/repatriate",
   quarterRetention: "/api/v1/transfers/orders/{id}/quarter-retention",
   quarterAllotments: "/api/v1/quarter-allotments",
+  // PH-16D counselling/vacancy/mutual depth (FR-G05-003/019 + BRD rules 5/6).
+  vacancies: "/api/v1/transfers/drives/{id}/vacancies",
+  preferences: "/api/v1/transfers/drives/{id}/preferences",
+  allot: "/api/v1/transfers/drives/{id}/allot",
+  reservationVacate: "/api/v1/transfers/reservations/{id}:vacate-on-relief",
+  reservationFill: "/api/v1/transfers/reservations/{id}:fill-on-join",
+  counsellingSessions: "/api/v1/transfers/drives/{id}/counselling-sessions",
+  counsellingRecordChoice: "/api/v1/counselling-sessions/{id}/record-choice",
+  counsellingChoices: "/api/v1/counselling-sessions/{id}/choices",
+  mutualRequests: "/api/v1/transfers/mutual-requests",
+  mutualPairApprove: "/api/v1/transfers/mutual-pairs/{id}:approve",
   resolver: "POSITION_AUTHORITY",
   parallel: "PARALLEL_ALL_OF",
 };
@@ -555,8 +568,316 @@ export function registerG05Routes(kernel: ApiKernel): void {
         return ok({ items: allotments.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
+    // --- PH-16D — FR-G05-003 vacancy publication (strength read-through) + preferences -----
+    {
+      method: "POST",
+      path: "/api/v1/transfers/drives/{id}/vacancies",
+      operationId: "g05.publishVacancyPosition",
+      protected: true,
+      permission: "g05.vacancy.publish",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          vacancyPosition: context.services.transferCounselling.publishVacancyPosition(context.actor, {
+            sanctionedPostId: requiredString(body, "sanctionedPostId"),
+            driveId: requiredParam(context.params, "id"),
+            cadre: optionalString(body, "cadre"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/transfers/drives/{id}/vacancies",
+      operationId: "g05.listVacancyPositions",
+      protected: true,
+      permission: "g05.transfer.read",
+      list: { defaultLimit: 25, maxLimit: 100 },
+      handler: (context) => {
+        const pagination = context.pagination ?? { limit: 25 };
+        const items = context.services.transferCounselling.listVacancyPositions(context.actor, requiredParam(context.params, "id"));
+        return ok({ items: items.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
+      },
+    },
+    {
+      method: "PUT",
+      path: "/api/v1/transfers/drives/{id}/preferences",
+      operationId: "g05.capturePreferences",
+      protected: true,
+      permission: "g05.preference.submit",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          preferences: context.services.transferCounselling.capturePreferences(context.actor, {
+            driveId: requiredParam(context.params, "id"),
+            employeeId: requiredString(body, "employeeId"),
+            preferences: readPreferenceRows(body.preferences),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/transfers/drives/{id}/allot",
+      operationId: "g05.allotVacancy",
+      protected: true,
+      permission: "g05.vacancy.allot",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          reservation: context.services.transferCounselling.allotVacancy(context.actor, {
+            vacancyPositionId: requiredString(body, "vacancyPositionId"),
+            employeeId: requiredString(body, "employeeId"),
+            driveId: requiredParam(context.params, "id"),
+          }),
+        });
+      },
+    },
+    // --- PH-16D — BRD rule 6 vacancy_reservations lifecycle ---------------------------------
+    {
+      method: "POST",
+      path: "/api/v1/transfers/reservations/{id}:vacate-on-relief",
+      operationId: "g05.vacateReservationOnRelief",
+      protected: true,
+      permission: "g05.vacancy.lifecycle",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          reservation: context.services.transferCounselling.markReservationVacatedOnRelief(context.actor, requiredParam(context.params, "id"), {
+            vacatedOn: requiredString(body, "vacatedOn"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/transfers/reservations/{id}:fill-on-join",
+      operationId: "g05.fillReservationOnJoin",
+      protected: true,
+      permission: "g05.vacancy.lifecycle",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          reservation: context.services.transferCounselling.markReservationFilledOnJoin(context.actor, requiredParam(context.params, "id"), {
+            joinedOn: requiredString(body, "joinedOn"),
+          }),
+        });
+      },
+    },
+    // --- PH-16D — FR-G05-019 interactive counselling turn engine ----------------------------
+    {
+      method: "POST",
+      path: "/api/v1/transfers/drives/{id}/counselling-sessions",
+      operationId: "g05.scheduleCounsellingSession",
+      protected: true,
+      permission: "g05.counselling.schedule",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          session: context.services.transferCounselling.scheduleCounsellingSession(context.actor, {
+            sessionCode: requiredString(body, "sessionCode"),
+            driveId: requiredParam(context.params, "id"),
+            scheduledAt: requiredString(body, "scheduledAt"),
+            turnOrderMethod: (optionalString(body, "turnOrderMethod") ?? "SENIORITY") as TurnOrderMethod,
+            presidingOfficerId: requiredString(body, "presidingOfficerId"),
+            turnTimeoutSeconds: optionalNumber(body, "turnTimeoutSeconds"),
+            candidates: readCandidateRows(body.candidates),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/counselling-sessions/{id}:start",
+      operationId: "g05.startCounsellingSession",
+      protected: true,
+      permission: "g05.counselling.conduct",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) =>
+        accepted({ session: context.services.transferCounselling.startCounsellingSession(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/counselling-sessions/{id}/record-choice",
+      operationId: "g05.recordCounsellingChoice",
+      protected: true,
+      permission: "g05.counselling.choice",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted(
+          context.services.transferCounselling.recordChoice(context.actor, requiredParam(context.params, "id"), {
+            employeeId: requiredString(body, "employeeId"),
+            choiceAction: requiredString(body, "choiceAction") as Exclude<CounsellingChoiceAction, "AUTO_PASS_TIMEOUT">,
+            vacancyPositionId: optionalString(body, "vacancyPositionId"),
+            remarks: optionalString(body, "remarks"),
+          })
+        );
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/counselling-sessions/{id}:sweep-timeout",
+      operationId: "g05.sweepCounsellingTurnTimeout",
+      protected: true,
+      permission: "g05.counselling.conduct",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) =>
+        accepted(context.services.transferCounselling.sweepTurnTimeout(context.actor, requiredParam(context.params, "id"))),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/counselling-sessions/{id}/choices",
+      operationId: "g05.listCounsellingChoices",
+      protected: true,
+      permission: "g05.transfer.read",
+      list: { defaultLimit: 25, maxLimit: 100 },
+      handler: (context) => {
+        const pagination = context.pagination ?? { limit: 25 };
+        const items = context.services.transferCounselling.listChoices(context.actor, requiredParam(context.params, "id"));
+        return ok({ items: items.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
+      },
+    },
+    // --- PH-16D — BRD rule 5 MUTUAL_TRANSFER coupled pairing ---------------------------------
+    {
+      method: "POST",
+      path: "/api/v1/transfers/mutual-requests",
+      operationId: "g05.fileMutualRequest",
+      protected: true,
+      permission: "g05.mutual.request",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          request: context.services.transferCounselling.fileMutualRequest(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            mutualCounterpartEmployeeId: requiredString(body, "mutualCounterpartEmployeeId"),
+            fromOrgUnitId: requiredString(body, "fromOrgUnitId"),
+            toOrgUnitId: requiredString(body, "toOrgUnitId"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/transfers/mutual-requests:pair",
+      operationId: "g05.pairMutualRequests",
+      protected: true,
+      permission: "g05.mutual.pair",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted(
+          context.services.transferCounselling.pairMutualRequests(context.actor, {
+            requestId: requiredString(body, "requestId"),
+            counterpartRequestId: requiredString(body, "counterpartRequestId"),
+          })
+        );
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/transfers/mutual-pairs/{id}:approve",
+      operationId: "g05.approveMutualPair",
+      protected: true,
+      permission: "g05.mutual.approve",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted(
+          context.services.transferCounselling.approveMutualPair(context.actor, requiredParam(context.params, "id"), {
+            orderDate: requiredString(body, "orderDate"),
+            effectiveDate: requiredString(body, "effectiveDate"),
+            idempotencyKey: context.idempotencyKey ?? "",
+          })
+        );
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/transfers/mutual-orders/{id}:relieve",
+      operationId: "g05.recordMutualRelief",
+      protected: true,
+      permission: "g05.mutual.progress",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          order: context.services.transferCounselling.recordMutualRelief(context.actor, requiredParam(context.params, "id"), {
+            relievedOn: requiredString(body, "relievedOn"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/transfers/mutual-orders/{id}:join",
+      operationId: "g05.recordMutualJoin",
+      protected: true,
+      permission: "g05.mutual.progress",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          order: context.services.transferCounselling.recordMutualJoin(context.actor, requiredParam(context.params, "id"), {
+            joinedOn: requiredString(body, "joinedOn"),
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
+}
+
+/** Parses the ranked preference rows for PUT /transfers/drives/{id}/preferences. */
+function readPreferenceRows(value: unknown): { preferenceRank: number; preferredOrgUnitId: string; vacancyPositionId?: string; seniorityScore?: number }[] {
+  if (!Array.isArray(value)) {
+    throw new FoundationError("VALIDATION_FAILED", "preferences must be an array", { field: "preferences" });
+  }
+  return value.map((entry) => {
+    const row = readBodyRecord(entry);
+    return {
+      preferenceRank: Number(row.preferenceRank),
+      preferredOrgUnitId: requiredString(row, "preferredOrgUnitId"),
+      vacancyPositionId: optionalString(row, "vacancyPositionId"),
+      seniorityScore: optionalNumber(row, "seniorityScore"),
+    };
+  });
+}
+
+/** Parses the counselling candidate rows for POST /transfers/drives/{id}/counselling-sessions. */
+function readCandidateRows(value: unknown): { employeeId: string; seniorityScore?: number; meritScore?: number }[] {
+  if (!Array.isArray(value)) {
+    throw new FoundationError("VALIDATION_FAILED", "candidates must be an array", { field: "candidates" });
+  }
+  return value.map((entry) => {
+    const row = readBodyRecord(entry);
+    return {
+      employeeId: requiredString(row, "employeeId"),
+      seniorityScore: optionalNumber(row, "seniorityScore"),
+      meritScore: optionalNumber(row, "meritScore"),
+    };
+  });
 }
 
 function requiredParam(params: Record<string, string>, key: string): string {

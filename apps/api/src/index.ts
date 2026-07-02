@@ -18,6 +18,8 @@ export * from "./modules/g04/leaveSrCatalogService";
 export * from "./modules/g04/leaveSrCatalogRepository";
 export * from "./modules/g05/transferService";
 export * from "./modules/g05/transferRepository";
+export * from "./modules/g05/counsellingVacancyService";
+export * from "./modules/g05/counsellingVacancyRepository";
 export * from "./modules/g06/promotionService";
 export * from "./modules/g06/establishmentQslRepository";
 export * from "./modules/g06/promotionDepthRepository";
