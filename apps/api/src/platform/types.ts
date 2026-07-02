@@ -19,7 +19,14 @@ export type G03DomainErrorCode =
   | "ENTITLEMENT_EXCEEDED"
   | "PERIOD_ALREADY_LOCKED"
   | "WINDOW_EXPIRED"
-  | "REGULARISATION_LIMIT";
+  | "REGULARISATION_LIMIT"
+  // PH-15C operational attendance core (BRD G03 FR-01/FR-03/FR-09).
+  | "VAL-G03-SHIFT-TIMES"
+  | "VAL-G03-ROSTER-OVERLAP"
+  | "DEVICE_NOT_AUTHORIZED"
+  | "INVALID_PUNCH_TIME"
+  | "COMP_OFF_INSUFFICIENT"
+  | "COMP_OFF_EXPIRED";
 
 /** BRD G06 §9.4 named domain error codes (docs/brd/v3/G06-promotion-posting-progression.md). */
 export type G06DomainErrorCode =

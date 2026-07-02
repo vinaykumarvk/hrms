@@ -6,6 +6,8 @@ import { PersonalDetailsService } from "../modules/g02/personalDetailsService";
 import { InMemoryPersonalDetailsRepository, defaultG02WorkflowConfig } from "../modules/g02/personalDetailsRepository";
 import { LeaveService } from "../modules/g03/leaveService";
 import { InMemoryLeaveRepository } from "../modules/g03/leaveRepository";
+import { AttendanceOpsService } from "../modules/g03/attendanceOpsService";
+import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
 import { TransferService } from "../modules/g05/transferService";
@@ -61,6 +63,7 @@ export interface FoundationServices {
   employeeMaster: EmployeeMasterService;
   personalDetails: PersonalDetailsService;
   leave: LeaveService;
+  attendanceOps: AttendanceOpsService;
   leaveSrRelay: LeaveSrRelayService;
   transfer: TransferService;
   promotion: PromotionService;
@@ -150,6 +153,14 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     leaveRepository.saveLeaveType(leaveType);
   }
   const leave = new LeaveService(employeeMaster, authorization, audit, workflow, leaveSrRelay, jobs, notifications, leaveRepository);
+  // PH-15C: G03 operational attendance core — E1 shifts / E2 rosters (VAL-G03-SHIFT-TIMES,
+  // VAL-G03-ROSTER-OVERLAP with supersede-on-publish), the E6 attendance_punches append-only
+  // ledger (dedup on (device_id, source_ref), DEVICE_NOT_AUTHORIZED fail-closed device auth,
+  // INVALID_PUNCH_TIME, attendance_date via the shift's date_anchor_rule), and the E11
+  // comp_off_ledger (FIFO redemption, COMP_OFF_INSUFFICIENT/COMP_OFF_EXPIRED,
+  // JOB-G03-COMPOFF-EXPIRE sweep) behind the repository pattern (migration 0024). Daily
+  // attendance derivation stays with the PH-07D LeaveService (deriveAttendanceFromPunches wires in).
+  const attendanceOps = new AttendanceOpsService(employeeMaster, authorization, audit, jobs, leave, new InMemoryAttendanceOpsRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -276,6 +287,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     employeeMaster,
     personalDetails,
     leave,
+    attendanceOps,
     leaveSrRelay,
     transfer,
     promotion,

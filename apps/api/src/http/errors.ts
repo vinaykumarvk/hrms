@@ -22,6 +22,8 @@ export function statusForError(code: WireErrorCode): number {
     // SoD violations on disposition/clearance approval (FR-009/FR-017) are 403.
     case "ERR-G13-CLEARANCE_INSUFFICIENT":
     case "ERR-G13-SOD_VIOLATION":
+    // BRD G03 FR-03: punches from unregistered/inactive devices fail closed as 403.
+    case "DEVICE_NOT_AUTHORIZED":
     // BRD G14 §8.3: a below-k cohort read (FR-17 k-anonymity, incl. its complementary
     // suppression) and a maker==checker scope-policy activation (FR-04 AC7) are 403.
     case "ERR-G14-SMALL-CELL":
@@ -34,6 +36,9 @@ export function statusForError(code: WireErrorCode): number {
       return 404;
     case "CONFLICT":
     case "LEAVE_OVERLAP":
+    // BRD G03 FR-01/FR-09: overlapping PUBLISHED rosters and comp-off over-balance are 409 CONFLICT.
+    case "VAL-G03-ROSTER-OVERLAP":
+    case "COMP_OFF_INSUFFICIENT":
     case "INSUFFICIENT_BALANCE":
     case "OPTIMISTIC_LOCK_CONFLICT":
     case "ENTITLEMENT_EXCEEDED":
@@ -98,6 +103,11 @@ export function statusForError(code: WireErrorCode): number {
       return 409;
     case "ELIGIBILITY_FAILED":
     case "WINDOW_EXPIRED":
+    // BRD G03 FR-01/FR-03/FR-09: malformed shift timings, future-dated punches, and
+    // redemption targeting an expired comp-off credit are 422 (fail closed).
+    case "VAL-G03-SHIFT-TIMES":
+    case "INVALID_PUNCH_TIME":
+    case "COMP_OFF_EXPIRED":
     // BRD G05 §8.2: deputation tenure cap and quarter retention beyond limit are 422 VALIDATION_FAILED.
     case "ERR-G05-DEPUTATION-CAP":
     case "ERR-G05-QUARTER-OVERSTAY":
