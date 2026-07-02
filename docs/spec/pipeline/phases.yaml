@@ -603,3 +603,56 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-15g.sh
     gate: human   # tranche-2 wave end — human reviews the honest verdict; only a human creates approvals/PH-15G.approved
     depends_on: [PH-15F]
+
+  # PH-16 is remediation tranche 3 (2026-07-03): the next band of feature-depth gaps named in the PH-15
+  # verdict's "remaining backlog" (docs/spec/ph-15-verdict.md) and the 2026-07-03 coverage delta. Same
+  # re-baseline rules: behavioral oracles run externally by the driver, no marker strings, at least one
+  # fail-closed negative per check, and the wave closes at a human gate with an honest content-checked verdict.
+  - id: PH-16A
+    name: PH-16 · G01 dedup/alias-merge, bulk import, lifecycle
+    prompt: docs/spec/pipeline/prompts/PH-16A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-16a.sh
+    gate: auto
+    depends_on: [PH-15G]
+
+  - id: PH-16B
+    name: PH-16 · G02 bulk corrections, fraud/velocity, status gates
+    prompt: docs/spec/pipeline/prompts/PH-16B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-16b.sh
+    gate: auto
+    depends_on: [PH-16A]
+
+  - id: PH-16C
+    name: PH-16 · G04 mapping catalog, leases/reaper, pre-pension certificate
+    prompt: docs/spec/pipeline/prompts/PH-16C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-16c.sh
+    gate: auto
+    depends_on: [PH-16B]
+
+  - id: PH-16D
+    name: PH-16 · G05 counselling, vacancy lifecycle, mutual transfer
+    prompt: docs/spec/pipeline/prompts/PH-16D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-16d.sh
+    gate: auto
+    depends_on: [PH-16C]
+
+  - id: PH-16E
+    name: PH-16 · G07 credentials/bonds + G08 calibration/PIP/probation
+    prompt: docs/spec/pipeline/prompts/PH-16E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-16e.sh
+    gate: auto
+    depends_on: [PH-16D]
+
+  - id: PH-16F
+    name: PH-16 · G10 loans/perquisites/GL/bank-file + G11 treasury/grievances/objections
+    prompt: docs/spec/pipeline/prompts/PH-16F.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-16f.sh
+    gate: auto
+    depends_on: [PH-16E]
+
+  - id: PH-16G
+    name: PH-16 · Tranche-3 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-16G.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-16g.sh
+    gate: human   # tranche-3 wave end — human reviews the honest verdict; only a human creates approvals/PH-16G.approved
+    depends_on: [PH-16F]
