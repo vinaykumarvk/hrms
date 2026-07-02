@@ -36,8 +36,78 @@ export type ShowCauseNoticeStatus = "ISSUED" | "SERVED" | "RESPONDED" | "NO_RESP
 export type ConsultationType = "UPSC" | "CVC_FIRST_STAGE" | "CVC_SECOND_STAGE" | "ICC" | "LEGAL";
 export type ConsultationStatus = "REQUIRED" | "REQUESTED" | "RECEIVED" | "CLOSED" | "WAIVED";
 export type DisagreementMemoStatus = "ISSUED" | "SERVED" | "RESPONDED" | "FINALISED";
-export type TimelineEventType = "STAGE_ENTERED" | "STAGE_COMPLETED" | "SLA_BREACH" | "ESCALATION" | "NOTE";
+export type TimelineEventType = "STAGE_ENTERED" | "STAGE_COMPLETED" | "SLA_BREACH" | "ESCALATION" | "NOTE" | "SLA_PAUSE" | "SLA_RESUME";
 export type PenaltyClass = "MINOR" | "MAJOR";
+
+// -----------------------------------------------------------------------------------------
+// PH-15F additions (docs/brd/v3/G09-disciplinary-cases-punishment.md FR-G09-023/024/025):
+//   inquiry_appointments ICC roles (E9), personal_hearings (E29), sla_pause_events (E28).
+// -----------------------------------------------------------------------------------------
+
+/** g09_inquiry_role ICC subset (DDL §1): the POSH Internal Committee roles (FR-G09-023). */
+export type IccRoleType = "ICC_PRESIDING" | "ICC_MEMBER" | "ICC_EXTERNAL_MEMBER";
+/** FR-G09-025: personal hearings attach to the SHOW_CAUSE or APPEAL stage only. */
+export type PersonalHearingStage = "SHOW_CAUSE" | "APPEAL";
+export type PersonalHearingStatus = "REQUESTED" | "GRANTED" | "DENIED";
+/** g09_sla_pause_reason (FR-G09-024): only defined reasons may pause the clock (BR-1). */
+export type SlaPauseReason = "STAY" | "REMIT" | "CONDONATION" | "CONSULTATION" | "CRIMINAL_STAY";
+
+/** E9 inquiry_appointments ICC row — composition evidence for the FR-G09-023 validator. */
+export interface IccAppointment {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  caseId: string;
+  roleType: IccRoleType;
+  /** Internal member id XOR external member name (DDL ck_inquiry_appointment_member). */
+  officerId?: string;
+  externalName?: string;
+  isExternalMember: boolean;
+  /** FR-G09-023 composition inputs: presiding officer must be a senior woman; ≥ half members women. */
+  isWoman: boolean;
+  isSeniorLevel: boolean;
+  appointedBy: string;
+  appointedDate: string;
+  status: "ACTIVE" | "RECUSED" | "REPLACED";
+}
+
+/** E29 personal_hearings row (FR-G09-025/DI-29): request -> grant/deny(reason) -> minutes. */
+export interface PersonalHearing {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  caseId: string;
+  stage: PersonalHearingStage;
+  requested: boolean;
+  requestedOn: string;
+  status: PersonalHearingStatus;
+  granted: boolean;
+  /** DI-29: mandatory when the request is denied — reasonless denial fails closed. */
+  denialReason?: string;
+  scheduledDate?: string;
+  heldDate?: string;
+  presidedBy?: string;
+  /** BR-2: immutable once recorded. */
+  minutesText?: string;
+  /** The referencing show-cause notice (SHOW_CAUSE stage) carries personal_hearing_id back. */
+  showCauseNoticeId?: string;
+}
+
+/** E28 sla_pause_events row — APPEND-ONLY: resume sets resumed_at on the open row, never deletes. */
+export interface SlaPauseEvent {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  caseId: string;
+  stage: string;
+  reason: SlaPauseReason;
+  pausedFrom: string;
+  /** null while paused; set exactly once on resume (BR-2: a resume is a new field, not a deletion). */
+  resumedAt?: string;
+  pausedBy?: string;
+  sourceRefId?: string;
+  recomputeApplied: boolean;
+}
 
 /** g09_penalty_type (DDL §1): the full statutory penalty menu incl. the Art. 311 trio. */
 export type G09PenaltyType =
@@ -139,6 +209,8 @@ export interface ShowCauseNotice {
   representationText?: string;
   respondedAt?: string;
   status: ShowCauseNoticeStatus;
+  /** FR-G09-025 AC-4: the show-cause references its granted personal hearing. */
+  personalHearingId?: string;
 }
 
 /** E23 authority_competence row ((cadre x penalty class/type) -> empowered level; FR-G09-018/DI-13). */
@@ -272,6 +344,22 @@ export interface G09DueProcessRepository {
   /** Append-only: allocates the next seq_no, links prev_hash to the last row, computes row_hash. */
   appendTimelineEvent(row: Omit<CaseTimelineEvent, "id" | "seqNo" | "prevHash" | "rowHash">): CaseTimelineEvent;
   listTimelineEvents(scope: TenantScope, caseId: string): CaseTimelineEvent[];
+  // PH-15F FR-G09-023: ICC appointments (inquiry_appointments ICC roles).
+  saveIccAppointment(row: IccAppointment): void;
+  listIccAppointments(scope: TenantScope, caseId: string): IccAppointment[];
+  // PH-15F FR-G09-025: personal_hearings.
+  savePersonalHearing(row: PersonalHearing): void;
+  findPersonalHearing(scope: TenantScope, id: string): PersonalHearing | undefined;
+  listPersonalHearings(scope: TenantScope, caseId: string): PersonalHearing[];
+  countPersonalHearings(): number;
+  // PH-15F FR-G09-024: sla_pause_events APPEND-ONLY ledger.
+  appendSlaPauseEvent(row: SlaPauseEvent): SlaPauseEvent;
+  /** The open (resumed_at IS NULL) pause for the case+stage, if any. */
+  findOpenSlaPause(scope: TenantScope, caseId: string, stage: string): SlaPauseEvent | undefined;
+  /** BR-2: resume writes resumed_at on the open row exactly once — never deletes or re-resumes. */
+  markSlaPauseResumed(scope: TenantScope, id: string, resumedAt: string): SlaPauseEvent;
+  listSlaPauseEvents(scope: TenantScope, caseId: string): SlaPauseEvent[];
+  countSlaPauseEvents(): number;
 }
 
 /** In-memory implementation (DI default, mirrors InMemoryAparDepthRepository). */
@@ -284,6 +372,9 @@ export class InMemoryG09DueProcessRepository implements G09DueProcessRepository 
   protected readonly consultations: CaseConsultation[] = [];
   protected readonly disagreementMemos: DisagreementMemo[] = [];
   protected readonly timelineEvents: CaseTimelineEvent[] = [];
+  protected readonly iccAppointments: IccAppointment[] = [];
+  protected readonly personalHearings: PersonalHearing[] = [];
+  protected readonly slaPauseEvents: SlaPauseEvent[] = [];
 
   savePreliminaryInquiry(row: PreliminaryInquiry): void {
     this.upsert(this.preliminaryInquiries, row);
@@ -403,6 +494,63 @@ export class InMemoryG09DueProcessRepository implements G09DueProcessRepository 
       .map((item) => ({ ...item }));
   }
 
+  saveIccAppointment(row: IccAppointment): void {
+    this.upsert(this.iccAppointments, row);
+  }
+
+  listIccAppointments(scope: TenantScope, caseId: string): IccAppointment[] {
+    return this.iccAppointments.filter((item) => item.caseId === caseId && this.inScope(item, scope)).map((item) => ({ ...item }));
+  }
+
+  savePersonalHearing(row: PersonalHearing): void {
+    this.upsert(this.personalHearings, row);
+  }
+
+  findPersonalHearing(scope: TenantScope, id: string): PersonalHearing | undefined {
+    return this.copyOf(this.personalHearings.find((item) => item.id === id && this.inScope(item, scope)));
+  }
+
+  listPersonalHearings(scope: TenantScope, caseId: string): PersonalHearing[] {
+    return this.personalHearings.filter((item) => item.caseId === caseId && this.inScope(item, scope)).map((item) => ({ ...item }));
+  }
+
+  countPersonalHearings(): number {
+    return this.personalHearings.length;
+  }
+
+  appendSlaPauseEvent(row: SlaPauseEvent): SlaPauseEvent {
+    // E28/CONVENTIONS §3: sla_pause_events is APPEND-ONLY — no update path other than the
+    // one-shot resume field write in markSlaPauseResumed.
+    this.slaPauseEvents.push({ ...row });
+    this.persist();
+    return { ...row };
+  }
+
+  findOpenSlaPause(scope: TenantScope, caseId: string, stage: string): SlaPauseEvent | undefined {
+    return this.copyOf(
+      this.slaPauseEvents.find((item) => item.caseId === caseId && item.stage === stage && item.resumedAt === undefined && this.inScope(item, scope))
+    );
+  }
+
+  markSlaPauseResumed(scope: TenantScope, id: string, resumedAt: string): SlaPauseEvent {
+    const pause = this.slaPauseEvents.find((item) => item.id === id && this.inScope(item, scope));
+    if (!pause || pause.resumedAt !== undefined) {
+      throw new FoundationError("ERR-G09-SLA-PAUSE-INVALID", "No open SLA pause to resume (DI-18)", { field: "pauseId", details: { pauseId: id } });
+    }
+    pause.resumedAt = resumedAt;
+    pause.recomputeApplied = true;
+    this.persist();
+    return { ...pause };
+  }
+
+  listSlaPauseEvents(scope: TenantScope, caseId: string): SlaPauseEvent[] {
+    return this.slaPauseEvents.filter((item) => item.caseId === caseId && this.inScope(item, scope)).map((item) => ({ ...item }));
+  }
+
+  countSlaPauseEvents(): number {
+    return this.slaPauseEvents.length;
+  }
+
   /** Durability hook — no-op in memory; the file-backed subclass writes through. */
   protected persist(): void {
     // In-memory repository keeps state in process only.
@@ -417,6 +565,9 @@ export class InMemoryG09DueProcessRepository implements G09DueProcessRepository 
     this.consultations.push(...(state.consultations ?? []));
     this.disagreementMemos.push(...(state.disagreementMemos ?? []));
     this.timelineEvents.push(...(state.timelineEvents ?? []));
+    this.iccAppointments.push(...(state.iccAppointments ?? []));
+    this.personalHearings.push(...(state.personalHearings ?? []));
+    this.slaPauseEvents.push(...(state.slaPauseEvents ?? []));
   }
 
   protected snapshotState(): {
@@ -428,6 +579,9 @@ export class InMemoryG09DueProcessRepository implements G09DueProcessRepository 
     consultations: CaseConsultation[];
     disagreementMemos: DisagreementMemo[];
     timelineEvents: CaseTimelineEvent[];
+    iccAppointments: IccAppointment[];
+    personalHearings: PersonalHearing[];
+    slaPauseEvents: SlaPauseEvent[];
   } {
     return {
       preliminaryInquiries: this.preliminaryInquiries,
@@ -438,6 +592,9 @@ export class InMemoryG09DueProcessRepository implements G09DueProcessRepository 
       consultations: this.consultations,
       disagreementMemos: this.disagreementMemos,
       timelineEvents: this.timelineEvents,
+      iccAppointments: this.iccAppointments,
+      personalHearings: this.personalHearings,
+      slaPauseEvents: this.slaPauseEvents,
     };
   }
 
@@ -557,6 +714,30 @@ const INSERT_PENALTY_ORDER =
 
 const INSERT_PENALTY_ITEM =
   "INSERT INTO g09_penalty_items (tenant_id, order_id, penalty_type, penalty_class, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id";
+
+// PH-15F SQL over migration 0027 (FR-G09-023/024/025) — parameterised only.
+const INSERT_ICC_APPOINTMENT =
+  "INSERT INTO g09_inquiry_appointments (tenant_id, entity_id, case_id, role_type, officer_id, external_name, is_external_member, is_woman, is_senior_level, appointed_by, appointed_date, status, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ACTIVE', $12) RETURNING id";
+
+const INSERT_PERSONAL_HEARING =
+  "INSERT INTO g09_personal_hearings (tenant_id, entity_id, case_id, stage, requested, requested_on, status, show_cause_notice_id, created_by) " +
+  "VALUES ($1, $2, $3, $4, true, $5, 'REQUESTED', $6, $7) RETURNING id";
+
+const DECIDE_PERSONAL_HEARING =
+  "UPDATE g09_personal_hearings SET status = $3, granted = $4, denial_reason = $5, scheduled_date = $6, presided_by = $7, updated_by = $8, updated_at = now() " +
+  "WHERE tenant_id = $1 AND id = $2 AND status = 'REQUESTED' AND is_deleted = false";
+
+const INSERT_SLA_PAUSE =
+  "INSERT INTO g09_sla_pause_events (tenant_id, entity_id, case_id, stage, reason, paused_from, paused_by, source_ref_id, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id";
+
+const SELECT_OPEN_SLA_PAUSE_FOR_UPDATE =
+  "SELECT id, stage, reason, paused_from FROM g09_sla_pause_events WHERE tenant_id = $1 AND case_id = $2 AND stage = $3 AND resumed_at IS NULL FOR UPDATE";
+
+// BR-2 append-only: the resume is a one-shot field write on the open row — never a delete.
+const RESUME_SLA_PAUSE =
+  "UPDATE g09_sla_pause_events SET resumed_at = $3, recompute_applied = true WHERE tenant_id = $1 AND id = $2 AND resumed_at IS NULL";
 
 /** Postgres-backed PH-08E G09 due-process repository over migration 0013 tables. */
 export class PgG09DueProcessRepository {
@@ -830,6 +1011,135 @@ export class PgG09DueProcessRepository {
         input.createdBy ?? null,
       ]);
       return { orderId, penaltyItemIds };
+    });
+  }
+
+  /** FR-G09-023: one ICC appointment row (composition is validated by the service before insert). */
+  async insertIccAppointment(input: {
+    tenantId: string;
+    entityId?: string;
+    caseId: string;
+    roleType: IccRoleType;
+    officerId?: string;
+    externalName?: string;
+    isExternalMember: boolean;
+    isWoman: boolean;
+    isSeniorLevel: boolean;
+    appointedBy: string;
+    appointedDate: string;
+    createdBy?: string;
+  }): Promise<{ id: string }> {
+    const result = await this.pool.query(INSERT_ICC_APPOINTMENT, [
+      input.tenantId,
+      input.entityId ?? null,
+      input.caseId,
+      input.roleType,
+      input.officerId ?? null,
+      input.externalName ?? null,
+      input.isExternalMember,
+      input.isWoman,
+      input.isSeniorLevel,
+      input.appointedBy,
+      input.appointedDate,
+      input.createdBy ?? null,
+    ]);
+    return result.rows[0] as { id: string };
+  }
+
+  /** FR-G09-025: record the charged officer's hearing request (requested=true). */
+  async insertPersonalHearing(input: {
+    tenantId: string;
+    entityId?: string;
+    caseId: string;
+    stage: PersonalHearingStage;
+    requestedOn: string;
+    showCauseNoticeId?: string;
+    createdBy?: string;
+  }): Promise<{ id: string }> {
+    const result = await this.pool.query(INSERT_PERSONAL_HEARING, [
+      input.tenantId,
+      input.entityId ?? null,
+      input.caseId,
+      input.stage,
+      input.requestedOn,
+      input.showCauseNoticeId ?? null,
+      input.createdBy ?? null,
+    ]);
+    return result.rows[0] as { id: string };
+  }
+
+  /** DI-29: the SQL layer re-asserts the deny-with-reason rule the service validates. */
+  async decidePersonalHearing(input: {
+    tenantId: string;
+    id: string;
+    decision: "GRANT" | "DENY";
+    denialReason?: string;
+    scheduledDate?: string;
+    presidedBy?: string;
+    updatedBy?: string;
+  }): Promise<void> {
+    if (input.decision === "DENY" && !input.denialReason) {
+      throw new FoundationError("ERR-G09-PERSONAL-HEARING-DENIED", "Denial of a requested personal hearing requires a recorded denial_reason (DI-29)", {
+        field: "denial_reason",
+      });
+    }
+    const result = await this.pool.query(DECIDE_PERSONAL_HEARING, [
+      input.tenantId,
+      input.id,
+      input.decision === "GRANT" ? "GRANTED" : "DENIED",
+      input.decision === "GRANT",
+      input.denialReason ?? null,
+      input.scheduledDate ?? null,
+      input.presidedBy ?? null,
+      input.updatedBy ?? null,
+    ]);
+    if (result.rowCount === 0) {
+      throw new FoundationError("PRECONDITION_FAILED", "Personal hearing is not open for a decision");
+    }
+  }
+
+  /** FR-G09-024: open a pause (append-only insert; resume never deletes it). */
+  async insertSlaPause(input: {
+    tenantId: string;
+    entityId?: string;
+    caseId: string;
+    stage: string;
+    reason: SlaPauseReason;
+    pausedFrom: string;
+    pausedBy?: string;
+    sourceRefId?: string;
+    createdBy?: string;
+  }): Promise<{ id: string }> {
+    const result = await this.pool.query(INSERT_SLA_PAUSE, [
+      input.tenantId,
+      input.entityId ?? null,
+      input.caseId,
+      input.stage,
+      input.reason,
+      input.pausedFrom,
+      input.pausedBy ?? null,
+      input.sourceRefId ?? null,
+      input.createdBy ?? null,
+    ]);
+    return result.rows[0] as { id: string };
+  }
+
+  /**
+   * FR-G09-024 resume in ONE transaction: lock the open pause (resumed_at IS NULL), fail closed
+   * with ERR-G09-SLA-PAUSE-INVALID when none exists, then write resumed_at exactly once.
+   */
+  async resumeSlaPause(input: { tenantId: string; caseId: string; stage: string; resumedAt: string }): Promise<{ id: string; pausedFrom: string }> {
+    return withTransaction(this.pool, async (client) => {
+      const open = await client.query(SELECT_OPEN_SLA_PAUSE_FOR_UPDATE, [input.tenantId, input.caseId, input.stage]);
+      const pause = open.rows[0] as { id: string; paused_from: string } | undefined;
+      if (!pause) {
+        throw new FoundationError("ERR-G09-SLA-PAUSE-INVALID", "Resume without an open SLA pause for this stage (DI-18)", {
+          field: "stage",
+          details: { caseId: input.caseId, stage: input.stage },
+        });
+      }
+      await client.query(RESUME_SLA_PAUSE, [input.tenantId, pause.id, input.resumedAt]);
+      return { id: pause.id, pausedFrom: pause.paused_from };
     });
   }
 }

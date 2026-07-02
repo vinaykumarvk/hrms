@@ -17,6 +17,8 @@ import {
   computeNetQualifyingService,
 } from "./establishmentQslRepository";
 import {
+  CombinedSeniorityConstruction,
+  CombinedSeniorityEntry,
   InMemoryPromotionDepthRepository,
   LegalCaseLink,
   LegalForum,
@@ -25,10 +27,15 @@ import {
   ProbationRecord,
   PromotionDepthRepository,
   PromotionRefusal,
+  RecruitmentStream,
   ReservationCategory,
   ReservationRoster,
   RosterPoint,
   RosterType,
+  RotationMethod,
+  RotationStartSlot,
+  RotationTraceSlot,
+  SeniorityQuotaRule,
   ConsequentialSeniorityMode,
   addMonthsIso,
 } from "./promotionDepthRepository";
@@ -634,6 +641,172 @@ export class PromotionService {
     list.documentId = attached.id;
     this.audit.recordMutation(actor, { action: "G06_SENIORITY_FINALISED", subjectRef: `g06_seniority_lists:${list.id}`, metadata: { documentId: attached.id } });
     return this.cloneSeniorityList(list);
+  }
+
+  // -------------------------------------------------------------------------------------
+  // FR-PPP-020 (PPP-SEN): seniority_quota_rules + multi-stream rota-quota construction
+  // -------------------------------------------------------------------------------------
+
+  /**
+   * FR-PPP-020 AC-1: a seniority_quota_rules row records the DR/promotee/LDCE ratios,
+   * rotation_method, rotation_start_slot and unfilled-quota carry-forward. An invalid ratio
+   * (negative / non-integer / all-zero) or an unknown method/start-slot fails closed with
+   * QUOTA_RULE_INVALID — the construction engine never runs on a malformed rule.
+   */
+  defineSeniorityQuotaRule(
+    actor: ActorContext,
+    input: {
+      ruleCode: string;
+      cadreId?: string;
+      gradeDesignationId: string;
+      drQuotaRatio: number;
+      promoteeQuotaRatio: number;
+      ldceQuotaRatio?: number;
+      rotationMethod: RotationMethod;
+      rotationStartSlot?: RotationStartSlot;
+      unfilledQuotaCarryForward?: boolean;
+      policyReference?: string;
+    }
+  ): SeniorityQuotaRule {
+    this.authorization.check(actor, "g06.seniority.write", actor);
+    const ldceQuotaRatio = input.ldceQuotaRatio ?? 0;
+    const ratios = [input.drQuotaRatio, input.promoteeQuotaRatio, ldceQuotaRatio];
+    if (ratios.some((ratio) => !Number.isInteger(ratio) || ratio < 0) || input.drQuotaRatio + input.promoteeQuotaRatio + ldceQuotaRatio < 1) {
+      throw new FoundationError("QUOTA_RULE_INVALID", "Quota ratios must be non-negative integers with at least one positive stream ratio (FR-PPP-020)", {
+        field: "drQuotaRatio",
+        details: { drQuotaRatio: input.drQuotaRatio, promoteeQuotaRatio: input.promoteeQuotaRatio, ldceQuotaRatio },
+      });
+    }
+    if (input.rotationMethod !== "ROTA_QUOTA" && input.rotationMethod !== "RUNNING_ACCOUNT" && input.rotationMethod !== "SEPARATE_STREAM") {
+      throw new FoundationError("QUOTA_RULE_INVALID", "rotation_method must be ROTA_QUOTA, RUNNING_ACCOUNT or SEPARATE_STREAM", {
+        field: "rotationMethod",
+        details: { rotationMethod: input.rotationMethod },
+      });
+    }
+    const rotationStartSlot = input.rotationStartSlot ?? "DR_FIRST";
+    if (rotationStartSlot !== "DR_FIRST" && rotationStartSlot !== "PROMOTEE_FIRST") {
+      throw new FoundationError("QUOTA_RULE_INVALID", "rotation_start_slot must be DR_FIRST or PROMOTEE_FIRST", {
+        field: "rotationStartSlot",
+        details: { rotationStartSlot },
+      });
+    }
+    const rule: SeniorityQuotaRule = {
+      id: nextId("seniority-quota-rule", this.promotionDepth.countQuotaRules()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      ruleCode: input.ruleCode,
+      cadreId: input.cadreId ?? "cadre-default",
+      gradeDesignationId: input.gradeDesignationId,
+      drQuotaRatio: input.drQuotaRatio,
+      promoteeQuotaRatio: input.promoteeQuotaRatio,
+      ldceQuotaRatio,
+      rotationMethod: input.rotationMethod,
+      rotationStartSlot,
+      unfilledQuotaCarryForward: input.unfilledQuotaCarryForward ?? true,
+      policyReference: input.policyReference,
+      isActive: true,
+    };
+    this.promotionDepth.saveSeniorityQuotaRule(rule);
+    this.audit.recordMutation(actor, {
+      action: "G06_SENIORITY_QUOTA_RULE_DEFINED",
+      subjectRef: `g06_seniority_quota_rules:${rule.id}`,
+      metadata: { ruleCode: rule.ruleCode, rotationMethod: rule.rotationMethod, rotationStartSlot: rule.rotationStartSlot },
+    });
+    return { ...rule };
+  }
+
+  /**
+   * FR-PPP-020 AC-2/3/4 (Appendix D.4, N.R. Parmar line): deterministic multi-stream combined
+   * seniority construction. Vacancy slots rotate across streams per the effective quota rule
+   * (ROTA_QUOTA slot-by-slot; RUNNING_ACCOUNT reconciling deficiencies across cycles;
+   * SEPARATE_STREAM without interleave); each slot draws the next senior-most member of its
+   * stream; each placed entry records its quota_slot_label and rotation_cycle_no; an unfilled
+   * stream slot is recorded in the rotation trace as carried forward — never silently lost.
+   * A population entry without its stream tag fails closed with STREAM_TAG_MISSING.
+   */
+  constructCombinedSeniority(
+    actor: ActorContext,
+    input: {
+      quotaRuleId: string;
+      cadreId?: string;
+      population: Array<{ employeeId: string; recruitmentStream?: string; streamSeniorityNo?: number }>;
+    }
+  ): CombinedSeniorityConstruction {
+    this.authorization.check(actor, "g06.seniority.write", actor);
+    const rule = this.promotionDepth.findSeniorityQuotaRule(actor, input.quotaRuleId);
+    if (!rule) {
+      throw new FoundationError("NOT_FOUND", "Seniority quota rule not found");
+    }
+    if (!rule.isActive) {
+      throw new FoundationError("QUOTA_RULE_INVALID", "Seniority quota rule is not active on the as-on date", { field: "quotaRuleId" });
+    }
+    if (input.population.length === 0) {
+      throw new FoundationError("VALIDATION_FAILED", "At least one population entry is required", { field: "population" });
+    }
+    // Edge case (FR-PPP-020): legacy data missing stream/quota history fails closed for tagging.
+    const untagged = input.population.find(
+      (entry) => entry.recruitmentStream !== "DIRECT" && entry.recruitmentStream !== "PROMOTEE" && entry.recruitmentStream !== "LDCE"
+    );
+    if (untagged) {
+      throw new FoundationError("STREAM_TAG_MISSING", "Population entry has no recruitment-stream tag — flag for manual stream tagging (FR-PPP-020)", {
+        field: "population",
+        details: { employeeId: untagged.employeeId, recruitmentStream: untagged.recruitmentStream },
+      });
+    }
+    // Deterministic stream-internal order: streamSeniorityNo, then employeeId as tie-break.
+    const queues: Record<RecruitmentStream, string[]> = { DIRECT: [], PROMOTEE: [], LDCE: [] };
+    for (const stream of Object.keys(queues) as RecruitmentStream[]) {
+      queues[stream] = input.population
+        .map((entry, index) => ({ ...entry, index }))
+        .filter((entry) => entry.recruitmentStream === stream)
+        .sort((left, right) => (left.streamSeniorityNo ?? left.index) - (right.streamSeniorityNo ?? right.index) || left.employeeId.localeCompare(right.employeeId))
+        .map((entry) => entry.employeeId);
+    }
+    const { entries, trace } = runRotaQuotaConstruction(rule, queues);
+    const construction: CombinedSeniorityConstruction = {
+      id: nextId("combined-seniority", this.promotionDepth.countCombinedConstructions()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      quotaRuleId: rule.id,
+      cadreId: input.cadreId ?? rule.cadreId,
+      entries,
+      trace,
+    };
+    this.promotionDepth.saveCombinedSeniorityConstruction(construction);
+    this.audit.recordMutation(actor, {
+      action: "G06_COMBINED_SENIORITY_CONSTRUCTED",
+      subjectRef: `g06_combined_seniority_constructions:${construction.id}`,
+      metadata: {
+        quotaRuleId: rule.id,
+        rotationMethod: rule.rotationMethod,
+        entries: entries.length,
+        carriedForwardSlots: trace.filter((slot) => slot.carriedForward).length,
+      },
+    });
+    return {
+      ...construction,
+      entries: construction.entries.map((entry) => ({ ...entry })),
+      trace: construction.trace.map((slot) => ({ ...slot })),
+    };
+  }
+
+  /** FR-PPP-020: retrievable rotation trace — which quota slot each cycle issued and to whom. */
+  getRotationTrace(scope: TenantScope, constructionId: string): { constructionId: string; quotaRuleId: string; trace: RotationTraceSlot[] } {
+    requireTenantScope(scope);
+    const construction = this.promotionDepth.findCombinedSeniorityConstruction(scope, constructionId);
+    if (!construction) {
+      throw new FoundationError("NOT_FOUND", "Combined seniority construction not found");
+    }
+    return { constructionId: construction.id, quotaRuleId: construction.quotaRuleId, trace: construction.trace };
+  }
+
+  getCombinedSeniorityConstruction(scope: TenantScope, constructionId: string): CombinedSeniorityConstruction {
+    requireTenantScope(scope);
+    const construction = this.promotionDepth.findCombinedSeniorityConstruction(scope, constructionId);
+    if (!construction) {
+      throw new FoundationError("NOT_FOUND", "Combined seniority construction not found");
+    }
+    return construction;
   }
 
   /**
@@ -1359,6 +1532,83 @@ export class PromotionService {
 
 function isContiguous(ranks: number[]): boolean {
   return [...ranks].sort((left, right) => left - right).every((rank, index) => rank === index + 1);
+}
+
+/** Slot-label prefixes pinned to the Appendix D.4 worked vector (DR-1, PR-1, LDCE-1, ...). */
+const STREAM_SLOT_PREFIX: Record<RecruitmentStream, string> = { DIRECT: "DR", PROMOTEE: "PR", LDCE: "LDCE" };
+
+/**
+ * FR-PPP-020 rota-quota construction kernel (Appendix D.4). Pure and deterministic: the same
+ * queues + rule always yield the same interleave, quota_slot_label set and rotation_cycle_no
+ * assignment. ROTA_QUOTA rotates slot-by-slot (an exhausted stream's slot is recorded as
+ * carried forward); RUNNING_ACCOUNT re-adds carried deficiencies to the stream's next cycle;
+ * SEPARATE_STREAM concatenates the streams without interleave.
+ */
+export function runRotaQuotaConstruction(
+  rule: SeniorityQuotaRule,
+  queuesInput: Record<RecruitmentStream, string[]>
+): { entries: CombinedSeniorityEntry[]; trace: RotationTraceSlot[] } {
+  const queues: Record<RecruitmentStream, string[]> = {
+    DIRECT: [...queuesInput.DIRECT],
+    PROMOTEE: [...queuesInput.PROMOTEE],
+    LDCE: [...queuesInput.LDCE],
+  };
+  const streamOrder: RecruitmentStream[] = rule.rotationStartSlot === "PROMOTEE_FIRST" ? ["PROMOTEE", "DIRECT", "LDCE"] : ["DIRECT", "PROMOTEE", "LDCE"];
+  const ratios: Record<RecruitmentStream, number> = { DIRECT: rule.drQuotaRatio, PROMOTEE: rule.promoteeQuotaRatio, LDCE: rule.ldceQuotaRatio };
+  const slotCounters: Record<RecruitmentStream, number> = { DIRECT: 0, PROMOTEE: 0, LDCE: 0 };
+  const owed: Record<RecruitmentStream, number> = { DIRECT: 0, PROMOTEE: 0, LDCE: 0 };
+  const entries: CombinedSeniorityEntry[] = [];
+  const trace: RotationTraceSlot[] = [];
+  let rank = 0;
+
+  const remaining = (): number => queues.DIRECT.length + queues.PROMOTEE.length + queues.LDCE.length;
+
+  const issueSlot = (stream: RecruitmentStream, cycleNo: number): void => {
+    slotCounters[stream] += 1;
+    const slotLabel = `${STREAM_SLOT_PREFIX[stream]}-${slotCounters[stream]}`;
+    const employeeId = queues[stream].shift();
+    if (employeeId) {
+      rank += 1;
+      entries.push({ employeeId, rank, recruitmentStream: stream, quotaSlotLabel: slotLabel, rotationCycleNo: cycleNo });
+      trace.push({ cycleNo, slotLabel, stream, filledByEmployeeId: employeeId, carriedForward: false });
+    } else {
+      // AC-3: an unfilled quota slot is recorded — carried forward per the rule, never silently lost.
+      trace.push({ cycleNo, slotLabel, stream, carriedForward: rule.unfilledQuotaCarryForward });
+      if (rule.rotationMethod === "RUNNING_ACCOUNT" && rule.unfilledQuotaCarryForward) {
+        owed[stream] += 1;
+      }
+    }
+  };
+
+  if (rule.rotationMethod === "SEPARATE_STREAM") {
+    // No interleave: each stream is emitted whole, in start-slot order, as cycle 1.
+    for (const stream of streamOrder) {
+      while (queues[stream].length > 0) {
+        issueSlot(stream, 1);
+      }
+    }
+    return { entries, trace };
+  }
+
+  let cycleNo = 0;
+  while (remaining() > 0) {
+    cycleNo += 1;
+    for (const stream of streamOrder) {
+      // RUNNING_ACCOUNT: quota deficiencies carried from earlier cycles are reconciled here.
+      let slots = ratios[stream];
+      if (rule.rotationMethod === "RUNNING_ACCOUNT" && owed[stream] > 0 && queues[stream].length > 0) {
+        slots += owed[stream];
+        owed[stream] = 0;
+      }
+      for (let index = 0; index < slots; index += 1) {
+        if (remaining() === 0) {
+          return { entries, trace };
+        }
+        issueSlot(stream, cycleNo);
+      }
+    }
+  }
+  return { entries, trace };
 }
 
 /**

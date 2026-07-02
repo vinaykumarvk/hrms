@@ -30,6 +30,66 @@ export type LegalLinkedEntityType = "PROMOTION_CASE" | "PROMOTION_ORDER" | "SENI
 export type LegalForum = "CAT" | "HIGH_COURT" | "SUPREME_COURT" | "TRIBUNAL_OTHER";
 export type LegalStatus = "FILED" | "INTERIM_STAYED" | "PENDING" | "DISPOSED_FAVOURABLE" | "DISPOSED_ADVERSE";
 
+// -----------------------------------------------------------------------------------------
+// PH-15F FR-PPP-020 (§5.2.28 seniority_quota_rules + §5.2.2 stream/slot fields): multi-stream
+// rota-quota combined seniority construction with a retrievable rotation trace.
+// -----------------------------------------------------------------------------------------
+
+/** g06_rotation_method: ROTA_QUOTA slot-by-slot; RUNNING_ACCOUNT reconciles deficiencies; SEPARATE_STREAM no interleave. */
+export type RotationMethod = "ROTA_QUOTA" | "RUNNING_ACCOUNT" | "SEPARATE_STREAM";
+export type RotationStartSlot = "DR_FIRST" | "PROMOTEE_FIRST";
+/** g06_recruitment_stream subset used by the FR-PPP-020 construction engine. */
+export type RecruitmentStream = "DIRECT" | "PROMOTEE" | "LDCE";
+
+/** §5.2.28 g06_seniority_quota_rules row (DR:Promotee:LDCE ratios + rotation configuration). */
+export interface SeniorityQuotaRule {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  ruleCode: string;
+  cadreId: string;
+  gradeDesignationId: string;
+  drQuotaRatio: number;
+  promoteeQuotaRatio: number;
+  ldceQuotaRatio: number;
+  rotationMethod: RotationMethod;
+  rotationStartSlot: RotationStartSlot;
+  /** AC-3: unfilled quota slots in a stream carry forward per the rule (no silent loss). */
+  unfilledQuotaCarryForward: boolean;
+  policyReference?: string;
+  isActive: boolean;
+}
+
+/** One combined seniority entry (§5.2.2 fields): each records its quota_slot_label + rotation_cycle_no. */
+export interface CombinedSeniorityEntry {
+  employeeId: string;
+  rank: number;
+  recruitmentStream: RecruitmentStream;
+  quotaSlotLabel: string;
+  rotationCycleNo: number;
+}
+
+/** One rotation-trace slot: which stream slot each cycle issued and whether it carried forward. */
+export interface RotationTraceSlot {
+  cycleNo: number;
+  slotLabel: string;
+  stream: RecruitmentStream;
+  filledByEmployeeId?: string;
+  /** AC-3: an unfilled slot is recorded as carried forward — never silently lost. */
+  carriedForward: boolean;
+}
+
+/** A persisted multi-stream construction run (entries + trace retrievable by id). */
+export interface CombinedSeniorityConstruction {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  quotaRuleId: string;
+  cadreId: string;
+  entries: CombinedSeniorityEntry[];
+  trace: RotationTraceSlot[];
+}
+
 /** FR-006: reservation_rosters register row (docs/data-model 5.2.16 g06_reservation_rosters). */
 export interface ReservationRoster {
   id: string;
@@ -157,6 +217,13 @@ export interface PromotionDepthRepository {
   findLegalCaseLink(scope: TenantScope, legalCaseLinkId: string): LegalCaseLink | undefined;
   /** Active interim stay on the entity (§5.6-20) — presence blocks effecting. */
   findActiveStay(scope: TenantScope, linkedEntityType: LegalLinkedEntityType, linkedEntityRefId: string): LegalCaseLink | undefined;
+  // PH-15F FR-PPP-020: seniority_quota_rules + persisted combined constructions/rotation traces.
+  countQuotaRules(): number;
+  saveSeniorityQuotaRule(rule: SeniorityQuotaRule): void;
+  findSeniorityQuotaRule(scope: TenantScope, quotaRuleId: string): SeniorityQuotaRule | undefined;
+  countCombinedConstructions(): number;
+  saveCombinedSeniorityConstruction(construction: CombinedSeniorityConstruction): void;
+  findCombinedSeniorityConstruction(scope: TenantScope, constructionId: string): CombinedSeniorityConstruction | undefined;
 }
 
 /** In-memory implementation (DI default, mirrors InMemoryEstablishmentQslRepository). */
@@ -166,6 +233,8 @@ export class InMemoryPromotionDepthRepository implements PromotionDepthRepositor
   protected readonly refusals: PromotionRefusal[] = [];
   protected readonly probations: ProbationRecord[] = [];
   protected readonly legalCaseLinks: LegalCaseLink[] = [];
+  protected readonly seniorityQuotaRules: SeniorityQuotaRule[] = [];
+  protected readonly combinedConstructions: CombinedSeniorityConstruction[] = [];
 
   countRosters(): number {
     return this.rosters.length;
@@ -255,6 +324,34 @@ export class InMemoryPromotionDepthRepository implements PromotionDepthRepositor
     return link ? { ...link } : undefined;
   }
 
+  countQuotaRules(): number {
+    return this.seniorityQuotaRules.length;
+  }
+
+  saveSeniorityQuotaRule(rule: SeniorityQuotaRule): void {
+    this.upsert(this.seniorityQuotaRules, rule);
+  }
+
+  findSeniorityQuotaRule(scope: TenantScope, quotaRuleId: string): SeniorityQuotaRule | undefined {
+    const rule = this.seniorityQuotaRules.find((item) => item.id === quotaRuleId && this.inScope(item, scope));
+    return rule ? { ...rule } : undefined;
+  }
+
+  countCombinedConstructions(): number {
+    return this.combinedConstructions.length;
+  }
+
+  saveCombinedSeniorityConstruction(construction: CombinedSeniorityConstruction): void {
+    this.upsert(this.combinedConstructions, construction);
+  }
+
+  findCombinedSeniorityConstruction(scope: TenantScope, constructionId: string): CombinedSeniorityConstruction | undefined {
+    const construction = this.combinedConstructions.find((item) => item.id === constructionId && this.inScope(item, scope));
+    return construction
+      ? { ...construction, entries: construction.entries.map((entry) => ({ ...entry })), trace: construction.trace.map((slot) => ({ ...slot })) }
+      : undefined;
+  }
+
   /** Durability hook — no-op in memory; the file-backed subclass writes through. */
   protected persist(): void {
     // In-memory repository keeps state in process only.
@@ -266,12 +363,16 @@ export class InMemoryPromotionDepthRepository implements PromotionDepthRepositor
     refusals?: PromotionRefusal[];
     probations?: ProbationRecord[];
     legalCaseLinks?: LegalCaseLink[];
+    seniorityQuotaRules?: SeniorityQuotaRule[];
+    combinedConstructions?: CombinedSeniorityConstruction[];
   }): void {
     this.rosters.push(...(state.rosters ?? []));
     this.rosterPoints.push(...(state.rosterPoints ?? []));
     this.refusals.push(...(state.refusals ?? []));
     this.probations.push(...(state.probations ?? []));
     this.legalCaseLinks.push(...(state.legalCaseLinks ?? []));
+    this.seniorityQuotaRules.push(...(state.seniorityQuotaRules ?? []));
+    this.combinedConstructions.push(...(state.combinedConstructions ?? []));
   }
 
   protected snapshotState(): {
@@ -280,6 +381,8 @@ export class InMemoryPromotionDepthRepository implements PromotionDepthRepositor
     refusals: PromotionRefusal[];
     probations: ProbationRecord[];
     legalCaseLinks: LegalCaseLink[];
+    seniorityQuotaRules: SeniorityQuotaRule[];
+    combinedConstructions: CombinedSeniorityConstruction[];
   } {
     return {
       rosters: this.rosters,
@@ -287,6 +390,8 @@ export class InMemoryPromotionDepthRepository implements PromotionDepthRepositor
       refusals: this.refusals,
       probations: this.probations,
       legalCaseLinks: this.legalCaseLinks,
+      seniorityQuotaRules: this.seniorityQuotaRules,
+      combinedConstructions: this.combinedConstructions,
     };
   }
 
@@ -381,6 +486,24 @@ const SELECT_ACTIVE_STAY =
 const VACATE_STAY =
   "UPDATE g06_legal_case_links SET interim_stay = false, stay_to_date = $3, status = 'PENDING', updated_by = $4, updated_at = now() " +
   "WHERE tenant_id = $1 AND id = $2 AND is_deleted = false RETURNING id, interim_stay, status";
+
+// PH-15F SQL over migration 0027 (FR-PPP-020 seniority_quota_rules + combined construction) — parameterised only.
+const INSERT_SENIORITY_QUOTA_RULE =
+  "INSERT INTO g06_seniority_quota_rules (tenant_id, entity_id, rule_code, cadre_id, grade_designation_id, dr_quota_ratio, promotee_quota_ratio, " +
+  "ldce_quota_ratio, rotation_method, rotation_start_slot, unfilled_quota_carry_forward, policy_reference, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id";
+
+const INSERT_COMBINED_CONSTRUCTION =
+  "INSERT INTO g06_combined_seniority_constructions (tenant_id, entity_id, quota_rule_id, cadre_id, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5) RETURNING id";
+
+const INSERT_COMBINED_ENTRY =
+  "INSERT INTO g06_combined_seniority_entries (tenant_id, construction_id, employee_id, rank_position, recruitment_stream, quota_slot_label, rotation_cycle_no, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id";
+
+const INSERT_ROTATION_TRACE_SLOT =
+  "INSERT INTO g06_rotation_trace_slots (tenant_id, construction_id, cycle_no, slot_label, recruitment_stream, filled_by_employee_id, carried_forward, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id";
 
 /** Postgres-backed PH-08C depth repository over migration 0010 tables. */
 export class PgPromotionDepthRepository {
@@ -585,5 +708,92 @@ export class PgPromotionDepthRepository {
   async vacateStay(input: { tenantId: string; legalCaseLinkId: string; stayToDate: string; updatedBy?: string }): Promise<Record<string, unknown> | undefined> {
     const result = await this.pool.query(VACATE_STAY, [input.tenantId, input.legalCaseLinkId, input.stayToDate, input.updatedBy ?? null]);
     return result.rows[0] as Record<string, unknown> | undefined;
+  }
+
+  /** FR-PPP-020: one seniority_quota_rules row (ratios validated by the service — QUOTA_RULE_INVALID). */
+  async insertSeniorityQuotaRule(input: {
+    tenantId: string;
+    entityId?: string;
+    ruleCode: string;
+    cadreId: string;
+    gradeDesignationId: string;
+    drQuotaRatio: number;
+    promoteeQuotaRatio: number;
+    ldceQuotaRatio: number;
+    rotationMethod: RotationMethod;
+    rotationStartSlot: RotationStartSlot;
+    unfilledQuotaCarryForward: boolean;
+    policyReference?: string;
+    createdBy?: string;
+  }): Promise<{ id: string }> {
+    const result = await this.pool.query(INSERT_SENIORITY_QUOTA_RULE, [
+      input.tenantId,
+      input.entityId ?? null,
+      input.ruleCode,
+      input.cadreId,
+      input.gradeDesignationId,
+      input.drQuotaRatio,
+      input.promoteeQuotaRatio,
+      input.ldceQuotaRatio,
+      input.rotationMethod,
+      input.rotationStartSlot,
+      input.unfilledQuotaCarryForward,
+      input.policyReference ?? null,
+      input.createdBy ?? null,
+    ]);
+    return result.rows[0] as { id: string };
+  }
+
+  /**
+   * FR-PPP-020: the construction header, its combined entries (quota_slot_label +
+   * rotation_cycle_no) and the rotation trace commit in ONE transaction — a failed
+   * insert leaves no half-persisted combined list.
+   */
+  async insertCombinedConstruction(input: {
+    tenantId: string;
+    entityId?: string;
+    quotaRuleId: string;
+    cadreId: string;
+    entries: CombinedSeniorityEntry[];
+    trace: RotationTraceSlot[];
+    createdBy?: string;
+  }): Promise<{ constructionId: string; entryIds: string[] }> {
+    return withTransaction(this.pool, async (client) => {
+      const header = await client.query(INSERT_COMBINED_CONSTRUCTION, [
+        input.tenantId,
+        input.entityId ?? null,
+        input.quotaRuleId,
+        input.cadreId,
+        input.createdBy ?? null,
+      ]);
+      const constructionId = (header.rows[0] as { id: string }).id;
+      const entryIds: string[] = [];
+      for (const entry of input.entries) {
+        const inserted = await client.query(INSERT_COMBINED_ENTRY, [
+          input.tenantId,
+          constructionId,
+          entry.employeeId,
+          entry.rank,
+          entry.recruitmentStream,
+          entry.quotaSlotLabel,
+          entry.rotationCycleNo,
+          input.createdBy ?? null,
+        ]);
+        entryIds.push((inserted.rows[0] as { id: string }).id);
+      }
+      for (const slot of input.trace) {
+        await client.query(INSERT_ROTATION_TRACE_SLOT, [
+          input.tenantId,
+          constructionId,
+          slot.cycleNo,
+          slot.slotLabel,
+          slot.stream,
+          slot.filledByEmployeeId ?? null,
+          slot.carriedForward,
+          input.createdBy ?? null,
+        ]);
+      }
+      return { constructionId, entryIds };
+    });
   }
 }

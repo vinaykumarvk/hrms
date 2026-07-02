@@ -1,8 +1,8 @@
 import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalNumber, optionalString, optionalStringArray, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
-import { PenaltyType } from "../modules/g09/disciplinaryService";
-import { G09PenaltyType, PreliminaryInquiryRecommendation } from "../modules/g09/dueProcessRepository";
+import { MisconductCategory, PenaltyType } from "../modules/g09/disciplinaryService";
+import { G09PenaltyType, IccRoleType, PersonalHearingStage, PreliminaryInquiryRecommendation, SlaPauseReason } from "../modules/g09/dueProcessRepository";
 import { ph03Ids } from "../seed/ph03Seed";
 
 export const g09RouteEvidence = {
@@ -20,6 +20,13 @@ export const g09RouteEvidence = {
   abate: "/api/v1/disciplinary/cases/{id}:abate",
   finaliseOrder: "/api/v1/disciplinary/cases/{id}:finalise-order",
   timelineVerify: "/api/v1/disciplinary/cases/{id}/timeline-verify",
+  // PH-15F FR-G09-023/024/025 surfaces (inquiry_route ICC_POSH, personal_hearings, sla_pause_events).
+  constituteIcc: "/api/v1/disciplinary/cases/{id}:constitute-icc",
+  personalHearing: "/api/v1/disciplinary/cases/{id}:personal-hearing",
+  personalHearingDecision: "/api/v1/disciplinary/personal-hearings/{id}:decision",
+  slaPause: "/api/v1/disciplinary/cases/{id}/sla:pause",
+  slaResume: "/api/v1/disciplinary/cases/{id}/sla:resume",
+  slaPauses: "/api/v1/disciplinary/cases/{id}/sla/pauses",
   markers: ["G09_AUTHORITY_COMPETENCE", "CHARGE_MEMO_SERVED", "INQUIRY_REPORT", "MAJOR_PENALTY", "APPEAL_DECIDED"],
 };
 
@@ -41,6 +48,8 @@ export function registerG09Routes(kernel: ApiKernel): void {
             disciplinaryAuthorityId: optionalString(body, "disciplinaryAuthorityId") ?? ph03Ids.manager,
             allegations: requiredString(body, "allegations"),
             confidential: optionalBoolean(body, "confidential"),
+            misconductCategory: readMisconductCategory(body),
+            openedOn: optionalString(body, "openedOn"),
           }),
         });
       },
@@ -311,6 +320,115 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.timeline.verify",
       handler: (context) => ok(context.services.disciplinary.verifyCaseTimeline(context.actor, requiredParam(context.params, "id"))),
     },
+    // ---------------------------------------------------------------------------------
+    // PH-15F FR-G09-023: ICC constitution on the ICC_POSH route (composition validated).
+    // ---------------------------------------------------------------------------------
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/cases/{id}:constitute-icc",
+      operationId: "g09.constituteIcc",
+      protected: true,
+      permission: "g09.icc.constitute",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          iccAppointments: context.services.disciplinary.constituteIcc(context.actor, requiredParam(context.params, "id"), {
+            appointedDate: requiredString(body, "appointedDate"),
+            members: readIccMembers(body),
+          }),
+        });
+      },
+    },
+    // PH-15F FR-G09-025: personal hearings (request -> grant/deny-with-reason -> minutes).
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/cases/{id}:personal-hearing",
+      operationId: "g09.requestPersonalHearing",
+      protected: true,
+      permission: "g09.personal-hearing.request",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          personalHearing: context.services.disciplinary.requestPersonalHearing(context.actor, requiredParam(context.params, "id"), {
+            stage: readHearingStage(body),
+            requestedOn: requiredString(body, "requestedOn"),
+            showCauseNoticeId: optionalString(body, "showCauseNoticeId"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/personal-hearings/{id}:decision",
+      operationId: "g09.decidePersonalHearing",
+      protected: true,
+      permission: "g09.personal-hearing.decide",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          personalHearing: context.services.disciplinary.decidePersonalHearing(context.actor, requiredParam(context.params, "id"), {
+            decision: readHearingDecision(body),
+            decidedOn: requiredString(body, "decidedOn"),
+            denialReason: optionalString(body, "denialReason"),
+            scheduledDate: optionalString(body, "scheduledDate"),
+            presidedBy: optionalString(body, "presidedBy"),
+          }),
+        });
+      },
+    },
+    // PH-15F FR-G09-024: sla_pause_events pause/resume + ledger read.
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/cases/{id}/sla:pause",
+      operationId: "g09.pauseSla",
+      protected: true,
+      permission: "g09.sla.pause",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          slaPause: context.services.disciplinary.pauseSla(context.actor, requiredParam(context.params, "id"), {
+            stage: requiredString(body, "stage"),
+            reason: readSlaPauseReason(body),
+            pausedFrom: requiredString(body, "pausedFrom"),
+            sourceRefId: optionalString(body, "sourceRefId"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/cases/{id}/sla:resume",
+      operationId: "g09.resumeSla",
+      protected: true,
+      permission: "g09.sla.pause",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted(
+          context.services.disciplinary.resumeSla(context.actor, requiredParam(context.params, "id"), {
+            stage: requiredString(body, "stage"),
+            resumedAt: requiredString(body, "resumedAt"),
+          })
+        );
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/disciplinary/cases/{id}/sla/pauses",
+      operationId: "g09.listSlaPauses",
+      protected: true,
+      permission: "g09.case.read",
+      handler: (context) => ok({ slaPauses: context.services.disciplinary.listSlaPauses(context.scope, requiredParam(context.params, "id")) }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
@@ -375,6 +493,69 @@ function readConsultationType(body: Record<string, unknown>): "UPSC" | "CVC_FIRS
   const value = optionalString(body, "consultationType") ?? "UPSC";
   if (value !== "UPSC" && value !== "CVC_FIRST_STAGE" && value !== "CVC_SECOND_STAGE" && value !== "ICC" && value !== "LEGAL") {
     throw new Error(`Unsupported consultation type ${value}`);
+  }
+  return value;
+}
+
+function readMisconductCategory(body: Record<string, unknown>): MisconductCategory | undefined {
+  const value = optionalString(body, "misconductCategory");
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value !== "GENERAL" && value !== "HARASSMENT" && value !== "CORRUPTION" && value !== "INSUBORDINATION" && value !== "ABSENCE") {
+    throw new Error(`Unsupported misconduct category ${value}`);
+  }
+  return value;
+}
+
+/** FR-G09-023 ICC member payloads (role, internal id or external name, composition attributes). */
+function readIccMembers(body: Record<string, unknown>): Array<{
+  roleType: IccRoleType;
+  officerId?: string;
+  externalName?: string;
+  isWoman: boolean;
+  isSeniorLevel?: boolean;
+}> {
+  const value = body.members;
+  if (!Array.isArray(value)) {
+    throw new Error("members must be an array of ICC appointments");
+  }
+  return value.map((item) => {
+    const record = readBodyRecord(item);
+    const roleType = requiredString(record, "roleType");
+    if (roleType !== "ICC_PRESIDING" && roleType !== "ICC_MEMBER" && roleType !== "ICC_EXTERNAL_MEMBER") {
+      throw new Error(`Unsupported ICC role ${roleType}`);
+    }
+    return {
+      roleType,
+      officerId: optionalString(record, "officerId"),
+      externalName: optionalString(record, "externalName"),
+      isWoman: optionalBoolean(record, "isWoman") ?? false,
+      isSeniorLevel: optionalBoolean(record, "isSeniorLevel"),
+    };
+  });
+}
+
+function readHearingStage(body: Record<string, unknown>): PersonalHearingStage {
+  const value = optionalString(body, "stage") ?? "SHOW_CAUSE";
+  if (value !== "SHOW_CAUSE" && value !== "APPEAL") {
+    throw new Error(`Unsupported personal-hearing stage ${value}`);
+  }
+  return value;
+}
+
+function readHearingDecision(body: Record<string, unknown>): "GRANT" | "DENY" {
+  const value = requiredString(body, "decision");
+  if (value !== "GRANT" && value !== "DENY") {
+    throw new Error(`Unsupported personal-hearing decision ${value}`);
+  }
+  return value;
+}
+
+function readSlaPauseReason(body: Record<string, unknown>): SlaPauseReason {
+  const value = requiredString(body, "reason");
+  if (value !== "STAY" && value !== "REMIT" && value !== "CONDONATION" && value !== "CONSULTATION" && value !== "CRIMINAL_STAY") {
+    throw new Error(`Unsupported SLA pause reason ${value}`);
   }
   return value;
 }

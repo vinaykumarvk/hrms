@@ -70,6 +70,10 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G09-AUDIT-CHAIN-BROKEN":
     case "ERR-G09-ACTOR-CONFLICT":
     case "ERR-G09-DUE-PROCESS-INCOMPLETE":
+    // BRD G09 FR-023: POSH case without a validly composed ICC cannot proceed (fail closed).
+    case "ERR-G09-ICC-PROCEDURE-REQUIRED":
+    // BRD G09 FR-024: SLA resume without an open pause is 409 (edge case: "Resume before pause (rejected)").
+    case "ERR-G09-SLA-PAUSE-INVALID":
     // BRD G10 FR-02: overlapping effective rate rows (VAL-G10-RATE-NONOVERLAP) are 409 CONFLICT.
     case "ERR-G10-RATE-OVERLAP":
     // BRD G10 §12: run/payslip lifecycle collisions are 409 CONFLICT — a second in-flight
@@ -118,6 +122,11 @@ export function statusForError(code: WireErrorCode): number {
     // BRD G09 §10.3: subsistence rate outside template bounds (DI-8) and payment without NEC (DI-16) are 422.
     case "ERR-G09-SUBSISTENCE-OUT-OF-BOUNDS":
     case "ERR-G09-NON-EMPLOYMENT-CERT-REQUIRED":
+    // BRD G09 FR-025 (DI-29): "Deny without reason ⇒ 422 ERR-G09-PERSONAL-HEARING-DENIED".
+    case "ERR-G09-PERSONAL-HEARING-DENIED":
+    // BRD G06 FR-PPP-020: rota-quota input guards fail closed as 422.
+    case "STREAM_TAG_MISSING":
+    case "QUOTA_RULE_INVALID":
     // BRD G10 §12: bad DSL expression (VAL-G10-DSL-TOKEN), as-of resolution miss, and missing
     // PT state-of-posting mapping are all 422.
     case "ERR-G10-RULE-EXPR":

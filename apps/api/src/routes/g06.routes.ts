@@ -3,7 +3,7 @@ import { optionalBoolean, optionalNumber, optionalString, optionalStringArray, r
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
 import { DpcPanelMember, SenioritySeed } from "../modules/g06/promotionService";
-import { LegalForum, LegalLinkedEntityType, MacpClockEffect, ReservationCategory } from "../modules/g06/promotionDepthRepository";
+import { LegalForum, LegalLinkedEntityType, MacpClockEffect, ReservationCategory, RotationMethod, RotationStartSlot } from "../modules/g06/promotionDepthRepository";
 
 export const g06RouteEvidence = {
   seniorityLists: "/api/v1/promotions/seniority-lists",
@@ -14,6 +14,10 @@ export const g06RouteEvidence = {
   rosters: "/api/v1/promotions/rosters",
   legalCaseLinks: "/api/v1/legal-case-links",
   macp: "/api/v1/promotions/macp",
+  // PH-15F FR-PPP-020 surfaces (seniority_quota_rules + rota-quota combined construction + trace).
+  seniorityQuotaRules: "/api/v1/promotions/seniority-quota-rules",
+  constructCombined: "/api/v1/promotions/combined-seniority:construct",
+  rotationTrace: "/api/v1/promotions/combined-seniority/{id}/rotation-trace",
   /** BRD §9.4 domain codes thrown by the G06 surface (no marker-string indirection). */
   domainCodes: [
     "SENIORITY_LIST_NOT_FINAL",
@@ -25,6 +29,8 @@ export const g06RouteEvidence = {
     "ROSTER_CATEGORY_MISMATCH",
     "EMPLOYEE_DEBARRED",
     "ENTITY_SUB_JUDICE",
+    "STREAM_TAG_MISSING",
+    "QUOTA_RULE_INVALID",
   ],
 };
 
@@ -296,6 +302,62 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.promotion.read",
       handler: (context) => ok(context.services.promotion.summary(context.scope)),
     },
+    // ---------------------------------------------------------------------------------
+    // PH-15F FR-PPP-020: seniority_quota_rules + multi-stream rota-quota construction.
+    // ---------------------------------------------------------------------------------
+    {
+      method: "POST",
+      path: "/api/v1/promotions/seniority-quota-rules",
+      operationId: "g06.defineSeniorityQuotaRule",
+      protected: true,
+      permission: "g06.seniority.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          seniorityQuotaRule: context.services.promotion.defineSeniorityQuotaRule(context.actor, {
+            ruleCode: requiredString(body, "ruleCode"),
+            cadreId: optionalString(body, "cadreId") ?? ph03Ids.cadreRevenue,
+            gradeDesignationId: requiredString(body, "gradeDesignationId"),
+            drQuotaRatio: optionalNumber(body, "drQuotaRatio") ?? 1,
+            promoteeQuotaRatio: optionalNumber(body, "promoteeQuotaRatio") ?? 1,
+            ldceQuotaRatio: optionalNumber(body, "ldceQuotaRatio"),
+            rotationMethod: (optionalString(body, "rotationMethod") ?? "ROTA_QUOTA") as RotationMethod,
+            rotationStartSlot: optionalString(body, "rotationStartSlot") as RotationStartSlot | undefined,
+            unfilledQuotaCarryForward: optionalBoolean(body, "unfilledQuotaCarryForward"),
+            policyReference: optionalString(body, "policyReference"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/promotions/combined-seniority:construct",
+      operationId: "g06.constructCombinedSeniority",
+      protected: true,
+      permission: "g06.seniority.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          construction: context.services.promotion.constructCombinedSeniority(context.actor, {
+            quotaRuleId: requiredString(body, "quotaRuleId"),
+            cadreId: optionalString(body, "cadreId"),
+            population: readQuotaPopulation(body),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/combined-seniority/{id}/rotation-trace",
+      operationId: "g06.getRotationTrace",
+      protected: true,
+      permission: "g06.promotion.read",
+      handler: (context) => ok(context.services.promotion.getRotationTrace(context.scope, requiredParam(context.params, "id"))),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
@@ -350,6 +412,22 @@ function readRosterPoints(body: Record<string, unknown>): Array<{ pointNumber: n
     return {
       pointNumber: optionalNumber(record, "pointNumber") ?? 1,
       reservedFor: requiredString(record, "reservedFor") as ReservationCategory,
+    };
+  });
+}
+
+/** FR-PPP-020 population entries — the stream tag is validated by the service (STREAM_TAG_MISSING). */
+function readQuotaPopulation(body: Record<string, unknown>): Array<{ employeeId: string; recruitmentStream?: string; streamSeniorityNo?: number }> {
+  const value = body.population;
+  if (!Array.isArray(value)) {
+    throw new Error("population must be an array of stream-tagged entries");
+  }
+  return value.map((item) => {
+    const record = readBodyRecord(item);
+    return {
+      employeeId: requiredString(record, "employeeId"),
+      recruitmentStream: optionalString(record, "recruitmentStream"),
+      streamSeniorityNo: optionalNumber(record, "streamSeniorityNo"),
     };
   });
 }

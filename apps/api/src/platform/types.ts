@@ -41,7 +41,11 @@ export type G06DomainErrorCode =
   | "ROSTER_POINT_OCCUPIED"
   | "ROSTER_CATEGORY_MISMATCH"
   | "EMPLOYEE_DEBARRED"
-  | "ENTITY_SUB_JUDICE";
+  | "ENTITY_SUB_JUDICE"
+  // FR-PPP-020 rota-quota construction guards: a population entry without its recruitment-stream
+  // tag and an invalid ratio/rotation-method fail closed (422, never a silent partial build).
+  | "STREAM_TAG_MISSING"
+  | "QUOTA_RULE_INVALID";
 
 /** BRD G05 §8.2 named domain error codes (docs/brd/v3/G05-transfer-relieving-joining-workflow.md FR-007/011/020/022). */
 export type G05DomainErrorCode =
@@ -65,7 +69,13 @@ export type G09DomainErrorCode =
   | "ERR-G09-CASE-ABATED"
   | "ERR-G09-AUDIT-CHAIN-BROKEN"
   | "ERR-G09-ACTOR-CONFLICT"
-  | "ERR-G09-DUE-PROCESS-INCOMPLETE";
+  | "ERR-G09-DUE-PROCESS-INCOMPLETE"
+  // FR-G09-023: a POSH (HARASSMENT) case without a validly composed ICC cannot proceed (409).
+  | "ERR-G09-ICC-PROCEDURE-REQUIRED"
+  // FR-G09-025/DI-29: denial of a requested personal hearing without a recorded reason (422).
+  | "ERR-G09-PERSONAL-HEARING-DENIED"
+  // FR-G09-024/DI-18: resume without an open pause / malformed pause window (409).
+  | "ERR-G09-SLA-PAUSE-INVALID";
 
 /** BRD G10 §12 named domain error codes (docs/brd/v3/G10-payroll-and-benefits.md FR-01/02/04/07/09/13/14/15/16/22 error catalogue). */
 export type G10DomainErrorCode =

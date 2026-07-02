@@ -13,10 +13,16 @@ import {
   DisagreementMemo,
   G09DueProcessRepository,
   G09PenaltyType,
+  IccAppointment,
+  IccRoleType,
   InMemoryG09DueProcessRepository,
+  PersonalHearing,
+  PersonalHearingStage,
   PreliminaryInquiry,
   PreliminaryInquiryRecommendation,
   ShowCauseNotice,
+  SlaPauseEvent,
+  SlaPauseReason,
   Suspension,
   SuspensionType,
   TimelineEventType,
@@ -30,6 +36,15 @@ export type DisciplinaryCaseStage = "INTAKE" | "CHARGE" | "INQUIRY" | "INQUIRY_R
 export type DisciplinaryCaseStatus = "OPEN" | "PENALTY_IMPOSED" | "ABATED" | "CLOSED";
 export type PenaltyType = "CENSURE" | "MINOR_PENALTY" | "MAJOR_PENALTY";
 export type AppealDecision = "UPHELD" | "MODIFIED" | "SET_ASIDE";
+/** FR-G09-023: HARASSMENT triage flips the case onto the POSH ICC route. */
+export type MisconductCategory = "GENERAL" | "HARASSMENT" | "CORRUPTION" | "INSUBORDINATION" | "ABSENCE";
+/** g09_inquiry_route (DDL §1): ORDINARY_IO default; ICC_POSH for HARASSMENT; DISPENSED exceptional. */
+export type InquiryRoute = "ORDINARY_IO" | "ICC_POSH" | "DISPENSED";
+
+/** FR-G09-023 POSH_ICC procedure-template timelines (POSH Act 2013: 90-day inquiry, 10-day report). */
+const POSH_ICC_TEMPLATE = { templateCode: "POSH_ICC", inquiryTargetDays: 90, reportTargetDays: 10, closureTargetDays: 180 } as const;
+/** Ordinary CCS-CCA route timelines (E22 template defaults consumed by the SLA engine). */
+const ORDINARY_TEMPLATE = { templateCode: "CCS_CCA_2026", inquiryTargetDays: 180, reportTargetDays: 30, closureTargetDays: 365 } as const;
 
 export interface DisciplinaryCase {
   id: string;
@@ -61,6 +76,23 @@ export interface DisciplinaryCase {
   penaltyOrderId?: string;
   srEventId?: string;
   appealDecision?: AppealDecision;
+  /** FR-G09-023: triage category; HARASSMENT resolves the POSH ICC template. */
+  misconductCategory: MisconductCategory;
+  isPoshCase: boolean;
+  inquiryRoute: InquiryRoute;
+  /** The resolved procedure template (POSH_ICC for HARASSMENT, CCS_CCA_2026 otherwise). */
+  procedureTemplateCode: string;
+  /** FR-G09-023 AC-5: heightened confidentiality + anti-retaliation flag on POSH cases. */
+  antiRetaliationFlag: boolean;
+  openedOn: string;
+  /** FR-G09-024/DI-18: current SLA targets — recomputed on resume by adding the paused duration. */
+  slaTargetAt: string;
+  expectedClosureDate: string;
+  /** Baselines the coalesced-pause recompute is applied against (never mutated). */
+  baseSlaTargetAt: string;
+  baseExpectedClosureDate: string;
+  /** FR-G09-025 AC-4 (APPEAL stage): the appeal references its granted personal hearing. */
+  appealPersonalHearingId?: string;
 }
 
 export interface PenaltyOrder {
@@ -97,6 +129,7 @@ export class DisciplinaryService {
   private disagreementSerial = 0;
   private consultationSerial = 0;
   private authoritySerial = 0;
+  private iccSerial = 0;
 
   constructor(
     private readonly employeeMaster: EmployeeMasterService,
@@ -121,6 +154,9 @@ export class DisciplinaryService {
       appointingAuthorityLevel?: string;
       subsistenceFloorPct?: number;
       subsistenceCeilingPct?: number;
+      /** FR-G09-023: HARASSMENT resolves the ICC template and sets inquiry_route=ICC_POSH. */
+      misconductCategory?: MisconductCategory;
+      openedOn?: string;
     }
   ): DisciplinaryCase {
     this.authorization.check(actor, "g09.case.open", actor);
@@ -128,12 +164,19 @@ export class DisciplinaryService {
     if (!this.employeeMaster.getById(actor, input.chargedEmployeeId)) {
       throw new FoundationError("NOT_FOUND", "Charged employee not found");
     }
+    const openedOn = input.openedOn ?? "2026-07-02";
+    const misconductCategory = input.misconductCategory ?? "GENERAL";
+    // FR-G09-023 AC-1: HARASSMENT (is_posh_case=true) resolves the POSH_ICC procedure template.
+    const isPoshCase = misconductCategory === "HARASSMENT";
+    const template = isPoshCase ? POSH_ICC_TEMPLATE : ORDINARY_TEMPLATE;
+    const slaTargetAt = addDays(openedOn, template.inquiryTargetDays);
+    const expectedClosureDate = addDays(openedOn, template.closureTargetDays);
     const started = this.workflow.start(actor, {
       workflowCode: "WF-G09-DISCIPLINARY-DUE-PROCESS",
       subjectRef: `g09_disciplinary_cases:${input.chargedEmployeeId}:${this.cases.length + 1}`,
       stage: "INTAKE",
       resolverRule: { mechanism: "NAMED_ROLE", roleCode: "G09_DISCIPLINARY_AUTHORITY", subjectEmployeeId: input.chargedEmployeeId },
-      asOf: "2026-07-02",
+      asOf: openedOn,
     });
     const disciplinaryCase: DisciplinaryCase = {
       id: nextId("disciplinary-case", this.cases.length),
@@ -151,16 +194,33 @@ export class DisciplinaryService {
       subsistenceFloorPct: input.subsistenceFloorPct ?? 25,
       subsistenceCeilingPct: input.subsistenceCeilingPct ?? 75,
       isUnderSuspension: false,
-      confidential: Boolean(input.confidential),
-      sealedRouting: Boolean(input.confidential),
+      // FR-G09-023 AC-5: POSH cases carry heightened confidentiality regardless of the request.
+      confidential: Boolean(input.confidential) || isPoshCase,
+      sealedRouting: Boolean(input.confidential) || isPoshCase,
       workflowInstanceId: started.instance.id,
+      misconductCategory,
+      isPoshCase,
+      inquiryRoute: isPoshCase ? "ICC_POSH" : "ORDINARY_IO",
+      procedureTemplateCode: template.templateCode,
+      antiRetaliationFlag: isPoshCase,
+      openedOn,
+      slaTargetAt,
+      expectedClosureDate,
+      baseSlaTargetAt: slaTargetAt,
+      baseExpectedClosureDate: expectedClosureDate,
     };
     this.cases.push(disciplinaryCase);
-    this.appendTimeline(actor, disciplinaryCase.id, "INTAKE", "STAGE_ENTERED", "Case opened", "2026-07-02");
+    this.appendTimeline(actor, disciplinaryCase.id, "INTAKE", "STAGE_ENTERED", `Case opened (route ${disciplinaryCase.inquiryRoute})`, openedOn);
     this.audit.recordMutation(actor, {
       action: "G09_CASE_OPENED",
       subjectRef: `g09_disciplinary_cases:${disciplinaryCase.id}`,
-      metadata: { marker: "G09_AUTHORITY_COMPETENCE", confidential: disciplinaryCase.confidential, allegations: input.allegations },
+      metadata: {
+        marker: "G09_AUTHORITY_COMPETENCE",
+        confidential: disciplinaryCase.confidential,
+        allegations: input.allegations,
+        inquiryRoute: disciplinaryCase.inquiryRoute,
+        procedureTemplateCode: disciplinaryCase.procedureTemplateCode,
+      },
     });
     return { ...disciplinaryCase };
   }
@@ -200,6 +260,8 @@ export class DisciplinaryService {
     this.authorization.check(actor, "g09.inquiry.report", actor);
     const disciplinaryCase = this.requireCase(actor, caseId);
     this.requireStage(disciplinaryCase, "CHARGE");
+    // FR-G09-023 fail closed: a POSH case cannot proceed to inquiry without a valid ICC.
+    this.assertIccConstitutedForPosh(actor, disciplinaryCase);
     const document = this.documentVault.createDocument(actor, {
       title: `Inquiry Report ${disciplinaryCase.caseNo}`,
       ownerEmployeeId: disciplinaryCase.chargedEmployeeId,
@@ -608,6 +670,327 @@ export class DisciplinaryService {
     return { ...consultation };
   }
 
+  // -------------------------------------------------------------------------------------
+  // PH-15F FR-G09-023: POSH ICC route — constitution with composition validation
+  // -------------------------------------------------------------------------------------
+
+  /**
+   * FR-G09-023 AC-2: constitute the Internal Committee on a POSH (HARASSMENT) case. The
+   * composition is validated at constitution time against the appointment roles:
+   *   (1) exactly one ICC_PRESIDING officer who is a senior-level woman,
+   *   (2) at least one ICC_EXTERNAL_MEMBER (BR-1: external member is mandatory for quorum),
+   *   (3) at least half the members are women (POSH Act 2013 s.4(2)).
+   * Any breach throws ERR-G09-ICC-PROCEDURE-REQUIRED and persists nothing (fail closed).
+   */
+  constituteIcc(
+    actor: ActorContext,
+    caseId: string,
+    input: {
+      appointedDate: string;
+      members: Array<{
+        roleType: IccRoleType;
+        officerId?: string;
+        externalName?: string;
+        isWoman: boolean;
+        isSeniorLevel?: boolean;
+      }>;
+    }
+  ): IccAppointment[] {
+    this.authorization.check(actor, "g09.icc.constitute", actor);
+    const disciplinaryCase = this.requireCase(actor, caseId);
+    this.assertNotAbated(disciplinaryCase);
+    if (!disciplinaryCase.isPoshCase || disciplinaryCase.inquiryRoute !== "ICC_POSH") {
+      throw new FoundationError("PRECONDITION_FAILED", "ICC constitution applies only to POSH (HARASSMENT) cases on the ICC_POSH route");
+    }
+    const presiding = input.members.filter((member) => member.roleType === "ICC_PRESIDING");
+    const externals = input.members.filter((member) => member.roleType === "ICC_EXTERNAL_MEMBER");
+    const women = input.members.filter((member) => member.isWoman);
+    const presidingOfficer = presiding[0];
+    if (presiding.length !== 1 || !presidingOfficer || !presidingOfficer.isWoman || !presidingOfficer.isSeniorLevel) {
+      throw new FoundationError("ERR-G09-ICC-PROCEDURE-REQUIRED", "ICC composition requires exactly one presiding officer who is a senior-level woman (FR-G09-023)", {
+        field: "members",
+        details: { presidingCount: presiding.length },
+      });
+    }
+    if (externals.length < 1) {
+      throw new FoundationError("ERR-G09-ICC-PROCEDURE-REQUIRED", "ICC composition requires at least one external member from an NGO/expert body (FR-G09-023 BR-1)", {
+        field: "members",
+        details: { externalMemberCount: externals.length },
+      });
+    }
+    if (women.length * 2 < input.members.length) {
+      throw new FoundationError("ERR-G09-ICC-PROCEDURE-REQUIRED", "At least half the ICC members must be women (POSH Act 2013 s.4(2))", {
+        field: "members",
+        details: { womenCount: women.length, memberCount: input.members.length },
+      });
+    }
+    const appointments = input.members.map((member) => {
+      const isExternalMember = member.roleType === "ICC_EXTERNAL_MEMBER";
+      if (isExternalMember ? !member.externalName : !member.officerId) {
+        throw new FoundationError("ERR-G09-ICC-PROCEDURE-REQUIRED", "Each ICC member needs an internal officer id or (for the external member) an external name", {
+          field: "members",
+          details: { roleType: member.roleType },
+        });
+      }
+      const appointment: IccAppointment = {
+        id: nextId("g09-icc-appointment", this.iccSerial++),
+        tenantId: actor.tenantId,
+        entityId: actor.entityId,
+        caseId,
+        roleType: member.roleType,
+        officerId: isExternalMember ? undefined : member.officerId,
+        externalName: isExternalMember ? member.externalName : undefined,
+        isExternalMember,
+        isWoman: member.isWoman,
+        isSeniorLevel: Boolean(member.isSeniorLevel),
+        appointedBy: disciplinaryCase.disciplinaryAuthorityId,
+        appointedDate: input.appointedDate,
+        status: "ACTIVE",
+      };
+      this.dueProcess.saveIccAppointment(appointment);
+      return appointment;
+    });
+    this.appendTimeline(actor, caseId, "INQUIRY", "STAGE_ENTERED", `ICC constituted (${appointments.length} members, route ICC_POSH)`, input.appointedDate);
+    this.audit.recordMutation(actor, {
+      action: "G09_ICC_CONSTITUTED",
+      subjectRef: `g09_disciplinary_cases:${caseId}`,
+      metadata: { memberCount: appointments.length, externalMembers: externals.length, inquiryRoute: "ICC_POSH" },
+    });
+    return appointments.map((appointment) => ({ ...appointment }));
+  }
+
+  listIccAppointments(scope: TenantScope, caseId: string): IccAppointment[] {
+    requireTenantScope(scope);
+    return this.dueProcess.listIccAppointments(scope, caseId);
+  }
+
+  /**
+   * FR-G09-023 fail-closed gate: a POSH case may not proceed past the charge stage unless the
+   * repository holds a validly composed ACTIVE ICC (presiding senior woman + external member).
+   */
+  private assertIccConstitutedForPosh(scope: TenantScope, disciplinaryCase: DisciplinaryCase): void {
+    if (!disciplinaryCase.isPoshCase) {
+      return;
+    }
+    const active = this.dueProcess.listIccAppointments(scope, disciplinaryCase.id).filter((row) => row.status === "ACTIVE");
+    const hasPresiding = active.some((row) => row.roleType === "ICC_PRESIDING" && row.isWoman && row.isSeniorLevel);
+    const hasExternal = active.some((row) => row.roleType === "ICC_EXTERNAL_MEMBER");
+    if (!hasPresiding || !hasExternal) {
+      throw new FoundationError("ERR-G09-ICC-PROCEDURE-REQUIRED", "A POSH case cannot proceed to inquiry without a validly constituted ICC (FR-G09-023)", {
+        details: { caseNo: disciplinaryCase.caseNo, hasPresiding, hasExternal, inquiryRoute: disciplinaryCase.inquiryRoute },
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------------------
+  // PH-15F FR-G09-025: personal_hearings (SHOW_CAUSE / APPEAL) — grant / deny-with-reason
+  // -------------------------------------------------------------------------------------
+
+  /** FR-G09-025 AC-1: record the charged officer's hearing request (requested=true). */
+  requestPersonalHearing(
+    actor: ActorContext,
+    caseId: string,
+    input: { stage: PersonalHearingStage; requestedOn: string; showCauseNoticeId?: string }
+  ): PersonalHearing {
+    this.authorization.check(actor, "g09.personal-hearing.request", actor);
+    const disciplinaryCase = this.requireCase(actor, caseId);
+    this.assertNotAbated(disciplinaryCase);
+    if (input.showCauseNoticeId) {
+      const notice = this.requireShowCauseNotice(actor, input.showCauseNoticeId);
+      if (notice.caseId !== caseId) {
+        throw new FoundationError("VALIDATION_FAILED", "Show-cause notice does not belong to this case", { field: "showCauseNoticeId" });
+      }
+    }
+    const hearing: PersonalHearing = {
+      id: nextId("g09-personal-hearing", this.dueProcess.countPersonalHearings()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      caseId,
+      stage: input.stage,
+      requested: true,
+      requestedOn: input.requestedOn,
+      status: "REQUESTED",
+      granted: false,
+      showCauseNoticeId: input.showCauseNoticeId,
+    };
+    this.dueProcess.savePersonalHearing(hearing);
+    this.appendTimeline(actor, caseId, input.stage, "NOTE", "Personal hearing requested", input.requestedOn);
+    this.audit.recordMutation(actor, { action: "G09_PERSONAL_HEARING_REQUESTED", subjectRef: `g09_personal_hearings:${hearing.id}`, metadata: { stage: input.stage } });
+    return { ...hearing };
+  }
+
+  /**
+   * FR-G09-025 AC-2 (DI-29): the authority grants or denies. A denial without a recorded
+   * denial_reason throws ERR-G09-PERSONAL-HEARING-DENIED (422) — the BRD requires the right
+   * to be heard before adverse action, so a silent/reasonless denial fails closed. A grant
+   * records the schedule and links personal_hearing_id onto the referencing show-cause/appeal.
+   */
+  decidePersonalHearing(
+    actor: ActorContext,
+    hearingId: string,
+    input: { decision: "GRANT" | "DENY"; decidedOn: string; denialReason?: string; scheduledDate?: string; presidedBy?: string }
+  ): PersonalHearing {
+    this.authorization.check(actor, "g09.personal-hearing.decide", actor);
+    const hearing = this.requirePersonalHearing(actor, hearingId);
+    if (hearing.status !== "REQUESTED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Personal hearing is not open for a decision");
+    }
+    const disciplinaryCase = this.requireCase(actor, hearing.caseId);
+    if (input.decision === "DENY") {
+      if (!input.denialReason) {
+        throw new FoundationError("ERR-G09-PERSONAL-HEARING-DENIED", "Denial of a requested personal hearing requires a recorded denial_reason (FR-G09-025/DI-29)", {
+          field: "denialReason",
+          details: { hearingId: hearing.id, stage: hearing.stage },
+        });
+      }
+      hearing.status = "DENIED";
+      hearing.granted = false;
+      hearing.denialReason = input.denialReason;
+    } else {
+      hearing.status = "GRANTED";
+      hearing.granted = true;
+      hearing.scheduledDate = input.scheduledDate ?? input.decidedOn;
+      // BR-3: the presiding authority is the DA (show-cause) unless an appellate authority is named.
+      hearing.presidedBy = input.presidedBy ?? disciplinaryCase.disciplinaryAuthorityId;
+      // FR-G09-025 AC-4: the referencing show-cause/appeal carries personal_hearing_id.
+      if (hearing.stage === "SHOW_CAUSE" && hearing.showCauseNoticeId) {
+        const notice = this.requireShowCauseNotice(actor, hearing.showCauseNoticeId);
+        notice.personalHearingId = hearing.id;
+        this.dueProcess.saveShowCauseNotice(notice);
+      }
+      if (hearing.stage === "APPEAL") {
+        disciplinaryCase.appealPersonalHearingId = hearing.id;
+      }
+    }
+    this.dueProcess.savePersonalHearing(hearing);
+    this.appendTimeline(actor, hearing.caseId, hearing.stage, "NOTE", `Personal hearing ${hearing.status.toLowerCase()}`, input.decidedOn);
+    this.audit.recordMutation(actor, {
+      action: "G09_PERSONAL_HEARING_DECIDED",
+      subjectRef: `g09_personal_hearings:${hearing.id}`,
+      metadata: { decision: hearing.status, denialReason: hearing.denialReason },
+    });
+    return { ...hearing };
+  }
+
+  /** FR-G09-025 AC-3: hold the hearing and record minutes; minutes are immutable once recorded (BR-2). */
+  recordPersonalHearingMinutes(actor: ActorContext, hearingId: string, input: { heldDate: string; minutesText: string }): PersonalHearing {
+    this.authorization.check(actor, "g09.personal-hearing.decide", actor);
+    const hearing = this.requirePersonalHearing(actor, hearingId);
+    if (hearing.status !== "GRANTED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Minutes can only be recorded on a granted personal hearing");
+    }
+    if (hearing.minutesText) {
+      throw new FoundationError("PRECONDITION_FAILED", "Personal-hearing minutes are immutable once finalised (FR-G09-025 BR-2)");
+    }
+    hearing.heldDate = input.heldDate;
+    hearing.minutesText = input.minutesText;
+    this.dueProcess.savePersonalHearing(hearing);
+    this.appendTimeline(actor, hearing.caseId, hearing.stage, "NOTE", "Personal hearing held; minutes recorded", input.heldDate);
+    return { ...hearing };
+  }
+
+  listPersonalHearings(scope: TenantScope, caseId: string): PersonalHearing[] {
+    requireTenantScope(scope);
+    return this.dueProcess.listPersonalHearings(scope, caseId);
+  }
+
+  // -------------------------------------------------------------------------------------
+  // PH-15F FR-G09-024: sla_pause_events pause/resume with SLA recompute (DI-18)
+  // -------------------------------------------------------------------------------------
+
+  /** FR-G09-024 AC-1: open a pause recording stage, reason, paused_from, paused_by, source ref. */
+  pauseSla(
+    actor: ActorContext,
+    caseId: string,
+    input: { stage: string; reason: SlaPauseReason; pausedFrom: string; sourceRefId?: string }
+  ): SlaPauseEvent {
+    this.authorization.check(actor, "g09.sla.pause", actor);
+    const disciplinaryCase = this.requireCase(actor, caseId);
+    this.assertNotAbated(disciplinaryCase);
+    const pause: SlaPauseEvent = {
+      id: nextId("g09-sla-pause", this.dueProcess.countSlaPauseEvents()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      caseId,
+      stage: input.stage,
+      reason: input.reason,
+      pausedFrom: input.pausedFrom,
+      pausedBy: actor.userId,
+      sourceRefId: input.sourceRefId,
+      recomputeApplied: false,
+    };
+    this.dueProcess.appendSlaPauseEvent(pause);
+    // FR-G09-024 AC-4: pause/resume land on the hash-chained case timeline.
+    this.appendTimeline(actor, caseId, input.stage, "SLA_PAUSE", `SLA paused (${input.reason})`, input.pausedFrom);
+    this.audit.recordMutation(actor, { action: "G09_SLA_PAUSED", subjectRef: `g09_sla_pause_events:${pause.id}`, metadata: { stage: input.stage, reason: input.reason } });
+    return { ...pause };
+  }
+
+  /**
+   * FR-G09-024 AC-3 (DI-18): resume sets resumed_at on the OPEN pause (append-only, never a
+   * deletion) and recomputes sla_target_at / expected_closure_date by adding the paused duration.
+   * Overlapping pause windows are coalesced (AC-5) so a duplicated reason never double-extends
+   * the targets. Resume without an open pause throws ERR-G09-SLA-PAUSE-INVALID (409).
+   */
+  resumeSla(
+    actor: ActorContext,
+    caseId: string,
+    input: { stage: string; resumedAt: string }
+  ): { pause: SlaPauseEvent; totalPausedDays: number; slaTargetAt: string; expectedClosureDate: string } {
+    this.authorization.check(actor, "g09.sla.pause", actor);
+    const disciplinaryCase = this.requireCase(actor, caseId);
+    const open = this.dueProcess.findOpenSlaPause(actor, caseId, input.stage);
+    if (!open) {
+      throw new FoundationError("ERR-G09-SLA-PAUSE-INVALID", "Resume without an open SLA pause for this stage (FR-G09-024/DI-18)", {
+        field: "stage",
+        details: { caseId, stage: input.stage },
+      });
+    }
+    if (input.resumedAt < open.pausedFrom) {
+      throw new FoundationError("ERR-G09-SLA-PAUSE-INVALID", "resumed_at cannot precede paused_from", {
+        field: "resumedAt",
+        details: { pausedFrom: open.pausedFrom, resumedAt: input.resumedAt },
+      });
+    }
+    const resumed = this.dueProcess.markSlaPauseResumed(actor, open.id, input.resumedAt);
+    // AC-5: coalesce all CLOSED pause windows and recompute from the immutable baselines —
+    // overlapping windows count once, and repeated resumes stay idempotent per window set.
+    const totalPausedDays = coalescedPausedDays(
+      this.dueProcess
+        .listSlaPauseEvents(actor, caseId)
+        .filter((row) => row.resumedAt !== undefined)
+        .map((row) => ({ from: row.pausedFrom, to: row.resumedAt as string }))
+    );
+    disciplinaryCase.slaTargetAt = addDays(disciplinaryCase.baseSlaTargetAt, totalPausedDays);
+    disciplinaryCase.expectedClosureDate = addDays(disciplinaryCase.baseExpectedClosureDate, totalPausedDays);
+    this.appendTimeline(actor, caseId, input.stage, "SLA_RESUME", `SLA resumed; targets extended by ${totalPausedDays} paused day(s)`, input.resumedAt);
+    this.audit.recordMutation(actor, {
+      action: "G09_SLA_RESUMED",
+      subjectRef: `g09_sla_pause_events:${resumed.id}`,
+      metadata: { stage: input.stage, totalPausedDays, slaTargetAt: disciplinaryCase.slaTargetAt },
+    });
+    return { pause: resumed, totalPausedDays, slaTargetAt: disciplinaryCase.slaTargetAt, expectedClosureDate: disciplinaryCase.expectedClosureDate };
+  }
+
+  /** FR-G09-024 AC-2 (DI-18): the SLA evaluator raises NO breach for a stage while it is paused. */
+  evaluateSlaBreach(scope: TenantScope, caseId: string, input: { stage: string; asOf: string }): { paused: boolean; breached: boolean; slaTargetAt: string } {
+    requireTenantScope(scope);
+    const disciplinaryCase = this.requireCase(scope, caseId);
+    const pauses = this.dueProcess.listSlaPauseEvents(scope, caseId).filter((row) => row.stage === input.stage);
+    const paused = pauses.some((row) => row.pausedFrom <= input.asOf && (row.resumedAt === undefined || input.asOf < row.resumedAt));
+    return {
+      paused,
+      breached: paused ? false : input.asOf > disciplinaryCase.slaTargetAt,
+      slaTargetAt: disciplinaryCase.slaTargetAt,
+    };
+  }
+
+  /** FR-G09-024: the pause windows ledger (dashboard shows total paused duration, AC-5). */
+  listSlaPauses(scope: TenantScope, caseId: string): SlaPauseEvent[] {
+    requireTenantScope(scope);
+    return this.dueProcess.listSlaPauseEvents(scope, caseId);
+  }
+
   /** FR-G09-018: authority-level assignment (delegation modelled as an authority level). */
   registerAuthorityLevel(actor: ActorContext, input: { employeeId: string; authorityLevel: string }): void {
     this.authorization.check(actor, "g09.competence.admin", actor);
@@ -933,6 +1316,14 @@ export class DisciplinaryService {
     return memo;
   }
 
+  private requirePersonalHearing(scope: TenantScope, hearingId: string): PersonalHearing {
+    const hearing = this.dueProcess.findPersonalHearing(scope, hearingId);
+    if (!hearing) {
+      throw new FoundationError("NOT_FOUND", "Personal hearing not found");
+    }
+    return hearing;
+  }
+
   private requireConsultationRow(scope: TenantScope, consultationId: string): CaseConsultation {
     const consultation = this.dueProcess.findConsultation(scope, consultationId);
     if (!consultation) {
@@ -986,4 +1377,35 @@ function addDays(isoDate: string, days: number): string {
   const date = new Date(`${isoDate}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+/** Whole days between two ISO dates (yyyy-mm-dd). */
+function dayDiff(fromIso: string, toIso: string): number {
+  return Math.round((Date.parse(`${toIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / 86_400_000);
+}
+
+/**
+ * FR-G09-024 AC-5 (DI-18): total paused days across CLOSED pause windows with overlapping
+ * windows coalesced — two overlapping pauses never double-extend the SLA targets.
+ */
+export function coalescedPausedDays(windows: Array<{ from: string; to: string }>): number {
+  const sorted = [...windows].sort((left, right) => left.from.localeCompare(right.from));
+  let total = 0;
+  let currentFrom: string | undefined;
+  let currentTo: string | undefined;
+  for (const window of sorted) {
+    if (currentFrom === undefined || currentTo === undefined || window.from > currentTo) {
+      if (currentFrom !== undefined && currentTo !== undefined) {
+        total += dayDiff(currentFrom, currentTo);
+      }
+      currentFrom = window.from;
+      currentTo = window.to;
+    } else if (window.to > currentTo) {
+      currentTo = window.to;
+    }
+  }
+  if (currentFrom !== undefined && currentTo !== undefined) {
+    total += dayDiff(currentFrom, currentTo);
+  }
+  return total;
 }
