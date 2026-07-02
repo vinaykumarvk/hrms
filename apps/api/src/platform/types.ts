@@ -64,6 +64,14 @@ export type G06DomainErrorCode =
   | "STREAM_TAG_MISSING"
   | "QUOTA_RULE_INVALID";
 
+/**
+ * BRD G02 registered domain error codes (docs/brd/v3/G02-personal-details-modification-workflow.md):
+ * FR-G02-019 AC3 — risk_band=BLOCKED holds any commit attempt pending fraud review
+ * (412 ERR-G02-RISKBLOCK); FR-G02-018 AC1 — self-service on any non-ACTIVE target is
+ * rejected fail-closed (403 ERR-G02-STATUSGATE).
+ */
+export type G02DomainErrorCode = "ERR-G02-RISKBLOCK" | "ERR-G02-STATUSGATE";
+
 /** BRD G05 §8.2 named domain error codes (docs/brd/v3/G05-transfer-relieving-joining-workflow.md FR-007/011/020/022). */
 export type G05DomainErrorCode =
   | "ERR-G05-HANDOVER-DISPUTED"
@@ -161,6 +169,7 @@ export type G14DomainErrorCode =
 export type WireErrorCode =
   | CanonicalErrorCode
   | G01DomainErrorCode
+  | G02DomainErrorCode
   | G03DomainErrorCode
   | G06DomainErrorCode
   | G05DomainErrorCode

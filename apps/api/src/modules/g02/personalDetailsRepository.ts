@@ -217,6 +217,42 @@ export function defaultG02WorkflowConfig(tenantId: string): {
       selfServiceEditable: false,
       version: 1,
     },
+    // PH-16B (FR-G02-018/019): bank/nominee are FINANCIAL HIGH (risk-evaluated, family-pension
+    // gate on DECEASED); the mobile number is the auth-bearing CONTACT channel (R1 chain).
+    {
+      id: "fsc-00000000-0000-0000-0000-000000000004",
+      tenantId,
+      fieldKey: "bankAccountNumber",
+      m01FieldKey: "employee.bank_account_number",
+      displayLabel: "Bank account number",
+      fieldGroup: "FINANCIAL",
+      sensitivity: "HIGH",
+      maskFieldGrant: "employee.bank_account",
+      selfServiceEditable: true,
+      version: 1,
+    },
+    {
+      id: "fsc-00000000-0000-0000-0000-000000000005",
+      tenantId,
+      fieldKey: "nomineeName",
+      m01FieldKey: "employee.nominee_name",
+      displayLabel: "Nominee name",
+      fieldGroup: "FINANCIAL",
+      sensitivity: "HIGH",
+      selfServiceEditable: true,
+      version: 1,
+    },
+    {
+      id: "fsc-00000000-0000-0000-0000-000000000006",
+      tenantId,
+      fieldKey: "mobileNumber",
+      m01FieldKey: "employee.mobile_number",
+      displayLabel: "Mobile number",
+      fieldGroup: "CONTACT",
+      sensitivity: "MEDIUM",
+      selfServiceEditable: true,
+      version: 1,
+    },
   ];
   const matrix: ApprovalMatrixConfig = {
     id: "amc-00000000-0000-0000-0000-000000000001",

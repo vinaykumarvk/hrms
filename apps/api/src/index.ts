@@ -8,6 +8,8 @@ export * from "./modules/g01/employeeMasterService";
 export * from "./modules/g01/employeeProfileRepository";
 export * from "./modules/g02/personalDetailsService";
 export * from "./modules/g02/personalDetailsRepository";
+export * from "./modules/g02/changeGovernanceService";
+export * from "./modules/g02/changeGovernanceRepository";
 export * from "./modules/g03/leaveService";
 export * from "./modules/g03/leaveRepository";
 export * from "./modules/g04/leaveSrRelayService";

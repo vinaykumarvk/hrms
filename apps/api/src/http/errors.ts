@@ -31,6 +31,8 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G14-SMALL-CELL":
     case "ERR-G14-COMP-SUPPRESS":
     case "ERR-G14-SCOPE-CHECKER":
+    // BRD G02 FR-018 AC1: self-service on any non-ACTIVE employment_status_at_submit is 403.
+    case "ERR-G02-STATUSGATE":
       return 403;
     case "NOT_FOUND":
     // BRD G14 FR-23: no snapshot known at the requested knowledge_time is 404.
@@ -162,6 +164,8 @@ export function statusForError(code: WireErrorCode): number {
     case "PRECONDITION_FAILED":
     // BRD G06 §9.4: effecting blocked by an active interim stay is a 412 precondition failure.
     case "ENTITY_SUB_JUDICE":
+    // BRD G02 FR-019 AC3: risk_band=BLOCKED holds commit pending fraud review (412).
+    case "ERR-G02-RISKBLOCK":
       return 412;
     case "RATE_LIMITED":
       return 429;

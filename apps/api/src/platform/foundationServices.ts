@@ -6,6 +6,8 @@ import { EmployeeIdentityOpsService } from "../modules/g01/identityOpsService";
 import { InMemoryEmployeeIdentityOpsRepository } from "../modules/g01/identityOpsRepository";
 import { PersonalDetailsService } from "../modules/g02/personalDetailsService";
 import { InMemoryPersonalDetailsRepository, defaultG02WorkflowConfig } from "../modules/g02/personalDetailsRepository";
+import { ChangeGovernanceService } from "../modules/g02/changeGovernanceService";
+import { InMemoryChangeGovernanceRepository } from "../modules/g02/changeGovernanceRepository";
 import { LeaveService } from "../modules/g03/leaveService";
 import { InMemoryLeaveRepository } from "../modules/g03/leaveRepository";
 import { AttendanceOpsService } from "../modules/g03/attendanceOpsService";
@@ -68,6 +70,7 @@ export interface FoundationServices {
   employeeMaster: EmployeeMasterService;
   employeeIdentityOps: EmployeeIdentityOpsService;
   personalDetails: PersonalDetailsService;
+  changeGovernance: ChangeGovernanceService;
   leave: LeaveService;
   attendanceOps: AttendanceOpsService;
   leaveSrRelay: LeaveSrRelayService;
@@ -178,6 +181,19 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   }
   personalDetailsRepository.saveApprovalMatrix(g02Config.matrix);
   const personalDetails = new PersonalDetailsService(employeeMaster, authorization, audit, workflow, documentVault, notifications, personalDetailsRepository);
+  // PH-16B: FR-G02-009 bulk_correction_batches (E12) + FR-G02-019 cr_risk_signals (E13,
+  // append-only) + FR-G02-018 employment-status gating behind the repository pattern
+  // (migration 0029). Field sensitivity and approval routing come from the PH-07C config
+  // entities seeded above; detector windows are BR1 configuration with documented defaults.
+  const changeGovernance = new ChangeGovernanceService(
+    employeeMaster,
+    authorization,
+    audit,
+    workflow,
+    notifications,
+    personalDetailsRepository,
+    new InMemoryChangeGovernanceRepository()
+  );
   const leaveSrRelay = new LeaveSrRelayService(authorization, audit, serviceRegister, notifications, new InMemoryLeaveSrRelayRepository(), {
     hmacKey: resolveG04RelayHmacKey(options),
   });
@@ -325,6 +341,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     employeeMaster,
     employeeIdentityOps,
     personalDetails,
+    changeGovernance,
     leave,
     attendanceOps,
     leaveSrRelay,
