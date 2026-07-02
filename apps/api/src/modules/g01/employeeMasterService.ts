@@ -2,6 +2,7 @@ import { AuthorizationService } from "../../platform/authorization/authorization
 import { AuditService } from "../../platform/audit/auditService";
 import { ActorContext, FoundationError, TenantScope, inScope, nextId, requireTenantScope } from "../../platform/types";
 import { ServiceRegisterService } from "../g12/serviceRegisterService";
+import { EmployeeProfileRepository, InMemoryEmployeeProfileRepository } from "./employeeProfileRepository";
 
 export interface EmployeeRecord {
   id: string;
@@ -41,12 +42,95 @@ export interface OutboxEvent {
   tenantId: string;
   entityId?: string;
   sequenceNo: number;
-  eventType: "PROFILE_CREATED" | "GOVERNED_CHANGE_REQUESTED" | "GOVERNED_CHANGE_APPROVED" | "GOVERNED_CHANGE_REJECTED" | "IDENTITY_CHANGE_COMMITTED" | "POSTING_UPDATED";
-  aggregateType: "employees" | "governed_changes";
+  eventType:
+    | "PROFILE_CREATED"
+    | "GOVERNED_CHANGE_REQUESTED"
+    | "GOVERNED_CHANGE_APPROVED"
+    | "GOVERNED_CHANGE_REJECTED"
+    | "IDENTITY_CHANGE_COMMITTED"
+    | "POSTING_UPDATED"
+    | "CONTACT_UPDATED"
+    | "ADDRESS_UPDATED"
+    | "DEPENDENT_UPDATED";
+  aggregateType: "employees" | "governed_changes" | "employee_contacts" | "employee_addresses" | "employee_dependents";
   aggregateId: string;
   employeeId: string;
   eventDate: string;
   payload: Record<string, unknown>;
+}
+
+/** E2 employee_contacts satellite row (FR-EPM-003). */
+export type ContactType = "MOBILE" | "ALT_MOBILE" | "PERSONAL_EMAIL" | "OFFICIAL_EMAIL" | "LANDLINE";
+
+export interface EmployeeContact {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  employeeId: string;
+  contactType: ContactType;
+  contactValue: string;
+  isPrimary: boolean;
+  isVerified: boolean;
+  visibility: "PUBLIC" | "INTERNAL" | "RESTRICTED" | "PRIVATE";
+  rowVersion: number;
+  isDeleted: boolean;
+}
+
+/** E3 employee_addresses satellite row (FR-EPM-003, effective-dated). */
+export type AddressType = "PERMANENT" | "PRESENT" | "MAILING" | "OVERSEAS";
+
+export interface EmployeeAddress {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  employeeId: string;
+  addressType: AddressType;
+  line1: string;
+  line2?: string;
+  city: string;
+  district?: string;
+  state: string;
+  country: string;
+  pincode: string;
+  isCurrent: boolean;
+  validFrom: string;
+  validTo?: string;
+  rowVersion: number;
+  isDeleted: boolean;
+}
+
+/** E4 employee_dependents satellite row (FR-EPM-004). */
+export type DependentRelationship = "SPOUSE" | "SON" | "DAUGHTER" | "FATHER" | "MOTHER" | "BROTHER" | "SISTER" | "GUARDIAN" | "OTHER";
+
+export interface EmployeeDependent {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  employeeId: string;
+  fullName: string;
+  relationship: DependentRelationship;
+  dob?: string;
+  isMinor?: boolean;
+  isLegalHeir: boolean;
+  heirSuccessionRank?: number;
+  nationalIdMasked?: string;
+  isDeleted: boolean;
+}
+
+/** E23 employee_attribute_history spine row (FR-EPM-011). Append-only; windows close via effective_to. */
+export interface EmployeeAttributeHistoryEntry {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  employeeId: string;
+  attributePath: string;
+  valueText?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  changeReason: "HIRE" | "MARRIAGE" | "GAZETTE" | "COURT_ORDER" | "CORRECTION" | "GENDER_AFFIRMATION" | "MIGRATION";
+  source: string;
+  governedChangeId?: string;
+  recordedBy: string;
 }
 
 /** FR-EPM-022 governed statutory-field change request (PENDING -> APPROVED | REJECTED). */
@@ -85,10 +169,28 @@ export interface EmployeeProfileView {
 const PAN_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const SERVICE_NO_PREFIX = "GOV-";
 
+/** ISO day before a YYYY-MM-DD date (closes the prior effective window without overlap). */
+function dayBefore(isoDate: string): string {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** FR-EPM-004 AC1: is_minor derived from dob — under 18 as of the effective date. */
+function isMinorAsOf(dobIso: string, asOfIso: string): boolean {
+  const dob = new Date(`${dobIso}T00:00:00Z`);
+  const asOf = new Date(`${asOfIso}T00:00:00Z`);
+  const eighteenth = new Date(dob);
+  eighteenth.setUTCFullYear(eighteenth.getUTCFullYear() + 18);
+  return asOf < eighteenth;
+}
+
 export class EmployeeMasterService {
   private readonly employees: EmployeeRecord[];
-
-  private readonly outboxEvents: OutboxEvent[] = [];
 
   private readonly governedChanges: GovernedChangeRequest[] = [];
 
@@ -96,7 +198,8 @@ export class EmployeeMasterService {
     employees: EmployeeRecord[],
     private readonly authz: AuthorizationService,
     private readonly audit: AuditService,
-    private readonly serviceRegister: ServiceRegisterService
+    private readonly serviceRegister: ServiceRegisterService,
+    private readonly repository: EmployeeProfileRepository = new InMemoryEmployeeProfileRepository()
   ) {
     this.employees = employees.map((employee) => ({ ...employee }));
   }
@@ -170,8 +273,17 @@ export class EmployeeMasterService {
       category: input.category,
       rowVersion: 1,
     };
-    // Unit of work: master row + PROFILE_CREATED outbox row + audit committed together (AC6).
+    // Unit of work: master row + HIRE attribute-history seed + PROFILE_CREATED outbox row + audit
+    // committed together (AC6 / FR-EPM-011 spine).
     this.employees.push(employee);
+    this.appendAttributeHistory(actor, {
+      employeeId: employee.id,
+      attributePath: "display_name",
+      valueText: employee.displayName,
+      effectiveFrom: input.dateOfJoining,
+      changeReason: "HIRE",
+      source: "G01",
+    });
     const outboxEvent = this.appendOutbox(actor, {
       eventType: "PROFILE_CREATED",
       aggregateType: "employees",
@@ -191,8 +303,9 @@ export class EmployeeMasterService {
   /** Cursor-ordered change feed read model: the outbox rows in append (sequence) order. */
   listChanges(scope: TenantScope): OutboxEvent[] {
     requireTenantScope(scope);
-    return this.outboxEvents
-      .filter((event) => inScope(event, scope))
+    return this.repository
+      .listOutboxEvents(scope)
+      .slice()
       .sort((left, right) => left.sequenceNo - right.sequenceNo)
       .map((event) => ({ ...event, payload: { ...event.payload } }));
   }
@@ -269,6 +382,7 @@ export class EmployeeMasterService {
       reason: request.reason,
       idempotencyKey: input.idempotencyKey,
       effectiveDate: request.effectiveDate,
+      governedChangeId: request.id,
     });
     request.status = "APPROVED";
     request.decidedByUserId = actor.userId;
@@ -339,7 +453,14 @@ export class EmployeeMasterService {
 
   private commitIdentityChange(
     actor: ActorContext,
-    input: { employeeId: string; newDisplayName: string; reason: string; idempotencyKey: string; effectiveDate: string }
+    input: {
+      employeeId: string;
+      newDisplayName: string;
+      reason: string;
+      idempotencyKey: string;
+      effectiveDate: string;
+      governedChangeId?: string;
+    }
   ): { employee: EmployeeRecord; srEventId: string } {
     const employee = this.getMutable(actor, input.employeeId);
     // Append the governing SR fact FIRST. The master mutation and its audit are committed only after the
@@ -360,6 +481,18 @@ export class EmployeeMasterService {
     if (!sr.replayed && !sr.semanticDuplicate) {
       employee.displayName = input.newDisplayName;
       employee.rowVersion = nextRowVersion;
+      // FR-EPM-011 spine: close the open display_name window and append the new version
+      // in the same unit of work as the master mutation and its outbox row.
+      this.appendAttributeHistory(actor, {
+        employeeId: employee.id,
+        attributePath: "display_name",
+        valueText: input.newDisplayName,
+        effectiveFrom: input.effectiveDate,
+        changeReason: "CORRECTION",
+        source: "G01",
+        governedChangeId: input.governedChangeId,
+        closePrior: true,
+      });
       this.appendOutbox(actor, {
         eventType: "IDENTITY_CHANGE_COMMITTED",
         aggregateType: "employees",
@@ -422,6 +555,348 @@ export class EmployeeMasterService {
     return { employee: { ...employee }, previousOrgUnitId };
   }
 
+  /**
+   * FR-EPM-003 — add a contact. Unit of work: optional primary demotion, the
+   * employee_contacts insert, the attribute-history append, the CONTACT_UPDATED outbox
+   * row (no raw contact value in the payload), and the audit entry commit together.
+   */
+  addContact(
+    actor: ActorContext,
+    input: { employeeId: string; contactType: ContactType; contactValue: string; isPrimary?: boolean; visibility?: EmployeeContact["visibility"]; effectiveDate?: string }
+  ): { contact: EmployeeContact; historyEntry: EmployeeAttributeHistoryEntry; outboxEvent: OutboxEvent } {
+    this.authz.check(actor, "g01.employee.contact.write", actor);
+    const employee = this.getRequired(actor, input.employeeId);
+    this.validateContactValue(input.contactType, input.contactValue);
+    if (input.contactType === "OFFICIAL_EMAIL" && this.repository.findContactByOfficialEmail(actor, input.contactValue)) {
+      // r17 / FR-EPM-003 AC7: official email is tenant-unique across non-deleted rows.
+      throw new FoundationError("CONFLICT", "official email already in use", {
+        field: "contactValue",
+        details: { reason: "DUPLICATE_OFFICIAL_EMAIL", messageId: "ERR-G01-STATE" },
+      });
+    }
+    const effectiveDate = input.effectiveDate ?? todayIso();
+    // AC2: marking a new primary auto-demotes the previous primary atomically.
+    if (input.isPrimary) {
+      this.demotePrimaryContact(actor, employee.id, input.contactType);
+    }
+    const contact: EmployeeContact = {
+      id: nextId("cont", this.repository.countContacts()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      employeeId: employee.id,
+      contactType: input.contactType,
+      contactValue: input.contactValue,
+      isPrimary: Boolean(input.isPrimary),
+      isVerified: false,
+      visibility: input.visibility ?? "INTERNAL",
+      rowVersion: 1,
+      isDeleted: false,
+    };
+    this.repository.insertContact(contact);
+    const historyEntry = this.appendAttributeHistory(actor, {
+      employeeId: employee.id,
+      attributePath: `contact.${input.contactType}`,
+      valueText: input.contactValue,
+      effectiveFrom: effectiveDate,
+      changeReason: "CORRECTION",
+      source: "G01",
+      closePrior: true,
+    });
+    const outboxEvent = this.appendOutbox(actor, {
+      eventType: "CONTACT_UPDATED",
+      aggregateType: "employee_contacts",
+      aggregateId: contact.id,
+      employeeId: employee.id,
+      eventDate: effectiveDate,
+      payload: { contactId: contact.id, contactType: contact.contactType, isPrimary: contact.isPrimary },
+    });
+    this.audit.recordMutation(actor, {
+      action: "G01_CONTACT_ADDED",
+      subjectRef: `employee_contacts:${contact.id}`,
+      metadata: { employeeId: employee.id, contactType: contact.contactType, outboxEventId: outboxEvent.id },
+    });
+    return { contact: { ...contact }, historyEntry, outboxEvent };
+  }
+
+  /** FR-EPM-003 AC8 — optimistic-concurrency contact update (STALE_VERSION 409 on mismatch). */
+  updateContact(
+    actor: ActorContext,
+    input: { employeeId: string; contactId: string; contactValue?: string; isPrimary?: boolean; expectedRowVersion: number; effectiveDate?: string }
+  ): { contact: EmployeeContact; outboxEvent: OutboxEvent } {
+    this.authz.check(actor, "g01.employee.contact.write", actor);
+    const contact = this.repository.findContact(actor, input.contactId);
+    if (!contact || contact.employeeId !== input.employeeId) {
+      throw new FoundationError("NOT_FOUND", "Contact not found");
+    }
+    if (contact.rowVersion !== input.expectedRowVersion) {
+      throw new FoundationError("CONFLICT", "Contact changed since it was read", {
+        details: { reason: "STALE_VERSION", messageId: "ERR-G01-STALE" },
+      });
+    }
+    if (input.contactValue !== undefined) {
+      this.validateContactValue(contact.contactType, input.contactValue);
+      if (
+        contact.contactType === "OFFICIAL_EMAIL" &&
+        input.contactValue.toLowerCase() !== contact.contactValue.toLowerCase() &&
+        this.repository.findContactByOfficialEmail(actor, input.contactValue)
+      ) {
+        throw new FoundationError("CONFLICT", "official email already in use", {
+          field: "contactValue",
+          details: { reason: "DUPLICATE_OFFICIAL_EMAIL", messageId: "ERR-G01-STATE" },
+        });
+      }
+    }
+    const effectiveDate = input.effectiveDate ?? todayIso();
+    if (input.isPrimary && !contact.isPrimary) {
+      this.demotePrimaryContact(actor, contact.employeeId, contact.contactType);
+    }
+    const valueChanged = input.contactValue !== undefined && input.contactValue !== contact.contactValue;
+    const updated: EmployeeContact = {
+      ...contact,
+      contactValue: input.contactValue ?? contact.contactValue,
+      isPrimary: input.isPrimary ?? contact.isPrimary,
+      isVerified: valueChanged ? false : contact.isVerified,
+      rowVersion: contact.rowVersion + 1,
+    };
+    this.repository.updateContact(updated);
+    if (valueChanged) {
+      this.appendAttributeHistory(actor, {
+        employeeId: contact.employeeId,
+        attributePath: `contact.${contact.contactType}`,
+        valueText: updated.contactValue,
+        effectiveFrom: effectiveDate,
+        changeReason: "CORRECTION",
+        source: "G01",
+        closePrior: true,
+      });
+    }
+    const outboxEvent = this.appendOutbox(actor, {
+      eventType: "CONTACT_UPDATED",
+      aggregateType: "employee_contacts",
+      aggregateId: updated.id,
+      employeeId: updated.employeeId,
+      eventDate: effectiveDate,
+      payload: { contactId: updated.id, contactType: updated.contactType, isPrimary: updated.isPrimary },
+    });
+    this.audit.recordMutation(actor, {
+      action: "G01_CONTACT_UPDATED",
+      subjectRef: `employee_contacts:${updated.id}`,
+      metadata: { employeeId: updated.employeeId, outboxEventId: outboxEvent.id },
+    });
+    return { contact: { ...updated }, outboxEvent };
+  }
+
+  /** P02: RESTRICTED/PRIVATE contact values are masked without the employee.contact field grant. */
+  listContacts(actor: ActorContext, employeeId: string): EmployeeContact[] {
+    this.authz.check(actor, "g01.employee.read", actor);
+    return this.repository.listContacts(actor, employeeId).map((contact) => ({
+      ...contact,
+      contactValue:
+        contact.visibility === "RESTRICTED" || contact.visibility === "PRIVATE"
+          ? this.authz.canSeeField(actor, "employee.contact")
+            ? contact.contactValue
+            : "[HIDDEN]"
+          : contact.contactValue,
+    }));
+  }
+
+  /**
+   * FR-EPM-003 AC5 — effective-dated address change. Unit of work: the prior current row
+   * of the same type is closed (valid_to, is_current=false), the new row opened, the
+   * attribute-history window rolled, and the ADDRESS_UPDATED outbox row appended together.
+   */
+  addAddress(
+    actor: ActorContext,
+    input: {
+      employeeId: string;
+      addressType: AddressType;
+      line1: string;
+      line2?: string;
+      city: string;
+      district?: string;
+      state: string;
+      country?: string;
+      pincode: string;
+      validFrom: string;
+    }
+  ): { address: EmployeeAddress; historyEntry: EmployeeAttributeHistoryEntry; outboxEvent: OutboxEvent } {
+    this.authz.check(actor, "g01.employee.address.write", actor);
+    const employee = this.getRequired(actor, input.employeeId);
+    for (const [field, value] of [
+      ["line1", input.line1],
+      ["city", input.city],
+      ["state", input.state],
+      ["pincode", input.pincode],
+      ["validFrom", input.validFrom],
+    ] as const) {
+      if (!value || !value.trim()) {
+        throw new FoundationError("VALIDATION_FAILED", `${field} is required`, { field });
+      }
+    }
+    const country = input.country ?? "India";
+    if (country === "India" && !/^[0-9]{6}$/.test(input.pincode)) {
+      throw new FoundationError("VALIDATION_FAILED", "pincode must be 6 digits for India", { field: "pincode" });
+    }
+    if (input.addressType === "OVERSEAS" && country === "India") {
+      throw new FoundationError("VALIDATION_FAILED", "OVERSEAS address requires a non-India country", { field: "country" });
+    }
+    // Close the prior current row of the same type (old row valid_to closed, new row opened).
+    const priorValidTo = dayBefore(input.validFrom);
+    for (const existing of this.repository.listAddresses(actor, employee.id)) {
+      if (existing.addressType === input.addressType && existing.isCurrent) {
+        this.repository.updateAddress({ ...existing, isCurrent: false, validTo: priorValidTo, rowVersion: existing.rowVersion + 1 });
+      }
+    }
+    const address: EmployeeAddress = {
+      id: nextId("addr", this.repository.countAddresses()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      employeeId: employee.id,
+      addressType: input.addressType,
+      line1: input.line1,
+      line2: input.line2,
+      city: input.city,
+      district: input.district,
+      state: input.state,
+      country,
+      pincode: input.pincode,
+      isCurrent: true,
+      validFrom: input.validFrom,
+      rowVersion: 1,
+      isDeleted: false,
+    };
+    this.repository.insertAddress(address);
+    const historyEntry = this.appendAttributeHistory(actor, {
+      employeeId: employee.id,
+      attributePath: `address.${input.addressType}`,
+      valueText: `${input.line1}, ${input.city}, ${input.state} ${input.pincode}`,
+      effectiveFrom: input.validFrom,
+      changeReason: "CORRECTION",
+      source: "G01",
+      closePrior: true,
+    });
+    const outboxEvent = this.appendOutbox(actor, {
+      eventType: "ADDRESS_UPDATED",
+      aggregateType: "employee_addresses",
+      aggregateId: address.id,
+      employeeId: employee.id,
+      eventDate: input.validFrom,
+      payload: { addressId: address.id, addressType: address.addressType, validFrom: address.validFrom },
+    });
+    this.audit.recordMutation(actor, {
+      action: "G01_ADDRESS_ADDED",
+      subjectRef: `employee_addresses:${address.id}`,
+      metadata: { employeeId: employee.id, addressType: address.addressType, outboxEventId: outboxEvent.id },
+    });
+    return { address: { ...address }, historyEntry, outboxEvent };
+  }
+
+  listAddresses(actor: ActorContext, employeeId: string): EmployeeAddress[] {
+    this.authz.check(actor, "g01.employee.read", actor);
+    return this.repository
+      .listAddresses(actor, employeeId)
+      .slice()
+      .sort((left, right) => left.validFrom.localeCompare(right.validFrom))
+      .map((address) => ({ ...address }));
+  }
+
+  /**
+   * FR-EPM-004 — add a dependent. is_minor is derived from dob (AC1); a second active
+   * SPOUSE is rejected; the dependent insert, attribute-history append, DEPENDENT_UPDATED
+   * outbox row (no national-id in the payload), and audit commit together.
+   */
+  addDependent(
+    actor: ActorContext,
+    input: {
+      employeeId: string;
+      fullName: string;
+      relationship: DependentRelationship;
+      dob?: string;
+      isLegalHeir?: boolean;
+      heirSuccessionRank?: number;
+      nationalIdMasked?: string;
+      effectiveDate?: string;
+    }
+  ): { dependent: EmployeeDependent; historyEntry: EmployeeAttributeHistoryEntry; outboxEvent: OutboxEvent } {
+    this.authz.check(actor, "g01.employee.dependent.write", actor);
+    const employee = this.getRequired(actor, input.employeeId);
+    if (!input.fullName || !input.fullName.trim()) {
+      throw new FoundationError("VALIDATION_FAILED", "fullName is required", { field: "fullName" });
+    }
+    if (
+      input.relationship === "SPOUSE" &&
+      this.repository.listDependents(actor, employee.id).some((item) => item.relationship === "SPOUSE")
+    ) {
+      // BR: one active spouse per employee.
+      throw new FoundationError("CONFLICT", "An active spouse is already recorded", {
+        field: "relationship",
+        details: { reason: "DUPLICATE_SPOUSE", messageId: "ERR-G01-STATE" },
+      });
+    }
+    const effectiveDate = input.effectiveDate ?? todayIso();
+    const dependent: EmployeeDependent = {
+      id: nextId("dep", this.repository.countDependents()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      employeeId: employee.id,
+      fullName: input.fullName,
+      relationship: input.relationship,
+      dob: input.dob,
+      isMinor: input.dob ? isMinorAsOf(input.dob, effectiveDate) : undefined,
+      isLegalHeir: Boolean(input.isLegalHeir),
+      heirSuccessionRank: input.heirSuccessionRank,
+      nationalIdMasked: input.nationalIdMasked,
+      isDeleted: false,
+    };
+    this.repository.insertDependent(dependent);
+    const historyEntry = this.appendAttributeHistory(actor, {
+      employeeId: employee.id,
+      attributePath: `dependent.${dependent.id}`,
+      valueText: `${dependent.fullName} (${dependent.relationship})`,
+      effectiveFrom: effectiveDate,
+      changeReason: "CORRECTION",
+      source: "G01",
+    });
+    const outboxEvent = this.appendOutbox(actor, {
+      eventType: "DEPENDENT_UPDATED",
+      aggregateType: "employee_dependents",
+      aggregateId: dependent.id,
+      employeeId: employee.id,
+      eventDate: effectiveDate,
+      payload: { dependentId: dependent.id, relationship: dependent.relationship, isLegalHeir: dependent.isLegalHeir },
+    });
+    this.audit.recordMutation(actor, {
+      action: "G01_DEPENDENT_ADDED",
+      subjectRef: `employee_dependents:${dependent.id}`,
+      metadata: { employeeId: employee.id, relationship: dependent.relationship, outboxEventId: outboxEvent.id },
+    });
+    return { dependent: this.serializeDependent(dependent, actor, true), historyEntry, outboxEvent };
+  }
+
+  /** P02: dependent national-id stays masked without the dedicated field grant. */
+  listDependents(actor: ActorContext, employeeId: string): EmployeeDependent[] {
+    this.authz.check(actor, "g01.employee.read", actor);
+    return this.repository.listDependents(actor, employeeId).map((dependent) => this.serializeDependent(dependent, actor, false));
+  }
+
+  /**
+   * FR-EPM-011 — chronological attribute-history timeline. P02 masking applies to the
+   * values: contact.* windows require the employee.contact field grant.
+   */
+  listAttributeHistory(actor: ActorContext, employeeId: string): EmployeeAttributeHistoryEntry[] {
+    this.authz.check(actor, "g01.employee.read", actor);
+    return this.repository
+      .listAttributeHistory(actor, employeeId)
+      .sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom) || left.id.localeCompare(right.id))
+      .map((entry) => ({
+        ...entry,
+        valueText:
+          entry.attributePath.startsWith("contact.") && !this.authz.canSeeField(actor, "employee.contact")
+            ? "[HIDDEN]"
+            : entry.valueText,
+      }));
+  }
+
   count(scope: TenantScope): number {
     requireTenantScope(scope);
     return this.employees.filter((employee) => inScope(employee, scope)).length;
@@ -480,15 +955,88 @@ export class EmployeeMasterService {
     scope: TenantScope,
     input: Omit<OutboxEvent, "id" | "tenantId" | "entityId" | "sequenceNo">
   ): OutboxEvent {
+    const count = this.repository.countOutboxEvents();
     const event: OutboxEvent = {
-      id: nextId("outbox", this.outboxEvents.length),
+      id: nextId("outbox", count),
       tenantId: scope.tenantId,
       entityId: scope.entityId,
-      sequenceNo: this.outboxEvents.length + 1,
+      sequenceNo: count + 1,
       ...input,
     };
-    this.outboxEvents.push(event);
+    this.repository.appendOutboxEvent(event);
     return { ...event, payload: { ...event.payload } };
+  }
+
+  /**
+   * FR-EPM-011 append-only spine write: optionally closes the open window for the
+   * attribute path (effective_to = day before the new effective_from), then appends the
+   * new history row through the repository.
+   */
+  private appendAttributeHistory(
+    actor: ActorContext,
+    input: {
+      employeeId: string;
+      attributePath: string;
+      valueText?: string;
+      effectiveFrom: string;
+      changeReason: EmployeeAttributeHistoryEntry["changeReason"];
+      source: string;
+      governedChangeId?: string;
+      closePrior?: boolean;
+    }
+  ): EmployeeAttributeHistoryEntry {
+    if (input.closePrior) {
+      this.repository.closeAttributeHistory(actor, input.employeeId, input.attributePath, dayBefore(input.effectiveFrom));
+    }
+    const entry: EmployeeAttributeHistoryEntry = {
+      id: nextId("attrh", this.repository.countAttributeHistory()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      employeeId: input.employeeId,
+      attributePath: input.attributePath,
+      valueText: input.valueText,
+      effectiveFrom: input.effectiveFrom,
+      changeReason: input.changeReason,
+      source: input.source,
+      governedChangeId: input.governedChangeId,
+      recordedBy: actor.userId ?? "system",
+    };
+    this.repository.appendAttributeHistory(entry);
+    return { ...entry };
+  }
+
+  /** FR-EPM-003 AC2: exactly one primary per (employee, contact_type); demotion bumps row_version. */
+  private demotePrimaryContact(scope: TenantScope, employeeId: string, contactType: ContactType): void {
+    for (const existing of this.repository.listContacts(scope, employeeId)) {
+      if (existing.contactType === contactType && existing.isPrimary) {
+        this.repository.updateContact({ ...existing, isPrimary: false, rowVersion: existing.rowVersion + 1 });
+      }
+    }
+  }
+
+  /** FR-EPM-003 AC1: type-specific format validation (phone E.164-ish, email RFC-5322-lite). */
+  private validateContactValue(contactType: ContactType, contactValue: string): void {
+    if (!contactValue || !contactValue.trim()) {
+      throw new FoundationError("VALIDATION_FAILED", "contactValue is required", { field: "contactValue" });
+    }
+    const isEmailType = contactType === "PERSONAL_EMAIL" || contactType === "OFFICIAL_EMAIL";
+    const pattern = isEmailType ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/ : /^\+?[0-9]{8,15}$/;
+    if (!pattern.test(contactValue)) {
+      throw new FoundationError("VALIDATION_FAILED", `contactValue is not a valid ${contactType}`, {
+        field: "contactValue",
+        details: { reason: "INVALID_FORMAT", messageId: "ERR-G01-IDFMT" },
+      });
+    }
+  }
+
+  private serializeDependent(dependent: EmployeeDependent, actor: ActorContext, justWritten: boolean): EmployeeDependent {
+    return {
+      ...dependent,
+      nationalIdMasked:
+        dependent.nationalIdMasked && !justWritten && !this.authz.canSeeField(actor, "employee.dependent.national_id")
+          ? "[HIDDEN]"
+          : dependent.nationalIdMasked,
+    };
   }
 
   private serializeEmployee(employee: EmployeeRecord, actor: ActorContext): EmployeeProfileView {

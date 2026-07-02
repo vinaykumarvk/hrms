@@ -9,6 +9,8 @@ export const g02RouteEvidence = {
   reversal: "reverse-through-G01",
   resolver: "REPORTING_CHAIN",
   evidenceDocs: "G13 evidence documents",
+  // PH-07C BRD-contract lifecycle routes (docs/brd/v3/G02 §8): withdraw, resubmit, masked diff.
+  lifecycle: "/api/v1/change-requests/{id}/withdraw|resubmit|diff",
 };
 
 export function registerG02Routes(kernel: ApiKernel): void {
@@ -48,7 +50,55 @@ export function registerG02Routes(kernel: ApiKernel): void {
       },
     },
     actionRoute("approve", "g02.change.approve", (context, requestId) => accepted({ request: context.services.personalDetails.approve(context.actor, requestId) })),
-    actionRoute("reject", "g02.change.reject", (context, requestId) => accepted({ request: context.services.personalDetails.reject(context.actor, requestId) })),
+    actionRoute("reject", "g02.change.reject", (context, requestId) =>
+      accepted({ request: context.services.personalDetails.reject(context.actor, requestId, optionalString(readBodyRecord(context.request.body), "comment")) })
+    ),
+    // FR-G02-006 return-for-correction: P01 sendBack -> RETURNED with a mandatory comment (ERR-REASON-REQ).
+    actionRoute("send-back", "g02.change.reject", (context, requestId) =>
+      accepted({ request: context.services.personalDetails.sendBack(context.actor, requestId, optionalString(readBodyRecord(context.request.body), "comment")) })
+    ),
+    {
+      method: "POST",
+      path: "/api/v1/change-requests/{id}/resubmit",
+      operationId: "g02.resubmitPersonalDetailChangeRequest",
+      protected: true,
+      permission: "g02.change.submit",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          request: context.services.personalDetails.resubmit(context.actor, requiredParam(context.params, "id"), {
+            newValue: optionalString(body, "newValue"),
+            reason: requiredString(body, "reason"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/change-requests/{id}/withdraw",
+      operationId: "g02.withdrawPersonalDetailChangeRequest",
+      protected: true,
+      permission: "g02.change.submit",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          request: context.services.personalDetails.withdraw(context.actor, requiredParam(context.params, "id"), optionalString(body, "reason")),
+        });
+      },
+    },
+    {
+      // FR-G02-005: P02-aware per-field diff; sensitive values are masked for readers without the field grant.
+      method: "GET",
+      path: "/api/v1/change-requests/{id}/diff",
+      operationId: "g02.getPersonalDetailChangeRequestDiff",
+      protected: true,
+      permission: "g02.change.read",
+      handler: (context) => ok(context.services.personalDetails.getDiff(context.actor, requiredParam(context.params, "id"))),
+    },
     {
       method: "POST",
       path: "/api/v1/personal-details/change-requests/{id}:commit",
@@ -94,14 +144,14 @@ export function registerG02Routes(kernel: ApiKernel): void {
 }
 
 function actionRoute(
-  action: "approve" | "reject",
+  action: "approve" | "reject" | "send-back",
   permission: string,
   handler: (context: Parameters<RouteDefinition["handler"]>[0], requestId: string) => ReturnType<RouteDefinition["handler"]>
 ): RouteDefinition {
   return {
     method: "POST",
     path: `/api/v1/personal-details/change-requests/{id}:${action}`,
-    operationId: `g02.${action}PersonalDetailChangeRequest`,
+    operationId: `g02.${action === "send-back" ? "sendBack" : action}PersonalDetailChangeRequest`,
     protected: true,
     permission,
     unsafe: true,

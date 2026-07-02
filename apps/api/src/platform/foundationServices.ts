@@ -1,10 +1,13 @@
 import { JobService } from "../jobs/jobService";
 import { MigrationStagingService } from "../migration/staging/migrationStagingService";
 import { EmployeeMasterService } from "../modules/g01/employeeMasterService";
+import { InMemoryEmployeeProfileRepository } from "../modules/g01/employeeProfileRepository";
 import { PersonalDetailsService } from "../modules/g02/personalDetailsService";
+import { InMemoryPersonalDetailsRepository, defaultG02WorkflowConfig } from "../modules/g02/personalDetailsRepository";
 import { LeaveService } from "../modules/g03/leaveService";
 import { InMemoryLeaveRepository } from "../modules/g03/leaveRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
+import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
 import { TransferService } from "../modules/g05/transferService";
 import { InMemoryTransferRepository } from "../modules/g05/transferRepository";
 import { PromotionService } from "../modules/g06/promotionService";
@@ -17,7 +20,7 @@ import { ServiceRegisterService } from "../modules/g12/serviceRegisterService";
 import { DocumentVaultService } from "../modules/g13/documentVaultService";
 import { AnalyticsService } from "../modules/g14/analyticsService";
 import { NotificationService } from "../notifications/notificationService";
-import { ph03AuthorityFacts, ph03Documents, ph03Employees, ph03LeaveTypes } from "../seed/ph03Seed";
+import { ph03AuthorityFacts, ph03Documents, ph03Employees, ph03Ids, ph03LeaveTypes } from "../seed/ph03Seed";
 import { AuditService } from "./audit/auditService";
 import { AuthorityResolutionService } from "./authority-resolution/authorityResolutionService";
 import { AuthorizationService } from "./authorization/authorizationService";
@@ -47,18 +50,48 @@ export interface FoundationServices {
   migrationStaging: MigrationStagingService;
 }
 
-export function createFoundationServices(): FoundationServices {
+export interface FoundationServicesOptions {
+  /** G04 relay HMAC key override (config injection for tests); production must set G04_RELAY_HMAC_KEY. */
+  g04RelayHmacKey?: string;
+}
+
+/**
+ * Resolve the G04 relay HMAC key: explicit override, then the G04_RELAY_HMAC_KEY
+ * environment variable. Outside production a deterministic test-only value is injected
+ * so suites can run without environment setup; production refuses to start without the env key.
+ */
+function resolveG04RelayHmacKey(options: FoundationServicesOptions): string {
+  const configured = options.g04RelayHmacKey ?? process.env.G04_RELAY_HMAC_KEY;
+  if (configured) {
+    return configured;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("G04_RELAY_HMAC_KEY must be set in production");
+  }
+  return "g04-relay-local-test-key";
+}
+
+export function createFoundationServices(options: FoundationServicesOptions = {}): FoundationServices {
   const audit = new AuditService();
   const authorization = new AuthorizationService();
   const serviceRegister = new ServiceRegisterService(audit);
-  const employeeMaster = new EmployeeMasterService(ph03Employees(), authorization, audit, serviceRegister);
+  const employeeMaster = new EmployeeMasterService(ph03Employees(), authorization, audit, serviceRegister, new InMemoryEmployeeProfileRepository());
   const documentVault = new DocumentVaultService(ph03Documents(), audit);
   const authorityResolution = new AuthorityResolutionService(ph03AuthorityFacts());
   const notifications = new NotificationService();
   const workflow = new HrmsWorkflowService(authorityResolution, audit, notifications);
   const jobs = new JobService();
-  const personalDetails = new PersonalDetailsService(employeeMaster, authorization, audit, workflow, documentVault, notifications);
-  const leaveSrRelay = new LeaveSrRelayService(authorization, audit, serviceRegister, notifications);
+  // PH-07C: field sensitivity + approval routing come from the seeded config entities, never hardcoded.
+  const personalDetailsRepository = new InMemoryPersonalDetailsRepository();
+  const g02Config = defaultG02WorkflowConfig(ph03Ids.tenant);
+  for (const entry of g02Config.catalog) {
+    personalDetailsRepository.saveSensitivityCatalogEntry(entry);
+  }
+  personalDetailsRepository.saveApprovalMatrix(g02Config.matrix);
+  const personalDetails = new PersonalDetailsService(employeeMaster, authorization, audit, workflow, documentVault, notifications, personalDetailsRepository);
+  const leaveSrRelay = new LeaveSrRelayService(authorization, audit, serviceRegister, notifications, new InMemoryLeaveSrRelayRepository(), {
+    hmacKey: resolveG04RelayHmacKey(options),
+  });
   const leaveRepository = new InMemoryLeaveRepository();
   for (const leaveType of ph03LeaveTypes()) {
     leaveRepository.saveLeaveType(leaveType);

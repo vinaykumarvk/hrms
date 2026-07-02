@@ -53,7 +53,9 @@ test("PH-07 G02 approved display-name change commits through G01-owned SR postin
     reason: "Gazette update",
     evidenceTitle: "Gazette proof",
   }).request;
-  services.personalDetails.approve(actor(), request.id);
+  // PH-07C SoD: the approver must be a different user than the maker (ERR-G02-SOD otherwise).
+  const approver = actor({ userId: "user-ph07-g02-checker", actorUserId: "user-ph07-g02-checker" });
+  services.personalDetails.approve(approver, request.id);
   const committed = services.personalDetails.commit(actor(), request.id, "idem-ph07-g02-commit-001", "2026-07-24");
   assert.equal(committed.status, "COMMITTED");
   assert.match(committed.srEventId, /^sr-/);
@@ -94,6 +96,8 @@ test("PH-07 G02 API flow creates, approves, commits, and lists change requests",
     path: `/api/v1/personal-details/change-requests/${created.body.request.id}:approve`,
     headers: { "Idempotency-Key": "idem-ph07-g02-approve-route-001" },
     body: {},
+    // PH-07C SoD: route-level approval also needs a checker distinct from the maker.
+    actor: { userId: "user-ph07-g02-checker", actorUserId: "user-ph07-g02-checker" },
   });
   assert.equal(approved.status, 202);
 

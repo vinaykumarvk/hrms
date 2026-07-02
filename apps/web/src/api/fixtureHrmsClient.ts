@@ -1,17 +1,26 @@
 import {
+  ChangeRequestDiffResult,
   DocumentSummary,
+  EmployeeContactAddInput,
+  EmployeeContactRecord,
+  EmployeeDependentAddInput,
+  EmployeeDependentRecord,
   EmployeeProfileView,
   EmployeeSummary,
   AnalyticsSliceSummary,
   AparSliceSummary,
   DisciplinarySliceSummary,
+  HrmsApiError,
   HrmsClient,
   LeaveApplicationRecord,
   LeaveApplicationSubmitInput,
+  LeaveBalanceView,
   LeaveSliceSummary,
   LeaveSrRelaySliceSummary,
   LeaveTypeOption,
   PageResult,
+  PersonalDetailChangeCreateInput,
+  PersonalDetailChangeRecord,
   TransferInitiateInput,
   TransferOrderRecord,
   PayrollSliceSummary,
@@ -243,9 +252,157 @@ export function createFixtureHrmsClient(): HrmsClient {
       clearanceItems: transferSlice.clearances.map((clearance) => ({ ...clearance })),
     },
   ];
+  const employeeContacts: EmployeeContactRecord[] = [
+    {
+      id: "cont-fixture-000001",
+      employeeId: employees[0].id,
+      contactType: "MOBILE",
+      contactValue: "+91-98450-00001",
+      isPrimary: true,
+      isVerified: true,
+      visibility: "INTERNAL",
+      rowVersion: 1,
+    },
+  ];
+  const employeeDependents: EmployeeDependentRecord[] = [
+    {
+      id: "dep-fixture-000001",
+      employeeId: employees[0].id,
+      fullName: "Meera Rao",
+      relationship: "SPOUSE",
+      dob: "1988-02-14",
+      isLegalHeir: true,
+      heirSuccessionRank: 1,
+      nationalIdMasked: "xxxx-xxxx-5678",
+    },
+  ];
+  const changeRequests: PersonalDetailChangeRecord[] = [
+    {
+      id: "g02-fixture-000001",
+      requestNo: "G02/00001",
+      employeeId: employees[0].id,
+      fieldCode: "displayName",
+      oldValue: "Ananya Rao",
+      newValue: "Ananya R. Rao",
+      sensitivity: "LOW",
+      status: "IN_REVIEW",
+      revisionNo: 1,
+      documentIds: ["d0c00000-0000-0000-0000-000000001001"],
+    },
+  ];
+  const leaveBalance: LeaveBalanceView = {
+    employeeId: employees[0].id,
+    leaveTypeId: "EL",
+    leaveYear: 2026,
+    currentBalance: 30,
+    reserved: 3,
+    debited: 0,
+    availableBalance: 27,
+  };
   let fixtureSequence = 2;
 
+  function fixtureError(status: number, code: string, message: string, messageId?: string): HrmsApiError {
+    return new HrmsApiError(status, { error: { code, message, details: messageId ? { messageId } : undefined } });
+  }
+
   return {
+    listEmployeeContacts: () => Promise.resolve(page(employeeContacts.map((contact) => ({ ...contact })))),
+    addEmployeeContact: (employeeId: string, input: EmployeeContactAddInput) => {
+      const contact: EmployeeContactRecord = {
+        id: `cont-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        employeeId,
+        contactType: input.contactType,
+        contactValue: input.contactValue,
+        isPrimary: Boolean(input.isPrimary),
+        isVerified: false,
+        visibility: input.visibility ?? "INTERNAL",
+        rowVersion: 1,
+      };
+      fixtureSequence += 1;
+      if (contact.isPrimary) {
+        for (const existing of employeeContacts) {
+          if (existing.contactType === contact.contactType) {
+            existing.isPrimary = false;
+          }
+        }
+      }
+      employeeContacts.push(contact);
+      return Promise.resolve({ contact: { ...contact } });
+    },
+    listEmployeeDependents: () => Promise.resolve(page(employeeDependents.map((dependent) => ({ ...dependent })))),
+    addEmployeeDependent: (employeeId: string, input: EmployeeDependentAddInput) => {
+      if (input.relationship === "SPOUSE" && employeeDependents.some((dependent) => dependent.relationship === "SPOUSE")) {
+        return Promise.reject(fixtureError(409, "CONFLICT", "An active spouse is already recorded", "ERR-G01-STATE"));
+      }
+      const dependent: EmployeeDependentRecord = {
+        id: `dep-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        employeeId,
+        fullName: input.fullName,
+        relationship: input.relationship,
+        dob: input.dob,
+        isLegalHeir: Boolean(input.isLegalHeir),
+        heirSuccessionRank: input.heirSuccessionRank,
+      };
+      fixtureSequence += 1;
+      employeeDependents.push(dependent);
+      return Promise.resolve({ dependent: { ...dependent } });
+    },
+    listPersonalDetailChangeRequests: () => Promise.resolve(page(changeRequests.map((request) => ({ ...request })))),
+    createPersonalDetailChangeRequest: (input: PersonalDetailChangeCreateInput) => {
+      const request: PersonalDetailChangeRecord = {
+        id: `g02-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        requestNo: `G02/${String(fixtureSequence + 1).padStart(5, "0")}`,
+        employeeId: input.employeeId,
+        fieldCode: input.fieldCode,
+        oldValue: input.fieldCode === "displayName" ? employees[0].displayName : "[HIDDEN]",
+        newValue: input.newValue,
+        sensitivity: input.fieldCode === "displayName" ? "LOW" : "HIGH",
+        status: "IN_REVIEW",
+        revisionNo: 1,
+        documentIds: [],
+      };
+      fixtureSequence += 1;
+      changeRequests.push(request);
+      return Promise.resolve({ request: { ...request } });
+    },
+    decidePersonalDetailChangeRequest: (requestId, verb, comment) => {
+      const request = changeRequests.find((candidate) => candidate.id === requestId);
+      if (!request) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture change request ${requestId} not found`));
+      }
+      if ((verb === "reject" || verb === "send-back") && !comment?.trim()) {
+        // Mirrors the API's VAL-COMMENT rule: reject/return decisions need a mandatory comment.
+        return Promise.reject(fixtureError(400, "VALIDATION_FAILED", "A decision comment is required", "ERR-REASON-REQ"));
+      }
+      request.status = verb === "approve" ? "APPROVED" : verb === "reject" ? "REJECTED" : "RETURNED";
+      request.decisionComment = comment;
+      return Promise.resolve({ request: { ...request } });
+    },
+    getPersonalDetailChangeRequestDiff: (requestId) => {
+      const request = changeRequests.find((candidate) => candidate.id === requestId);
+      if (!request) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture change request ${requestId} not found`));
+      }
+      const masked = request.sensitivity === "HIGH";
+      const diff: ChangeRequestDiffResult = {
+        changeRequestId: request.id,
+        requestNo: request.requestNo,
+        status: request.status,
+        revisionNo: request.revisionNo,
+        fields: [
+          {
+            fieldCode: request.fieldCode,
+            displayLabel: request.fieldCode,
+            sensitivity: request.sensitivity,
+            oldValue: masked ? "[HIDDEN]" : request.oldValue,
+            newValue: masked ? "[HIDDEN]" : request.newValue,
+            masked,
+          },
+        ],
+      };
+      return Promise.resolve(diff);
+    },
+    getLeaveBalance: () => Promise.resolve({ ...leaveBalance }),
     listLeaveApplications: () => Promise.resolve(page(leaveApplications.map((application) => ({ ...application })))),
     submitLeaveApplication: (input: LeaveApplicationSubmitInput) => {
       const application: LeaveApplicationRecord = {

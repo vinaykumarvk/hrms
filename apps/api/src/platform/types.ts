@@ -14,7 +14,10 @@ export type G03DomainErrorCode =
   | "INSUFFICIENT_BALANCE"
   | "OPTIMISTIC_LOCK_CONFLICT"
   | "ELIGIBILITY_FAILED"
-  | "ENTITLEMENT_EXCEEDED";
+  | "ENTITLEMENT_EXCEEDED"
+  | "PERIOD_ALREADY_LOCKED"
+  | "WINDOW_EXPIRED"
+  | "REGULARISATION_LIMIT";
 
 export type WireErrorCode = CanonicalErrorCode | G03DomainErrorCode;
 

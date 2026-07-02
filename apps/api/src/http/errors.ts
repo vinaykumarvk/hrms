@@ -26,8 +26,11 @@ export function statusForError(code: WireErrorCode): number {
     case "INSUFFICIENT_BALANCE":
     case "OPTIMISTIC_LOCK_CONFLICT":
     case "ENTITLEMENT_EXCEEDED":
+    case "PERIOD_ALREADY_LOCKED":
+    case "REGULARISATION_LIMIT":
       return 409;
     case "ELIGIBILITY_FAILED":
+    case "WINDOW_EXPIRED":
       return 422;
     case "PRECONDITION_FAILED":
       return 412;

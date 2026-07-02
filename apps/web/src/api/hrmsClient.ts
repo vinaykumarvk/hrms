@@ -3,7 +3,9 @@ export const HRMS_API_ROUTES = {
   workflowInstances: "/api/v1/workflow/instances",
   employees: "/api/v1/employees",
   personalDetailChanges: "/api/v1/personal-details/change-requests",
+  changeRequests: "/api/v1/change-requests",
   leaveApplications: "/api/v1/atl/leave-applications",
+  leaveBalances: "/api/v1/atl/leave-balances",
   leaveTypes: "/api/v1/atl/leave-types",
   leaveOutbox: "/api/v1/atl/leave-sr-outbox",
   payrollSignals: "/api/v1/atl/payroll-signals",
@@ -221,6 +223,132 @@ export interface AnalyticsSliceSummary {
   uatMarker: "UAT_ACCEPTANCE_PACK";
 }
 
+/** One E2 employee_contacts row from GET /api/v1/employees/{id}/contacts (PH-07A satellite). */
+export interface EmployeeContactRecord {
+  id: string;
+  employeeId: string;
+  contactType: "MOBILE" | "ALT_MOBILE" | "PERSONAL_EMAIL" | "OFFICIAL_EMAIL" | "LANDLINE";
+  contactValue: string;
+  isPrimary: boolean;
+  isVerified: boolean;
+  visibility: "PUBLIC" | "INTERNAL" | "RESTRICTED" | "PRIVATE";
+  rowVersion: number;
+}
+
+/** Request body for POST /api/v1/employees/{id}/contacts (g01.addEmployeeContact). */
+export interface EmployeeContactAddInput {
+  contactType: EmployeeContactRecord["contactType"];
+  contactValue: string;
+  isPrimary?: boolean;
+  visibility?: EmployeeContactRecord["visibility"];
+}
+
+/** 201 body of POST /api/v1/employees/{id}/contacts: the created satellite row. */
+export interface EmployeeContactAddResult {
+  contact: EmployeeContactRecord;
+}
+
+/**
+ * One E4 employee_dependents row from GET /api/v1/employees/{id}/dependents.
+ * nationalIdMasked arrives pre-masked per P02 field grants; the client never unmasks.
+ */
+export interface EmployeeDependentRecord {
+  id: string;
+  employeeId: string;
+  fullName: string;
+  relationship: "SPOUSE" | "SON" | "DAUGHTER" | "FATHER" | "MOTHER" | "BROTHER" | "SISTER" | "GUARDIAN" | "OTHER";
+  dob?: string;
+  isMinor?: boolean;
+  isLegalHeir: boolean;
+  heirSuccessionRank?: number;
+  nationalIdMasked?: string;
+}
+
+/** Request body for POST /api/v1/employees/{id}/dependents (g01.addEmployeeDependent). */
+export interface EmployeeDependentAddInput {
+  fullName: string;
+  relationship: EmployeeDependentRecord["relationship"];
+  dob?: string;
+  isLegalHeir?: boolean;
+  heirSuccessionRank?: number;
+}
+
+/** 201 body of POST /api/v1/employees/{id}/dependents: the created satellite row. */
+export interface EmployeeDependentAddResult {
+  dependent: EmployeeDependentRecord;
+}
+
+/** One row of GET /api/v1/personal-details/change-requests as the G02 routes project it. */
+export interface PersonalDetailChangeRecord {
+  id: string;
+  requestNo: string;
+  employeeId: string;
+  fieldCode: "displayName" | "pan" | "aadhaarMasked";
+  oldValue: string;
+  newValue: string;
+  sensitivity: "LOW" | "HIGH";
+  status: "IN_REVIEW" | "RETURNED" | "APPROVED" | "COMMITTED" | "REJECTED" | "REVERSED" | "WITHDRAWN";
+  revisionNo: number;
+  decisionComment?: string;
+  documentIds: string[];
+}
+
+/** Request body for POST /api/v1/personal-details/change-requests (g02.createPersonalDetailChangeRequest). */
+export interface PersonalDetailChangeCreateInput {
+  employeeId: string;
+  fieldCode: PersonalDetailChangeRecord["fieldCode"];
+  newValue: string;
+  reason: string;
+  evidenceTitle?: string;
+}
+
+/** 201 body of POST /api/v1/personal-details/change-requests. */
+export interface PersonalDetailChangeCreateResult {
+  request: PersonalDetailChangeRecord;
+}
+
+/** Approver verbs on POST /api/v1/personal-details/change-requests/{id}:{verb} (PH-07C lifecycle). */
+export type PersonalDetailDecisionVerb = "approve" | "reject" | "send-back";
+
+/** 202 body of the G02 approve / reject / send-back decision routes. */
+export interface PersonalDetailDecisionResult {
+  request: PersonalDetailChangeRecord;
+}
+
+/**
+ * One field row of GET /api/v1/change-requests/{id}/diff (FR-G02-005). When `masked` is true the
+ * API has already replaced both values with "[HIDDEN]" per P02 field grants; the UI renders the
+ * masked values exactly as returned and never reconstructs them.
+ */
+export interface ChangeRequestFieldDiff {
+  fieldCode: string;
+  displayLabel: string;
+  sensitivity: "LOW" | "HIGH";
+  oldValue: string;
+  newValue: string;
+  masked: boolean;
+}
+
+/** 200 body of GET /api/v1/change-requests/{id}/diff. */
+export interface ChangeRequestDiffResult {
+  changeRequestId: string;
+  requestNo: string;
+  status: PersonalDetailChangeRecord["status"];
+  revisionNo: number;
+  fields: ChangeRequestFieldDiff[];
+}
+
+/** `balance` object of GET /api/v1/atl/leave-balances (g03.getLeaveBalance). */
+export interface LeaveBalanceView {
+  employeeId: string;
+  leaveTypeId: string;
+  leaveYear: number;
+  currentBalance: number;
+  reserved: number;
+  debited: number;
+  availableBalance: number;
+}
+
 /** One row of GET /api/v1/atl/leave-applications as the G03 routes project it to the web layer. */
 export interface LeaveApplicationRecord {
   id: string;
@@ -347,6 +475,20 @@ export interface HrmsClient {
   actOnWorkflowInstance(instanceId: string, verb: WorkflowInstanceActionVerb, body: WorkflowActionRequestBody, idempotencyKey: string): Promise<unknown>;
   listEmployees(): Promise<PageResult<EmployeeSummary>>;
   getEmployeeProfile(employeeId: string): Promise<EmployeeProfileView>;
+  listEmployeeContacts(employeeId: string): Promise<PageResult<EmployeeContactRecord>>;
+  addEmployeeContact(employeeId: string, input: EmployeeContactAddInput, idempotencyKey: string): Promise<EmployeeContactAddResult>;
+  listEmployeeDependents(employeeId: string): Promise<PageResult<EmployeeDependentRecord>>;
+  addEmployeeDependent(employeeId: string, input: EmployeeDependentAddInput, idempotencyKey: string): Promise<EmployeeDependentAddResult>;
+  listPersonalDetailChangeRequests(): Promise<PageResult<PersonalDetailChangeRecord>>;
+  createPersonalDetailChangeRequest(input: PersonalDetailChangeCreateInput, idempotencyKey: string): Promise<PersonalDetailChangeCreateResult>;
+  decidePersonalDetailChangeRequest(
+    requestId: string,
+    verb: PersonalDetailDecisionVerb,
+    comment: string | undefined,
+    idempotencyKey: string
+  ): Promise<PersonalDetailDecisionResult>;
+  getPersonalDetailChangeRequestDiff(requestId: string): Promise<ChangeRequestDiffResult>;
+  getLeaveBalance(employeeId?: string, leaveTypeId?: string): Promise<LeaveBalanceView>;
   getServiceRegisterTimeline(employeeId: string, page?: PageQuery): Promise<PageResult<SrTimelineEntry>>;
   listDocuments(): Promise<PageResult<DocumentSummary>>;
   listLeaveApplications(): Promise<PageResult<LeaveApplicationRecord>>;
@@ -432,6 +574,57 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
         `${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/profile-360`
       );
       return result.profile;
+    },
+    listEmployeeContacts: (employeeId) =>
+      request<PageResult<EmployeeContactRecord>>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/contacts`),
+    addEmployeeContact: (employeeId, input, idempotencyKey) =>
+      request<EmployeeContactAddResult>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/contacts`, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
+    listEmployeeDependents: (employeeId) =>
+      request<PageResult<EmployeeDependentRecord>>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/dependents`),
+    addEmployeeDependent: (employeeId, input, idempotencyKey) =>
+      request<EmployeeDependentAddResult>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/dependents`, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
+    listPersonalDetailChangeRequests: () => request<PageResult<PersonalDetailChangeRecord>>(HRMS_API_ROUTES.personalDetailChanges),
+    createPersonalDetailChangeRequest: (input, idempotencyKey) =>
+      request<PersonalDetailChangeCreateResult>(HRMS_API_ROUTES.personalDetailChanges, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
+    decidePersonalDetailChangeRequest: (requestId, verb, comment, idempotencyKey) =>
+      request<PersonalDetailDecisionResult>(`${HRMS_API_ROUTES.personalDetailChanges}/${encodeURIComponent(requestId)}:${verb}`, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(comment === undefined ? {} : { comment }),
+      }),
+    getPersonalDetailChangeRequestDiff: (requestId) =>
+      request<ChangeRequestDiffResult>(`${HRMS_API_ROUTES.changeRequests}/${encodeURIComponent(requestId)}/diff`),
+    getLeaveBalance: async (employeeId, leaveTypeId) => {
+      const params = new URLSearchParams();
+      if (employeeId) {
+        params.set("employeeId", employeeId);
+      }
+      if (leaveTypeId) {
+        params.set("leaveTypeId", leaveTypeId);
+      }
+      const query = params.toString();
+      const result = await request<{ balance: LeaveBalanceView }>(`${HRMS_API_ROUTES.leaveBalances}${query ? `?${query}` : ""}`);
+      return result.balance;
     },
     getServiceRegisterTimeline: (employeeId, page = {}) =>
       request<PageResult<SrTimelineEntry>>(
@@ -561,6 +754,8 @@ function requireFirst<TItem>(items: TItem[], label: string): TItem {
 
 export class HrmsApiError extends Error {
   readonly code: string;
+  /** Module error id from error.details.messageId (e.g. ERR-REASON-REQ, ERR-G02-SOD), when present. */
+  readonly messageId?: string;
 
   constructor(
     readonly status: number,
@@ -570,7 +765,24 @@ export class HrmsApiError extends Error {
     super(`HRMS API request failed (${code})`);
     this.name = "HrmsApiError";
     this.code = code;
+    this.messageId = extractEnvelopeMessageId(body);
   }
+
+  /** The most specific renderable code: the module messageId when present, else the wire code. */
+  get displayCode(): string {
+    return this.messageId ?? this.code;
+  }
+}
+
+function extractEnvelopeMessageId(body: unknown): string | undefined {
+  if (body && typeof body === "object" && "error" in body) {
+    const envelope = (body as { error?: { details?: { messageId?: unknown } } }).error;
+    const messageId = envelope?.details?.messageId;
+    if (typeof messageId === "string") {
+      return messageId;
+    }
+  }
+  return undefined;
 }
 
 function extractEnvelopeCode(body: unknown): string {

@@ -7,8 +7,13 @@ import { useCallback, useState } from "react";
 import { WorkflowWorkspace } from "./workflow/WorkflowWorkspace";
 import { WorkflowConfigConsole } from "./workflow/WorkflowConfigConsole";
 import { EmployeeProfile } from "./modules/g01/EmployeeProfile";
+import { EmployeeContactsPanel } from "./modules/g01/EmployeeContactsPanel";
+import { EmployeeDependentsPanel } from "./modules/g01/EmployeeDependentsPanel";
 import { PersonalDetailsWorkspace } from "./modules/g02/PersonalDetailsWorkspace";
+import { ChangeRequestEditor } from "./modules/g02/ChangeRequestEditor";
+import { ChangeRequestApproverQueue } from "./modules/g02/ChangeRequestApproverQueue";
 import { LeaveWorkspace } from "./modules/g03/LeaveWorkspace";
+import { SelfServiceSummary } from "./modules/g03/SelfServiceSummary";
 import { LeaveSrRelayWorkspace } from "./modules/g04/LeaveSrRelayWorkspace";
 import { TransferWorkspace } from "./modules/g05/TransferWorkspace";
 import { PromotionWorkspace } from "./modules/g06/PromotionWorkspace";
@@ -34,6 +39,10 @@ const client = createHrmsClient({
 
 export function App() {
   const [session, setSession] = useState<HrmsSession | null>(() => readStoredSession(window.sessionStorage));
+  // PH-07E: the G02 editor and approver queue share a refresh token so a newly
+  // created change request appears in the queue without a full reload.
+  const [g02QueueRefresh, setG02QueueRefresh] = useState(0);
+  const bumpG02Queue = useCallback(() => setG02QueueRefresh((token) => token + 1), []);
 
   const handleSignIn = useCallback((token: string): boolean => {
     const nextSession = startSession(window.sessionStorage, token);
@@ -75,9 +84,12 @@ export function App() {
       <section className="workspace-grid" aria-label="Phase 06 vertical slices">
         <RouteGuard permissions={permissions} requiredPermission="g02.change.read" routeLabel="Personal Details workspace (G02)">
           <PersonalDetailsWorkspace client={client} />
+          <ChangeRequestEditor client={client} onCreated={bumpG02Queue} />
+          <ChangeRequestApproverQueue client={client} refreshToken={g02QueueRefresh} onDecided={bumpG02Queue} />
         </RouteGuard>
         <RouteGuard permissions={permissions} requiredPermission="g03.leave.read" routeLabel="Attendance & Leave workspace (G03)">
           <LeaveWorkspace client={client} />
+          <SelfServiceSummary client={client} />
         </RouteGuard>
         <RouteGuard permissions={permissions} requiredPermission="g04.relay.read" routeLabel="Leave-SR Relay workspace (G04)">
           <LeaveSrRelayWorkspace client={client} />
@@ -116,6 +128,8 @@ export function App() {
       <section className="workspace-grid" aria-label="Phase 05D foundation record views">
         <RouteGuard permissions={permissions} requiredPermission="g01.employee.read" routeLabel="Employees workspace (G01)">
           <EmployeeProfile client={client} />
+          <EmployeeContactsPanel client={client} />
+          <EmployeeDependentsPanel client={client} />
         </RouteGuard>
         <RouteGuard permissions={permissions} requiredPermission="g12.sr.read" routeLabel="Service Register workspace (G12)">
           <ServiceRegisterTimeline client={client} />

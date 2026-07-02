@@ -10,6 +10,7 @@ const {
   runMigrations,
   PgLeaveRepository,
   PgTransferRepository,
+  PgEmployeeProfileRepository,
 } = require("../../../dist/apps/api/src");
 
 const MIGRATIONS_DIR = path.join(__dirname, "..", "db", "migrations");
@@ -70,7 +71,15 @@ test("PH-06A persistence substrate: migrations + pg-backed G03/G05 repositories 
     const secondRun = await runMigrations(pool, MIGRATIONS_DIR);
     assert.equal(secondRun.length, 0, "migration runner must be idempotent");
     if (firstRun.length > 0) {
-      assert.deepEqual(firstRun, ["0001_platform_core.sql", "0002_g03_leave.sql", "0003_g05_transfer.sql"]);
+      assert.deepEqual(firstRun, [
+        "0001_platform_core.sql",
+        "0002_g03_leave.sql",
+        "0003_g05_transfer.sql",
+        "0004_g01_employee_satellites.sql",
+        "0005_g04_leave_sr_relay.sql",
+        "0006_g02_workflow_config.sql",
+        "0007_g03_payroll_feed.sql",
+      ]);
     }
 
     const core = await seedCore(pool);
@@ -183,6 +192,62 @@ test("PH-06A persistence substrate: migrations + pg-backed G03/G05 repositories 
       assert.equal(ledger[0].source_ref_type, "LEAVE_APPLICATION");
     });
 
+    await t.test("PH-07D payroll_attendance_feed lock + adjustment round-trip (R6)", async () => {
+      const feedRow = await leaveRepo.upsertFeedRow({
+        tenantId: core.tenantId,
+        entityId: core.entityId,
+        payPeriod: "2026-07",
+        employeeId: core.employeeId,
+        lwpDays: 1,
+        halfPayDays: 0,
+        paidOtMinutes: 45,
+        presentUnits: 21.5,
+        encashmentAmount: 0,
+      });
+      assert.ok(feedRow.id, "feed row persisted with database id");
+      assert.equal(feedRow.is_locked, false);
+
+      const lock = await leaveRepo.lockFeedPeriod({ tenantId: core.tenantId, entityId: core.entityId, payPeriod: "2026-07" });
+      assert.equal(lock.lockedRowCount, 1);
+      assert.equal(await leaveRepo.isFeedPeriodLocked(core.tenantId, "2026-07"), true);
+
+      // Direct write into the locked period must fail closed with PERIOD_ALREADY_LOCKED.
+      await assert.rejects(
+        () =>
+          leaveRepo.upsertFeedRow({
+            tenantId: core.tenantId,
+            entityId: core.entityId,
+            payPeriod: "2026-07",
+            employeeId: core.employeeId,
+            lwpDays: 2,
+            halfPayDays: 0,
+            paidOtMinutes: 0,
+            presentUnits: 20,
+            encashmentAmount: 0,
+          }),
+        (error) => error.code === "PERIOD_ALREADY_LOCKED"
+      );
+      const lockedRow = await leaveRepo.findFeedRow(core.tenantId, "2026-07", core.employeeId);
+      assert.equal(lockedRow.is_locked, true);
+      assert.equal(Number(lockedRow.lwp_days), 1, "locked feed row must not be overwritten");
+
+      const adjustment = await leaveRepo.insertFeedAdjustment({
+        tenantId: core.tenantId,
+        entityId: core.entityId,
+        originalFeedId: feedRow.id,
+        appliedInPayPeriod: "2026-08",
+        employeeId: core.employeeId,
+        adjustmentType: "LWP_DELTA",
+        deltaValue: -1,
+        reason: "Late regularisation of locked 2026-07",
+        sourceRefType: "REGULARISATION",
+      });
+      assert.equal(adjustment.status, "PENDING");
+      const adjustments = await leaveRepo.listFeedAdjustments(core.tenantId, "2026-08");
+      assert.equal(adjustments.length, 1);
+      assert.equal(adjustments[0].original_feed_id, feedRow.id);
+    });
+
     await t.test("transfer_orders and clearance_items round-trip with transactional checklist creation", async () => {
       const request = await transferRepo.insertTransferRequest({
         tenantId: core.tenantId,
@@ -241,6 +306,105 @@ test("PH-06A persistence substrate: migrations + pg-backed G03/G05 repositories 
       assert.equal(items.filter((item) => item.status === "CLEARED").length, 1);
       shared.orderId = order.id;
       shared.checklistId = created.checklist.id;
+    });
+
+    await t.test("PH-07A g01 satellites + transactional outbox round-trip on a real Postgres", async () => {
+      const profileRepo = new PgEmployeeProfileRepository(pool);
+
+      const contact = await profileRepo.insertContactWithOutbox({
+        tenantId: core.tenantId,
+        entityId: core.entityId,
+        employeeId: core.employeeId,
+        contactType: "MOBILE",
+        contactValue: "+919812340000",
+        isPrimary: true,
+        visibility: "INTERNAL",
+        demoteExistingPrimary: true,
+        effectiveFrom: "2026-01-01",
+        changeReason: "CORRECTION",
+        recordedBy: core.employeeId,
+      });
+      assert.ok(contact.contact.id);
+      assert.equal(contact.contact.is_primary, true);
+      assert.equal(contact.historyEntry.attribute_path, "contact.MOBILE");
+      assert.ok(contact.outboxEvent.event_id);
+
+      const firstAddress = await profileRepo.insertAddressWithOutbox({
+        tenantId: core.tenantId,
+        entityId: core.entityId,
+        employeeId: core.employeeId,
+        addressType: "PERMANENT",
+        line1: "12 MG Road",
+        city: "Mysuru",
+        state: "Karnataka",
+        country: "India",
+        pincode: "570001",
+        validFrom: "2020-01-15",
+        changeReason: "CORRECTION",
+        recordedBy: core.employeeId,
+      });
+      const secondAddress = await profileRepo.insertAddressWithOutbox({
+        tenantId: core.tenantId,
+        entityId: core.entityId,
+        employeeId: core.employeeId,
+        addressType: "PERMANENT",
+        line1: "4 Palace Road",
+        city: "Ballari",
+        state: "Karnataka",
+        country: "India",
+        pincode: "583101",
+        validFrom: "2026-06-01",
+        changeReason: "CORRECTION",
+        recordedBy: core.employeeId,
+      });
+      const addresses = await profileRepo.listAddresses(core.tenantId, core.employeeId);
+      assert.equal(addresses.length, 2);
+      const closed = addresses.find((row) => row.id === firstAddress.address.id);
+      assert.equal(closed.is_current, false);
+      assert.ok(closed.valid_to, "prior current address must be closed in the same transaction");
+      const current = addresses.find((row) => row.id === secondAddress.address.id);
+      assert.equal(current.is_current, true);
+
+      const dependent = await profileRepo.insertDependentWithOutbox({
+        tenantId: core.tenantId,
+        entityId: core.entityId,
+        employeeId: core.employeeId,
+        fullName: "Kavya Rao",
+        relationship: "DAUGHTER",
+        dob: "2015-09-20",
+        isMinor: true,
+        isLegalHeir: true,
+        heirSuccessionRank: 1,
+        effectiveFrom: "2026-01-01",
+        changeReason: "CORRECTION",
+        recordedBy: core.employeeId,
+      });
+      assert.equal(dependent.dependent.is_minor, true);
+
+      const governed = await profileRepo.appendAttributeHistoryWithOutbox({
+        tenantId: core.tenantId,
+        entityId: core.entityId,
+        employeeId: core.employeeId,
+        attributePath: "display_name",
+        valueText: "Asha Menon",
+        effectiveFrom: "2026-06-15",
+        changeReason: "CORRECTION",
+        source: "G01",
+        recordedBy: core.employeeId,
+      });
+      assert.equal(governed.historyEntry.attribute_path, "display_name");
+
+      // Ordered cursor feed: monotonic event_id, no gaps in what a cursor walk returns.
+      const feed = await profileRepo.listOutboxEventsAfter(core.tenantId, 0, 100);
+      assert.ok(feed.length >= 5, "every mutation must have produced exactly one outbox row");
+      const ids = feed.map((row) => Number(row.event_id));
+      assert.deepEqual(ids, [...ids].sort((a, b) => a - b));
+      const afterCursor = await profileRepo.listOutboxEventsAfter(core.tenantId, ids[0], 100);
+      assert.equal(afterCursor.length, feed.length - 1, "cursor must resume strictly after the given event_id");
+
+      const history = await profileRepo.listAttributeHistory(core.tenantId, core.employeeId);
+      assert.ok(history.some((row) => row.attribute_path === "contact.MOBILE"));
+      assert.ok(history.some((row) => row.attribute_path === "display_name"));
     });
 
     await t.test("rehydration: fresh pool and repository instances see the committed rows", async () => {

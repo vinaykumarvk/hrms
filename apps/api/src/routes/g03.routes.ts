@@ -251,7 +251,9 @@ export function registerG03Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(context.services.leave.regulariseAttendance(context.actor, requiredParam(context.params, "id"), requiredString(body, "reason")));
+        return accepted(
+          context.services.leave.regulariseAttendance(context.actor, requiredParam(context.params, "id"), requiredString(body, "reason"), optionalString(body, "asOfDate"))
+        );
       },
     },
     {
@@ -284,6 +286,59 @@ export function registerG03Routes(kernel: ApiKernel): void {
         const pagination = context.pagination ?? { limit: 25 };
         const signals = context.services.leave.listPayrollSignals(context.scope);
         return ok({ items: signals.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/atl/payroll-feed:generate",
+      operationId: "g03.generatePayrollFeed",
+      protected: true,
+      permission: "g03.payroll.feed.generate",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({ items: context.services.leave.generatePayrollFeed(context.actor, requiredString(body, "payPeriod")) });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/atl/payroll-feed:lock",
+      operationId: "g03.lockPayrollFeedPeriod",
+      protected: true,
+      permission: "g03.payroll.feed.lock",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted(context.services.leave.lockPayrollFeedPeriod(context.actor, requiredString(body, "payPeriod")));
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/atl/payroll-feed",
+      operationId: "g03.listPayrollFeed",
+      protected: true,
+      permission: "g03.payroll.feed.read",
+      list: { defaultLimit: 25, maxLimit: 100 },
+      handler: (context) => {
+        const pagination = context.pagination ?? { limit: 25 };
+        const payPeriod = optionalString(context.request.query ?? {}, "payPeriod");
+        const rows = context.services.leave.listPayrollFeed(context.scope, payPeriod);
+        return ok({ items: rows.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/atl/payroll-feed-adjustments",
+      operationId: "g03.listPayrollFeedAdjustments",
+      protected: true,
+      permission: "g03.payroll.feed.read",
+      list: { defaultLimit: 25, maxLimit: 100 },
+      handler: (context) => {
+        const pagination = context.pagination ?? { limit: 25 };
+        const adjustments = context.services.leave.listPayrollFeedAdjustments(context.scope);
+        return ok({ items: adjustments.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
   ];
