@@ -1,7 +1,18 @@
 import { Pool } from "pg";
 import { withTransaction } from "../../db/pool";
 import { FoundationError, TenantScope, nextId } from "../../platform/types";
-import type { ClearanceChecklist, JoiningReport, RelievingOrder, TransferOrder, TransferRepresentation } from "./transferService";
+import type {
+  ChargeHandover,
+  ClearanceChecklist,
+  DeputationRecord,
+  JoiningDistanceBand,
+  JoiningReport,
+  OrderAcknowledgement,
+  QuarterAllotment,
+  RelievingOrder,
+  TransferOrder,
+  TransferRepresentation,
+} from "./transferService";
 
 /**
  * G05 transfer repository contract consumed by TransferService.
@@ -45,6 +56,51 @@ const DEFAULT_CLEARANCE_DEPARTMENTS: ClearanceDepartmentConfig[] = [
   { code: "HR", label: "Service book and establishment clearance", slaDays: 3 },
 ];
 
+/**
+ * One joining-time distance-band rule row (BRD G05 §16.4 / VAL-G05-JTIME).
+ * Band boundaries are configuration DATA (rule rows), never hardcoded in the service.
+ */
+export interface JoiningTimeRule {
+  band: JoiningDistanceBand;
+  /** LOCAL is matched by same-station, not by kilometres. */
+  sameStation: boolean;
+  minDistanceKm: number;
+  /** Exclusive upper bound; undefined = unbounded (OUTSTATION). */
+  maxDistanceKm?: number;
+  joiningTimeDays: number;
+}
+
+/** Seeded §16.4 defaults (Org-Admin-configurable via configureJoiningTimeRules). */
+const DEFAULT_JOINING_TIME_RULES: JoiningTimeRule[] = [
+  { band: "LOCAL", sameStation: true, minDistanceKm: 0, maxDistanceKm: 0, joiningTimeDays: 0 },
+  { band: "SHORT", sameStation: false, minDistanceKm: 0, maxDistanceKm: 200, joiningTimeDays: 3 },
+  { band: "MEDIUM", sameStation: false, minDistanceKm: 200, maxDistanceKm: 500, joiningTimeDays: 5 },
+  { band: "LONG", sameStation: false, minDistanceKm: 500, maxDistanceKm: 1000, joiningTimeDays: 7 },
+  { band: "OUTSTATION", sameStation: false, minDistanceKm: 1000, joiningTimeDays: 10 },
+];
+
+/** BRD G05 §16.5 open configuration parameters consumed by the administration flows. */
+export interface TransferAdministrationPolicy {
+  /** Publication service channel; system channels (IN_APP/EMAIL/SMS) serve on approval (FR-G05-020 AC1). */
+  defaultDeliveryChannel: "IN_APP" | "EMAIL" | "SMS" | "REGISTERED_POST" | "HAND_DELIVERY" | "PUBLISHED_NOTICE";
+  /** Statutory non-acknowledgement window before DEEMED_SERVED (JOB-G05-SERVE-DEEM). */
+  deemedServiceWindowDays: number;
+  /** Charge-handover dispute resolution clock (JOB-G05-DISPUTE-SLA). */
+  disputeSlaHours: number;
+  /** Permissible quarter retention beyond LWD before ERR-G05-QUARTER-OVERSTAY. */
+  permissibleRetentionMonths: number;
+  /** Policy cap applied when a deputation record does not carry an explicit cap. */
+  deputationDefaultMaxTenureMonths: number;
+}
+
+const DEFAULT_ADMINISTRATION_POLICY: TransferAdministrationPolicy = {
+  defaultDeliveryChannel: "IN_APP",
+  deemedServiceWindowDays: 7,
+  disputeSlaHours: 72,
+  permissibleRetentionMonths: 2,
+  deputationDefaultMaxTenureMonths: 36,
+};
+
 export interface TransferRepository {
   countOrders(): number;
   insertOrder(order: TransferOrder): void;
@@ -76,6 +132,34 @@ export interface TransferRepository {
   listRelievingOrders(scope: TenantScope): RelievingOrder[];
   insertJoiningReport(joiningReport: JoiningReport): void;
   listJoiningReports(scope: TenantScope): JoiningReport[];
+  /** PH-08B administration policy + joining-time band rules (config entities, seeded defaults). */
+  getAdministrationPolicy(scope: TenantScope): TransferAdministrationPolicy;
+  configureAdministrationPolicy(scope: TenantScope, policy: TransferAdministrationPolicy): void;
+  listJoiningTimeRules(scope: TenantScope): JoiningTimeRule[];
+  configureJoiningTimeRules(scope: TenantScope, rules: JoiningTimeRule[]): void;
+  /** order_acknowledgements — proof-of-service rows (FR-G05-020). */
+  countAcknowledgements(): number;
+  insertAcknowledgement(acknowledgement: OrderAcknowledgement): void;
+  updateAcknowledgement(acknowledgement: OrderAcknowledgement): void;
+  findAcknowledgementByOrder(scope: TenantScope, transferOrderId: string): OrderAcknowledgement | undefined;
+  /** charge_handovers — handover/assumption incl. under-protest (FR-G05-007). */
+  countChargeHandovers(): number;
+  insertChargeHandover(handover: ChargeHandover): void;
+  updateChargeHandover(handover: ChargeHandover): void;
+  findChargeHandover(scope: TenantScope, chargeHandoverId: string): ChargeHandover | undefined;
+  listChargeHandoversByOrder(scope: TenantScope, transferOrderId: string): ChargeHandover[];
+  /** deputation_records — tenure caps + repatriation (FR-G05-011). */
+  countDeputations(): number;
+  insertDeputationRecord(record: DeputationRecord): void;
+  updateDeputationRecord(record: DeputationRecord): void;
+  findDeputationRecord(scope: TenantScope, deputationId: string): DeputationRecord | undefined;
+  listDeputationRecords(scope: TenantScope): DeputationRecord[];
+  /** quarter_allotments — estate retention + penal-rate flip (FR-G05-022). */
+  countQuarterAllotments(): number;
+  insertQuarterAllotment(allotment: QuarterAllotment): void;
+  updateQuarterAllotment(allotment: QuarterAllotment): void;
+  findQuarterAllotment(scope: TenantScope, quarterAllotmentId: string): QuarterAllotment | undefined;
+  listQuarterAllotments(scope: TenantScope): QuarterAllotment[];
 }
 
 interface OrderNumberSequenceRow {
@@ -104,6 +188,12 @@ export class InMemoryTransferRepository implements TransferRepository {
   private readonly relievingOrders: RelievingOrder[] = [];
   private readonly joiningReports: JoiningReport[] = [];
   private readonly clearanceDepartmentConfig = new Map<string, ClearanceDepartmentConfig[]>();
+  private readonly administrationPolicyConfig = new Map<string, TransferAdministrationPolicy>();
+  private readonly joiningTimeRuleConfig = new Map<string, JoiningTimeRule[]>();
+  private readonly acknowledgements: OrderAcknowledgement[] = [];
+  private readonly chargeHandovers: ChargeHandover[] = [];
+  private readonly deputationRecords: DeputationRecord[] = [];
+  private readonly quarterAllotments: QuarterAllotment[] = [];
 
   countOrders(): number {
     return this.orders.length;
@@ -263,6 +353,132 @@ export class InMemoryTransferRepository implements TransferRepository {
 
   listJoiningReports(scope: TenantScope): JoiningReport[] {
     return this.joiningReports.filter((item) => item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId));
+  }
+
+  getAdministrationPolicy(scope: TenantScope): TransferAdministrationPolicy {
+    const configured = this.administrationPolicyConfig.get(scope.tenantId);
+    return { ...(configured ?? DEFAULT_ADMINISTRATION_POLICY) };
+  }
+
+  configureAdministrationPolicy(scope: TenantScope, policy: TransferAdministrationPolicy): void {
+    this.administrationPolicyConfig.set(scope.tenantId, { ...policy });
+  }
+
+  listJoiningTimeRules(scope: TenantScope): JoiningTimeRule[] {
+    const configured = this.joiningTimeRuleConfig.get(scope.tenantId);
+    return (configured ?? DEFAULT_JOINING_TIME_RULES).map((rule) => ({ ...rule }));
+  }
+
+  configureJoiningTimeRules(scope: TenantScope, rules: JoiningTimeRule[]): void {
+    if (rules.length === 0) {
+      throw new FoundationError("VALIDATION_FAILED", "At least one joining-time rule is required", { field: "rules" });
+    }
+    this.joiningTimeRuleConfig.set(
+      scope.tenantId,
+      rules.map((rule) => ({ ...rule }))
+    );
+  }
+
+  countAcknowledgements(): number {
+    return this.acknowledgements.length;
+  }
+
+  insertAcknowledgement(acknowledgement: OrderAcknowledgement): void {
+    this.acknowledgements.push(acknowledgement);
+  }
+
+  updateAcknowledgement(acknowledgement: OrderAcknowledgement): void {
+    const index = this.acknowledgements.findIndex((item) => item.id === acknowledgement.id);
+    if (index < 0) {
+      throw new FoundationError("NOT_FOUND", "Order acknowledgement not found");
+    }
+    this.acknowledgements[index] = acknowledgement;
+  }
+
+  findAcknowledgementByOrder(scope: TenantScope, transferOrderId: string): OrderAcknowledgement | undefined {
+    return this.acknowledgements.find(
+      (item) => item.transferOrderId === transferOrderId && item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId)
+    );
+  }
+
+  countChargeHandovers(): number {
+    return this.chargeHandovers.length;
+  }
+
+  insertChargeHandover(handover: ChargeHandover): void {
+    this.chargeHandovers.push(handover);
+  }
+
+  updateChargeHandover(handover: ChargeHandover): void {
+    const index = this.chargeHandovers.findIndex((item) => item.id === handover.id);
+    if (index < 0) {
+      throw new FoundationError("NOT_FOUND", "Charge handover not found");
+    }
+    this.chargeHandovers[index] = handover;
+  }
+
+  findChargeHandover(scope: TenantScope, chargeHandoverId: string): ChargeHandover | undefined {
+    return this.chargeHandovers.find(
+      (item) => item.id === chargeHandoverId && item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId)
+    );
+  }
+
+  listChargeHandoversByOrder(scope: TenantScope, transferOrderId: string): ChargeHandover[] {
+    return this.chargeHandovers.filter(
+      (item) => item.transferOrderId === transferOrderId && item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId)
+    );
+  }
+
+  countDeputations(): number {
+    return this.deputationRecords.length;
+  }
+
+  insertDeputationRecord(record: DeputationRecord): void {
+    this.deputationRecords.push(record);
+  }
+
+  updateDeputationRecord(record: DeputationRecord): void {
+    const index = this.deputationRecords.findIndex((item) => item.id === record.id);
+    if (index < 0) {
+      throw new FoundationError("NOT_FOUND", "Deputation record not found");
+    }
+    this.deputationRecords[index] = record;
+  }
+
+  findDeputationRecord(scope: TenantScope, deputationId: string): DeputationRecord | undefined {
+    return this.deputationRecords.find(
+      (item) => item.id === deputationId && item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId)
+    );
+  }
+
+  listDeputationRecords(scope: TenantScope): DeputationRecord[] {
+    return this.deputationRecords.filter((item) => item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId));
+  }
+
+  countQuarterAllotments(): number {
+    return this.quarterAllotments.length;
+  }
+
+  insertQuarterAllotment(allotment: QuarterAllotment): void {
+    this.quarterAllotments.push(allotment);
+  }
+
+  updateQuarterAllotment(allotment: QuarterAllotment): void {
+    const index = this.quarterAllotments.findIndex((item) => item.id === allotment.id);
+    if (index < 0) {
+      throw new FoundationError("NOT_FOUND", "Quarter allotment not found");
+    }
+    this.quarterAllotments[index] = allotment;
+  }
+
+  findQuarterAllotment(scope: TenantScope, quarterAllotmentId: string): QuarterAllotment | undefined {
+    return this.quarterAllotments.find(
+      (item) => item.id === quarterAllotmentId && item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId)
+    );
+  }
+
+  listQuarterAllotments(scope: TenantScope): QuarterAllotment[] {
+    return this.quarterAllotments.filter((item) => item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId));
   }
 
   private requireSequence(sequenceId: string): OrderNumberSequenceRow {
@@ -434,6 +650,63 @@ const INSERT_JOINING_REPORT =
   "INSERT INTO joining_reports (tenant_id, entity_id, joining_report_no, transfer_order_id, relieving_order_id, employee_id, dest_org_unit_id, reported_date, joining_date, service_continuity_asserted, status) " +
   "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) " +
   "RETURNING id, tenant_id, entity_id, joining_report_no, transfer_order_id, relieving_order_id, employee_id, dest_org_unit_id, reported_date, joining_date, service_continuity_asserted, status";
+
+// --- PH-08B administration entities (migration 0009) --------------------------------------
+
+const INSERT_ORDER_ACKNOWLEDGEMENT =
+  "INSERT INTO order_acknowledgements (tenant_id, entity_id, transfer_order_id, employee_id, served_on_date, delivery_channel, served_by, acknowledgement_status, proof_document_id) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) " +
+  "RETURNING id, tenant_id, entity_id, transfer_order_id, employee_id, served_on_date, delivery_channel, served_by, acknowledgement_status, acknowledged_at, deemed_served_reason, proof_document_id";
+
+const MIRROR_ORDER_SERVED =
+  "UPDATE transfer_orders SET served_on_date = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
+
+const ACKNOWLEDGE_ORDER_ACKNOWLEDGEMENT =
+  "UPDATE order_acknowledgements SET acknowledgement_status = 'ACKNOWLEDGED', acknowledged_at = $2, updated_at = now() " +
+  "WHERE id = $1 AND is_deleted = false " +
+  "RETURNING id, transfer_order_id, acknowledgement_status, acknowledged_at";
+
+const MIRROR_ORDER_ACKNOWLEDGED =
+  "UPDATE transfer_orders SET acknowledged_at = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
+
+const DEEM_ORDER_SERVED =
+  "UPDATE order_acknowledgements SET acknowledgement_status = 'DEEMED_SERVED', deemed_served_reason = $2, updated_at = now() " +
+  "WHERE id = $1 AND is_deleted = false " +
+  "RETURNING id, transfer_order_id, acknowledgement_status, deemed_served_reason";
+
+const INSERT_CHARGE_HANDOVER =
+  "INSERT INTO charge_handovers (tenant_id, entity_id, transfer_order_id, phase, relinquishing_employee_id, receiving_employee_id, charge_type, handover_date, assets_handed, cash_imprest_amount, pending_files_count, handover_note_document_id, status) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) " +
+  "RETURNING id, tenant_id, entity_id, transfer_order_id, phase, status, under_protest";
+
+const UPDATE_CHARGE_HANDOVER_STATUS =
+  "UPDATE charge_handovers SET status = $2, under_protest = $3, dispute_sla_due_at = $4, forced_action_type = $5, forced_action_reason = $6, forced_action_by = $7, accepted_by = $8, accepted_at = $9, updated_at = now() " +
+  "WHERE id = $1 AND is_deleted = false " +
+  "RETURNING id, transfer_order_id, status, under_protest, dispute_sla_due_at, forced_action_type";
+
+const INSERT_DEPUTATION_RECORD =
+  "INSERT INTO deputation_records (tenant_id, entity_id, transfer_order_id, employee_id, borrowing_org_unit_id, lending_org_unit_id, deputation_terms, start_date, initial_tenure_months, current_end_date, max_tenure_months, repatriation_due_date) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) " +
+  "RETURNING id, tenant_id, entity_id, transfer_order_id, employee_id, start_date, current_end_date, max_tenure_months, extension_count, repatriation_status";
+
+const EXTEND_DEPUTATION_RECORD =
+  "UPDATE deputation_records SET current_end_date = $2, extension_count = extension_count + 1, repatriation_due_date = $2, repatriation_status = 'EXTENDED', updated_at = now() " +
+  "WHERE id = $1 AND is_deleted = false " +
+  "RETURNING id, current_end_date, extension_count, repatriation_status";
+
+const REPATRIATE_DEPUTATION_RECORD =
+  "UPDATE deputation_records SET repatriation_status = 'REPATRIATED', updated_at = now() WHERE id = $1 AND is_deleted = false " +
+  "RETURNING id, repatriation_status";
+
+const INSERT_QUARTER_ALLOTMENT =
+  "INSERT INTO quarter_allotments (tenant_id, entity_id, employee_id, transfer_order_id, quarter_ref, org_unit_id, retention_status, vacate_by_date, licence_fee_rate) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) " +
+  "RETURNING id, tenant_id, entity_id, quarter_ref, retention_status, vacate_by_date, penal_rate_applies";
+
+const UPDATE_QUARTER_ALLOTMENT_STATE =
+  "UPDATE quarter_allotments SET retention_status = $2, retention_allowed = $3, penal_rate_applies = $4, licence_fee_rate = $5, licence_fee_recovery_ref = $6, vacated_on = $7, updated_at = now() " +
+  "WHERE id = $1 AND is_deleted = false " +
+  "RETURNING id, retention_status, retention_allowed, penal_rate_applies, licence_fee_rate, licence_fee_recovery_ref, vacated_on";
 
 /**
  * Postgres-backed G05 transfer repository over the frozen tables
@@ -676,5 +949,210 @@ export class PgTransferRepository {
       const checklistResult = await client.query(BUMP_CHECKLIST_CLEARED, [item.clearance_checklist_id]);
       return { item, checklist: checklistResult.rows[0] as ClearanceChecklistRow };
     });
+  }
+
+  /**
+   * Serve a transfer order (FR-G05-020): insert the order_acknowledgements proof-of-service row
+   * and mirror served_on_date onto transfer_orders in ONE transaction — no half-served order.
+   */
+  async serveOrder(input: {
+    tenantId: string;
+    entityId: string;
+    transferOrderId: string;
+    employeeId: string;
+    servedOnDate: string;
+    deliveryChannel: string;
+    servedBy?: string;
+    proofDocumentId?: string;
+  }): Promise<{ acknowledgementId: string }> {
+    return withTransaction(this.pool, async (client) => {
+      const inserted = await client.query(INSERT_ORDER_ACKNOWLEDGEMENT, [
+        input.tenantId,
+        input.entityId,
+        input.transferOrderId,
+        input.employeeId,
+        input.servedOnDate,
+        input.deliveryChannel,
+        input.servedBy ?? null,
+        "SERVED",
+        input.proofDocumentId ?? null,
+      ]);
+      await client.query(MIRROR_ORDER_SERVED, [input.tenantId, input.transferOrderId, input.servedOnDate]);
+      return { acknowledgementId: (inserted.rows[0] as { id: string }).id };
+    });
+  }
+
+  /** Acknowledge + mirror acknowledged_at onto the order in ONE transaction (FR-G05-020 AC2). */
+  async acknowledgeOrder(input: { tenantId: string; transferOrderId: string; acknowledgementId: string; acknowledgedAt: string }): Promise<void> {
+    await withTransaction(this.pool, async (client) => {
+      const updated = await client.query(ACKNOWLEDGE_ORDER_ACKNOWLEDGEMENT, [input.acknowledgementId, input.acknowledgedAt]);
+      if (!updated.rows[0]) {
+        throw new FoundationError("NOT_FOUND", "Order acknowledgement not found");
+      }
+      await client.query(MIRROR_ORDER_ACKNOWLEDGED, [input.tenantId, input.transferOrderId, input.acknowledgedAt]);
+    });
+  }
+
+  /** Flip an unacknowledged service row to DEEMED_SERVED with its recorded basis (JOB-G05-SERVE-DEEM). */
+  async deemOrderServed(acknowledgementId: string, deemedServedReason: string): Promise<void> {
+    const result = await this.pool.query(DEEM_ORDER_SERVED, [acknowledgementId, deemedServedReason]);
+    if (!result.rows[0]) {
+      throw new FoundationError("NOT_FOUND", "Order acknowledgement not found");
+    }
+  }
+
+  async insertChargeHandover(input: {
+    tenantId: string;
+    entityId: string;
+    transferOrderId: string;
+    phase: string;
+    relinquishingEmployeeId: string;
+    receivingEmployeeId?: string;
+    chargeType: string;
+    handoverDate: string;
+    assetsHanded?: unknown;
+    cashImprestAmount?: number;
+    pendingFilesCount?: number;
+    handoverNoteDocumentId?: string;
+    status: string;
+  }): Promise<{ chargeHandoverId: string }> {
+    const result = await this.pool.query(INSERT_CHARGE_HANDOVER, [
+      input.tenantId,
+      input.entityId,
+      input.transferOrderId,
+      input.phase,
+      input.relinquishingEmployeeId,
+      input.receivingEmployeeId ?? null,
+      input.chargeType,
+      input.handoverDate,
+      input.assetsHanded === undefined ? null : JSON.stringify(input.assetsHanded),
+      input.cashImprestAmount ?? null,
+      input.pendingFilesCount ?? null,
+      input.handoverNoteDocumentId ?? null,
+      input.status,
+    ]);
+    return { chargeHandoverId: (result.rows[0] as { id: string }).id };
+  }
+
+  async updateChargeHandoverStatus(input: {
+    chargeHandoverId: string;
+    status: string;
+    underProtest: boolean;
+    disputeSlaDueAt?: string;
+    forcedActionType?: string;
+    forcedActionReason?: string;
+    forcedActionBy?: string;
+    acceptedBy?: string;
+    acceptedAt?: string;
+  }): Promise<void> {
+    const result = await this.pool.query(UPDATE_CHARGE_HANDOVER_STATUS, [
+      input.chargeHandoverId,
+      input.status,
+      input.underProtest,
+      input.disputeSlaDueAt ?? null,
+      input.forcedActionType ?? null,
+      input.forcedActionReason ?? null,
+      input.forcedActionBy ?? null,
+      input.acceptedBy ?? null,
+      input.acceptedAt ?? null,
+    ]);
+    if (!result.rows[0]) {
+      throw new FoundationError("NOT_FOUND", "Charge handover not found");
+    }
+  }
+
+  async insertDeputationRecord(input: {
+    tenantId: string;
+    entityId: string;
+    transferOrderId: string;
+    employeeId: string;
+    borrowingOrgUnitId: string;
+    lendingOrgUnitId: string;
+    deputationTerms?: unknown;
+    startDate: string;
+    initialTenureMonths: number;
+    currentEndDate: string;
+    maxTenureMonths: number;
+    repatriationDueDate: string;
+  }): Promise<{ deputationId: string }> {
+    const result = await this.pool.query(INSERT_DEPUTATION_RECORD, [
+      input.tenantId,
+      input.entityId,
+      input.transferOrderId,
+      input.employeeId,
+      input.borrowingOrgUnitId,
+      input.lendingOrgUnitId,
+      input.deputationTerms === undefined ? null : JSON.stringify(input.deputationTerms),
+      input.startDate,
+      input.initialTenureMonths,
+      input.currentEndDate,
+      input.maxTenureMonths,
+      input.repatriationDueDate,
+    ]);
+    return { deputationId: (result.rows[0] as { id: string }).id };
+  }
+
+  /** Cap-checked tenure extension writes end date, count, and due date in one statement. */
+  async extendDeputationRecord(deputationId: string, newEndDate: string): Promise<void> {
+    const result = await this.pool.query(EXTEND_DEPUTATION_RECORD, [deputationId, newEndDate]);
+    if (!result.rows[0]) {
+      throw new FoundationError("NOT_FOUND", "Deputation record not found");
+    }
+  }
+
+  async repatriateDeputationRecord(deputationId: string): Promise<void> {
+    const result = await this.pool.query(REPATRIATE_DEPUTATION_RECORD, [deputationId]);
+    if (!result.rows[0]) {
+      throw new FoundationError("NOT_FOUND", "Deputation record not found");
+    }
+  }
+
+  async insertQuarterAllotment(input: {
+    tenantId: string;
+    entityId: string;
+    employeeId: string;
+    transferOrderId?: string;
+    quarterRef: string;
+    orgUnitId: string;
+    retentionStatus: string;
+    vacateByDate?: string;
+    licenceFeeRate?: number;
+  }): Promise<{ quarterAllotmentId: string }> {
+    const result = await this.pool.query(INSERT_QUARTER_ALLOTMENT, [
+      input.tenantId,
+      input.entityId,
+      input.employeeId,
+      input.transferOrderId ?? null,
+      input.quarterRef,
+      input.orgUnitId,
+      input.retentionStatus,
+      input.vacateByDate ?? null,
+      input.licenceFeeRate ?? null,
+    ]);
+    return { quarterAllotmentId: (result.rows[0] as { id: string }).id };
+  }
+
+  /** One-statement retention state write: approval, penal-rate flip (JOB-G05-QTR-OVERSTAY), vacation. */
+  async updateQuarterAllotmentState(input: {
+    quarterAllotmentId: string;
+    retentionStatus: string;
+    retentionAllowed: boolean;
+    penalRateApplies: boolean;
+    licenceFeeRate?: number;
+    licenceFeeRecoveryRef?: string;
+    vacatedOn?: string;
+  }): Promise<void> {
+    const result = await this.pool.query(UPDATE_QUARTER_ALLOTMENT_STATE, [
+      input.quarterAllotmentId,
+      input.retentionStatus,
+      input.retentionAllowed,
+      input.penalRateApplies,
+      input.licenceFeeRate ?? null,
+      input.licenceFeeRecoveryRef ?? null,
+      input.vacatedOn ?? null,
+    ]);
+    if (!result.rows[0]) {
+      throw new FoundationError("NOT_FOUND", "Quarter allotment not found");
+    }
   }
 }

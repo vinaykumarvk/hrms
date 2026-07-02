@@ -79,6 +79,7 @@ test("PH-06A persistence substrate: migrations + pg-backed G03/G05 repositories 
         "0005_g04_leave_sr_relay.sql",
         "0006_g02_workflow_config.sql",
         "0007_g03_payroll_feed.sql",
+        "0008_g06_establishment_qsl.sql",
       ]);
     }
 

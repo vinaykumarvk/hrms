@@ -17,9 +17,13 @@ import { SelfServiceSummary } from "./modules/g03/SelfServiceSummary";
 import { LeaveSrRelayWorkspace } from "./modules/g04/LeaveSrRelayWorkspace";
 import { TransferWorkspace } from "./modules/g05/TransferWorkspace";
 import { PromotionWorkspace } from "./modules/g06/PromotionWorkspace";
+import { DpcConvenePanel } from "./modules/g06/DpcConvenePanel";
 import { TrainingWorkspace } from "./modules/g07/TrainingWorkspace";
+import { TrainingNominationForm } from "./modules/g07/TrainingNominationForm";
 import { AparWorkspace } from "./modules/g08/AparWorkspace";
+import { AparTierForms } from "./modules/g08/AparTierForms";
 import { DisciplinaryWorkspace } from "./modules/g09/DisciplinaryWorkspace";
+import { DisciplinaryCaseWorkbench } from "./modules/g09/DisciplinaryCaseWorkbench";
 import { PayrollWorkspace } from "./modules/g10/PayrollWorkspace";
 import { PensionWorkspace } from "./modules/g11/PensionWorkspace";
 import { AnalyticsWorkspace } from "./modules/g14/AnalyticsWorkspace";
@@ -101,15 +105,19 @@ export function App() {
       <section className="workspace-grid" aria-label="Phase 08 statutory administration wave">
         <RouteGuard permissions={permissions} requiredPermission="g06.promotion.read" routeLabel="Promotions workspace (G06)">
           <PromotionWorkspace client={client} />
+          <DpcConvenePanel client={client} />
         </RouteGuard>
         <RouteGuard permissions={permissions} requiredPermission="g07.training.read" routeLabel="Training workspace (G07)">
           <TrainingWorkspace client={client} />
+          <TrainingNominationForm client={client} />
         </RouteGuard>
         <RouteGuard permissions={permissions} requiredPermission="g08.apar.read" routeLabel="APAR workspace (G08)">
           <AparWorkspace client={client} />
+          <AparTierForms client={client} permissions={permissions} />
         </RouteGuard>
         <RouteGuard permissions={permissions} requiredPermission="g09.case.read" routeLabel="Disciplinary workspace (G09)">
           <DisciplinaryWorkspace client={client} />
+          <DisciplinaryCaseWorkbench client={client} />
         </RouteGuard>
       </section>
       <section className="workspace-grid" aria-label="Phase 09 compensation wave">

@@ -6,6 +6,32 @@ import { ActorContext, FoundationError, TenantScope, nextId, pseudoHash64, requi
 import { EmployeeMasterService } from "../g01/employeeMasterService";
 import { ServiceRegisterService } from "../g12/serviceRegisterService";
 import { DocumentVaultService } from "../g13/documentVaultService";
+import {
+  EstablishmentQslRepository,
+  QSL_ENGINE_VERSION,
+  QualifyingServiceSnapshot,
+  SanctionedPost,
+  ServiceExclusionRule,
+  ServicePeriodInput,
+  SuspensionTreatment,
+  computeNetQualifyingService,
+} from "./establishmentQslRepository";
+import {
+  InMemoryPromotionDepthRepository,
+  LegalCaseLink,
+  LegalForum,
+  LegalLinkedEntityType,
+  MacpClockEffect,
+  ProbationRecord,
+  PromotionDepthRepository,
+  PromotionRefusal,
+  ReservationCategory,
+  ReservationRoster,
+  RosterPoint,
+  RosterType,
+  ConsequentialSeniorityMode,
+  addMonthsIso,
+} from "./promotionDepthRepository";
 
 export type SeniorityListStatus = "DRAFT" | "PUBLISHED_TENTATIVE" | "FINALISED";
 export type PromotionCaseStatus = "DRAFT" | "ELIGIBILITY_DONE" | "DPC_HELD" | "ORDERS_ISSUED" | "CLOSED";
@@ -41,17 +67,35 @@ export interface DpcPanelMember {
   role: string;
 }
 
+/** FR-004: candidate band on the crucial date, from the pinned DoPT slab (Appendix D.1). */
+export type ZoneOfConsideration = "IN_ZONE" | "EXTENDED_ZONE" | "OUT_OF_ZONE";
+
+export interface PromotionCandidate {
+  employeeId: string;
+  rank: number;
+  fitness: "PENDING" | "FIT" | "UNFIT";
+  /** FR-004 AC-3: zone band pinned on the crucial date — never a flat multiplier. */
+  zoneOfConsideration: ZoneOfConsideration;
+  isSelected: boolean;
+}
+
 export interface PromotionCase {
   id: string;
   tenantId: string;
   entityId?: string;
   caseNo: string;
   seniorityListId: string;
+  /** FR-015 linkage: the register post the case vacancy figure was reconciled against. */
+  sanctionedPostId?: string;
   fromDesignation: string;
   toDesignation: string;
   vacancies: number;
+  /** FR-004: the cut-off date on which eligibility/zone/debarment are judged (§5.4 glossary). */
+  crucialDate: string;
+  /** Pinned slab output: zone = 5 if v=1; 8 if v=2; 3×v if v≥3 (Appendix D.1). */
+  zoneSize: number;
   status: PromotionCaseStatus;
-  candidates: Array<{ employeeId: string; rank: number; fitness: "PENDING" | "FIT" | "UNFIT" }>;
+  candidates: PromotionCandidate[];
   dpc?: {
     quorumRequired: number;
     participatingMembers: number;
@@ -95,12 +139,98 @@ export interface G06PayImpactSignal {
   status: "READY_FOR_G10";
 }
 
+/** FR-015 register maker input; current_vacancies is always derived, never accepted. */
+export interface SanctionedPostInput {
+  cadreId: string;
+  gradeDesignationId: string;
+  orgUnitId: string;
+  sanctionOrderRef: string;
+  sanctionedStrength: number;
+  filledCount: number;
+  drQuotaPct: number;
+  promotionQuotaPct: number;
+  ldceQuotaPct: number;
+  anticipatedVacancies?: number;
+  carriedForwardVacancies?: number;
+  asOnDate: string;
+  /** P01 checker — must be a different actor than the maker (SoD). */
+  approverActorId: string;
+}
+
+/** FR-015 AC-3: promotion-quota vacancy figure consumed by FR-004 case creation. */
+export interface VacancyComputation {
+  sanctionedPostId: string;
+  sanctionedStrength: number;
+  filledCount: number;
+  currentVacancies: number;
+  anticipatedVacancies: number;
+  carriedForwardVacancies: number;
+  promotionQuotaPct: number;
+  promotionQuotaVacancies: number;
+}
+
+export interface ServiceExclusionRuleInput {
+  ruleCode: string;
+  eolCountsAsQualifying: boolean;
+  eolMaxCondonableDays?: number;
+  diesNonExcluded: boolean;
+  suspensionTreatment: SuspensionTreatment;
+  adhocServiceCounts: boolean;
+  adhocCountsIfRegularised: boolean;
+  deputationCounts: boolean;
+  breakInServiceResetsClock: boolean;
+  effectiveFrom?: string;
+  /** Rule changes are maker≠checker governed like register amendments. */
+  approverActorId: string;
+}
+
+export interface QualifyingServiceComputeInput {
+  employeeId: string;
+  gradeDesignationId: string;
+  asOfDate: string;
+  grossServiceDays: number;
+  periods: ServicePeriodInput[];
+  serviceExclusionRuleId: string;
+}
+
+/** One APAR year fed to the eligibility engine (read by reference from G08, never forked). */
+export interface AparYearInput {
+  year: string;
+  grading: "MEETS_BENCHMARK" | "BELOW_BENCHMARK" | "ADVERSE";
+  /** VAL-G06-APAR-USABLE (§5.6-16): adverse entry counts only if communicated ... */
+  communicated: boolean;
+  /** ... and the representation is DISPOSED or NOT_APPLICABLE (Dev Dutt line). */
+  representationStatus?: "PENDING" | "DISPOSED" | "NOT_APPLICABLE";
+}
+
+/** APAR-usability gate outcome recorded on the assessment (§5.6-16). */
+export interface AparUsabilityGate {
+  usableAdverseYears: string[];
+  /** Uncommunicated / representation-pending adverse years — cannot be relied upon. */
+  unusableAdverseYears: string[];
+  benchmarkMet: boolean;
+}
+
+/** FR-003 eligibility citation of the current qualifying_service_ledger snapshot. */
+export interface PromotionEligibilityAssessment {
+  employeeId: string;
+  gradeDesignationId: string;
+  requiredQualifyingYears: number;
+  netQualifyingYears: number;
+  qualifyingServiceMet: boolean;
+  aparGate: AparUsabilityGate;
+  eligible: boolean;
+  citedQslSnapshotId: string;
+}
+
 export class PromotionService {
   private readonly seniorityLists: SeniorityList[] = [];
   private readonly promotionCases: PromotionCase[] = [];
   private readonly promotionOrders: PromotionOrder[] = [];
   private readonly macpCases: MacpCase[] = [];
   private readonly payImpactSignals: G06PayImpactSignal[] = [];
+  /** Latest FR-003 assessment per employee+grade — cited by the DPC APAR-usability guard. */
+  private readonly eligibilityAssessments = new Map<string, PromotionEligibilityAssessment>();
 
   constructor(
     private readonly employeeMaster: EmployeeMasterService,
@@ -109,8 +239,325 @@ export class PromotionService {
     private readonly workflow: HrmsWorkflowService,
     private readonly serviceRegister: ServiceRegisterService,
     private readonly documentVault: DocumentVaultService,
-    private readonly notifications: NotificationService
+    private readonly notifications: NotificationService,
+    private readonly establishmentQsl: EstablishmentQslRepository,
+    private readonly promotionDepth: PromotionDepthRepository = new InMemoryPromotionDepthRepository()
   ) {}
+
+  // -------------------------------------------------------------------------------------
+  // FR-015 (PPP-EST): sanctioned_posts establishment-strength register & vacancy computation
+  // -------------------------------------------------------------------------------------
+
+  /** Registers a sanctioned_posts row (maker≠checker); vacancies derived, quota split validated. */
+  registerSanctionedPost(actor: ActorContext, input: SanctionedPostInput): SanctionedPost {
+    this.authorization.check(actor, "g06.establishment.write", actor);
+    this.requireDistinctApprover(actor, input.approverActorId, "sanctioned-post registration");
+    this.validateQuotaSplit(input.drQuotaPct, input.promotionQuotaPct, input.ldceQuotaPct);
+    this.validateStrength(input.sanctionedStrength, input.filledCount);
+    if (!input.sanctionOrderRef) {
+      throw new FoundationError("VALIDATION_FAILED", "sanctionOrderRef is required", { field: "sanctionOrderRef" });
+    }
+    const post: SanctionedPost = {
+      id: nextId("sanctioned-post", this.establishmentQsl.countSanctionedPosts()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      cadreId: input.cadreId,
+      gradeDesignationId: input.gradeDesignationId,
+      orgUnitId: input.orgUnitId,
+      sanctionOrderRef: input.sanctionOrderRef,
+      sanctionedStrength: input.sanctionedStrength,
+      filledCount: input.filledCount,
+      drQuotaPct: input.drQuotaPct,
+      promotionQuotaPct: input.promotionQuotaPct,
+      ldceQuotaPct: input.ldceQuotaPct,
+      currentVacancies: input.sanctionedStrength - input.filledCount,
+      anticipatedVacancies: input.anticipatedVacancies ?? 0,
+      carriedForwardVacancies: input.carriedForwardVacancies ?? 0,
+      asOnDate: input.asOnDate,
+      status: "ACTIVE",
+      version: 1,
+      makerActorId: actor.userId,
+      approverActorId: input.approverActorId,
+    };
+    this.establishmentQsl.saveSanctionedPost(post);
+    this.audit.recordMutation(actor, {
+      action: "G06_SANCTIONED_POST_REGISTERED",
+      subjectRef: `g06_sanctioned_posts:${post.id}`,
+      metadata: { makerActorId: post.makerActorId, approverActorId: post.approverActorId, currentVacancies: post.currentVacancies },
+    });
+    return { ...post };
+  }
+
+  /** FR-015 AC-5: strength revision (maker≠checker), re-deriving current_vacancies. */
+  reviseSanctionedPost(
+    actor: ActorContext,
+    sanctionedPostId: string,
+    input: Partial<Pick<SanctionedPostInput, "sanctionedStrength" | "filledCount" | "drQuotaPct" | "promotionQuotaPct" | "ldceQuotaPct" | "anticipatedVacancies" | "carriedForwardVacancies">> & {
+      approverActorId: string;
+    }
+  ): SanctionedPost {
+    this.authorization.check(actor, "g06.establishment.write", actor);
+    this.requireDistinctApprover(actor, input.approverActorId, "sanctioned-post revision");
+    const post = this.requireSanctionedPost(actor, sanctionedPostId);
+    const revised: SanctionedPost = {
+      ...post,
+      sanctionedStrength: input.sanctionedStrength ?? post.sanctionedStrength,
+      filledCount: input.filledCount ?? post.filledCount,
+      drQuotaPct: input.drQuotaPct ?? post.drQuotaPct,
+      promotionQuotaPct: input.promotionQuotaPct ?? post.promotionQuotaPct,
+      ldceQuotaPct: input.ldceQuotaPct ?? post.ldceQuotaPct,
+      anticipatedVacancies: input.anticipatedVacancies ?? post.anticipatedVacancies,
+      carriedForwardVacancies: input.carriedForwardVacancies ?? post.carriedForwardVacancies,
+      version: post.version + 1,
+      status: "REVISED",
+      makerActorId: actor.userId,
+      approverActorId: input.approverActorId,
+    };
+    this.validateQuotaSplit(revised.drQuotaPct, revised.promotionQuotaPct, revised.ldceQuotaPct);
+    this.validateStrength(revised.sanctionedStrength, revised.filledCount);
+    revised.currentVacancies = revised.sanctionedStrength - revised.filledCount;
+    this.establishmentQsl.saveSanctionedPost(revised);
+    this.audit.recordMutation(actor, {
+      action: "G06_SANCTIONED_POST_REVISED",
+      subjectRef: `g06_sanctioned_posts:${revised.id}`,
+      metadata: { version: revised.version, makerActorId: revised.makerActorId, approverActorId: revised.approverActorId },
+    });
+    return { ...revised };
+  }
+
+  /**
+   * FR-015 strength reconciliation (JOB-G06-ESTAB-RECONCILE): syncs filled_count against the
+   * incumbent headcount and re-derives current_vacancies; filled > sanctioned is blocked with
+   * STRENGTH_INCONSISTENT.
+   */
+  reconcileSanctionedPost(actor: ActorContext, sanctionedPostId: string, input: { filledCount: number }): SanctionedPost {
+    this.authorization.check(actor, "g06.establishment.write", actor);
+    const post = this.requireSanctionedPost(actor, sanctionedPostId);
+    if (input.filledCount > post.sanctionedStrength) {
+      throw new FoundationError("STRENGTH_INCONSISTENT", "filled_count may not exceed sanctioned_strength", {
+        field: "filledCount",
+        details: { filledCount: input.filledCount, sanctionedStrength: post.sanctionedStrength },
+      });
+    }
+    if (input.filledCount < 0) {
+      throw new FoundationError("VALIDATION_FAILED", "filledCount must be non-negative", { field: "filledCount" });
+    }
+    const reconciled: SanctionedPost = {
+      ...post,
+      filledCount: input.filledCount,
+      currentVacancies: post.sanctionedStrength - input.filledCount,
+    };
+    this.establishmentQsl.saveSanctionedPost(reconciled);
+    this.audit.recordMutation(actor, {
+      action: "G06_ESTABLISHMENT_RECONCILED",
+      subjectRef: `g06_sanctioned_posts:${reconciled.id}`,
+      metadata: { filledCount: reconciled.filledCount, currentVacancies: reconciled.currentVacancies },
+    });
+    return { ...reconciled };
+  }
+
+  getSanctionedPost(scope: TenantScope, sanctionedPostId: string): SanctionedPost {
+    requireTenantScope(scope);
+    return this.requireSanctionedPost(scope, sanctionedPostId);
+  }
+
+  listSanctionedPosts(scope: TenantScope): SanctionedPost[] {
+    requireTenantScope(scope);
+    return this.establishmentQsl.listSanctionedPosts(scope);
+  }
+
+  /** FR-015 AC-3: promotion-quota vacancies = (current + anticipated + carried-forward) × promotion_quota_pct. */
+  getVacancyComputation(scope: TenantScope, sanctionedPostId: string): VacancyComputation {
+    requireTenantScope(scope);
+    const post = this.requireSanctionedPost(scope, sanctionedPostId);
+    const vacancyBase = post.currentVacancies + post.anticipatedVacancies + post.carriedForwardVacancies;
+    return {
+      sanctionedPostId: post.id,
+      sanctionedStrength: post.sanctionedStrength,
+      filledCount: post.filledCount,
+      currentVacancies: post.currentVacancies,
+      anticipatedVacancies: post.anticipatedVacancies,
+      carriedForwardVacancies: post.carriedForwardVacancies,
+      promotionQuotaPct: post.promotionQuotaPct,
+      promotionQuotaVacancies: Math.floor((vacancyBase * post.promotionQuotaPct) / 100),
+    };
+  }
+
+  // -------------------------------------------------------------------------------------
+  // FR-016 (PPP-QSL): qualifying_service_ledger + service_exclusion_rules engine
+  // -------------------------------------------------------------------------------------
+
+  /** Defines a pinned service_exclusion_rules row (maker≠checker governed like register edits). */
+  defineServiceExclusionRule(actor: ActorContext, input: ServiceExclusionRuleInput): ServiceExclusionRule {
+    this.authorization.check(actor, "g06.qsl.rule.write", actor);
+    this.requireDistinctApprover(actor, input.approverActorId, "service-exclusion rule change");
+    const rule: ServiceExclusionRule = {
+      id: nextId("service-exclusion-rule", this.establishmentQsl.countExclusionRules()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      ruleCode: input.ruleCode,
+      eolCountsAsQualifying: input.eolCountsAsQualifying,
+      eolMaxCondonableDays: input.eolMaxCondonableDays,
+      diesNonExcluded: input.diesNonExcluded,
+      suspensionTreatment: input.suspensionTreatment,
+      adhocServiceCounts: input.adhocServiceCounts,
+      adhocCountsIfRegularised: input.adhocCountsIfRegularised,
+      deputationCounts: input.deputationCounts,
+      breakInServiceResetsClock: input.breakInServiceResetsClock,
+      effectiveFrom: input.effectiveFrom,
+      isActive: true,
+      makerActorId: actor.userId,
+      approverActorId: input.approverActorId,
+    };
+    this.establishmentQsl.saveExclusionRule(rule);
+    this.audit.recordMutation(actor, {
+      action: "G06_SERVICE_EXCLUSION_RULE_DEFINED",
+      subjectRef: `g06_service_exclusion_rules:${rule.id}`,
+      metadata: { ruleCode: rule.ruleCode, makerActorId: rule.makerActorId, approverActorId: rule.approverActorId },
+    });
+    return { ...rule };
+  }
+
+  /**
+   * FR-016 AC-1/AC-2 (VAL-G06-QUALSVC): computes net qualifying service (gross − rule-driven
+   * exclusions) and persists an immutable snapshot; recomputation supersedes the prior snapshot
+   * atomically, never edits it.
+   */
+  computeQualifyingService(
+    actor: ActorContext,
+    input: QualifyingServiceComputeInput
+  ): { snapshot: QualifyingServiceSnapshot; supersededSnapshotId?: string } {
+    this.authorization.check(actor, "g06.qsl.compute", actor);
+    this.employeeMaster.getById(actor, input.employeeId);
+    const rule = this.establishmentQsl.findExclusionRule(actor, input.serviceExclusionRuleId);
+    if (!rule) {
+      throw new FoundationError("NOT_FOUND", "Service exclusion rule not found");
+    }
+    if (!rule.isActive) {
+      throw new FoundationError("PRECONDITION_FAILED", "Service exclusion rule is not active on the as-of date");
+    }
+    const computation = computeNetQualifyingService(rule, { grossServiceDays: input.grossServiceDays, periods: input.periods });
+    const snapshot: QualifyingServiceSnapshot = {
+      id: nextId("qsl-snapshot", this.establishmentQsl.countSnapshots()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      employeeId: input.employeeId,
+      gradeDesignationId: input.gradeDesignationId,
+      asOfDate: input.asOfDate,
+      grossServiceYears: computation.grossServiceYears,
+      totalExclusionDays: computation.totalExclusionDays,
+      netQualifyingYears: computation.netQualifyingYears,
+      exclusionBreakdownJson: computation.exclusionBreakdown,
+      serviceExclusionRuleId: rule.id,
+      computedByVersion: QSL_ENGINE_VERSION,
+      isCurrent: true,
+      computedAt: new Date().toISOString(),
+    };
+    const result = this.establishmentQsl.insertSnapshotSuperseding(snapshot);
+    this.audit.recordMutation(actor, {
+      action: "G06_QSL_SNAPSHOT_COMPUTED",
+      subjectRef: `g06_qualifying_service_ledger:${result.snapshot.id}`,
+      metadata: {
+        netQualifyingYears: result.snapshot.netQualifyingYears,
+        totalExclusionDays: result.snapshot.totalExclusionDays,
+        supersededSnapshotId: result.supersededSnapshotId,
+      },
+    });
+    return result;
+  }
+
+  /** FR-016 read contract: current citable snapshot — consumed by G06 eligibility now, G11 pension later. */
+  getCurrentQualifyingService(scope: TenantScope, employeeId: string, gradeDesignationId: string): QualifyingServiceSnapshot {
+    requireTenantScope(scope);
+    const snapshot = this.establishmentQsl.findCurrentSnapshot(scope, employeeId, gradeDesignationId);
+    if (!snapshot) {
+      throw new FoundationError("NOT_FOUND", "No current qualifying-service snapshot for employee/grade");
+    }
+    return snapshot;
+  }
+
+  /** Fetch any immutable snapshot by id (citation by qsl_snapshot_id). */
+  getQualifyingServiceSnapshot(scope: TenantScope, snapshotId: string): QualifyingServiceSnapshot {
+    requireTenantScope(scope);
+    const snapshot = this.establishmentQsl.findSnapshot(scope, snapshotId);
+    if (!snapshot) {
+      throw new FoundationError("NOT_FOUND", "Qualifying-service snapshot not found");
+    }
+    return snapshot;
+  }
+
+  /**
+   * FR-003 eligibility engine: qualifying service CITES the current QSL snapshot (FR-016 AC-4,
+   * never re-derived in G06), and the APAR-usability gate (VAL-G06-APAR-USABLE, §5.6-16) admits
+   * an adverse/below-benchmark APAR year only if it was communicated AND the representation is
+   * DISPOSED or NOT_APPLICABLE — an unusable entry is excluded from the reckoning entirely.
+   */
+  assessPromotionEligibility(
+    actor: ActorContext,
+    input: { employeeId: string; gradeDesignationId: string; minQualifyingServiceYears: number; aparYears?: AparYearInput[] }
+  ): PromotionEligibilityAssessment {
+    this.authorization.check(actor, "g06.promotion.case.write", actor);
+    const snapshot = this.establishmentQsl.findCurrentSnapshot(actor, input.employeeId, input.gradeDesignationId);
+    if (!snapshot) {
+      throw new FoundationError("PRECONDITION_FAILED", "No current qualifying-service snapshot — run the FR-016 compute first");
+    }
+    const aparGate = evaluateAparUsability(input.aparYears ?? []);
+    const qualifyingServiceMet = snapshot.netQualifyingYears >= input.minQualifyingServiceYears;
+    const assessment: PromotionEligibilityAssessment = {
+      employeeId: input.employeeId,
+      gradeDesignationId: input.gradeDesignationId,
+      requiredQualifyingYears: input.minQualifyingServiceYears,
+      netQualifyingYears: snapshot.netQualifyingYears,
+      qualifyingServiceMet,
+      aparGate,
+      // Eligible only when service is met AND no USABLE adverse year drags below benchmark.
+      eligible: qualifyingServiceMet && aparGate.benchmarkMet,
+      citedQslSnapshotId: snapshot.id,
+    };
+    this.eligibilityAssessments.set(`${input.employeeId}:${input.gradeDesignationId}`, assessment);
+    return { ...assessment, aparGate: { ...aparGate, usableAdverseYears: [...aparGate.usableAdverseYears], unusableAdverseYears: [...aparGate.unusableAdverseYears] } };
+  }
+
+  private requireDistinctApprover(actor: ActorContext, approverActorId: string, subject: string): void {
+    if (!approverActorId) {
+      throw new FoundationError("VALIDATION_FAILED", `approverActorId is required for ${subject}`, { field: "approverActorId" });
+    }
+    if (approverActorId === actor.userId) {
+      throw new FoundationError("FORBIDDEN", `Maker and approver must be distinct actors for ${subject} (SoD)`, {
+        field: "approverActorId",
+        details: { makerActorId: actor.userId },
+      });
+    }
+  }
+
+  private validateQuotaSplit(drQuotaPct: number, promotionQuotaPct: number, ldceQuotaPct: number): void {
+    if (drQuotaPct < 0 || promotionQuotaPct < 0 || ldceQuotaPct < 0 || drQuotaPct + promotionQuotaPct + ldceQuotaPct > 100) {
+      throw new FoundationError("QUOTA_SPLIT_INVALID", "DR + promotion + LDCE quota percentages must be non-negative and sum to at most 100", {
+        field: "promotionQuotaPct",
+        details: { drQuotaPct, promotionQuotaPct, ldceQuotaPct, total: drQuotaPct + promotionQuotaPct + ldceQuotaPct },
+      });
+    }
+  }
+
+  private validateStrength(sanctionedStrength: number, filledCount: number): void {
+    if (sanctionedStrength < 0 || filledCount < 0) {
+      throw new FoundationError("VALIDATION_FAILED", "sanctionedStrength and filledCount must be non-negative", { field: "sanctionedStrength" });
+    }
+    if (filledCount > sanctionedStrength) {
+      throw new FoundationError("STRENGTH_INCONSISTENT", "filled_count may not exceed sanctioned_strength", {
+        field: "filledCount",
+        details: { filledCount, sanctionedStrength },
+      });
+    }
+  }
+
+  private requireSanctionedPost(scope: TenantScope, sanctionedPostId: string): SanctionedPost {
+    const post = this.establishmentQsl.findSanctionedPost(scope, sanctionedPostId);
+    if (!post) {
+      throw new FoundationError("NOT_FOUND", "Sanctioned post not found");
+    }
+    return post;
+  }
 
   createSeniorityList(actor: ActorContext, input: { cadreId: string; effectiveDate: string; entries: SenioritySeed[] }): SeniorityList {
     this.authorization.check(actor, "g06.seniority.write", actor);
@@ -163,6 +610,14 @@ export class PromotionService {
     if (list.status !== "PUBLISHED_TENTATIVE") {
       throw new FoundationError("PRECONDITION_FAILED", "Only published tentative lists can be finalised");
     }
+    // §5.6-20: an active interim stay on the list blocks finalisation, not just order effecting.
+    const stay = this.promotionDepth.findActiveStay(actor, "SENIORITY_LIST", list.id);
+    if (stay) {
+      throw new FoundationError("ENTITY_SUB_JUDICE", "This can't be done because a required condition isn't met: active interim stay", {
+        field: "seniorityListId",
+        details: { legalCaseLinkId: stay.id, caseReference: stay.caseReference },
+      });
+    }
     const document = this.documentVault.createDocument(actor, {
       title: `Final Seniority List ${list.cadreId}`,
       classification: "CONFIDENTIAL",
@@ -181,37 +636,129 @@ export class PromotionService {
     return this.cloneSeniorityList(list);
   }
 
-  createPromotionCase(actor: ActorContext, input: { seniorityListId: string; vacancies: number; fromDesignation: string; toDesignation: string }): PromotionCase {
+  /**
+   * FR-004: creates the case, reconciles vacancies against sanctioned_posts, and assembles the
+   * zone of consideration with the PINNED non-linear slab (Appendix D.1: 5 if v=1; 8 if v=2;
+   * 3×v if v≥3) on the crucial date. Reserved-category candidates get the extended zone where
+   * the roster requires. Field assembly enforces the refusal debarment window (§5.6-18):
+   * re-consideration before next_consideration_after fails closed with EMPLOYEE_DEBARRED.
+   */
+  createPromotionCase(
+    actor: ActorContext,
+    input: {
+      seniorityListId: string;
+      vacancies: number;
+      fromDesignation: string;
+      toDesignation: string;
+      sanctionedPostId?: string;
+      /** FR-004 crucial date — defaults to the seniority list effective date. */
+      crucialDate?: string;
+      /** Reserved-category candidates eligible for the extended zone (roster-driven). */
+      reservedCategoryEmployeeIds?: string[];
+      /** Extra extended-zone slots for reserved categories (policy factor, Appendix D.1). */
+      extendedZoneSlots?: number;
+    }
+  ): PromotionCase {
     this.authorization.check(actor, "g06.promotion.case.write", actor);
     const list = this.requireSeniorityList(actor, input.seniorityListId);
     if (list.status !== "FINALISED") {
-      throw new FoundationError("PRECONDITION_FAILED", "Promotion case requires a final seniority list");
+      // BRD §9.4: a promotion case needs a FINALISED seniority list — 409 SENIORITY_LIST_NOT_FINAL.
+      throw new FoundationError("SENIORITY_LIST_NOT_FINAL", "Promotion case requires a finalised seniority list", {
+        field: "seniorityListId",
+        details: { seniorityListId: list.id, status: list.status },
+      });
     }
     if (input.vacancies < 1) {
       throw new FoundationError("VALIDATION_FAILED", "vacancies must be at least 1", { field: "vacancies" });
     }
-    const candidates = list.entries.slice(0, input.vacancies).map((entry) => ({ employeeId: entry.employeeId, rank: entry.rank, fitness: "PENDING" as const }));
+    if (input.sanctionedPostId) {
+      // VAL-G06-VACANCY-RECON: the case vacancy figure must equal the promotion-quota vacancies
+      // computed from the linked sanctioned_posts register — never a free-typed number.
+      const computation = this.getVacancyComputation(actor, input.sanctionedPostId);
+      if (input.vacancies !== computation.promotionQuotaVacancies) {
+        throw new FoundationError("VACANCY_NOT_RECONCILED", "Case vacancies do not equal the promotion-quota vacancies computed from sanctioned_posts", {
+          field: "vacancies",
+          details: {
+            requestedVacancies: input.vacancies,
+            promotionQuotaVacancies: computation.promotionQuotaVacancies,
+            currentVacancies: computation.currentVacancies,
+            sanctionedPostId: computation.sanctionedPostId,
+          },
+        });
+      }
+    }
+    const crucialDate = input.crucialDate ?? list.effectiveDate;
+    // Appendix D.1 pinned slab — configurable in policy, pinned to the worked vector here.
+    const zoneSize = zoneOfConsiderationSlab(input.vacancies);
+    const extendedZoneSlots = input.extendedZoneSlots ?? 0;
+    const reservedCategoryIds = new Set(input.reservedCategoryEmployeeIds ?? []);
+    const candidates: PromotionCandidate[] = list.entries
+      .map((entry): PromotionCandidate => {
+        const zone: ZoneOfConsideration =
+          entry.rank <= zoneSize
+            ? "IN_ZONE"
+            : reservedCategoryIds.has(entry.employeeId) && entry.rank <= zoneSize + extendedZoneSlots
+              ? "EXTENDED_ZONE"
+              : "OUT_OF_ZONE";
+        return { employeeId: entry.employeeId, rank: entry.rank, fitness: "PENDING", zoneOfConsideration: zone, isSelected: false };
+      })
+      .filter((candidate) => candidate.zoneOfConsideration !== "OUT_OF_ZONE");
+    for (const candidate of candidates) {
+      // §5.6-18: while a refusal is ACTIVE, the employee is barred from re-consideration
+      // before next_consideration_after — fail closed, never silently include.
+      const refusal = this.promotionDepth.findActiveRefusal(actor, candidate.employeeId, crucialDate);
+      if (refusal) {
+        throw new FoundationError("EMPLOYEE_DEBARRED", "Employee is within the refusal debarment window and cannot be re-considered", {
+          field: "seniorityListId",
+          details: {
+            employeeId: candidate.employeeId,
+            debarmentUntil: refusal.debarmentUntil,
+            nextConsiderationAfter: refusal.nextConsiderationAfter,
+            refusalId: refusal.id,
+          },
+        });
+      }
+    }
     const promotionCase: PromotionCase = {
       id: nextId("promotion-case", this.promotionCases.length),
       tenantId: actor.tenantId,
       entityId: actor.entityId,
       caseNo: `DPC/${list.effectiveDate.slice(0, 4)}/${String(this.promotionCases.length + 1).padStart(5, "0")}`,
       seniorityListId: list.id,
+      sanctionedPostId: input.sanctionedPostId,
       fromDesignation: input.fromDesignation,
       toDesignation: input.toDesignation,
       vacancies: input.vacancies,
+      crucialDate,
+      zoneSize,
       status: "ELIGIBILITY_DONE",
       candidates,
     };
     this.promotionCases.push(promotionCase);
-    this.audit.recordMutation(actor, { action: "G06_PROMOTION_CASE_CREATED", subjectRef: `g06_promotion_cases:${promotionCase.id}`, metadata: { candidates: candidates.length } });
+    this.audit.recordMutation(actor, {
+      action: "G06_PROMOTION_CASE_CREATED",
+      subjectRef: `g06_promotion_cases:${promotionCase.id}`,
+      metadata: { candidates: candidates.length, zoneSize, crucialDate },
+    });
     return this.clonePromotionCase(promotionCase);
   }
 
+  /**
+   * FR-005 DPC adjudication. Maker≠checker SoD (§5.6-8): a candidate on the case cannot sit on
+   * its panel unless RECUSED — violation is PANEL_CONFLICT_OF_INTEREST. Quorum failure is
+   * QUORUM_NOT_MET. A supersession citing an APAR year the usability gate rejected (§5.6-16)
+   * is APAR_NOT_USABLE. All three are BRD §9.4 domain codes thrown as the error's `code`.
+   */
   holdDpc(
     actor: ActorContext,
     promotionCaseId: string,
-    input: { panelMembers: DpcPanelMember[]; recusedEmployeeIds?: string[]; quorumRequired?: number }
+    input: {
+      panelMembers: DpcPanelMember[];
+      recusedEmployeeIds?: string[];
+      quorumRequired?: number;
+      /** DPC supersessions — each must cite a USABLE adverse APAR year (§5.6-16). */
+      supersessions?: Array<{ employeeId: string; citedAparYear: string }>;
+    }
   ): PromotionCase {
     this.authorization.check(actor, "g06.dpc.hold", actor);
     const promotionCase = this.requirePromotionCase(actor, promotionCaseId);
@@ -219,12 +766,32 @@ export class PromotionService {
     const candidateIds = new Set(promotionCase.candidates.map((candidate) => candidate.employeeId));
     const conflicted = input.panelMembers.find((member) => member.employeeId && candidateIds.has(member.employeeId) && !recused.includes(member.employeeId));
     if (conflicted) {
-      throw new FoundationError("PRECONDITION_FAILED", "DPC_RECUSAL required for conflicted member", { details: { marker: "DPC_RECUSAL", employeeId: conflicted.employeeId } });
+      throw new FoundationError("PANEL_CONFLICT_OF_INTEREST", "A candidate on this case cannot be a DPC panel member unless recused (P02 SoD)", {
+        field: "panelMembers",
+        details: { employeeId: conflicted.employeeId },
+      });
     }
     const participatingMembers = input.panelMembers.filter((member) => !member.employeeId || !recused.includes(member.employeeId)).length;
     const quorumRequired = input.quorumRequired ?? 2;
     if (participatingMembers < quorumRequired) {
-      throw new FoundationError("PRECONDITION_FAILED", "DPC_QUORUM not met", { details: { marker: "DPC_QUORUM", participatingMembers, quorumRequired } });
+      throw new FoundationError("QUORUM_NOT_MET", "DPC quorum is not met", {
+        field: "panelMembers",
+        details: { participatingMembers, quorumRequired },
+      });
+    }
+    const superseded = new Set<string>();
+    for (const supersession of input.supersessions ?? []) {
+      // §5.6-16: the DPC verdict cannot record a supersession citing an unusable APAR entry.
+      const assessment = this.eligibilityAssessments.get(`${supersession.employeeId}:${promotionCase.toDesignation}`)
+        ?? [...this.eligibilityAssessments.values()].find((item) => item.employeeId === supersession.employeeId);
+      const citedIsUsable = assessment?.aparGate.usableAdverseYears.includes(supersession.citedAparYear) ?? false;
+      if (!citedIsUsable) {
+        throw new FoundationError("APAR_NOT_USABLE", "Supersession cites an APAR year that fails the usability gate (uncommunicated or representation pending)", {
+          field: "supersessions",
+          details: { employeeId: supersession.employeeId, citedAparYear: supersession.citedAparYear },
+        });
+      }
+      superseded.add(supersession.employeeId);
     }
     const started = this.workflow.start(actor, {
       workflowCode: "WF-G06-DPC-PARALLEL_ALL_OF",
@@ -235,7 +802,21 @@ export class PromotionService {
     });
     this.workflow.act(actor, { taskId: started.task.id, action: "APPROVE" });
     promotionCase.status = "DPC_HELD";
-    promotionCase.candidates = promotionCase.candidates.map((candidate) => ({ ...candidate, fitness: "FIT" }));
+    promotionCase.candidates = promotionCase.candidates.map((candidate) => ({
+      ...candidate,
+      fitness: superseded.has(candidate.employeeId) ? "UNFIT" : "FIT",
+    }));
+    // §5.6-5 vacancy cap: select the top FIT candidates by rank, never beyond the case vacancies.
+    let remaining = promotionCase.vacancies;
+    promotionCase.candidates = promotionCase.candidates
+      .sort((left, right) => left.rank - right.rank)
+      .map((candidate) => {
+        const select = candidate.fitness === "FIT" && remaining > 0;
+        if (select) {
+          remaining -= 1;
+        }
+        return { ...candidate, isSelected: select };
+      });
     promotionCase.dpc = {
       quorumRequired,
       participatingMembers,
@@ -246,7 +827,7 @@ export class PromotionService {
     this.audit.recordMutation(actor, {
       action: "G06_DPC_HELD",
       subjectRef: `g06_promotion_cases:${promotionCase.id}`,
-      metadata: { marker: "DPC_QUORUM", participatingMembers, quorumRequired, recusedEmployeeIds: recused },
+      metadata: { participatingMembers, quorumRequired, recusedEmployeeIds: recused, supersededCount: superseded.size },
     });
     return this.clonePromotionCase(promotionCase);
   }
@@ -258,7 +839,8 @@ export class PromotionService {
       throw new FoundationError("PRECONDITION_FAILED", "DPC must be held before orders are issued");
     }
     const orders = promotionCase.candidates
-      .filter((candidate) => candidate.fitness === "FIT")
+      // §5.6-7: an order requires a FIT verdict AND selection within the vacancy cap.
+      .filter((candidate) => candidate.fitness === "FIT" && candidate.isSelected)
       .map((candidate) => {
         const document = this.documentVault.createDocument(actor, {
           title: `Promotion Order ${promotionCase.caseNo} ${candidate.employeeId}`,
@@ -293,12 +875,23 @@ export class PromotionService {
     return orders;
   }
 
-  effectPromotionOrder(actor: ActorContext, promotionOrderId: string, input: { effectDate: string; idempotencyKey: string }): { order: PromotionOrder; srEventId: string; payImpactSignal: G06PayImpactSignal } {
+  /**
+   * FR-007 effecting: blocked while sub judice (§5.6-20 — an active interim stay on the order
+   * or its case is ENTITY_SUB_JUDICE), posts the idempotent G12 SR event, and AUTO-CREATES the
+   * probation record (§5.6-11: scheduled_end = probation_start + probation_months, ON_PROBATION)
+   * in the same logical transaction as the order transition.
+   */
+  effectPromotionOrder(
+    actor: ActorContext,
+    promotionOrderId: string,
+    input: { effectDate: string; idempotencyKey: string; probationMonths?: number }
+  ): { order: PromotionOrder; srEventId: string; payImpactSignal: G06PayImpactSignal; probation: ProbationRecord } {
     this.authorization.check(actor, "g06.promotion.order.effect", actor);
     const order = this.requirePromotionOrder(actor, promotionOrderId);
     if (order.status !== "ISSUED") {
       throw new FoundationError("PRECONDITION_FAILED", "Only issued promotion orders can be effected");
     }
+    this.requireNotSubJudice(actor, order);
     const sr = this.serviceRegister.ingest(actor, input.idempotencyKey, {
       sourceModule: "G06",
       sourceReferenceId: `g06_promotion_orders:${order.id}:EFFECTED`,
@@ -313,15 +906,115 @@ export class PromotionService {
     });
     order.status = "EFFECTED";
     order.srEventId = sr.event.id;
+    const probationMonths = input.probationMonths ?? 24;
+    const probation: ProbationRecord = {
+      id: nextId("probation-record", this.promotionDepth.countProbations()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      promotionOrderId: order.id,
+      employeeId: order.employeeId,
+      probationStart: input.effectDate,
+      probationMonths,
+      scheduledEnd: addMonthsIso(input.effectDate, probationMonths),
+      status: "ON_PROBATION",
+    };
+    this.promotionDepth.saveProbation(probation);
     const signal = this.addPayImpactSignal(actor, { sourceRef: order.id, kind: "PROMOTION", employeeId: order.employeeId });
-    this.audit.recordMutation(actor, { action: "G06_PROMOTION_EFFECTED", subjectRef: `g06_promotion_orders:${order.id}`, metadata: { srEventId: sr.event.id, marker: "PROMOTION_EFFECTED" } });
+    this.audit.recordMutation(actor, {
+      action: "G06_PROMOTION_EFFECTED",
+      subjectRef: `g06_promotion_orders:${order.id}`,
+      metadata: { srEventId: sr.event.id, probationRecordId: probation.id, scheduledEnd: probation.scheduledEnd },
+    });
     this.employeeMaster.getById(actor, order.employeeId);
-    return { order: this.clonePromotionOrder(order), srEventId: sr.event.id, payImpactSignal: signal };
+    return { order: this.clonePromotionOrder(order), srEventId: sr.event.id, payImpactSignal: signal, probation: { ...probation } };
+  }
+
+  /**
+   * FR-019 refusal consequence: a DECLINED order transactionally creates the promotion_refusals
+   * row with the debarment window (debarment_until = refusal_date + debarment_months) and the
+   * MACP-clock effect; re-consideration inside the window fails with EMPLOYEE_DEBARRED (§5.6-18).
+   */
+  declinePromotionOrder(
+    actor: ActorContext,
+    promotionOrderId: string,
+    input: { refusalDate: string; refusalReason?: string; debarmentMonths?: number; macpClockEffect?: MacpClockEffect }
+  ): { order: PromotionOrder; refusal: PromotionRefusal } {
+    this.authorization.check(actor, "g06.promotion.order.effect", actor);
+    const order = this.requirePromotionOrder(actor, promotionOrderId);
+    if (order.status !== "ISSUED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only issued promotion orders can be declined");
+    }
+    const debarmentMonths = input.debarmentMonths ?? 12;
+    const debarmentUntil = addMonthsIso(input.refusalDate, debarmentMonths);
+    const refusal: PromotionRefusal = {
+      id: nextId("promotion-refusal", this.promotionDepth.countRefusals()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      promotionOrderId: order.id,
+      employeeId: order.employeeId,
+      refusalDate: input.refusalDate,
+      refusalReason: input.refusalReason,
+      debarmentMonths,
+      debarmentUntil,
+      nextConsiderationAfter: debarmentUntil,
+      macpClockEffect: input.macpClockEffect ?? "STOP",
+      refusalEffectApplied: true,
+      status: "ACTIVE",
+    };
+    order.status = "DECLINED";
+    this.promotionDepth.saveRefusal(refusal);
+    this.audit.recordMutation(actor, {
+      action: "G06_PROMOTION_REFUSED",
+      subjectRef: `g06_promotion_refusals:${refusal.id}`,
+      metadata: { promotionOrderId: order.id, debarmentUntil, macpClockEffect: refusal.macpClockEffect },
+    });
+    return { order: this.clonePromotionOrder(order), refusal: { ...refusal } };
+  }
+
+  listPromotionRefusals(scope: TenantScope, employeeId: string): PromotionRefusal[] {
+    requireTenantScope(scope);
+    return this.promotionDepth.listRefusals(scope, employeeId);
+  }
+
+  listProbationRecords(scope: TenantScope, employeeId: string): ProbationRecord[] {
+    requireTenantScope(scope);
+    return this.promotionDepth.listProbations(scope, employeeId);
+  }
+
+  /** §5.6-20 sub-judice guard: an active interim stay on the order or its case blocks effecting. */
+  private requireNotSubJudice(scope: TenantScope, order: PromotionOrder): void {
+    const stay =
+      this.promotionDepth.findActiveStay(scope, "PROMOTION_ORDER", order.id) ??
+      this.promotionDepth.findActiveStay(scope, "PROMOTION_CASE", order.promotionCaseId);
+    if (stay) {
+      throw new FoundationError("ENTITY_SUB_JUDICE", "This can't be done because a required condition isn't met: active interim stay", {
+        field: "order_id",
+        details: { legalCaseLinkId: stay.id, caseReference: stay.caseReference, linkedEntityType: stay.linkedEntityType },
+      });
+    }
   }
 
   effectMacp(actor: ActorContext, input: { employeeId: string; level: string; dueDate: string; effectDate: string; idempotencyKey: string }): { macp: MacpCase; srEventId: string; payImpactSignal: G06PayImpactSignal } {
     this.authorization.check(actor, "g06.macp.effect", actor);
     this.employeeMaster.getById(actor, input.employeeId);
+    // §5.6-10 MACP cap: at most 3 financial up-gradations in a career; each EFFECTED regular
+    // promotion reduces the remaining MACP entitlement (it is not a combined ≤3 cap on both).
+    const effectedMacp = this.macpCases.filter((item) => item.employeeId === input.employeeId && item.status === "EFFECTED" && this.inScope(item, actor)).length;
+    const effectedPromotions = this.promotionOrders.filter((item) => item.employeeId === input.employeeId && item.status === "EFFECTED" && this.inScope(item, actor)).length;
+    if (effectedMacp >= 3 || effectedMacp + effectedPromotions >= 3) {
+      throw new FoundationError("PRECONDITION_FAILED", "MACP entitlement exhausted: career cap is 3 up-gradations and regular promotions reduce the remaining entitlement", {
+        field: "employeeId",
+        details: { effectedMacp, effectedPromotions, careerCap: 3 },
+      });
+    }
+    // §5.6-18: an ACTIVE refusal applies its recorded MACP-clock effect before any sanction.
+    const activeRefusal = this.promotionDepth.findActiveRefusal(actor, input.employeeId, input.effectDate);
+    if (activeRefusal && activeRefusal.macpClockEffect !== "NONE") {
+      throw new FoundationError("PRECONDITION_FAILED", "MACP clock is stopped/forfeited by an active promotion refusal", {
+        field: "employeeId",
+        details: { refusalId: activeRefusal.id, macpClockEffect: activeRefusal.macpClockEffect, debarmentUntil: activeRefusal.debarmentUntil },
+      });
+    }
     const macp: MacpCase = {
       id: nextId("macp", this.macpCases.length),
       tenantId: actor.tenantId,
@@ -348,6 +1041,237 @@ export class PromotionService {
     const signal = this.addPayImpactSignal(actor, { sourceRef: macp.id, kind: "MACP", employeeId: input.employeeId });
     this.notifications.publish(actor, { recipientEmployeeId: input.employeeId, messageId: "G06_MACP_EFFECTED", channel: "IN_APP", relatedRef: `g06_macp:${macp.id}`, mergeFields: { level: input.level } });
     return { macp: { ...macp }, srEventId: sr.event.id, payImpactSignal: signal };
+  }
+
+  // -------------------------------------------------------------------------------------
+  // FR-PPP-006: reservation_rosters + roster_points with own-merit migration (§5.6-6)
+  // -------------------------------------------------------------------------------------
+
+  /** Creates the reservation roster register and its points (maker≠checker, Nagaraj justification). */
+  createReservationRoster(
+    actor: ActorContext,
+    input: {
+      rosterNo: string;
+      cadreId: string;
+      gradeDesignationId: string;
+      rosterType?: RosterType;
+      cycleSize?: number;
+      policyVersion?: string;
+      rosterApplicable?: boolean;
+      enablingProvisionRef?: string;
+      quantifiableDataDocId?: string;
+      consequentialSeniorityMode?: ConsequentialSeniorityMode;
+      approverActorId: string;
+      points: Array<{ pointNumber: number; reservedFor: ReservationCategory }>;
+    }
+  ): { roster: ReservationRoster; points: RosterPoint[] } {
+    this.authorization.check(actor, "g06.roster.write", actor);
+    this.requireDistinctApprover(actor, input.approverActorId, "reservation roster creation");
+    if (input.points.length === 0) {
+      throw new FoundationError("VALIDATION_FAILED", "A reservation roster needs at least one roster point", { field: "points" });
+    }
+    const seen = new Set<number>();
+    for (const point of input.points) {
+      if (seen.has(point.pointNumber)) {
+        throw new FoundationError("VALIDATION_FAILED", "Roster point numbers must be unique", { field: "points", details: { pointNumber: point.pointNumber } });
+      }
+      seen.add(point.pointNumber);
+    }
+    const roster: ReservationRoster = {
+      id: nextId("reservation-roster", this.promotionDepth.countRosters()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      rosterNo: input.rosterNo,
+      cadreId: input.cadreId,
+      gradeDesignationId: input.gradeDesignationId,
+      rosterType: input.rosterType ?? "PROMOTION_RESERVATION",
+      cycleSize: input.cycleSize ?? input.points.length,
+      policyVersion: input.policyVersion ?? "roster-policy-1.0",
+      rosterApplicable: input.rosterApplicable ?? true,
+      enablingProvisionRef: input.enablingProvisionRef,
+      quantifiableDataDocId: input.quantifiableDataDocId,
+      consequentialSeniorityMode: input.consequentialSeniorityMode ?? "CATCH_UP",
+      status: "ACTIVE",
+      makerActorId: actor.userId,
+      approverActorId: input.approverActorId,
+    };
+    this.promotionDepth.saveRoster(roster);
+    const points = input.points.map((point) => {
+      const row: RosterPoint = {
+        id: nextId("roster-point", this.promotionDepth.countRosterPoints()),
+        tenantId: actor.tenantId,
+        entityId: actor.entityId,
+        rosterId: roster.id,
+        pointNumber: point.pointNumber,
+        reservedFor: point.reservedFor,
+        status: "VACANT",
+      };
+      this.promotionDepth.saveRosterPoint(row);
+      return row;
+    });
+    this.audit.recordMutation(actor, {
+      action: "G06_RESERVATION_ROSTER_CREATED",
+      subjectRef: `g06_reservation_rosters:${roster.id}`,
+      metadata: { rosterNo: roster.rosterNo, points: points.length, makerActorId: roster.makerActorId, approverActorId: roster.approverActorId },
+    });
+    return { roster: { ...roster }, points: points.map((point) => ({ ...point })) };
+  }
+
+  /**
+   * FR-006 point occupation with own-merit migration (§5.6-6):
+   *   - a reserved candidate selected on own merit MUST occupy an unreserved (GEN) point and is
+   *     counted against GEN (adjusted_against_category=GEN) — a reserved point is never consumed;
+   *     placing them on a reserved point fails with OWN_MERIT_MIGRATION_REQUIRED;
+   *   - double-fill fails with ROSTER_POINT_OCCUPIED; a reserved point cannot be filled by a
+   *     non-matching category (ROSTER_CATEGORY_MISMATCH).
+   */
+  fillRosterPoint(
+    actor: ActorContext,
+    rosterId: string,
+    input: {
+      pointNumber: number;
+      employeeId: string;
+      candidateCategory: ReservationCategory;
+      selectedOnOwnMerit?: boolean;
+      promotionCaseId?: string;
+    }
+  ): RosterPoint {
+    this.authorization.check(actor, "g06.roster.write", actor);
+    const roster = this.promotionDepth.findRoster(actor, rosterId);
+    if (!roster) {
+      throw new FoundationError("NOT_FOUND", "Reservation roster not found");
+    }
+    const point = this.promotionDepth.findRosterPoint(actor, rosterId, input.pointNumber);
+    if (!point) {
+      throw new FoundationError("NOT_FOUND", "Roster point not found");
+    }
+    if (point.status !== "VACANT") {
+      throw new FoundationError("ROSTER_POINT_OCCUPIED", "Roster point is already occupied", {
+        field: "pointNumber",
+        details: { pointNumber: point.pointNumber, status: point.status, filledByEmployeeId: point.filledByEmployeeId },
+      });
+    }
+    const ownMerit = input.selectedOnOwnMerit ?? false;
+    if (ownMerit && point.reservedFor !== "GEN") {
+      throw new FoundationError("OWN_MERIT_MIGRATION_REQUIRED", "Own-merit reserved candidate must migrate to an unreserved (GEN) point — the reserved point is not consumed", {
+        field: "pointNumber",
+        details: { pointNumber: point.pointNumber, reservedFor: point.reservedFor, employeeId: input.employeeId },
+      });
+    }
+    if (!ownMerit && point.reservedFor !== "GEN" && point.reservedFor !== input.candidateCategory) {
+      throw new FoundationError("ROSTER_CATEGORY_MISMATCH", "A reserved point cannot be filled by a non-matching category without de-reservation authority", {
+        field: "candidateCategory",
+        details: { reservedFor: point.reservedFor, candidateCategory: input.candidateCategory },
+      });
+    }
+    const filled: RosterPoint = {
+      ...point,
+      status: "FILLED",
+      filledByEmployeeId: input.employeeId,
+      filledInCaseId: input.promotionCaseId,
+      // Own-merit migration: the fill is counted against GEN, preserving the reserved tally.
+      adjustedAgainstCategory: ownMerit ? "GEN" : point.reservedFor,
+    };
+    this.promotionDepth.saveRosterPoint(filled);
+    this.audit.recordMutation(actor, {
+      action: "G06_ROSTER_POINT_FILLED",
+      subjectRef: `g06_roster_points:${filled.id}`,
+      metadata: {
+        pointNumber: filled.pointNumber,
+        reservedFor: filled.reservedFor,
+        adjustedAgainstCategory: filled.adjustedAgainstCategory,
+        selectedOnOwnMerit: ownMerit,
+      },
+    });
+    return { ...filled };
+  }
+
+  /** FR-006 AC-3 compliance report: per-category tallies with own-merit migrations itemised. */
+  getRosterCompliance(scope: TenantScope, rosterId: string): {
+    rosterId: string;
+    points: RosterPoint[];
+    filledByAdjustedCategory: Record<string, number>;
+    ownMeritMigrations: Array<{ pointNumber: number; employeeId?: string }>;
+  } {
+    requireTenantScope(scope);
+    const points = this.promotionDepth.listRosterPoints(scope, rosterId);
+    const filledByAdjustedCategory: Record<string, number> = {};
+    const ownMeritMigrations: Array<{ pointNumber: number; employeeId?: string }> = [];
+    for (const point of points) {
+      if (point.status !== "FILLED" || !point.adjustedAgainstCategory) {
+        continue;
+      }
+      filledByAdjustedCategory[point.adjustedAgainstCategory] = (filledByAdjustedCategory[point.adjustedAgainstCategory] ?? 0) + 1;
+      if (point.adjustedAgainstCategory === "GEN" && point.reservedFor === "GEN" && point.filledByEmployeeId) {
+        // Own-merit migrations are GEN-adjusted fills; itemise them for the compliance report.
+        ownMeritMigrations.push({ pointNumber: point.pointNumber, employeeId: point.filledByEmployeeId });
+      }
+    }
+    return { rosterId, points, filledByAdjustedCategory, ownMeritMigrations };
+  }
+
+  // -------------------------------------------------------------------------------------
+  // FR-PPP-017: legal-case linkage & sub-judice handling (§5.6-20)
+  // -------------------------------------------------------------------------------------
+
+  /** Attaches a court/tribunal reference; interim_stay=true transitions the entity to INTERIM_STAYED. */
+  attachLegalCaseLink(
+    actor: ActorContext,
+    input: {
+      linkedEntityType: LegalLinkedEntityType;
+      linkedEntityRefId: string;
+      forum: LegalForum;
+      caseReference: string;
+      petitioner?: string;
+      interimStay?: boolean;
+      stayFromDate?: string;
+      subjectToOutcome?: boolean;
+    }
+  ): LegalCaseLink {
+    this.authorization.check(actor, "g06.legal.write", actor);
+    const interimStay = input.interimStay ?? false;
+    const link: LegalCaseLink = {
+      id: nextId("legal-case-link", this.promotionDepth.countLegalCaseLinks()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      linkNo: `LCL/${String(this.promotionDepth.countLegalCaseLinks() + 1).padStart(5, "0")}`,
+      linkedEntityType: input.linkedEntityType,
+      linkedEntityRefId: input.linkedEntityRefId,
+      forum: input.forum,
+      caseReference: input.caseReference,
+      petitioner: input.petitioner,
+      interimStay,
+      stayFromDate: input.stayFromDate,
+      subjectToOutcome: input.subjectToOutcome ?? false,
+      status: interimStay ? "INTERIM_STAYED" : "FILED",
+    };
+    this.promotionDepth.saveLegalCaseLink(link);
+    this.audit.recordMutation(actor, {
+      action: "G06_LEGAL_CASE_LINKED",
+      subjectRef: `g06_legal_case_links:${link.id}`,
+      metadata: { linkedEntityType: link.linkedEntityType, linkedEntityRefId: link.linkedEntityRefId, interimStay, caseReference: link.caseReference },
+    });
+    return { ...link };
+  }
+
+  /** A vacated stay clears INTERIM_STAYED and restores effecting (FR-017 business rule). */
+  vacateInterimStay(actor: ActorContext, legalCaseLinkId: string, input: { stayToDate: string }): LegalCaseLink {
+    this.authorization.check(actor, "g06.legal.write", actor);
+    const link = this.promotionDepth.findLegalCaseLink(actor, legalCaseLinkId);
+    if (!link) {
+      throw new FoundationError("NOT_FOUND", "Legal case link not found");
+    }
+    if (!link.interimStay) {
+      throw new FoundationError("PRECONDITION_FAILED", "No active interim stay to vacate on this legal case link");
+    }
+    const vacated: LegalCaseLink = { ...link, interimStay: false, stayToDate: input.stayToDate, status: "PENDING" };
+    this.promotionDepth.saveLegalCaseLink(vacated);
+    this.audit.recordMutation(actor, {
+      action: "G06_INTERIM_STAY_VACATED",
+      subjectRef: `g06_legal_case_links:${vacated.id}`,
+      metadata: { stayToDate: input.stayToDate },
+    });
+    return { ...vacated };
   }
 
   listPromotionOrders(scope: TenantScope): PromotionOrder[] {
@@ -435,4 +1359,47 @@ export class PromotionService {
 
 function isContiguous(ranks: number[]): boolean {
   return [...ranks].sort((left, right) => left - right).every((rank, index) => rank === index + 1);
+}
+
+/**
+ * FR-004 AC-3 / Appendix D.1: the PINNED non-linear DoPT zone-of-consideration slab —
+ * zone = 5 if v=1; 8 if v=2; 3×v if v≥3. Never a flat multiplier.
+ */
+export function zoneOfConsiderationSlab(vacancies: number): number {
+  if (vacancies <= 0) {
+    throw new FoundationError("VALIDATION_FAILED", "vacancies must be at least 1 to compute the zone of consideration", { field: "vacancies" });
+  }
+  if (vacancies === 1) {
+    return 5;
+  }
+  if (vacancies === 2) {
+    return 8;
+  }
+  return 3 * vacancies;
+}
+
+/**
+ * VAL-G06-APAR-USABLE (§5.6-16, Dev Dutt line): an adverse/below-benchmark APAR year is USABLE
+ * only if it was communicated AND its representation is DISPOSED or NOT_APPLICABLE. Unusable
+ * years are excluded from the reckoning; usable adverse years defeat the benchmark.
+ */
+export function evaluateAparUsability(aparYears: AparYearInput[]): AparUsabilityGate {
+  const usableAdverseYears: string[] = [];
+  const unusableAdverseYears: string[] = [];
+  for (const entry of aparYears) {
+    if (entry.grading === "MEETS_BENCHMARK") {
+      continue;
+    }
+    const representationSettled = (entry.representationStatus ?? "NOT_APPLICABLE") !== "PENDING";
+    if (entry.communicated && representationSettled) {
+      usableAdverseYears.push(entry.year);
+    } else {
+      unusableAdverseYears.push(entry.year);
+    }
+  }
+  return {
+    usableAdverseYears,
+    unusableAdverseYears,
+    benchmarkMet: usableAdverseYears.length === 0,
+  };
 }

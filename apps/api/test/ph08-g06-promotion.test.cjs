@@ -44,7 +44,7 @@ test("PH-08 G06 seniority tie-breaks are deterministic", () => {
   assert.equal(list.entries[0].rank, 1);
 });
 
-test("PH-08 G06 DPC enforces DPC_QUORUM and DPC_RECUSAL before promotion SR posting", () => {
+test("PH-08 G06 DPC enforces QUORUM_NOT_MET and PANEL_CONFLICT_OF_INTEREST before promotion SR posting", () => {
   const services = createFoundationServices();
   const list = services.promotion.createSeniorityList(actor(), {
     cadreId: ph03Ids.cadreRevenue,
@@ -60,9 +60,10 @@ test("PH-08 G06 DPC enforces DPC_QUORUM and DPC_RECUSAL before promotion SR post
     toDesignation: "Section Officer",
   });
 
+  // PH-08C: BRD §9.4 domain codes are thrown as the error's `code` — no marker indirection.
   assert.throws(
     () => services.promotion.holdDpc(actor(), promotionCase.id, { panelMembers: [{ employeeId: ph03Ids.manager, role: "CHAIRPERSON" }], quorumRequired: 2 }),
-    (error) => error instanceof FoundationError && error.code === "PRECONDITION_FAILED" && String(error.details.marker) === "DPC_QUORUM"
+    (error) => error instanceof FoundationError && error.code === "QUORUM_NOT_MET"
   );
   assert.throws(
     () =>
@@ -73,7 +74,7 @@ test("PH-08 G06 DPC enforces DPC_QUORUM and DPC_RECUSAL before promotion SR post
         ],
         quorumRequired: 2,
       }),
-    (error) => error instanceof FoundationError && error.code === "PRECONDITION_FAILED" && String(error.details.marker) === "DPC_RECUSAL"
+    (error) => error instanceof FoundationError && error.code === "PANEL_CONFLICT_OF_INTEREST"
   );
 
   const dpc = services.promotion.holdDpc(actor(), promotionCase.id, {

@@ -6,7 +6,7 @@ import { ActorContext, FoundationError, TenantScope, nextId, pseudoHash64, requi
 import { EmployeeMasterService } from "../g01/employeeMasterService";
 import { ServiceRegisterService } from "../g12/serviceRegisterService";
 import { DocumentRecord, DocumentVaultService } from "../g13/documentVaultService";
-import { ClearanceDepartmentConfig, TransferRepository } from "./transferRepository";
+import { ClearanceDepartmentConfig, JoiningTimeRule, TransferAdministrationPolicy, TransferRepository } from "./transferRepository";
 
 export type TransferOrderStatus = "PENDING_APPROVAL" | "APPROVED" | "RELIEVED" | "JOINED" | "RETAINED" | "CANCELLED" | "DEEMED_RELIEVED";
 export type ClearanceStatus = "OPEN" | "CLEARED" | "DEEMED_CLEARED";
@@ -14,6 +14,115 @@ export type ClearanceChecklistStatus = "OPEN" | "CLEARED" | "CLEARED_WITH_DEEMED
 export type TransferRepresentationStatus = "UNDER_REVIEW" | "RETAINED" | "REJECTED";
 export type RelievingOrderStatus = "RELIEVED" | "DEEMED_RELIEVED" | "CANCELLED";
 export type JoiningReportStatus = "JOINED_CONFIRMED" | "CANCELLED";
+
+// --- PH-08B administration enums (frozen g05_* domains, migration 0003/0009) -------------
+export type DeliveryChannel = "IN_APP" | "EMAIL" | "SMS" | "REGISTERED_POST" | "HAND_DELIVERY" | "PUBLISHED_NOTICE";
+export type AcknowledgementStatus = "SERVED" | "ACKNOWLEDGED" | "DEEMED_SERVED" | "REFUSED";
+export type DeemedServiceBasis = "NON_ACKNOWLEDGEMENT" | "RETURNED_REGISTERED_POST" | "PUBLISHED_NOTICE";
+export type ChargeHandoverStatus = "DRAFT" | "SUBMITTED" | "ACCEPTED" | "DISPUTED" | "UNDER_PROTEST";
+export type ChargePhase = "HANDOVER_SOURCE" | "ASSUMPTION_DEST";
+export type ChargeType = "FULL" | "ADDITIONAL" | "CURRENT_DUTIES";
+export type RepatriationStatus = "ACTIVE" | "EXTENSION_REQUESTED" | "EXTENDED" | "REPATRIATION_DUE" | "REPATRIATED";
+export type QuarterRetentionStatus = "OCCUPIED" | "RETENTION_REQUESTED" | "RETENTION_APPROVED" | "VACATION_DUE" | "VACATED" | "OVERSTAY";
+export type JoiningDistanceBand = "LOCAL" | "SHORT" | "MEDIUM" | "LONG" | "OUTSTATION";
+
+/** System channels serve on publication (FR-G05-020 AC1); manual channels need explicit HR service + proof. */
+const SYSTEM_DELIVERY_CHANNELS: DeliveryChannel[] = ["IN_APP", "EMAIL", "SMS"];
+/** Acknowledgement states that satisfy the served gate (BRD invariant 5.6-15). */
+const SERVED_GATE_STATUSES: AcknowledgementStatus[] = ["SERVED", "ACKNOWLEDGED", "DEEMED_SERVED"];
+
+/** order_acknowledgements entity (BRD G05 §5.2.17) — proof-of-service & acknowledgement. */
+export interface OrderAcknowledgement {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  transferOrderId: string;
+  employeeId: string;
+  servedOnDate: string;
+  deliveryChannel: DeliveryChannel;
+  /** Undefined for system channels (auto-served on publication). */
+  servedByUserId?: string;
+  acknowledgementStatus: AcknowledgementStatus;
+  acknowledgedAt?: string;
+  /** Evidence backing DEEMED_SERVED: basis + reason + flip timestamp + the statutory window applied. */
+  deemedServedBasis?: DeemedServiceBasis;
+  deemedServedReason?: string;
+  deemedServedOn?: string;
+  statutoryWindowDays?: number;
+  proofDocumentId?: string;
+}
+
+/** charge_handovers entity (BRD G05 §5.2.10) — handover of charge incl. under-protest. */
+export interface ChargeHandover {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  transferOrderId: string;
+  phase: ChargePhase;
+  relinquishingEmployeeId: string;
+  receivingEmployeeId: string;
+  chargeType: ChargeType;
+  handoverDate: string;
+  assetsHanded?: Record<string, unknown>[];
+  cashImprestAmount?: number;
+  pendingFilesCount?: number;
+  handoverNoteDocumentId?: string;
+  status: ChargeHandoverStatus;
+  underProtest: boolean;
+  disputeSlaDueAt?: string;
+  disputeRemarks?: string;
+  forcedActionType?: "HANDOVER_UNDER_PROTEST";
+  forcedActionReason?: string;
+  forcedActionByUserId?: string;
+  acceptedByUserId?: string;
+  acceptedAt?: string;
+  recordedByUserId: string;
+}
+
+/** deputation_records entity (BRD G05 §5.2.13) — tenure caps + repatriation. */
+export interface DeputationRecord {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  transferOrderId: string;
+  employeeId: string;
+  borrowingOrgUnitId: string;
+  lendingOrgUnitId: string;
+  deputationTerms?: Record<string, unknown>;
+  startDate: string;
+  initialTenureMonths: number;
+  /** Cumulative sanctioned tenure (initial + granted extensions), capped by maxTenureMonths. */
+  tenureMonths: number;
+  currentEndDate: string;
+  maxTenureMonths: number;
+  extensionCount: number;
+  repatriationDueDate: string;
+  repatriationStatus: RepatriationStatus;
+  repatriationOrderId?: string;
+  repatriatedOn?: string;
+  initiatedByUserId: string;
+}
+
+/** quarter_allotments entity (BRD G05 §5.2.21) — estate retention + penal-rate flip. */
+export interface QuarterAllotment {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  employeeId: string;
+  transferOrderId?: string;
+  quarterRef: string;
+  orgUnitId: string;
+  retentionAllowed: boolean;
+  retentionStatus: QuarterRetentionStatus;
+  vacateByDate?: string;
+  vacatedOn?: string;
+  /** Current billing rate; flips from normal to penal on overstay (JOB-G05-QTR-OVERSTAY). */
+  licenceFeeRate?: number;
+  penalLicenceFeeRate?: number;
+  penalRateApplies: boolean;
+  licenceFeeRecoveryRef?: string;
+  requestedByUserId: string;
+}
 
 export interface ClearanceItem {
   code: string;
@@ -94,6 +203,12 @@ export interface TransferOrder {
   resolverEvidence: Record<string, unknown>;
   /** View of the persisted clearance checklist items (source of truth: clearance_checklists). */
   clearanceItems: ClearanceItem[];
+  /** Mirrors of the canonical order_acknowledgements record (FR-G05-020). */
+  servedOnDate?: string;
+  acknowledgedAt?: string;
+  /** FR-G05-009: joining time derived from the configured distance-band rule rows (VAL-G05-JTIME). */
+  joiningDistanceBand?: JoiningDistanceBand;
+  joiningTimeDays?: number;
   lastWorkingDay?: string;
   relievingOrderId?: string;
   joiningReportId?: string;
@@ -177,7 +292,16 @@ export class TransferService {
 
   initiate(
     actor: ActorContext,
-    input: { employeeId: string; fromOrgUnitId: string; toOrgUnitId: string; orderDate: string; effectiveDate: string; reason?: string }
+    input: {
+      employeeId: string;
+      fromOrgUnitId: string;
+      toOrgUnitId: string;
+      orderDate: string;
+      effectiveDate: string;
+      reason?: string;
+      /** Sanctioning authority anchor when it differs from the source office (e.g. repatriation is sanctioned by the lending organisation). */
+      authorityOrgUnitId?: string;
+    }
   ): TransferInitiationResult {
     this.authorization.check(actor, "g05.transfer.initiate", actor);
     if (!dateOnly(input.orderDate) || !dateOnly(input.effectiveDate)) {
@@ -197,7 +321,7 @@ export class TransferService {
       resolverRule: {
         mechanism: "POSITION_AUTHORITY",
         authorityCode: "G05_TRANSFER_REVENUE",
-        orgUnitId: input.fromOrgUnitId,
+        orgUnitId: input.authorityOrgUnitId ?? input.fromOrgUnitId,
         subjectEmployeeId: input.employeeId,
       },
       asOf: input.orderDate,
@@ -327,6 +451,24 @@ export class TransferService {
     order.clearanceWorkflowInstanceId = clearanceWorkflow.instance.id;
     order.clearanceChecklistId = checklist.id;
     order.srEventId = sr.event.id;
+    // FR-G05-020 AC1: publication creates the order_acknowledgements proof-of-service row.
+    // System channels (IN_APP/EMAIL/SMS via X.2) serve immediately; manual channels
+    // (registered post / hand delivery / published notice) require explicit HR service with proof.
+    const policy = this.repository.getAdministrationPolicy(actor);
+    if (SYSTEM_DELIVERY_CHANNELS.includes(policy.defaultDeliveryChannel)) {
+      const acknowledgement: OrderAcknowledgement = {
+        id: nextId("order-acknowledgement", this.repository.countAcknowledgements()),
+        tenantId: actor.tenantId,
+        entityId: actor.entityId,
+        transferOrderId: order.id,
+        employeeId: order.employeeId,
+        servedOnDate: order.orderDate,
+        deliveryChannel: policy.defaultDeliveryChannel,
+        acknowledgementStatus: "SERVED",
+      };
+      this.repository.insertAcknowledgement(acknowledgement);
+      order.servedOnDate = acknowledgement.servedOnDate;
+    }
     this.repository.updateOrder(order);
     this.audit.recordMutation(actor, {
       action: "G05_TRANSFER_APPROVE",
@@ -399,6 +541,10 @@ export class TransferService {
     if (order.status !== "APPROVED") {
       throw new FoundationError("PRECONDITION_FAILED", "Transfer order must be approved before relieving");
     }
+    // BRD invariant 5.6-15 (FR-G05-020 AC4): an unserved order cannot relieve.
+    this.requireServedOrder(actor, order, "RELIEVE");
+    // FR-G05-007: a recorded charge handover must be ACCEPTED or UNDER_PROTEST before relieving.
+    this.requireHandoverNotDisputed(actor, order);
     if (!dateOnly(input.relievingDate) || input.relievingDate < order.orderDate) {
       // BRD-registered code: relieving date must be a valid date on/after the order date.
       throw new FoundationError("VALIDATION_FAILED", "Relieving date is invalid", {
@@ -747,6 +893,9 @@ export class TransferService {
     if (order.status !== "APPROVED") {
       throw new FoundationError("PRECONDITION_FAILED", "Only approved transfer orders can be deemed relieved");
     }
+    // BRD invariant 5.6-15: even a forced (deemed) relief cannot take effect on an unserved order.
+    this.requireServedOrder(actor, order, "DEEM_RELIEVED");
+    this.requireHandoverNotDisputed(actor, order);
     const checklist = this.requireChecklist(actor, order);
     if (!checklist.items.every((item) => item.status === "CLEARED" || item.status === "DEEMED_CLEARED")) {
       throw new FoundationError("PRECONDITION_FAILED", "All clearance branches must be cleared or deemed before relief", {
@@ -826,6 +975,680 @@ export class TransferService {
     return { order: this.cloneOrder(order), srEventId: sr.event.id, document: attached };
   }
 
+  // =====================================================================================
+  // PH-08B — G05 transfer administration depth (FR-G05-007/009/011/020/022)
+  // =====================================================================================
+
+  /** §16.5 configuration cascade: administration policy is data, maintained by Org Admin. */
+  configureAdministrationPolicy(actor: ActorContext, policy: TransferAdministrationPolicy): void {
+    this.authorization.check(actor, "g05.transfer.administration.configure", actor);
+    this.repository.configureAdministrationPolicy(actor, policy);
+    this.audit.recordMutation(actor, {
+      action: "G05_ADMINISTRATION_POLICY_CONFIGURED",
+      subjectRef: `g05_administration_policy:${actor.tenantId}`,
+      metadata: { ...policy },
+    });
+  }
+
+  /** FR-G05-009: distance-band boundaries are rule rows, not code (§16.4). */
+  configureJoiningTimeRules(actor: ActorContext, rules: JoiningTimeRule[]): void {
+    this.authorization.check(actor, "g05.transfer.administration.configure", actor);
+    this.repository.configureJoiningTimeRules(actor, rules);
+    this.audit.recordMutation(actor, {
+      action: "G05_JOINING_TIME_RULES_CONFIGURED",
+      subjectRef: `g05_joining_time_rules:${actor.tenantId}`,
+      metadata: { bands: rules.map((rule) => rule.band) },
+    });
+  }
+
+  /**
+   * FR-G05-020: record manual service of the order on the employee (registered post /
+   * hand delivery / published notice require a G13 proof document).
+   */
+  serveOrder(
+    actor: ActorContext,
+    transferOrderId: string,
+    input: { servedOnDate: string; deliveryChannel: DeliveryChannel; proofDocumentTitle?: string }
+  ): OrderAcknowledgement {
+    this.authorization.check(actor, "g05.transfer.serve", actor);
+    const order = this.requireOrder(actor, transferOrderId);
+    if (order.status !== "APPROVED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only approved (published) transfer orders can be served");
+    }
+    if (this.repository.findAcknowledgementByOrder(actor, order.id)) {
+      throw new FoundationError("CONFLICT", "Transfer order already has a service record");
+    }
+    if (!dateOnly(input.servedOnDate) || input.servedOnDate < order.orderDate) {
+      throw new FoundationError("VALIDATION_FAILED", "Served-on date must be a valid date on/after the order date", { field: "servedOnDate" });
+    }
+    let proofDocumentId: string | undefined;
+    if (!SYSTEM_DELIVERY_CHANNELS.includes(input.deliveryChannel)) {
+      // BRD business rule: registered-post/hand-delivery/published-notice service needs recorded proof (G13).
+      if (!input.proofDocumentTitle) {
+        throw new FoundationError("VALIDATION_FAILED", "Manual delivery channels require a proof-of-service document", { field: "proofDocumentTitle" });
+      }
+      const proof = this.documentVault.createDocument(actor, {
+        title: input.proofDocumentTitle,
+        ownerEmployeeId: order.employeeId,
+        classification: "CONFIDENTIAL",
+        contentHash: pseudoHash64(stableStringify({ orderNo: order.orderNo, servedOnDate: input.servedOnDate, channel: input.deliveryChannel })),
+        isWorm: true,
+      });
+      proofDocumentId = this.documentVault.attach(actor, proof.id, {
+        moduleCode: "G05",
+        entityName: "order_acknowledgements",
+        entityRefId: order.id,
+        linkRole: "PROOF_OF_SERVICE",
+      }).id;
+    }
+    const acknowledgement: OrderAcknowledgement = {
+      id: nextId("order-acknowledgement", this.repository.countAcknowledgements()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      transferOrderId: order.id,
+      employeeId: order.employeeId,
+      servedOnDate: input.servedOnDate,
+      deliveryChannel: input.deliveryChannel,
+      servedByUserId: actor.userId,
+      acknowledgementStatus: "SERVED",
+      proofDocumentId,
+    };
+    this.repository.insertAcknowledgement(acknowledgement);
+    order.servedOnDate = input.servedOnDate;
+    this.repository.updateOrder(order);
+    this.audit.recordMutation(actor, {
+      action: "G05_ORDER_SERVED",
+      subjectRef: `g05_order_acknowledgements:${acknowledgement.id}`,
+      metadata: { transferOrderId: order.id, deliveryChannel: input.deliveryChannel, servedOnDate: input.servedOnDate, proofDocumentId },
+    });
+    this.notifications.publish(actor, {
+      recipientEmployeeId: order.employeeId,
+      messageId: "G05_ORDER_SERVED",
+      channel: "IN_APP",
+      relatedRef: `g05_transfer_orders:${order.id}`,
+      mergeFields: { orderNo: order.orderNo },
+    });
+    return { ...acknowledgement };
+  }
+
+  /** FR-G05-020 AC2: employee acknowledgement. SoD: the serving officer cannot acknowledge. */
+  acknowledgeOrder(actor: ActorContext, transferOrderId: string, input: { acknowledgedAt: string }): OrderAcknowledgement {
+    this.authorization.check(actor, "g05.transfer.acknowledge", actor);
+    const order = this.requireOrder(actor, transferOrderId);
+    const acknowledgement = this.requireAcknowledgement(actor, order);
+    if (acknowledgement.acknowledgementStatus !== "SERVED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only a served, unacknowledged order can be acknowledged", {
+        details: { acknowledgementStatus: acknowledgement.acknowledgementStatus },
+      });
+    }
+    if (acknowledgement.servedByUserId && acknowledgement.servedByUserId === actor.userId) {
+      // Maker-checker SoD (P02): the officer who served the order cannot acknowledge it for the employee.
+      throw new FoundationError("FORBIDDEN", "Serving officer cannot acknowledge the order", {
+        details: { rule: "VAL-G02-SOD", servedByUserId: acknowledgement.servedByUserId },
+      });
+    }
+    acknowledgement.acknowledgementStatus = "ACKNOWLEDGED";
+    acknowledgement.acknowledgedAt = input.acknowledgedAt;
+    this.repository.updateAcknowledgement(acknowledgement);
+    order.acknowledgedAt = input.acknowledgedAt;
+    this.repository.updateOrder(order);
+    this.audit.recordMutation(actor, {
+      action: "G05_ORDER_ACKNOWLEDGED",
+      subjectRef: `g05_order_acknowledgements:${acknowledgement.id}`,
+      metadata: { transferOrderId: order.id, acknowledgedAt: input.acknowledgedAt },
+    });
+    return { ...acknowledgement };
+  }
+
+  /**
+   * FR-G05-020 AC3 / JOB-G05-SERVE-DEEM: deemed service. Evidence-backed — either the
+   * statutory non-acknowledgement window has elapsed, or the channel evidences returned
+   * registered post / published notice. Recorded with basis, reason, and timestamps.
+   */
+  deemOrderServed(
+    actor: ActorContext,
+    transferOrderId: string,
+    input: { asOf: string; basis: DeemedServiceBasis; reason: string }
+  ): OrderAcknowledgement {
+    this.authorization.check(actor, "g05.transfer.deem_served", actor);
+    const order = this.requireOrder(actor, transferOrderId);
+    const acknowledgement = this.requireAcknowledgement(actor, order);
+    if (acknowledgement.acknowledgementStatus !== "SERVED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only an unacknowledged service record can be deemed served", {
+        details: { acknowledgementStatus: acknowledgement.acknowledgementStatus },
+      });
+    }
+    const policy = this.repository.getAdministrationPolicy(actor);
+    if (input.basis === "NON_ACKNOWLEDGEMENT") {
+      const windowExpiry = addDaysIso(acknowledgement.servedOnDate, policy.deemedServiceWindowDays);
+      if (input.asOf < windowExpiry) {
+        throw new FoundationError("PRECONDITION_FAILED", "Statutory non-acknowledgement window has not elapsed", {
+          details: { servedOnDate: acknowledgement.servedOnDate, windowDays: policy.deemedServiceWindowDays, windowExpiry, asOf: input.asOf },
+        });
+      }
+    } else if (input.basis === "RETURNED_REGISTERED_POST" && acknowledgement.deliveryChannel !== "REGISTERED_POST") {
+      throw new FoundationError("VALIDATION_FAILED", "Returned-post basis requires a registered-post service record", { field: "basis" });
+    } else if (input.basis === "PUBLISHED_NOTICE" && acknowledgement.deliveryChannel !== "PUBLISHED_NOTICE") {
+      throw new FoundationError("VALIDATION_FAILED", "Published-notice basis requires a published-notice service record", { field: "basis" });
+    }
+    acknowledgement.acknowledgementStatus = "DEEMED_SERVED";
+    acknowledgement.deemedServedBasis = input.basis;
+    acknowledgement.deemedServedReason = input.reason;
+    acknowledgement.deemedServedOn = input.asOf;
+    acknowledgement.statutoryWindowDays = policy.deemedServiceWindowDays;
+    this.repository.updateAcknowledgement(acknowledgement);
+    this.audit.recordMutation(actor, {
+      action: "G05_ORDER_DEEMED_SERVED",
+      subjectRef: `g05_order_acknowledgements:${acknowledgement.id}`,
+      metadata: {
+        transferOrderId: order.id,
+        basis: input.basis,
+        reason: input.reason,
+        deemedServedOn: input.asOf,
+        servedOnDate: acknowledgement.servedOnDate,
+        statutoryWindowDays: policy.deemedServiceWindowDays,
+      },
+    });
+    return { ...acknowledgement };
+  }
+
+  getServiceRecord(scope: TenantScope, transferOrderId: string): OrderAcknowledgement | undefined {
+    requireTenantScope(scope);
+    const acknowledgement = this.repository.findAcknowledgementByOrder(scope, transferOrderId);
+    return acknowledgement ? { ...acknowledgement } : undefined;
+  }
+
+  /** FR-G05-007: record the charge handover at source (assets, cash/imprest, files, G13 note). */
+  recordChargeHandover(
+    actor: ActorContext,
+    transferOrderId: string,
+    input: {
+      receivingEmployeeId: string;
+      handoverDate: string;
+      phase?: ChargePhase;
+      chargeType?: ChargeType;
+      assetsHanded?: Record<string, unknown>[];
+      cashImprestAmount?: number;
+      pendingFilesCount?: number;
+      noteTitle?: string;
+    }
+  ): ChargeHandover {
+    this.authorization.check(actor, "g05.transfer.handover.record", actor);
+    const order = this.requireOrder(actor, transferOrderId);
+    if (order.status !== "APPROVED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Charge handover requires an approved transfer order");
+    }
+    if (input.receivingEmployeeId === order.employeeId) {
+      // BRD business rule (P02): relinquisher and acceptor must be different persons.
+      throw new FoundationError("VALIDATION_FAILED", "Relinquishing and receiving employees must differ", { field: "receivingEmployeeId" });
+    }
+    const note = this.documentVault.createDocument(actor, {
+      title: input.noteTitle ?? `Charge Handover Note ${order.orderNo}`,
+      ownerEmployeeId: order.employeeId,
+      classification: "CONFIDENTIAL",
+      contentHash: pseudoHash64(stableStringify({ orderNo: order.orderNo, handoverDate: input.handoverDate, receiving: input.receivingEmployeeId })),
+      isWorm: true,
+    });
+    const attached = this.documentVault.attach(actor, note.id, {
+      moduleCode: "G05",
+      entityName: "charge_handovers",
+      entityRefId: order.id,
+      linkRole: "HANDOVER_NOTE",
+    });
+    const handover: ChargeHandover = {
+      id: nextId("charge-handover", this.repository.countChargeHandovers()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      transferOrderId: order.id,
+      phase: input.phase ?? "HANDOVER_SOURCE",
+      relinquishingEmployeeId: order.employeeId,
+      receivingEmployeeId: input.receivingEmployeeId,
+      chargeType: input.chargeType ?? "FULL",
+      handoverDate: input.handoverDate,
+      assetsHanded: input.assetsHanded,
+      cashImprestAmount: input.cashImprestAmount,
+      pendingFilesCount: input.pendingFilesCount,
+      handoverNoteDocumentId: attached.id,
+      status: "SUBMITTED",
+      underProtest: false,
+      recordedByUserId: actor.userId,
+    };
+    this.repository.insertChargeHandover(handover);
+    this.audit.recordMutation(actor, {
+      action: "G05_CHARGE_HANDOVER_RECORDED",
+      subjectRef: `g05_charge_handovers:${handover.id}`,
+      metadata: { transferOrderId: order.id, phase: handover.phase, chargeType: handover.chargeType, noteDocumentId: attached.id },
+    });
+    this.notifications.publish(actor, {
+      recipientEmployeeId: input.receivingEmployeeId,
+      messageId: "G05_CHARGE_HANDOVER_SUBMITTED",
+      channel: "IN_APP",
+      relatedRef: `g05_charge_handovers:${handover.id}`,
+      mergeFields: { orderNo: order.orderNo },
+    });
+    return { ...handover };
+  }
+
+  /** FR-G05-007 AC2: receiving officer accepts. SoD: the recorder cannot accept their own handover. */
+  acceptChargeHandover(actor: ActorContext, chargeHandoverId: string, input: { acceptedAt: string }): ChargeHandover {
+    this.authorization.check(actor, "g05.transfer.handover.accept", actor);
+    const handover = this.requireChargeHandover(actor, chargeHandoverId);
+    if (handover.status !== "SUBMITTED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only submitted charge handovers can be accepted", { details: { status: handover.status } });
+    }
+    if (handover.recordedByUserId === actor.userId) {
+      throw new FoundationError("FORBIDDEN", "Relinquisher cannot accept their own charge handover", {
+        details: { recordedByUserId: handover.recordedByUserId },
+      });
+    }
+    handover.status = "ACCEPTED";
+    handover.acceptedByUserId = actor.userId;
+    handover.acceptedAt = input.acceptedAt;
+    this.repository.updateChargeHandover(handover);
+    this.audit.recordMutation(actor, {
+      action: "G05_CHARGE_HANDOVER_ACCEPTED",
+      subjectRef: `g05_charge_handovers:${handover.id}`,
+      metadata: { transferOrderId: handover.transferOrderId, acceptedAt: input.acceptedAt },
+    });
+    return { ...handover };
+  }
+
+  /** FR-G05-007 AC2/AC3: dispute starts the time-bound resolution clock (JOB-G05-DISPUTE-SLA). */
+  disputeChargeHandover(actor: ActorContext, chargeHandoverId: string, input: { remarks: string; disputedAt: string }): ChargeHandover {
+    this.authorization.check(actor, "g05.transfer.handover.dispute", actor);
+    const handover = this.requireChargeHandover(actor, chargeHandoverId);
+    if (handover.status !== "SUBMITTED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only submitted charge handovers can be disputed", { details: { status: handover.status } });
+    }
+    if (handover.recordedByUserId === actor.userId) {
+      throw new FoundationError("FORBIDDEN", "Relinquisher cannot dispute their own charge handover", {
+        details: { recordedByUserId: handover.recordedByUserId },
+      });
+    }
+    const policy = this.repository.getAdministrationPolicy(actor);
+    handover.status = "DISPUTED";
+    handover.disputeRemarks = input.remarks;
+    handover.disputeSlaDueAt = addHoursIso(input.disputedAt, policy.disputeSlaHours);
+    this.repository.updateChargeHandover(handover);
+    this.audit.recordMutation(actor, {
+      action: "G05_CHARGE_HANDOVER_DISPUTED",
+      subjectRef: `g05_charge_handovers:${handover.id}`,
+      metadata: { transferOrderId: handover.transferOrderId, remarks: input.remarks, disputeSlaDueAt: handover.disputeSlaDueAt },
+    });
+    return { ...handover };
+  }
+
+  /**
+   * FR-G05-007 AC3 / FR-G05-016: after the dispute SLA breaches, the Authority certifies
+   * handover UNDER_PROTEST — unblocking relieving while preserving the dispute record.
+   */
+  certifyHandoverUnderProtest(actor: ActorContext, chargeHandoverId: string, input: { asOf: string; reason: string }): ChargeHandover {
+    this.authorization.check(actor, "g05.transfer.handover.protest", actor);
+    const handover = this.requireChargeHandover(actor, chargeHandoverId);
+    if (handover.status !== "DISPUTED" || !handover.disputeSlaDueAt) {
+      // The dispute path is the only route into under-protest — this is the dispute-blocked state.
+      throw new FoundationError("ERR-G05-HANDOVER-DISPUTED", "Only a disputed charge handover can be certified under protest", {
+        details: { chargeHandoverId: handover.id, status: handover.status },
+      });
+    }
+    if (input.asOf <= handover.disputeSlaDueAt) {
+      throw new FoundationError("PRECONDITION_FAILED", "Dispute resolution SLA has not breached yet", {
+        details: { disputeSlaDueAt: handover.disputeSlaDueAt, asOf: input.asOf },
+      });
+    }
+    if (handover.recordedByUserId === actor.userId) {
+      throw new FoundationError("FORBIDDEN", "Relinquisher cannot certify their own handover under protest", {
+        details: { recordedByUserId: handover.recordedByUserId },
+      });
+    }
+    handover.status = "UNDER_PROTEST";
+    handover.underProtest = true;
+    handover.forcedActionType = "HANDOVER_UNDER_PROTEST";
+    handover.forcedActionReason = input.reason;
+    handover.forcedActionByUserId = actor.userId;
+    this.repository.updateChargeHandover(handover);
+    this.audit.recordMutation(actor, {
+      action: "G05_CHARGE_HANDOVER_UNDER_PROTEST",
+      subjectRef: `g05_charge_handovers:${handover.id}`,
+      metadata: {
+        transferOrderId: handover.transferOrderId,
+        forcedActionType: "HANDOVER_UNDER_PROTEST",
+        reason: input.reason,
+        disputeRemarksPreserved: handover.disputeRemarks,
+      },
+    });
+    return { ...handover };
+  }
+
+  listChargeHandovers(scope: TenantScope, transferOrderId: string): ChargeHandover[] {
+    requireTenantScope(scope);
+    return this.repository.listChargeHandoversByOrder(scope, transferOrderId).map((handover) => ({ ...handover }));
+  }
+
+  /**
+   * FR-G05-009 / VAL-G05-JTIME: joining time from the configured distance-band rule rows.
+   * Band boundaries are data (g05_joining_time_rules), never magic numbers in the service.
+   */
+  computeJoiningTime(
+    actor: ActorContext,
+    transferOrderId: string,
+    input: { distanceKm?: number; sameStation?: boolean }
+  ): { transferOrderId: string; joiningDistanceBand: JoiningDistanceBand; joiningTimeDays: number; rule: JoiningTimeRule } {
+    this.authorization.check(actor, "g05.transfer.joining_time.compute", actor);
+    const order = this.requireOrder(actor, transferOrderId);
+    const rules = this.repository.listJoiningTimeRules(actor);
+    let rule: JoiningTimeRule | undefined;
+    if (input.sameStation) {
+      rule = rules.find((candidate) => candidate.sameStation);
+    } else {
+      if (typeof input.distanceKm !== "number" || Number.isNaN(input.distanceKm) || input.distanceKm < 0) {
+        throw new FoundationError("VALIDATION_FAILED", "Distance in kilometres is required for joining-time computation", {
+          field: "distanceKm",
+          details: { messageId: "VAL-G05-JTIME" },
+        });
+      }
+      const distanceKm = input.distanceKm;
+      rule = rules.find(
+        (candidate) =>
+          !candidate.sameStation && distanceKm >= candidate.minDistanceKm && (candidate.maxDistanceKm === undefined || distanceKm < candidate.maxDistanceKm)
+      );
+    }
+    if (!rule) {
+      throw new FoundationError("VALIDATION_FAILED", "No configured distance-band rule matches the journey", {
+        field: "distanceKm",
+        details: { messageId: "VAL-G05-JTIME", distanceKm: input.distanceKm },
+      });
+    }
+    order.joiningDistanceBand = rule.band;
+    order.joiningTimeDays = rule.joiningTimeDays;
+    this.repository.updateOrder(order);
+    this.audit.recordMutation(actor, {
+      action: "G05_JOINING_TIME_COMPUTED",
+      subjectRef: `g05_transfer_orders:${order.id}`,
+      metadata: { rule: "VAL-G05-JTIME", distanceKm: input.distanceKm, sameStation: input.sameStation, band: rule.band, joiningTimeDays: rule.joiningTimeDays },
+    });
+    return { transferOrderId: order.id, joiningDistanceBand: rule.band, joiningTimeDays: rule.joiningTimeDays, rule: { ...rule } };
+  }
+
+  /** FR-G05-011 AC1: deputation record for a deputation-class order, with the tenure cap recorded. */
+  createDeputationRecord(
+    actor: ActorContext,
+    transferOrderId: string,
+    input: {
+      startDate: string;
+      initialTenureMonths: number;
+      maxTenureMonths?: number;
+      borrowingOrgUnitId?: string;
+      lendingOrgUnitId?: string;
+      deputationTerms?: Record<string, unknown>;
+    }
+  ): DeputationRecord {
+    this.authorization.check(actor, "g05.deputation.manage", actor);
+    const order = this.requireOrder(actor, transferOrderId);
+    const policy = this.repository.getAdministrationPolicy(actor);
+    const maxTenureMonths = input.maxTenureMonths ?? policy.deputationDefaultMaxTenureMonths;
+    if (input.initialTenureMonths <= 0) {
+      throw new FoundationError("VALIDATION_FAILED", "Initial deputation tenure must be positive", { field: "initialTenureMonths" });
+    }
+    if (input.initialTenureMonths > maxTenureMonths) {
+      // FR-G05-011 AC2: tenure beyond the policy cap is blocked (422).
+      throw new FoundationError("ERR-G05-DEPUTATION-CAP", "Deputation tenure exceeds the maximum tenure cap", {
+        details: { initialTenureMonths: input.initialTenureMonths, maxTenureMonths },
+      });
+    }
+    const currentEndDate = addMonthsIso(input.startDate, input.initialTenureMonths);
+    const record: DeputationRecord = {
+      id: nextId("deputation-record", this.repository.countDeputations()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      transferOrderId: order.id,
+      employeeId: order.employeeId,
+      borrowingOrgUnitId: input.borrowingOrgUnitId ?? order.toOrgUnitId,
+      lendingOrgUnitId: input.lendingOrgUnitId ?? order.fromOrgUnitId,
+      deputationTerms: input.deputationTerms,
+      startDate: input.startDate,
+      initialTenureMonths: input.initialTenureMonths,
+      tenureMonths: input.initialTenureMonths,
+      currentEndDate,
+      maxTenureMonths,
+      extensionCount: 0,
+      repatriationDueDate: currentEndDate,
+      repatriationStatus: "ACTIVE",
+      initiatedByUserId: actor.userId,
+    };
+    this.repository.insertDeputationRecord(record);
+    this.audit.recordMutation(actor, {
+      action: "G05_DEPUTATION_RECORDED",
+      subjectRef: `g05_deputation_records:${record.id}`,
+      metadata: { transferOrderId: order.id, startDate: record.startDate, currentEndDate, maxTenureMonths },
+    });
+    return { ...record };
+  }
+
+  /** FR-G05-011 AC2: extensions are validated against max_tenure_months; over-cap is blocked. */
+  extendDeputation(actor: ActorContext, deputationId: string, input: { extensionMonths: number; reason?: string }): DeputationRecord {
+    this.authorization.check(actor, "g05.deputation.extend", actor);
+    const record = this.requireDeputationRecord(actor, deputationId);
+    if (record.repatriationStatus === "REPATRIATED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Repatriated deputations cannot be extended");
+    }
+    if (input.extensionMonths <= 0) {
+      throw new FoundationError("VALIDATION_FAILED", "Extension months must be positive", { field: "extensionMonths" });
+    }
+    if (record.tenureMonths + input.extensionMonths > record.maxTenureMonths) {
+      // BRD §8.2: 422 / ERR-G05-DEPUTATION-CAP — extension beyond max tenure.
+      throw new FoundationError("ERR-G05-DEPUTATION-CAP", "Extension beyond maximum deputation tenure", {
+        details: {
+          tenureMonths: record.tenureMonths,
+          extensionMonths: input.extensionMonths,
+          maxTenureMonths: record.maxTenureMonths,
+        },
+      });
+    }
+    record.tenureMonths += input.extensionMonths;
+    record.currentEndDate = addMonthsIso(record.startDate, record.tenureMonths);
+    record.repatriationDueDate = record.currentEndDate;
+    record.extensionCount += 1;
+    record.repatriationStatus = "EXTENDED";
+    this.repository.updateDeputationRecord(record);
+    this.audit.recordMutation(actor, {
+      action: "G05_DEPUTATION_EXTENDED",
+      subjectRef: `g05_deputation_records:${record.id}`,
+      metadata: { extensionMonths: input.extensionMonths, currentEndDate: record.currentEndDate, reason: input.reason },
+    });
+    return { ...record };
+  }
+
+  /**
+   * FR-G05-011 AC4: repatriation (on cap, due date, or recall) initiates a reverse
+   * transfer order back to the lending unit. SoD: the approving authority must differ
+   * from the actor who initiated the deputation record.
+   */
+  repatriateDeputation(
+    actor: ActorContext,
+    deputationId: string,
+    input: { repatriationDate: string; reason: string }
+  ): { record: DeputationRecord; repatriationOrder: TransferOrder } {
+    this.authorization.check(actor, "g05.deputation.repatriate", actor);
+    const record = this.requireDeputationRecord(actor, deputationId);
+    if (record.repatriationStatus === "REPATRIATED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Deputation is already repatriated");
+    }
+    if (record.initiatedByUserId === actor.userId) {
+      throw new FoundationError("FORBIDDEN", "Repatriation approval must come from a different actor than the deputation initiator", {
+        details: { initiatedByUserId: record.initiatedByUserId },
+      });
+    }
+    // Reverse REPATRIATION-class order to the lending unit (reuses the FR-004 initiation path).
+    // The sanctioning authority for repatriation sits with the lending/parent organisation.
+    const initiated = this.initiate(actor, {
+      employeeId: record.employeeId,
+      fromOrgUnitId: record.borrowingOrgUnitId,
+      toOrgUnitId: record.lendingOrgUnitId,
+      orderDate: input.repatriationDate,
+      effectiveDate: input.repatriationDate,
+      reason: `REPATRIATION: ${input.reason}`,
+      authorityOrgUnitId: record.lendingOrgUnitId,
+    });
+    record.repatriationStatus = "REPATRIATED";
+    record.repatriationOrderId = initiated.order.id;
+    record.repatriatedOn = input.repatriationDate;
+    this.repository.updateDeputationRecord(record);
+    this.audit.recordMutation(actor, {
+      action: "G05_DEPUTATION_REPATRIATED",
+      subjectRef: `g05_deputation_records:${record.id}`,
+      metadata: { repatriationOrderId: initiated.order.id, repatriationDate: input.repatriationDate, reason: input.reason },
+    });
+    return { record: { ...record }, repatriationOrder: initiated.order };
+  }
+
+  listDeputationRecords(scope: TenantScope): DeputationRecord[] {
+    requireTenantScope(scope);
+    return this.repository.listDeputationRecords(scope).map((record) => ({ ...record }));
+  }
+
+  /**
+   * FR-G05-022 AC1: quarter retention request. Retention beyond the permissible policy
+   * window is rejected with ERR-G05-QUARTER-OVERSTAY (422).
+   */
+  requestQuarterRetention(
+    actor: ActorContext,
+    transferOrderId: string,
+    input: { quarterRef: string; orgUnitId?: string; vacateByDate: string; licenceFeeRate: number; penalLicenceFeeRate?: number }
+  ): QuarterAllotment {
+    this.authorization.check(actor, "g05.quarter.request", actor);
+    const order = this.requireOrder(actor, transferOrderId);
+    const baseline = order.lastWorkingDay ?? order.effectiveDate;
+    if (!dateOnly(input.vacateByDate) || input.vacateByDate < baseline) {
+      // BRD validation: vacate-by >= last working day.
+      throw new FoundationError("VALIDATION_FAILED", "Vacate-by date must be on/after the last working day", {
+        field: "vacateByDate",
+        details: { lastWorkingDay: baseline },
+      });
+    }
+    const policy = this.repository.getAdministrationPolicy(actor);
+    const permissibleUntil = addMonthsIso(baseline, policy.permissibleRetentionMonths);
+    if (input.vacateByDate > permissibleUntil) {
+      throw new FoundationError("ERR-G05-QUARTER-OVERSTAY", "Accommodation retention requested beyond the permissible period", {
+        details: { vacateByDate: input.vacateByDate, permissibleUntil, permissibleRetentionMonths: policy.permissibleRetentionMonths },
+      });
+    }
+    const allotment: QuarterAllotment = {
+      id: nextId("quarter-allotment", this.repository.countQuarterAllotments()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      employeeId: order.employeeId,
+      transferOrderId: order.id,
+      quarterRef: input.quarterRef,
+      orgUnitId: input.orgUnitId ?? order.fromOrgUnitId,
+      retentionAllowed: false,
+      retentionStatus: "RETENTION_REQUESTED",
+      vacateByDate: input.vacateByDate,
+      licenceFeeRate: input.licenceFeeRate,
+      penalLicenceFeeRate: input.penalLicenceFeeRate,
+      penalRateApplies: false,
+      requestedByUserId: actor.userId,
+    };
+    this.repository.insertQuarterAllotment(allotment);
+    this.audit.recordMutation(actor, {
+      action: "G05_QUARTER_RETENTION_REQUESTED",
+      subjectRef: `g05_quarter_allotments:${allotment.id}`,
+      metadata: { transferOrderId: order.id, quarterRef: input.quarterRef, vacateByDate: input.vacateByDate },
+    });
+    return { ...allotment };
+  }
+
+  /** FR-G05-022 AC1: Authority approval. SoD: the requesting officer cannot approve. */
+  approveQuarterRetention(actor: ActorContext, quarterAllotmentId: string, input: { approvedOn: string }): QuarterAllotment {
+    this.authorization.check(actor, "g05.quarter.approve", actor);
+    const allotment = this.requireQuarterAllotment(actor, quarterAllotmentId);
+    if (allotment.retentionStatus !== "RETENTION_REQUESTED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only requested retentions can be approved", { details: { retentionStatus: allotment.retentionStatus } });
+    }
+    if (allotment.requestedByUserId === actor.userId) {
+      throw new FoundationError("FORBIDDEN", "Retention approval must come from a different actor than the requester", {
+        details: { requestedByUserId: allotment.requestedByUserId },
+      });
+    }
+    allotment.retentionAllowed = true;
+    allotment.retentionStatus = "RETENTION_APPROVED";
+    this.repository.updateQuarterAllotment(allotment);
+    this.audit.recordMutation(actor, {
+      action: "G05_QUARTER_RETENTION_APPROVED",
+      subjectRef: `g05_quarter_allotments:${allotment.id}`,
+      metadata: { approvedOn: input.approvedOn, vacateByDate: allotment.vacateByDate },
+    });
+    return { ...allotment };
+  }
+
+  /**
+   * FR-G05-022 AC2/AC3 (JOB-G05-QTR-OVERSTAY surrogate): retention past vacate-by flips the
+   * penal licence-fee rate, marks OVERSTAY, and raises the G10 licence-fee-recovery reference.
+   */
+  flagQuarterOverstay(actor: ActorContext, quarterAllotmentId: string, input: { asOf: string }): QuarterAllotment {
+    this.authorization.check(actor, "g05.quarter.overstay", actor);
+    const allotment = this.requireQuarterAllotment(actor, quarterAllotmentId);
+    if (allotment.retentionStatus === "VACATED" || allotment.retentionStatus === "OVERSTAY") {
+      throw new FoundationError("PRECONDITION_FAILED", "Quarter is already vacated or flagged", { details: { retentionStatus: allotment.retentionStatus } });
+    }
+    if (!allotment.vacateByDate || input.asOf <= allotment.vacateByDate) {
+      throw new FoundationError("PRECONDITION_FAILED", "Retention has not overstayed the vacate-by date", {
+        details: { vacateByDate: allotment.vacateByDate, asOf: input.asOf },
+      });
+    }
+    const normalRate = allotment.licenceFeeRate;
+    allotment.penalRateApplies = true;
+    allotment.retentionStatus = "OVERSTAY";
+    if (allotment.penalLicenceFeeRate !== undefined) {
+      // Penal-rate flip: billing moves from the normal to the penal licence-fee rate.
+      allotment.licenceFeeRate = allotment.penalLicenceFeeRate;
+    }
+    allotment.licenceFeeRecoveryRef = `G10:LICENCE_FEE_RECOVERY:${allotment.id}`;
+    this.repository.updateQuarterAllotment(allotment);
+    this.audit.recordMutation(actor, {
+      action: "G05_QUARTER_PENAL_RATE_FLIPPED",
+      subjectRef: `g05_quarter_allotments:${allotment.id}`,
+      metadata: {
+        asOf: input.asOf,
+        vacateByDate: allotment.vacateByDate,
+        normalRate,
+        penalRate: allotment.licenceFeeRate,
+        licenceFeeRecoveryRef: allotment.licenceFeeRecoveryRef,
+      },
+    });
+    this.notifications.publish(actor, {
+      recipientEmployeeId: allotment.employeeId,
+      messageId: "G05_QUARTER_OVERSTAY_PENAL_RATE",
+      channel: "IN_APP",
+      relatedRef: `g05_quarter_allotments:${allotment.id}`,
+      mergeFields: { quarterRef: allotment.quarterRef, recoveryRef: allotment.licenceFeeRecoveryRef ?? "" },
+    });
+    return { ...allotment };
+  }
+
+  /** FR-G05-022 AC4: vacation recording closes the retention. */
+  recordQuarterVacation(actor: ActorContext, quarterAllotmentId: string, input: { vacatedOn: string }): QuarterAllotment {
+    this.authorization.check(actor, "g05.quarter.vacate", actor);
+    const allotment = this.requireQuarterAllotment(actor, quarterAllotmentId);
+    if (allotment.retentionStatus === "VACATED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Quarter is already vacated");
+    }
+    allotment.retentionStatus = "VACATED";
+    allotment.vacatedOn = input.vacatedOn;
+    this.repository.updateQuarterAllotment(allotment);
+    this.audit.recordMutation(actor, {
+      action: "G05_QUARTER_VACATED",
+      subjectRef: `g05_quarter_allotments:${allotment.id}`,
+      metadata: { vacatedOn: input.vacatedOn, penalRateApplied: allotment.penalRateApplies },
+    });
+    return { ...allotment };
+  }
+
+  listQuarterAllotments(scope: TenantScope): QuarterAllotment[] {
+    requireTenantScope(scope);
+    return this.repository.listQuarterAllotments(scope).map((allotment) => ({ ...allotment }));
+  }
+
   listOrders(scope: TenantScope): TransferOrder[] {
     requireTenantScope(scope);
     return this.repository.listOrders(scope).map((order) => this.cloneOrder(order));
@@ -874,6 +1697,63 @@ export class TransferService {
     return item;
   }
 
+  /** BRD invariant 5.6-15: relieve/effect requires a SERVED / ACKNOWLEDGED / DEEMED_SERVED row. */
+  private requireServedOrder(scope: TenantScope, order: TransferOrder, action: string): OrderAcknowledgement {
+    const acknowledgement = this.repository.findAcknowledgementByOrder(scope, order.id);
+    if (!acknowledgement || !SERVED_GATE_STATUSES.includes(acknowledgement.acknowledgementStatus)) {
+      throw new FoundationError("ERR-G05-NOT-SERVED", "Transfer order has no proof of service on the employee", {
+        details: { transferOrderId: order.id, action, acknowledgementStatus: acknowledgement?.acknowledgementStatus },
+      });
+    }
+    return acknowledgement;
+  }
+
+  /** FR-G05-007: a recorded handover blocks relieving until it is ACCEPTED or UNDER_PROTEST. */
+  private requireHandoverNotDisputed(scope: TenantScope, order: TransferOrder): void {
+    const blocking = this.repository
+      .listChargeHandoversByOrder(scope, order.id)
+      .find((handover) => handover.status === "SUBMITTED" || handover.status === "DISPUTED");
+    if (blocking) {
+      throw new FoundationError("ERR-G05-HANDOVER-DISPUTED", "Charge handover is not accepted or certified under protest", {
+        details: { chargeHandoverId: blocking.id, status: blocking.status, disputeSlaDueAt: blocking.disputeSlaDueAt },
+      });
+    }
+  }
+
+  private requireAcknowledgement(scope: TenantScope, order: TransferOrder): OrderAcknowledgement {
+    const acknowledgement = this.repository.findAcknowledgementByOrder(scope, order.id);
+    if (!acknowledgement) {
+      throw new FoundationError("ERR-G05-NOT-SERVED", "Transfer order has no service record", {
+        details: { transferOrderId: order.id },
+      });
+    }
+    return acknowledgement;
+  }
+
+  private requireChargeHandover(scope: TenantScope, chargeHandoverId: string): ChargeHandover {
+    const handover = this.repository.findChargeHandover(scope, chargeHandoverId);
+    if (!handover) {
+      throw new FoundationError("NOT_FOUND", "Charge handover not found");
+    }
+    return handover;
+  }
+
+  private requireDeputationRecord(scope: TenantScope, deputationId: string): DeputationRecord {
+    const record = this.repository.findDeputationRecord(scope, deputationId);
+    if (!record) {
+      throw new FoundationError("NOT_FOUND", "Deputation record not found");
+    }
+    return record;
+  }
+
+  private requireQuarterAllotment(scope: TenantScope, quarterAllotmentId: string): QuarterAllotment {
+    const allotment = this.repository.findQuarterAllotment(scope, quarterAllotmentId);
+    if (!allotment) {
+      throw new FoundationError("NOT_FOUND", "Quarter allotment not found");
+    }
+    return allotment;
+  }
+
   private requireRepresentation(scope: TenantScope, representationId: string): TransferRepresentation {
     const representation = this.repository.findRepresentation(scope, representationId);
     if (!representation) {
@@ -911,4 +1791,23 @@ function fiscalYearOf(isoDate: string): number {
 
 function dateOnly(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/** Add whole days to a YYYY-MM-DD date (UTC-safe). */
+function addDaysIso(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Add whole months to a YYYY-MM-DD date (UTC-safe). */
+function addMonthsIso(isoDate: string, months: number): string {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Add whole hours to an ISO timestamp (dispute SLA clock). */
+function addHoursIso(isoTimestamp: string, hours: number): string {
+  return new Date(new Date(isoTimestamp).getTime() + hours * 3_600_000).toISOString();
 }

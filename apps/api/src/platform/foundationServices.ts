@@ -11,9 +11,14 @@ import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepos
 import { TransferService } from "../modules/g05/transferService";
 import { InMemoryTransferRepository } from "../modules/g05/transferRepository";
 import { PromotionService } from "../modules/g06/promotionService";
+import { InMemoryEstablishmentQslRepository } from "../modules/g06/establishmentQslRepository";
+import { InMemoryPromotionDepthRepository } from "../modules/g06/promotionDepthRepository";
 import { TrainingService } from "../modules/g07/trainingService";
+import { InMemoryTrainingDepthRepository } from "../modules/g07/trainingDepthRepository";
 import { AparService } from "../modules/g08/aparService";
+import { InMemoryAparDepthRepository } from "../modules/g08/aparDepthRepository";
 import { DisciplinaryService } from "../modules/g09/disciplinaryService";
+import { G09DueProcessRepository, InMemoryG09DueProcessRepository, defaultG09CompetenceMatrix } from "../modules/g09/dueProcessRepository";
 import { PayrollService } from "../modules/g10/payrollService";
 import { PensionService } from "../modules/g11/pensionService";
 import { ServiceRegisterService } from "../modules/g12/serviceRegisterService";
@@ -53,6 +58,8 @@ export interface FoundationServices {
 export interface FoundationServicesOptions {
   /** G04 relay HMAC key override (config injection for tests); production must set G04_RELAY_HMAC_KEY. */
   g04RelayHmacKey?: string;
+  /** PH-08E: G09 due-process repository override (e.g. the file-backed impl for DI-21 tamper checks). */
+  g09DueProcessRepository?: G09DueProcessRepository;
 }
 
 /**
@@ -98,10 +105,48 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   }
   const leave = new LeaveService(employeeMaster, authorization, audit, workflow, leaveSrRelay, jobs, notifications, leaveRepository);
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
-  const promotion = new PromotionService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications);
-  const training = new TrainingService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications);
-  const apar = new AparService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications);
-  const disciplinary = new DisciplinaryService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications);
+  // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
+  // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
+  const promotion = new PromotionService(
+    employeeMaster,
+    authorization,
+    audit,
+    workflow,
+    serviceRegister,
+    documentVault,
+    notifications,
+    new InMemoryEstablishmentQslRepository(),
+    new InMemoryPromotionDepthRepository()
+  );
+  // PH-08D: G07 taxonomy/gap-contract/campaign + G08 cycle/goal/disclosure/part-period depth
+  // entities behind the same repository pattern.
+  const training = new TrainingService(
+    employeeMaster,
+    authorization,
+    audit,
+    workflow,
+    serviceRegister,
+    documentVault,
+    notifications,
+    new InMemoryTrainingDepthRepository()
+  );
+  const apar = new AparService(
+    employeeMaster,
+    authorization,
+    audit,
+    workflow,
+    serviceRegister,
+    documentVault,
+    notifications,
+    new InMemoryAparDepthRepository()
+  );
+  // PH-08E: G09 natural-justice chain entities (E3/E4/E14/E15/E23/E24 + DI-21 timeline chain)
+  // behind the same repository pattern; the E23 competence matrix is seeded reference data.
+  const g09DueProcessRepository = options.g09DueProcessRepository ?? new InMemoryG09DueProcessRepository();
+  for (const rule of defaultG09CompetenceMatrix(ph03Ids.tenant)) {
+    g09DueProcessRepository.saveCompetenceRule(rule);
+  }
+  const disciplinary = new DisciplinaryService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, g09DueProcessRepository);
   const payroll = new PayrollService(employeeMaster, authorization, audit);
   const pension = new PensionService(employeeMaster, payroll, authorization, audit, serviceRegister, documentVault);
   const analytics = new AnalyticsService(employeeMaster, workflow, serviceRegister, documentVault, disciplinary, payroll, pension, authorization, audit);

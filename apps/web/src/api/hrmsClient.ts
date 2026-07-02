@@ -13,9 +13,13 @@ export const HRMS_API_ROUTES = {
   leaveSrReconciliation: "/api/v1/leave-sr/reconciliation",
   transferOrders: "/api/v1/transfers/orders",
   promotionSummary: "/api/v1/promotions/summary",
+  promotionCases: "/api/v1/promotions/cases",
   trainingSummary: "/api/v1/training/summary",
+  trainingNominations: "/api/v1/training/nominations",
   aparSummary: "/api/v1/apar/summary",
+  aparForms: "/api/v1/apar/forms",
   disciplinarySummary: "/api/v1/disciplinary/summary",
+  disciplinaryCases: "/api/v1/disciplinary/cases",
   payrollSummary: "/api/v1/payroll/summary",
   pensionSummary: "/api/v1/pension/summary",
   analyticsSummary: "/api/v1/analytics/summary",
@@ -448,6 +452,146 @@ export interface TransferInitiateResult {
   order: TransferOrderRecord;
 }
 
+/**
+ * One G09 disciplinary case as the g09 routes project it. The API exposes no
+ * case-list read route (PH-08B..E scope), so the workbench tracks the cases
+ * returned by its own POSTs; `stage` carries the due-process position.
+ */
+export interface DisciplinaryCaseView {
+  id: string;
+  caseNo: string;
+  chargedEmployeeId: string;
+  disciplinaryAuthorityId: string;
+  stage: "INTAKE" | "CHARGE" | "INQUIRY" | "INQUIRY_REPORT" | "ORDER" | "CLOSED" | "APPEAL";
+  caseStatus: "OPEN" | "PENALTY_IMPOSED" | "ABATED" | "CLOSED";
+  confidential: boolean;
+  chargeMemoDocumentId?: string;
+}
+
+/** Request body for POST /api/v1/disciplinary/cases (g09.openCase — complaint/case intake). */
+export interface DisciplinaryCaseOpenInput {
+  chargedEmployeeId: string;
+  disciplinaryAuthorityId: string;
+  allegations: string;
+  confidential?: boolean;
+}
+
+/** Body of the g09 case routes: 201 on open, 202 on :charge. */
+export interface DisciplinaryCaseResult {
+  disciplinaryCase: DisciplinaryCaseView;
+}
+
+/** Request body for POST /api/v1/disciplinary/cases/{id}:charge (g09.serveChargeMemo). */
+export interface ChargeMemoInput {
+  articles: string[];
+  servedOn: string;
+}
+
+/** One DPC panel member row for POST /api/v1/promotions/cases/{id}:hold-dpc. */
+export interface DpcPanelMemberInput {
+  employeeId?: string;
+  externalName?: string;
+  role: string;
+}
+
+/**
+ * Request body for POST /api/v1/promotions/cases/{id}:hold-dpc. Per-member
+ * recusal verdicts are carried in recusedEmployeeIds; the API persists the
+ * recusal list and a panel-level verdict, not a per-member vote record.
+ */
+export interface DpcHoldInput {
+  panelMembers: DpcPanelMemberInput[];
+  recusedEmployeeIds?: string[];
+  quorumRequired?: number;
+}
+
+export interface PromotionCandidateView {
+  employeeId: string;
+  rank: number;
+  fitness: "PENDING" | "FIT" | "UNFIT";
+  isSelected: boolean;
+}
+
+/** The promotion case as :hold-dpc returns it, including the recorded DPC block. */
+export interface PromotionCaseView {
+  id: string;
+  caseNo: string;
+  status: string;
+  vacancies: number;
+  candidates: PromotionCandidateView[];
+  dpc?: {
+    quorumRequired: number;
+    participatingMembers: number;
+    recusedEmployeeIds: string[];
+    verdict: "FIT_PANEL";
+  };
+}
+
+/** 202 body of POST /api/v1/promotions/cases/{id}:hold-dpc. */
+export interface DpcHoldResult {
+  promotionCase: PromotionCaseView;
+}
+
+/** The G08 APAR form as the tier-action routes return it. */
+export interface AparFormView {
+  id: string;
+  formNo: string;
+  employeeId: string;
+  status:
+    | "GOALS_PENDING"
+    | "SELF_APPRAISAL"
+    | "RO_ASSESSMENT"
+    | "RVO_REVIEW"
+    | "AA_ACCEPTANCE"
+    | "FINALISED"
+    | "POSTED"
+    | "DISCLOSURE"
+    | "SEALED_COVER"
+    | "WITHDRAWN";
+  reportingOfficerId: string;
+  reviewingOfficerId: string;
+  grade?: string;
+  sealedCover: boolean;
+}
+
+/** Request body for POST /api/v1/apar/forms/{id}:report (g08.recordReporting — RO tier). */
+export interface AparReportingInput {
+  grade: string;
+  narrative: string;
+}
+
+/** Request body for POST /api/v1/apar/forms/{id}:review (g08.recordReview — RvO tier). */
+export interface AparReviewInput {
+  concur: boolean;
+  remarks: string;
+}
+
+/** 202 body of the g08 tier-action routes (:submit-self, :report, :review). */
+export interface AparFormActionResult {
+  form: AparFormView;
+}
+
+/** Request body for POST /api/v1/training/nominations (g07.nominate). */
+export interface TrainingNominationInput {
+  sessionId: string;
+  employeeId: string;
+}
+
+/** The G07 nomination as the routes return it; WAITLISTED carries capacity feedback. */
+export interface TrainingNominationView {
+  id: string;
+  nominationNo: string;
+  sessionId: string;
+  employeeId: string;
+  status: "PENDING_L1" | "APPROVED" | "WAITLISTED" | "REJECTED" | "COMPLETED" | "NO_SHOW";
+  waitlistPosition?: number;
+}
+
+/** 201 body of POST /api/v1/training/nominations. */
+export interface TrainingNominationResult {
+  nomination: TrainingNominationView;
+}
+
 export interface ServiceRegisterIngestInput {
   sourceModule: string;
   sourceReferenceId: string;
@@ -505,6 +649,13 @@ export interface HrmsClient {
   getTrainingSlice(): Promise<TrainingSliceSummary>;
   getAparSlice(): Promise<AparSliceSummary>;
   getDisciplinarySlice(): Promise<DisciplinarySliceSummary>;
+  openDisciplinaryCase(input: DisciplinaryCaseOpenInput, idempotencyKey: string): Promise<DisciplinaryCaseResult>;
+  serveDisciplinaryCharge(caseId: string, input: ChargeMemoInput, idempotencyKey: string): Promise<DisciplinaryCaseResult>;
+  holdDpc(promotionCaseId: string, input: DpcHoldInput, idempotencyKey: string): Promise<DpcHoldResult>;
+  submitAparSelf(formId: string, idempotencyKey: string): Promise<AparFormActionResult>;
+  recordAparReporting(formId: string, input: AparReportingInput, idempotencyKey: string): Promise<AparFormActionResult>;
+  recordAparReview(formId: string, input: AparReviewInput, idempotencyKey: string): Promise<AparFormActionResult>;
+  nominateForTraining(input: TrainingNominationInput, idempotencyKey: string): Promise<TrainingNominationResult>;
   getPayrollSlice(): Promise<PayrollSliceSummary>;
   getPensionSlice(): Promise<PensionSliceSummary>;
   getAnalyticsSlice(): Promise<AnalyticsSliceSummary>;
@@ -554,6 +705,17 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
 
   function workflowAction(route: string, body: WorkflowActionRequestBody, idempotencyKey: string): Promise<unknown> {
     return request<unknown>(route, {
+      method: "POST",
+      headers: {
+        [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** Shared POST helper for the statutory-wave action routes: JSON body + fresh Idempotency-Key. */
+  function postWithIdempotency<TResponse>(route: string, body: unknown, idempotencyKey: string): Promise<TResponse> {
+    return request<TResponse>(route, {
       method: "POST",
       headers: {
         [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
@@ -733,6 +895,28 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
       const summary = await request<Omit<AnalyticsSliceSummary, "migrationMarker" | "uatMarker">>(HRMS_API_ROUTES.analyticsSummary);
       return { ...summary, migrationMarker: "MIGRATION_DRY_RUN", uatMarker: "UAT_ACCEPTANCE_PACK" };
     },
+    openDisciplinaryCase: (input, idempotencyKey) =>
+      postWithIdempotency<DisciplinaryCaseResult>(HRMS_API_ROUTES.disciplinaryCases, input, idempotencyKey),
+    serveDisciplinaryCharge: (caseId, input, idempotencyKey) =>
+      postWithIdempotency<DisciplinaryCaseResult>(
+        `${HRMS_API_ROUTES.disciplinaryCases}/${encodeURIComponent(caseId)}:charge`,
+        input,
+        idempotencyKey
+      ),
+    holdDpc: (promotionCaseId, input, idempotencyKey) =>
+      postWithIdempotency<DpcHoldResult>(
+        `${HRMS_API_ROUTES.promotionCases}/${encodeURIComponent(promotionCaseId)}:hold-dpc`,
+        input,
+        idempotencyKey
+      ),
+    submitAparSelf: (formId, idempotencyKey) =>
+      postWithIdempotency<AparFormActionResult>(`${HRMS_API_ROUTES.aparForms}/${encodeURIComponent(formId)}:submit-self`, {}, idempotencyKey),
+    recordAparReporting: (formId, input, idempotencyKey) =>
+      postWithIdempotency<AparFormActionResult>(`${HRMS_API_ROUTES.aparForms}/${encodeURIComponent(formId)}:report`, input, idempotencyKey),
+    recordAparReview: (formId, input, idempotencyKey) =>
+      postWithIdempotency<AparFormActionResult>(`${HRMS_API_ROUTES.aparForms}/${encodeURIComponent(formId)}:review`, input, idempotencyKey),
+    nominateForTraining: (input, idempotencyKey) =>
+      postWithIdempotency<TrainingNominationResult>(HRMS_API_ROUTES.trainingNominations, input, idempotencyKey),
     ingestServiceRegister: (input, idempotencyKey) =>
       request<unknown>(HRMS_API_ROUTES.srIngest, {
         method: "POST",

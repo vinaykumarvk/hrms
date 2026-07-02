@@ -28,11 +28,47 @@ export function statusForError(code: WireErrorCode): number {
     case "ENTITLEMENT_EXCEEDED":
     case "PERIOD_ALREADY_LOCKED":
     case "REGULARISATION_LIMIT":
+    case "STRENGTH_INCONSISTENT":
+    case "QUOTA_SPLIT_INVALID":
+    case "VACANCY_NOT_RECONCILED":
+    // BRD G06 §9.4: DPC/roster/refusal domain failures are 409 CONFLICT.
+    case "SENIORITY_LIST_NOT_FINAL":
+    case "QUORUM_NOT_MET":
+    case "PANEL_CONFLICT_OF_INTEREST":
+    case "APAR_NOT_USABLE":
+    case "OWN_MERIT_MIGRATION_REQUIRED":
+    case "ROSTER_POINT_OCCUPIED":
+    case "ROSTER_CATEGORY_MISMATCH":
+    case "EMPLOYEE_DEBARRED":
+    // BRD G05 §8.2: handover not accepted/under-protest and relieving before proof-of-service are 409 CONFLICT.
+    case "ERR-G05-HANDOVER-DISPUTED":
+    case "ERR-G05-NOT-SERVED":
+    // BRD G08 §9: representation window elapsed (condonation required) is 409 CONFLICT.
+    case "ERR-G08-REPWINDOW":
+    // BRD G09 §10.3: due-process gate violations (Art. 311(1) competence, pending consultation,
+    // DI-4 penalty enhancement, abated case, broken timeline chain, actor conflict) are 409 CONFLICT.
+    case "ERR-G09-AUTHORITY-NOT-COMPETENT":
+    case "ERR-G09-CONSULTATION-PENDING":
+    case "ERR-G09-PENALTY-EXCEEDS-PROPOSED":
+    case "ERR-G09-CASE-ABATED":
+    case "ERR-G09-AUDIT-CHAIN-BROKEN":
+    case "ERR-G09-ACTOR-CONFLICT":
+    case "ERR-G09-DUE-PROCESS-INCOMPLETE":
       return 409;
     case "ELIGIBILITY_FAILED":
     case "WINDOW_EXPIRED":
+    // BRD G05 §8.2: deputation tenure cap and quarter retention beyond limit are 422 VALIDATION_FAILED.
+    case "ERR-G05-DEPUTATION-CAP":
+    case "ERR-G05-QUARTER-OVERSTAY":
+    // BRD G08 §9: performance goal weightages != 100% at lock (VAL-WEIGHTAGE/WSUM) is 422.
+    case "ERR-G08-WEIGHTAGE":
+    // BRD G09 §10.3: subsistence rate outside template bounds (DI-8) and payment without NEC (DI-16) are 422.
+    case "ERR-G09-SUBSISTENCE-OUT-OF-BOUNDS":
+    case "ERR-G09-NON-EMPLOYMENT-CERT-REQUIRED":
       return 422;
     case "PRECONDITION_FAILED":
+    // BRD G06 §9.4: effecting blocked by an active interim stay is a 412 precondition failure.
+    case "ENTITY_SUB_JUDICE":
       return 412;
     case "RATE_LIMITED":
       return 429;

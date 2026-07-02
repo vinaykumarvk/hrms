@@ -19,7 +19,46 @@ export type G03DomainErrorCode =
   | "WINDOW_EXPIRED"
   | "REGULARISATION_LIMIT";
 
-export type WireErrorCode = CanonicalErrorCode | G03DomainErrorCode;
+/** BRD G06 §9.4 named domain error codes (docs/brd/v3/G06-promotion-posting-progression.md). */
+export type G06DomainErrorCode =
+  | "STRENGTH_INCONSISTENT"
+  | "QUOTA_SPLIT_INVALID"
+  | "VACANCY_NOT_RECONCILED"
+  | "SENIORITY_LIST_NOT_FINAL"
+  | "QUORUM_NOT_MET"
+  | "PANEL_CONFLICT_OF_INTEREST"
+  | "APAR_NOT_USABLE"
+  | "OWN_MERIT_MIGRATION_REQUIRED"
+  | "ROSTER_POINT_OCCUPIED"
+  | "ROSTER_CATEGORY_MISMATCH"
+  | "EMPLOYEE_DEBARRED"
+  | "ENTITY_SUB_JUDICE";
+
+/** BRD G05 §8.2 named domain error codes (docs/brd/v3/G05-transfer-relieving-joining-workflow.md FR-007/011/020/022). */
+export type G05DomainErrorCode =
+  | "ERR-G05-HANDOVER-DISPUTED"
+  | "ERR-G05-DEPUTATION-CAP"
+  | "ERR-G05-NOT-SERVED"
+  | "ERR-G05-QUARTER-OVERSTAY";
+
+/** BRD G08 §9 named domain error codes (docs/brd/v3/G08-performance-appraisal-management.md error catalogue). */
+export type G08DomainErrorCode =
+  | "ERR-G08-WEIGHTAGE"
+  | "ERR-G08-REPWINDOW";
+
+/** BRD G09 §10.3 named domain error codes (docs/brd/v3/G09-disciplinary-cases-punishment.md error catalogue). */
+export type G09DomainErrorCode =
+  | "ERR-G09-AUTHORITY-NOT-COMPETENT"
+  | "ERR-G09-CONSULTATION-PENDING"
+  | "ERR-G09-PENALTY-EXCEEDS-PROPOSED"
+  | "ERR-G09-SUBSISTENCE-OUT-OF-BOUNDS"
+  | "ERR-G09-NON-EMPLOYMENT-CERT-REQUIRED"
+  | "ERR-G09-CASE-ABATED"
+  | "ERR-G09-AUDIT-CHAIN-BROKEN"
+  | "ERR-G09-ACTOR-CONFLICT"
+  | "ERR-G09-DUE-PROCESS-INCOMPLETE";
+
+export type WireErrorCode = CanonicalErrorCode | G03DomainErrorCode | G06DomainErrorCode | G05DomainErrorCode | G08DomainErrorCode | G09DomainErrorCode;
 
 export interface TenantScope {
   tenantId: string;

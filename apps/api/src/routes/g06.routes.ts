@@ -1,16 +1,31 @@
 import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
-import { optionalNumber, optionalString, optionalStringArray, readBodyRecord, requiredString } from "../http/body";
+import { optionalBoolean, optionalNumber, optionalString, optionalStringArray, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
 import { DpcPanelMember, SenioritySeed } from "../modules/g06/promotionService";
+import { LegalForum, LegalLinkedEntityType, MacpClockEffect, ReservationCategory } from "../modules/g06/promotionDepthRepository";
 
 export const g06RouteEvidence = {
   seniorityLists: "/api/v1/promotions/seniority-lists",
   promotionCases: "/api/v1/promotions/cases",
   dpc: "/api/v1/promotions/cases/{id}:hold-dpc",
   effectOrder: "/api/v1/promotions/orders/{id}:effect",
+  declineOrder: "/api/v1/promotions/orders/{id}:decline",
+  rosters: "/api/v1/promotions/rosters",
+  legalCaseLinks: "/api/v1/legal-case-links",
   macp: "/api/v1/promotions/macp",
-  markers: ["DPC_QUORUM", "DPC_RECUSAL", "PROMOTION_EFFECTED", "MACP_EFFECTED", "G06_PAY_IMPACT_SIGNAL"],
+  /** BRD §9.4 domain codes thrown by the G06 surface (no marker-string indirection). */
+  domainCodes: [
+    "SENIORITY_LIST_NOT_FINAL",
+    "QUORUM_NOT_MET",
+    "PANEL_CONFLICT_OF_INTEREST",
+    "APAR_NOT_USABLE",
+    "OWN_MERIT_MIGRATION_REQUIRED",
+    "ROSTER_POINT_OCCUPIED",
+    "ROSTER_CATEGORY_MISMATCH",
+    "EMPLOYEE_DEBARRED",
+    "ENTITY_SUB_JUDICE",
+  ],
 };
 
 export function registerG06Routes(kernel: ApiKernel): void {
@@ -143,6 +158,137 @@ export function registerG06Routes(kernel: ApiKernel): void {
       },
     },
     {
+      method: "POST",
+      path: "/api/v1/promotions/orders/{id}:decline",
+      operationId: "g06.declinePromotionOrder",
+      protected: true,
+      permission: "g06.promotion.order.effect",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted(
+          context.services.promotion.declinePromotionOrder(context.actor, requiredParam(context.params, "id"), {
+            refusalDate: requiredString(body, "refusalDate"),
+            refusalReason: optionalString(body, "refusalReason"),
+            debarmentMonths: optionalNumber(body, "debarmentMonths"),
+            macpClockEffect: optionalString(body, "macpClockEffect") as MacpClockEffect | undefined,
+          })
+        );
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/promotions/rosters",
+      operationId: "g06.createReservationRoster",
+      protected: true,
+      permission: "g06.roster.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created(
+          context.services.promotion.createReservationRoster(context.actor, {
+            rosterNo: requiredString(body, "rosterNo"),
+            cadreId: optionalString(body, "cadreId") ?? ph03Ids.cadreRevenue,
+            gradeDesignationId: requiredString(body, "gradeDesignationId"),
+            enablingProvisionRef: optionalString(body, "enablingProvisionRef"),
+            quantifiableDataDocId: optionalString(body, "quantifiableDataDocId"),
+            approverActorId: requiredString(body, "approverActorId"),
+            points: readRosterPoints(body),
+          })
+        );
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/promotions/rosters/{id}/points/{pointNumber}:fill",
+      operationId: "g06.fillRosterPoint",
+      protected: true,
+      permission: "g06.roster.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          rosterPoint: context.services.promotion.fillRosterPoint(context.actor, requiredParam(context.params, "id"), {
+            pointNumber: Number.parseInt(requiredParam(context.params, "pointNumber"), 10),
+            employeeId: requiredString(body, "employeeId"),
+            candidateCategory: requiredString(body, "candidateCategory") as ReservationCategory,
+            selectedOnOwnMerit: optionalBoolean(body, "selectedOnOwnMerit"),
+            promotionCaseId: optionalString(body, "promotionCaseId"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/rosters/{id}/compliance",
+      operationId: "g06.getRosterCompliance",
+      protected: true,
+      permission: "g06.promotion.read",
+      handler: (context) => ok(context.services.promotion.getRosterCompliance(context.scope, requiredParam(context.params, "id"))),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/probation-records",
+      operationId: "g06.listProbationRecords",
+      protected: true,
+      permission: "g06.promotion.read",
+      handler: (context) =>
+        ok({ probationRecords: context.services.promotion.listProbationRecords(context.scope, optionalString(context.request.query ?? {}, "employeeId") ?? ph03Ids.employee) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/refusals",
+      operationId: "g06.listPromotionRefusals",
+      protected: true,
+      permission: "g06.promotion.read",
+      handler: (context) =>
+        ok({ refusals: context.services.promotion.listPromotionRefusals(context.scope, optionalString(context.request.query ?? {}, "employeeId") ?? ph03Ids.employee) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/legal-case-links",
+      operationId: "g06.attachLegalCaseLink",
+      protected: true,
+      permission: "g06.legal.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          legalCaseLink: context.services.promotion.attachLegalCaseLink(context.actor, {
+            linkedEntityType: requiredString(body, "linkedEntityType") as LegalLinkedEntityType,
+            linkedEntityRefId: requiredString(body, "linkedEntityRefId"),
+            forum: requiredString(body, "forum") as LegalForum,
+            caseReference: requiredString(body, "caseReference"),
+            petitioner: optionalString(body, "petitioner"),
+            interimStay: optionalBoolean(body, "interimStay"),
+            stayFromDate: optionalString(body, "stayFromDate"),
+            subjectToOutcome: optionalBoolean(body, "subjectToOutcome"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/legal-case-links/{id}:vacate-stay",
+      operationId: "g06.vacateInterimStay",
+      protected: true,
+      permission: "g06.legal.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          legalCaseLink: context.services.promotion.vacateInterimStay(context.actor, requiredParam(context.params, "id"), {
+            stayToDate: requiredString(body, "stayToDate"),
+          }),
+        });
+      },
+    },
+    {
       method: "GET",
       path: "/api/v1/promotions/summary",
       operationId: "g06.summary",
@@ -187,6 +333,23 @@ function readPanelMembers(body: Record<string, unknown>): DpcPanelMember[] {
       employeeId: optionalString(record, "employeeId"),
       externalName: optionalString(record, "externalName"),
       role: requiredString(record, "role"),
+    };
+  });
+}
+
+function readRosterPoints(body: Record<string, unknown>): Array<{ pointNumber: number; reservedFor: ReservationCategory }> {
+  const value = body.points;
+  if (!Array.isArray(value)) {
+    return [
+      { pointNumber: 1, reservedFor: "GEN" },
+      { pointNumber: 2, reservedFor: "SC" },
+    ];
+  }
+  return value.map((item) => {
+    const record = readBodyRecord(item);
+    return {
+      pointNumber: optionalNumber(record, "pointNumber") ?? 1,
+      reservedFor: requiredString(record, "reservedFor") as ReservationCategory,
     };
   });
 }

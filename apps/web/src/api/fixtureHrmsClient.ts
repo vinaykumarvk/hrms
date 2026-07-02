@@ -1,6 +1,14 @@
 import {
+  AparFormActionResult,
+  AparFormView,
+  AparReportingInput,
+  AparReviewInput,
   ChangeRequestDiffResult,
+  ChargeMemoInput,
+  DisciplinaryCaseOpenInput,
+  DisciplinaryCaseView,
   DocumentSummary,
+  DpcHoldInput,
   EmployeeContactAddInput,
   EmployeeContactRecord,
   EmployeeDependentAddInput,
@@ -12,6 +20,9 @@ import {
   DisciplinarySliceSummary,
   HrmsApiError,
   HrmsClient,
+  PromotionCaseView,
+  TrainingNominationInput,
+  TrainingNominationView,
   LeaveApplicationRecord,
   LeaveApplicationSubmitInput,
   LeaveBalanceView,
@@ -305,6 +316,53 @@ export function createFixtureHrmsClient(): HrmsClient {
     return new HrmsApiError(status, { error: { code, message, details: messageId ? { messageId } : undefined } });
   }
 
+  // --- PH-08F statutory-wave interactive fixtures (stateful per client, like the real API) ---
+  const disciplinaryCases: DisciplinaryCaseView[] = [];
+  const promotionCase: PromotionCaseView = {
+    id: "promotion-case-fixture-000001",
+    caseNo: "PC/2026/00001",
+    status: "OPEN",
+    vacancies: 1,
+    candidates: [
+      { employeeId: employees[0].id, rank: 1, fitness: "PENDING", isSelected: false },
+      { employeeId: "99999999-9999-9999-9999-999999999902", rank: 2, fitness: "PENDING", isSelected: false },
+    ],
+  };
+  const aparForms: AparFormView[] = [
+    {
+      id: "apar-fixture-000001",
+      formNo: "APAR/2026/00001",
+      employeeId: employees[0].id,
+      status: "SELF_APPRAISAL",
+      reportingOfficerId: "99999999-9999-9999-9999-999999999903",
+      reviewingOfficerId: "99999999-9999-9999-9999-999999999904",
+      sealedCover: false,
+    },
+  ];
+  const trainingSessions = [{ id: "training-session-fixture-000001", capacity: 2, status: "OPEN" as const }];
+  const trainingNominations: TrainingNominationView[] = [];
+
+  /** Mirrors the API's APAR state machine: each tier action is legal only from its expected status. */
+  function aparTierAction(
+    formId: string,
+    expected: AparFormView["status"],
+    next: AparFormView["status"],
+    mutate?: (form: AparFormView) => void
+  ): Promise<AparFormActionResult> {
+    const form = aparForms.find((candidate) => candidate.id === formId);
+    if (!form) {
+      return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture APAR form ${formId} not found`));
+    }
+    if (form.status !== expected) {
+      return Promise.reject(
+        fixtureError(409, "PRECONDITION_FAILED", `APAR form is in ${form.status}; this tier action requires ${expected}`)
+      );
+    }
+    form.status = next;
+    mutate?.(form);
+    return Promise.resolve({ form: { ...form } });
+  }
+
   return {
     listEmployeeContacts: () => Promise.resolve(page(employeeContacts.map((contact) => ({ ...contact })))),
     addEmployeeContact: (employeeId: string, input: EmployeeContactAddInput) => {
@@ -474,6 +532,103 @@ export function createFixtureHrmsClient(): HrmsClient {
     getPayrollSlice: () => Promise.resolve({ ...payrollSlice }),
     getPensionSlice: () => Promise.resolve({ ...pensionSlice }),
     getAnalyticsSlice: () => Promise.resolve({ ...analyticsSlice }),
+    openDisciplinaryCase: (input: DisciplinaryCaseOpenInput) => {
+      if (input.chargedEmployeeId === input.disciplinaryAuthorityId) {
+        // Mirrors the API's G09_AUTHORITY_COMPETENCE self-authority block.
+        return Promise.reject(fixtureError(409, "CONFLICT", "G09_AUTHORITY_COMPETENCE blocks self disciplinary authority"));
+      }
+      const disciplinaryCase: DisciplinaryCaseView = {
+        id: `disciplinary-case-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        caseNo: `DCP/${String(fixtureSequence).padStart(5, "0")}`,
+        chargedEmployeeId: input.chargedEmployeeId,
+        disciplinaryAuthorityId: input.disciplinaryAuthorityId,
+        stage: "INTAKE",
+        caseStatus: "OPEN",
+        confidential: Boolean(input.confidential),
+      };
+      fixtureSequence += 1;
+      disciplinaryCases.push(disciplinaryCase);
+      return Promise.resolve({ disciplinaryCase: { ...disciplinaryCase } });
+    },
+    serveDisciplinaryCharge: (caseId: string, input: ChargeMemoInput) => {
+      const disciplinaryCase = disciplinaryCases.find((candidate) => candidate.id === caseId);
+      if (!disciplinaryCase) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture disciplinary case ${caseId} not found`));
+      }
+      if (disciplinaryCase.stage !== "INTAKE") {
+        return Promise.reject(fixtureError(409, "PRECONDITION_FAILED", "Charge memo can only be served at the INTAKE stage"));
+      }
+      if (input.articles.length === 0) {
+        return Promise.reject(fixtureError(400, "VALIDATION_FAILED", "At least one article of charge is required"));
+      }
+      disciplinaryCase.stage = "CHARGE";
+      disciplinaryCase.chargeMemoDocumentId = `doc-fixture-${String(fixtureSequence).padStart(6, "0")}`;
+      fixtureSequence += 1;
+      return Promise.resolve({ disciplinaryCase: { ...disciplinaryCase } });
+    },
+    holdDpc: (promotionCaseId: string, input: DpcHoldInput) => {
+      if (promotionCaseId !== promotionCase.id) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture promotion case ${promotionCaseId} not found`));
+      }
+      const recused = input.recusedEmployeeIds ?? [];
+      const candidateIds = new Set(promotionCase.candidates.map((candidate) => candidate.employeeId));
+      const conflicted = input.panelMembers.find(
+        (member) => member.employeeId && candidateIds.has(member.employeeId) && !recused.includes(member.employeeId)
+      );
+      if (conflicted) {
+        return Promise.reject(
+          fixtureError(409, "PANEL_CONFLICT_OF_INTEREST", "A candidate on this case cannot be a DPC panel member unless recused (P02 SoD)")
+        );
+      }
+      const participatingMembers = input.panelMembers.filter((member) => !member.employeeId || !recused.includes(member.employeeId)).length;
+      const quorumRequired = input.quorumRequired ?? 2;
+      if (participatingMembers < quorumRequired) {
+        return Promise.reject(fixtureError(422, "QUORUM_NOT_MET", "DPC quorum is not met"));
+      }
+      promotionCase.status = "DPC_HELD";
+      promotionCase.candidates = promotionCase.candidates.map((candidate, index) => ({
+        ...candidate,
+        fitness: "FIT",
+        isSelected: index < promotionCase.vacancies,
+      }));
+      promotionCase.dpc = { quorumRequired, participatingMembers, recusedEmployeeIds: [...recused], verdict: "FIT_PANEL" };
+      return Promise.resolve({ promotionCase: { ...promotionCase, candidates: promotionCase.candidates.map((candidate) => ({ ...candidate })) } });
+    },
+    submitAparSelf: (formId: string) => {
+      return aparTierAction(formId, "SELF_APPRAISAL", "RO_ASSESSMENT");
+    },
+    recordAparReporting: (formId: string, input: AparReportingInput) => {
+      if (!input.grade.trim() || !input.narrative.trim()) {
+        return Promise.reject(fixtureError(400, "VALIDATION_FAILED", "Reporting grade and narrative are required"));
+      }
+      return aparTierAction(formId, "RO_ASSESSMENT", "RVO_REVIEW", (form) => {
+        form.grade = input.grade;
+      });
+    },
+    recordAparReview: (formId: string, input: AparReviewInput) => {
+      if (!input.remarks.trim()) {
+        return Promise.reject(fixtureError(400, "VALIDATION_FAILED", "Review remarks are required"));
+      }
+      return aparTierAction(formId, "RVO_REVIEW", "AA_ACCEPTANCE");
+    },
+    nominateForTraining: (input: TrainingNominationInput) => {
+      const session = trainingSessions.find((candidate) => candidate.id === input.sessionId);
+      if (!session) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture training session ${input.sessionId} not found`));
+      }
+      const enrolled = trainingNominations.filter((nomination) => nomination.sessionId === session.id).length;
+      const nomination: TrainingNominationView = {
+        id: `training-nomination-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        nominationNo: `TN/${String(fixtureSequence).padStart(5, "0")}`,
+        sessionId: session.id,
+        employeeId: input.employeeId,
+        status: enrolled >= session.capacity ? "WAITLISTED" : "PENDING_L1",
+        waitlistPosition: enrolled >= session.capacity ? enrolled - session.capacity + 1 : undefined,
+      };
+      fixtureSequence += 1;
+      trainingNominations.push(nomination);
+      return Promise.resolve({ nomination: { ...nomination } });
+    },
     ingestServiceRegister: (input: ServiceRegisterIngestInput, idempotencyKey: string) =>
       Promise.resolve({
         event: {
