@@ -54,6 +54,15 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G09-AUDIT-CHAIN-BROKEN":
     case "ERR-G09-ACTOR-CONFLICT":
     case "ERR-G09-DUE-PROCESS-INCOMPLETE":
+    // BRD G10 FR-02: overlapping effective rate rows (VAL-G10-RATE-NONOVERLAP) are 409 CONFLICT.
+    case "ERR-G10-RATE-OVERLAP":
+    // BRD G10 §12: run/payslip lifecycle collisions are 409 CONFLICT — a second in-flight
+    // FINAL run, a write to a locked run/payslip, a reopen after bank transmission, and a
+    // recovery that would breach the protected net-pay floor (excess -> carryforward).
+    case "ERR-G10-RUN-INFLIGHT":
+    case "ERR-G10-RUN-IMMUTABLE":
+    case "ERR-G10-REOPEN-BLOCKED":
+    case "ERR-G10-RECOVERY-NET":
       return 409;
     case "ELIGIBILITY_FAILED":
     case "WINDOW_EXPIRED":
@@ -65,6 +74,14 @@ export function statusForError(code: WireErrorCode): number {
     // BRD G09 §10.3: subsistence rate outside template bounds (DI-8) and payment without NEC (DI-16) are 422.
     case "ERR-G09-SUBSISTENCE-OUT-OF-BOUNDS":
     case "ERR-G09-NON-EMPLOYMENT-CERT-REQUIRED":
+    // BRD G10 §12: bad DSL expression (VAL-G10-DSL-TOKEN), as-of resolution miss, and missing
+    // PT state-of-posting mapping are all 422.
+    case "ERR-G10-RULE-EXPR":
+    case "ERR-G10-RATE-NOTFOUND":
+    case "ERR-G10-PT-STATE":
+    // BRD G11 §12: rule-row/commutation-factor resolution misses are 422 (fail closed).
+    case "ERR-G11-RULE-NOT-EFFECTIVE":
+    case "ERR-G11-FACTOR-NOT-FOUND":
       return 422;
     case "PRECONDITION_FAILED":
     // BRD G06 §9.4: effecting blocked by an active interim stay is a 412 precondition failure.

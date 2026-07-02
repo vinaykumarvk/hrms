@@ -58,7 +58,31 @@ export type G09DomainErrorCode =
   | "ERR-G09-ACTOR-CONFLICT"
   | "ERR-G09-DUE-PROCESS-INCOMPLETE";
 
-export type WireErrorCode = CanonicalErrorCode | G03DomainErrorCode | G06DomainErrorCode | G05DomainErrorCode | G08DomainErrorCode | G09DomainErrorCode;
+/** BRD G10 §12 named domain error codes (docs/brd/v3/G10-payroll-and-benefits.md FR-01/02/04/09/13/16 error catalogue). */
+export type G10DomainErrorCode =
+  | "ERR-G10-RULE-EXPR"
+  | "ERR-G10-RATE-OVERLAP"
+  | "ERR-G10-RATE-NOTFOUND"
+  | "ERR-G10-PT-STATE"
+  | "ERR-G10-RUN-INFLIGHT"
+  | "ERR-G10-RUN-IMMUTABLE"
+  | "ERR-G10-REOPEN-BLOCKED"
+  | "ERR-G10-RECOVERY-NET";
+
+/** BRD G11 §12 named domain error codes (docs/brd/v3/G11-retirement-and-pension.md FR-19/FR-06 error catalogue). */
+export type G11DomainErrorCode =
+  | "ERR-G11-RULE-NOT-EFFECTIVE"
+  | "ERR-G11-FACTOR-NOT-FOUND";
+
+export type WireErrorCode =
+  | CanonicalErrorCode
+  | G03DomainErrorCode
+  | G06DomainErrorCode
+  | G05DomainErrorCode
+  | G08DomainErrorCode
+  | G09DomainErrorCode
+  | G10DomainErrorCode
+  | G11DomainErrorCode;
 
 export interface TenantScope {
   tenantId: string;

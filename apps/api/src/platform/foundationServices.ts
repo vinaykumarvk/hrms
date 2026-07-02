@@ -20,7 +20,13 @@ import { InMemoryAparDepthRepository } from "../modules/g08/aparDepthRepository"
 import { DisciplinaryService } from "../modules/g09/disciplinaryService";
 import { G09DueProcessRepository, InMemoryG09DueProcessRepository, defaultG09CompetenceMatrix } from "../modules/g09/dueProcessRepository";
 import { PayrollService } from "../modules/g10/payrollService";
+import { PayrollEngineService } from "../modules/g10/payrollEngineService";
+import { InMemoryPayrollEngineRepository } from "../modules/g10/payrollEngineRepository";
+import { PayRuleService } from "../modules/g10/payRuleService";
+import { InMemoryPayRuleRepository } from "../modules/g10/payRuleRepository";
 import { PensionService } from "../modules/g11/pensionService";
+import { PensionRuleService } from "../modules/g11/pensionRuleService";
+import { InMemoryPensionRuleRepository } from "../modules/g11/pensionRuleRepository";
 import { ServiceRegisterService } from "../modules/g12/serviceRegisterService";
 import { DocumentVaultService } from "../modules/g13/documentVaultService";
 import { AnalyticsService } from "../modules/g14/analyticsService";
@@ -45,7 +51,10 @@ export interface FoundationServices {
   apar: AparService;
   disciplinary: DisciplinaryService;
   payroll: PayrollService;
+  payrollEngine: PayrollEngineService;
+  payRules: PayRuleService;
   pension: PensionService;
+  pensionRules: PensionRuleService;
   serviceRegister: ServiceRegisterService;
   documentVault: DocumentVaultService;
   analytics: AnalyticsService;
@@ -148,7 +157,16 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   }
   const disciplinary = new DisciplinaryService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, g09DueProcessRepository);
   const payroll = new PayrollService(employeeMaster, authorization, audit);
+  // PH-09A: persisted, effective-dated rule substrate — G10 pay_components/pay_rules/rate_tables
+  // and G11 pen_* rule tables E30-E36 behind the same repository pattern.
+  const payRuleRepository = new InMemoryPayRuleRepository();
+  const payRules = new PayRuleService(authorization, audit, payRuleRepository);
+  // PH-09B: deterministic G10 payroll engine at BRD depth — payroll_runs/payslips/payslip_lines/
+  // arrears/deduction_carryforwards over the PH-09A rule substrate, with the G03 payroll feed
+  // consumed at snapshot time (FR-05) and post-lock supersede-versioning (FR-16).
+  const payrollEngine = new PayrollEngineService(employeeMaster, authorization, audit, leave, payRuleRepository, new InMemoryPayrollEngineRepository());
   const pension = new PensionService(employeeMaster, payroll, authorization, audit, serviceRegister, documentVault);
+  const pensionRules = new PensionRuleService(authorization, audit, new InMemoryPensionRuleRepository());
   const analytics = new AnalyticsService(employeeMaster, workflow, serviceRegister, documentVault, disciplinary, payroll, pension, authorization, audit);
   const migrationStaging = new MigrationStagingService(employeeMaster);
   return {
@@ -165,7 +183,10 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     apar,
     disciplinary,
     payroll,
+    payrollEngine,
+    payRules,
     pension,
+    pensionRules,
     serviceRegister,
     documentVault,
     analytics,
