@@ -17,6 +17,15 @@ info:
     (source_module="G06", source_reference_id, source_event_version) with a
     mandatory fact_key + explicit tenant_id/entity_id. The pay-fixation SR event
     (PAY_FIXATION / ANNUAL_INCREMENT) is G10's, not G06's.
+  x-ph08-statutory-wave:
+    implementedRoutes:
+      - POST /api/v1/promotions/seniority-lists
+      - POST /api/v1/promotions/cases
+      - POST /api/v1/promotions/cases/{id}:hold-dpc
+      - POST /api/v1/promotions/orders/{id}:effect
+      - POST /api/v1/promotions/macp
+    statutoryScope: seniority, DPC, promotion orders, MACP, SR posting
+    srWriter: G06
 servers:
   - url: /api/v1
 security:

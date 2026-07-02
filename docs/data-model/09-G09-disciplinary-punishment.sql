@@ -553,7 +553,18 @@ CREATE TABLE inquiry_appointments (
     updated_at               timestamptz NOT NULL DEFAULT now(),
     created_by               uuid,
     updated_by               uuid,
-    is_deleted               boolean NOT NULL DEFAULT false
+    is_deleted               boolean NOT NULL DEFAULT false,
+    CONSTRAINT ck_inquiry_appointment_member CHECK (
+        (officer_id IS NOT NULL AND external_name IS NULL)
+        OR (officer_id IS NULL AND external_name IS NOT NULL)
+    ),
+    CONSTRAINT ck_inquiry_appointment_external CHECK (
+        (is_external_member = true AND external_name IS NOT NULL)
+        OR (is_external_member = false AND officer_id IS NOT NULL)
+    ),
+    CONSTRAINT ck_inquiry_appointment_recusal CHECK (
+        (status = 'RECUSED' AND recusal_reason IS NOT NULL) OR status <> 'RECUSED'
+    )
 );
 CREATE INDEX ix_inquiry_appointments_tenant  ON inquiry_appointments(tenant_id);
 CREATE INDEX ix_inquiry_appointments_inquiry ON inquiry_appointments(inquiry_id);
@@ -1063,6 +1074,8 @@ CREATE INDEX ix_idempotency_keys_case    ON idempotency_keys(case_id);
 CREATE INDEX ix_idempotency_keys_scope   ON idempotency_keys(scope);
 CREATE INDEX ix_idempotency_keys_expires ON idempotency_keys(expires_at);
 
+COMMENT ON TABLE authority_competence IS 'PH-02 statutory-authority resolver input for disciplinary competence; P01 snapshots selected authority evidence at stage entry.';
+COMMENT ON TABLE inquiry_appointments IS 'PH-02 inquiry committee/officer source; recusal and external-member identity are resolver evidence for G09 workflows.';
 
 -- =====================================================================================
 -- SECTION 3 — ROW-LEVEL SECURITY (P02 data-scope substrate; CONVENTIONS §6)

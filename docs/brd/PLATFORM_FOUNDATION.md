@@ -123,6 +123,9 @@ Each contract below is **already built**. Government BRDs reference the service 
 - **Approver resolution (4 mechanisms):** named role · reporting-chain position · named individual · cost-centre head (Platform §P01). "Manager" resolves to L1 with BRD fallback.
 - **In-flight version pinning:** each `workflow_instance` pins the definition version it began on; deprecating/replacing a definition affects only new instances (Platform §P01, §0.3). Deprecation, not deletion.
 - **SLA & escalation runtime:** per-stage SLA timers; on breach emit escalation event → notification (X.2) + audit, applying the configured breach output (Platform §P01).
+- **Durable execution snapshots:** P01 persists task rows, wait rows, fork/join rows, department-reference rows, idempotency records, and immutable approver-resolution snapshots. These records are tenant-scoped, RLS-compatible, and hold the exact queue/role/person candidates and fallback evidence used at stage entry.
+- **Resolver/hook SPI boundary:** PH-00D defines the `ApproverResolver` SPI and HRMS hook ports for employee, position/authority, org-unit, document, notification, audit, and Service Register side effects. The hierarchy/statutory authority resolver is a PH-01/PH-02 implementation behind this SPI, not a PH-00D business rule.
+- **PH-01 contract freeze:** `docs/spec/p01-schema-amendment.yaml` formalizes `workflow_actions` as immutable decision history and `workflow_tasks` as P01-owned actionable work-item state. `docs/spec/authority-resolution-contract.yaml` defines resolver evidence, replay, and fail-closed error taxonomy.
 - **Service:** `WorkflowEngine.startInstance({ workflow_code, subject_ref, context, initiator })` → `{ instance_id, first_stage, assignees[] }`; errors 400/403/409 (`ERR-DUP-INSTANCE`)/422 (Platform §P01, §Y).
 
 ### P02 — RBAC & Authorization.check (Platform §P02; RBAC; BRD §5.1.2)

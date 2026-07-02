@@ -1,0 +1,93 @@
+meta:
+  phase: PH-01
+  status: implemented_agentic_gate_green
+  generated_on: "2026-07-01"
+  purpose: >
+    Freeze the P01 runtime schema contract after PH-00. Durable workflow tasks are formalized as P01-owned
+    runtime work items used by the inbox and SLA engine; modules must not create separate local task tables for
+    approval routing.
+
+decision:
+  workflow_task_naming: workflow_tasks
+  owner: P01 Workflow Engine
+  rationale: >
+    PH-00 proved PUDA-style queue/task behavior and the HRMS synthetic adapter needs durable assignment state.
+    `workflow_actions` remains the immutable decision/action log; `workflow_tasks` is the current actionable work
+    item/inbox record derived from stage entry and approver resolution.
+  supersedes:
+    - docs/brd/MODULE_RECONCILIATION.md old wording that said to use workflow_actions and not workflow_tasks.
+  module_rule: >
+    G01-G14 may reference P01 workflow_instances/workflow_tasks/workflow_actions by id, but may not define
+    duplicate approval-task engines or mutate P01 runtime tables directly.
+
+runtime_tables:
+  workflows:
+    role: W.1 process definition catalog and version source.
+    evidence: docs/data-model/00-platform-core.sql:906
+  workflow_instances:
+    role: In-flight instance record, subject reference, status, SLA due date, and pinned definition version.
+    evidence: docs/data-model/00-platform-core.sql:932
+  workflow_actions:
+    role: Immutable idempotent action/decision log; one row per start/advance/approve/reject/sendBack/delegate/cancel action.
+    evidence: docs/data-model/00-platform-core.sql:967
+  workflow_idempotency_records:
+    role: Unsafe P01 call deduplication across instance/action operations.
+    evidence: docs/data-model/00-platform-core.sql:992
+  workflow_resolution_snapshots:
+    role: Immutable approver/queue/person candidate evidence captured at stage entry for replay and legal explanation.
+    evidence: docs/data-model/00-platform-core.sql:1010
+  workflow_tasks:
+    role: P01-owned actionable inbox/work-item row derived from stage entry; not a module-owned task table.
+    evidence: docs/data-model/00-platform-core.sql:1031
+  workflow_waits:
+    role: Durable timer/manual-event wait state for SLA pause/resume and statutory clocks.
+    evidence: docs/data-model/00-platform-core.sql:1063
+  workflow_fork_executions:
+    role: Parallel fork execution header for all-of/any-of branch joins.
+    evidence: docs/data-model/00-platform-core.sql:1091
+  workflow_fork_branches:
+    role: Parallel branch state linked to P01 tasks where applicable.
+    evidence: docs/data-model/00-platform-core.sql:1115
+  workflow_references:
+    role: Department/reference fan-out state linked to a source P01 task.
+    evidence: docs/data-model/00-platform-core.sql:1137
+
+integrity_rules:
+  tenant_scope:
+    rule: Every P01 runtime table carries tenant_id; entity-scoped runtime rows also carry entity_id.
+    evidence: docs/data-model/00-platform-core.sql:1652
+  rls:
+    rule: P01 runtime tables are included in the platform tenant-isolation RLS block.
+    evidence: docs/data-model/00-platform-core.sql:1652
+  idempotency:
+    rule: Unsafe starts/actions require idempotency keys and replay the original result.
+    evidence: docs/data-model/00-platform-core.sql:957
+  action_vs_task:
+    workflow_actions: historical decision log
+    workflow_tasks: current/past assignment work item
+    invariant: Completing, returning, delegating, or cancelling a task must also emit a workflow_actions row and P05 audit evidence.
+  analytics:
+    rule: G14 may read pending workflow/SLA facts from P01 tables through P02/RLS-scoped read models; it must not invent a parallel workflow task model.
+
+openapi_binding:
+  contract: docs/contracts/openapi/P01-workflow.yaml
+  required_operations:
+    - startInstance
+    - advance
+    - approve
+    - reject
+    - sendBack
+    - delegate
+    - cancel
+    - query
+  required_runtime_surfaces:
+    - task query/inbox shape
+    - resolver snapshot shape
+    - wait/fork/reference shape
+    - standard error envelope
+
+phase_handoff:
+  next_phase: PH-02
+  requirement: >
+    Build the master data and fixtures that let REPORTING_CHAIN, STATUTORY_AUTHORITY, COST_CENTRE_HEAD,
+    delegation, acting charge, and committee resolvers produce deterministic snapshots.

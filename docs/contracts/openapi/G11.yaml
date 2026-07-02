@@ -2,6 +2,7 @@ openapi: 3.1.0
 info:
   title: Government HRMS — G11 Retirement & Pension Management
   version: 3.0.0
+  x-ph09-compensation-wave: deterministic-pension-sr-gate
   description: >
     OpenAPI contract for government HRMS module G11 (Retirement & Pension Management),
     grounded in docs/brd/v3/G11-retirement-and-pension.md (Section 6 FR API tables + Section 8),

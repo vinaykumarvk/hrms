@@ -1,0 +1,34 @@
+{
+  "name": "government-hrms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Government HRMS modular-monolith foundation services.",
+  "scripts": {
+    "typecheck": "node /Users/n15318/workflow-platform/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "build": "node /Users/n15318/workflow-platform/node_modules/typescript/bin/tsc -p tsconfig.json",
+    "test": "npm run build && node --test apps/api/test/*.test.cjs",
+    "check": "npm run typecheck && npm test",
+    "web:typecheck": "node /Users/n15318/workflow-platform/node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
+    "web:build": "node node_modules/vite/bin/vite.js build --config apps/web/vite.config.ts",
+    "web:test": "node --test apps/web/test/*.test.cjs",
+    "web:check": "npm run web:typecheck && npm run web:build && npm run web:test",
+    "web:dev": "node node_modules/vite/bin/vite.js --config apps/web/vite.config.ts --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@hrms-workflow/adapters-hrms": "file:../workflow-platform/packages/adapters-hrms",
+    "@hrms-workflow/workflow-config": "file:../workflow-platform/packages/workflow-config",
+    "@hrms-workflow/workflow-core": "file:../workflow-platform/packages/workflow-core",
+    "@hrms-workflow/workflow-postgres": "file:../workflow-platform/packages/workflow-postgres",
+    "@hrms-workflow/workflow-resolvers": "file:../workflow-platform/packages/workflow-resolvers",
+    "@hrms-workflow/workflow-test-kit": "file:../workflow-platform/packages/workflow-test-kit",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "file:../workflow-platform/node_modules/typescript",
+    "vite": "^8.1.2"
+  }
+}

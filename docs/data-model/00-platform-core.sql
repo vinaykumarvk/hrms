@@ -29,6 +29,7 @@
 --        capability_flags, user_capability_flags, individual_entitlements, pii_tiers)
 --     4  Employee golden record (employees, employee_dependents)        [G01 owner]
 --     5  Workflow engine (workflows, workflow_instances, workflow_actions,
+--        durable task/wait/fork/reference/resolution snapshots,
 --        skip_settings, sla_settings)                                   [P01]
 --     6  Audit & consent (audit_log, security_audit_log, consent_records) [P05/DPDPA]
 --     7  Documents (documents, document_versions)                       [G13/P13 owner]
@@ -150,8 +151,13 @@ CREATE TYPE dependent_relationship AS ENUM ('SPOUSE','SON','DAUGHTER','FATHER','
 CREATE TYPE workflow_pattern         AS ENUM ('SEQUENTIAL','PARALLEL_ALL_OF','PARALLEL_ANY_OF','CONDITIONAL','DYNAMIC_APPROVER');
 CREATE TYPE workflow_def_status      AS ENUM ('DRAFT','ACTIVE','DEPRECATED');
 CREATE TYPE workflow_instance_status AS ENUM ('RUNNING','APPROVED','REJECTED','SENT_BACK','CANCELLED','ESCALATED','COMPLETED');
-CREATE TYPE workflow_action_type     AS ENUM ('START','ADVANCE','APPROVE','REJECT','SEND_BACK','DELEGATE','CANCEL','ESCALATE');
-CREATE TYPE approver_resolution      AS ENUM ('NAMED_ROLE','REPORTING_CHAIN','NAMED_INDIVIDUAL','COST_CENTRE_HEAD');
+CREATE TYPE workflow_action_type     AS ENUM ('START','ADVANCE','APPROVE','REJECT','SEND_BACK','DELEGATE','CANCEL','ESCALATE','QUERY');
+CREATE TYPE approver_resolution      AS ENUM ('WORK_QUEUE','NAMED_ROLE','REPORTING_CHAIN','STATUTORY_AUTHORITY','NAMED_INDIVIDUAL','COST_CENTRE_HEAD');
+CREATE TYPE workflow_task_status     AS ENUM ('PENDING','IN_PROGRESS','COMPLETED','CANCELLED','DELEGATED','RETURNED');
+CREATE TYPE workflow_wait_status     AS ENUM ('WAITING','SATISFIED','CANCELLED','EXPIRED');
+CREATE TYPE workflow_fork_status     AS ENUM ('OPEN','JOINED','CANCELLED');
+CREATE TYPE workflow_fork_branch_status AS ENUM ('OPEN','COMPLETED','CANCELLED');
+CREATE TYPE workflow_reference_status AS ENUM ('OPEN','RESPONDED','CANCELLED','EXPIRED');
 
 -- Audit (P05) / consent ---------------------------------------------------------------
 CREATE TYPE audit_operation     AS ENUM ('INSERT','UPDATE','SOFT_DELETE','REDACT');
@@ -982,6 +988,175 @@ CREATE INDEX ix_workflow_actions_tenant   ON workflow_actions(tenant_id);
 CREATE INDEX ix_workflow_actions_instance ON workflow_actions(instance_id);
 CREATE INDEX ix_workflow_actions_actor    ON workflow_actions(actor_user_id);
 
+-- workflow_idempotency_records (unsafe P01 call dedup across instances/actions) --------
+CREATE TABLE workflow_idempotency_records (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    idempotency_key    text NOT NULL,
+    request_hash       text NOT NULL,
+    owner_ref          text NOT NULL,                  -- e.g. workflow_instances:<id>
+    response_payload   jsonb NOT NULL,
+    expires_at         timestamptz NOT NULL,
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    created_by         uuid,
+    CONSTRAINT uq_workflow_idempotency_key UNIQUE (tenant_id, idempotency_key),
+    CONSTRAINT ck_workflow_idempotency_expiry CHECK (expires_at > created_at)
+);
+CREATE INDEX ix_workflow_idempotency_tenant ON workflow_idempotency_records(tenant_id);
+CREATE INDEX ix_workflow_idempotency_expiry ON workflow_idempotency_records(expires_at);
+
+-- workflow_resolution_snapshots (immutable approver/queue resolution evidence) ---------
+CREATE TABLE workflow_resolution_snapshots (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    instance_id        uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    stage              text NOT NULL,
+    resolver_type      approver_resolution NOT NULL,
+    resolver_rule      jsonb NOT NULL,                 -- configured rule evaluated at stage entry
+    candidates         jsonb NOT NULL DEFAULT '[]'::jsonb,
+    selected_assignees jsonb NOT NULL DEFAULT '[]'::jsonb,
+    fallback_applied   boolean NOT NULL DEFAULT false,
+    evidence           jsonb NOT NULL DEFAULT '{}'::jsonb, -- immutable route proof for audit/disputes
+    resolved_at        timestamptz NOT NULL DEFAULT now(),
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    created_by         uuid
+);
+CREATE INDEX ix_workflow_resolution_tenant   ON workflow_resolution_snapshots(tenant_id);
+CREATE INDEX ix_workflow_resolution_instance ON workflow_resolution_snapshots(instance_id);
+CREATE INDEX ix_workflow_resolution_stage    ON workflow_resolution_snapshots(instance_id, stage);
+
+-- workflow_tasks (durable task inbox rows derived from stage entry) --------------------
+CREATE TABLE workflow_tasks (
+    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id              uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id              uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    instance_id            uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    resolution_snapshot_id uuid REFERENCES workflow_resolution_snapshots(id) ON DELETE SET NULL,
+    stage                  text NOT NULL,
+    task_key               text NOT NULL,
+    status                 workflow_task_status NOT NULL DEFAULT 'PENDING',
+    assignment_mode        text NOT NULL,              -- WORK_QUEUE / SYSTEM_ROLE / future resolver-owned modes
+    assigned_user_id       uuid,
+    assigned_role_code     text,
+    org_unit_id            uuid REFERENCES org_units(id) ON DELETE RESTRICT,
+    level_id               text,
+    queue_key              text,
+    due_at                 timestamptz,
+    started_at             timestamptz,
+    completed_at           timestamptz,
+    created_at             timestamptz NOT NULL DEFAULT now(),
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    created_by             uuid,
+    updated_by             uuid,
+    is_deleted             boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_workflow_tasks_key UNIQUE (instance_id, task_key)
+);
+CREATE INDEX ix_workflow_tasks_tenant    ON workflow_tasks(tenant_id);
+CREATE INDEX ix_workflow_tasks_instance  ON workflow_tasks(instance_id);
+CREATE INDEX ix_workflow_tasks_status    ON workflow_tasks(tenant_id, status);
+CREATE INDEX ix_workflow_tasks_queue     ON workflow_tasks(tenant_id, queue_key) WHERE status IN ('PENDING','IN_PROGRESS');
+CREATE INDEX ix_workflow_tasks_assignee  ON workflow_tasks(assigned_user_id) WHERE assigned_user_id IS NOT NULL;
+
+-- workflow_waits (durable timer/manual wait rows) -------------------------------------
+CREATE TABLE workflow_waits (
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id             uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id             uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    instance_id           uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    stage                 text NOT NULL,
+    wait_key              text NOT NULL,
+    kind                  text NOT NULL,                -- TIMER / MANUAL_EVENT; validated by workflow-config
+    status                workflow_wait_status NOT NULL DEFAULT 'WAITING',
+    event_key             text,
+    due_at                timestamptz,
+    resume_transition_id  text NOT NULL,
+    payload               jsonb NOT NULL DEFAULT '{}'::jsonb,
+    pause_application_sla boolean NOT NULL DEFAULT true,
+    satisfied_at          timestamptz,
+    created_at            timestamptz NOT NULL DEFAULT now(),
+    updated_at            timestamptz NOT NULL DEFAULT now(),
+    created_by            uuid,
+    updated_by            uuid,
+    is_deleted            boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_workflow_waits_key UNIQUE (instance_id, wait_key)
+);
+CREATE INDEX ix_workflow_waits_tenant   ON workflow_waits(tenant_id);
+CREATE INDEX ix_workflow_waits_instance ON workflow_waits(instance_id);
+CREATE INDEX ix_workflow_waits_due      ON workflow_waits(due_at) WHERE status = 'WAITING';
+CREATE INDEX ix_workflow_waits_event    ON workflow_waits(tenant_id, event_key) WHERE status = 'WAITING';
+
+-- workflow_fork_executions / workflow_fork_branches (durable parallel execution) -------
+CREATE TABLE workflow_fork_executions (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    instance_id        uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    fork_state_id      text NOT NULL,
+    join_state_id      text NOT NULL,
+    status             workflow_fork_status NOT NULL DEFAULT 'OPEN',
+    required_branches  integer NOT NULL,
+    completed_branches integer NOT NULL DEFAULT 0,
+    context            jsonb NOT NULL DEFAULT '{}'::jsonb,
+    joined_at          timestamptz,
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    updated_at         timestamptz NOT NULL DEFAULT now(),
+    created_by         uuid,
+    updated_by         uuid,
+    is_deleted         boolean NOT NULL DEFAULT false,
+    CONSTRAINT ck_workflow_fork_required CHECK (required_branches > 0),
+    CONSTRAINT ck_workflow_fork_completed CHECK (completed_branches >= 0 AND completed_branches <= required_branches)
+);
+CREATE INDEX ix_workflow_forks_tenant   ON workflow_fork_executions(tenant_id);
+CREATE INDEX ix_workflow_forks_instance ON workflow_fork_executions(instance_id);
+CREATE INDEX ix_workflow_forks_status   ON workflow_fork_executions(status);
+
+CREATE TABLE workflow_fork_branches (
+    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id         uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    fork_execution_id uuid NOT NULL REFERENCES workflow_fork_executions(id) ON DELETE CASCADE,
+    branch_key        text NOT NULL,
+    state_id          text NOT NULL,
+    task_id           uuid REFERENCES workflow_tasks(id) ON DELETE SET NULL,
+    status            workflow_fork_branch_status NOT NULL DEFAULT 'OPEN',
+    completed_at      timestamptz,
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now(),
+    created_by        uuid,
+    updated_by        uuid,
+    is_deleted        boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_workflow_fork_branch UNIQUE (fork_execution_id, branch_key)
+);
+CREATE INDEX ix_workflow_fork_branches_tenant ON workflow_fork_branches(tenant_id);
+CREATE INDEX ix_workflow_fork_branches_fork   ON workflow_fork_branches(fork_execution_id);
+CREATE INDEX ix_workflow_fork_branches_task   ON workflow_fork_branches(task_id);
+
+-- workflow_references (department/reference fan-out from a source task) ---------------
+CREATE TABLE workflow_references (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    instance_id        uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    source_task_id     uuid NOT NULL REFERENCES workflow_tasks(id) ON DELETE CASCADE,
+    target_org_unit_id uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
+    status             workflow_reference_status NOT NULL DEFAULT 'OPEN',
+    remarks            text NOT NULL,
+    response_payload   jsonb,
+    due_at             timestamptz,
+    completed_at       timestamptz,
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    updated_at         timestamptz NOT NULL DEFAULT now(),
+    created_by         uuid,
+    updated_by         uuid,
+    is_deleted         boolean NOT NULL DEFAULT false
+);
+CREATE INDEX ix_workflow_references_tenant   ON workflow_references(tenant_id);
+CREATE INDEX ix_workflow_references_instance ON workflow_references(instance_id);
+CREATE INDEX ix_workflow_references_task     ON workflow_references(source_task_id);
+CREATE INDEX ix_workflow_references_target   ON workflow_references(target_org_unit_id);
+
 -- skip_settings (skip-condition subject/rule; reassign-to-role; §4.14.12) --------------
 CREATE TABLE skip_settings (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1474,7 +1649,9 @@ DECLARE
         'separation_reasons','contribution_levels',
         'users','roles','role_permissions','user_roles','capability_flags','user_capability_flags',
         'individual_entitlements','employees','employee_dependents',
-        'workflows','workflow_instances','workflow_actions','skip_settings','sla_settings',
+        'workflows','workflow_instances','workflow_actions','workflow_idempotency_records',
+        'workflow_resolution_snapshots','workflow_tasks','workflow_waits','workflow_fork_executions',
+        'workflow_fork_branches','workflow_references','skip_settings','sla_settings',
         'audit_log','security_audit_log','consent_records',
         'documents','document_versions','service_register_events',
         'notifications','jobs','integration_credentials','migration_runs'

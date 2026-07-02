@@ -9,6 +9,15 @@ info:
     §4: cursor pagination, Idempotency-Key on state-changing POSTs, X-Correlation-Id response header, canonical error envelope
     with the 8-code standard table; ERR-G08-* annotated on responses. APAR_FINAL_GRADE / PROBATION_CONFIRMED post to the canonical
     G12 write-port POST /sr/ingest (event_category APPRAISAL, no fact_key).'
+  x-ph08-statutory-wave:
+    implementedRoutes:
+      - POST /api/v1/apar/forms
+      - POST /api/v1/apar/forms/{id}:report
+      - POST /api/v1/apar/forms/{id}:review
+      - POST /api/v1/apar/forms/{id}:accept
+      - POST /api/v1/apar/forms/{id}:post-sr
+    statutoryScope: APAR authoring chain, sealed cover, final grade, SR posting
+    srWriter: G08
 servers:
 - url: /api/v1
 security:

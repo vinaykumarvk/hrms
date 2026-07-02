@@ -1,0 +1,288 @@
+meta:
+  contract_id: P01-WORKFLOW-FACADE
+  version: 0.1.0
+  phase: PH-00B
+  status: frozen_for_ph_00b_human_review
+  generated_on: "2026-07-01"
+  puda_pin: cadf39739e6f27c17d44767ca61d1a362034ac64
+  source_refs:
+    - docs/platform-grounding/extracts/platform_spec.txt
+    - docs/contracts/state-machines.yaml
+    - docs/spec/puda-vs-hrms-capability-gap.md
+    - docs/spec/ph-00b-facade-boundary-recommendation.md
+    - /Users/n15318/PUDA_workflow_engine/apps/api/src/p01-workflow-facade.ts
+
+principles:
+  - The public contract is HRMS/P01 shaped; PUDA service names, queue keys, LAC action names, and raw service-version semantics are adapter internals.
+  - Every state-changing call requires tenant scope, actor context, correlation id, and idempotency key.
+  - In-flight workflow instances continue on the workflow definition version pinned at instance start.
+  - PH-00B is a pass-through boundary only; no PUDA workflow behavior is reimplemented or extracted into a shared package.
+  - Person hierarchy, statutory authority, guard, action, form, audit, notification, and document behavior attach through SPIs.
+
+common_context:
+  actor:
+    fields:
+      user_id: required string
+      actor_type: required enum [CITIZEN, OFFICER, ADMIN, SYSTEM]
+      roles: optional string array
+      tenant_id: required string
+      entity_id: optional string
+  subject_ref:
+    fields:
+      type: required string
+      id: optional string
+      arn: optional string
+  idempotency:
+    header: Idempotency-Key
+    behavior: A repeated state-changing request with the same actor, subject, verb, and key returns the original outcome.
+  errors:
+    - code: ERR-WF-INVALID-CODE
+      http_status: 400
+      meaning: Workflow code is missing, inactive, or invalid.
+    - code: ERR-WF-FORBIDDEN
+      http_status: 403
+      meaning: Actor is not permitted to perform the workflow action.
+    - code: ERR-WF-DUPLICATE
+      http_status: 409
+      meaning: Duplicate instance or duplicate idempotent action.
+    - code: ERR-WF-CONFLICT
+      http_status: 409
+      meaning: Instance state, task state, or pinned-version conflict.
+    - code: ERR-WF-VALIDATION
+      http_status: 422
+      meaning: Guard, form, transition, or payload validation failed.
+
+methods:
+  startInstance:
+    purpose: Start a workflow instance for a subject record.
+    puda_mapping: createApplication via defaultPudaP01WorkflowPorts.startApplication.
+    request:
+      workflow_code: required string
+      subject_ref: required object
+      context: optional object
+      initiator: required actor
+      authority_id: adapter-only PUDA authority identifier until PH-01 tenant mapping exists
+      applicant_user_id: optional string
+      submission_channel: optional string
+      assisted_by_user_id: optional string
+    response:
+      instance_id: required string
+      first_stage: optional string
+      assignees: optional array
+      definition_version: optional string
+    semantics:
+      - Resolves and pins the active workflow definition version at start.
+      - Emits instance-created audit and notification events through adapters when configured.
+      - Does not expose PUDA ARN format as a stable HRMS API guarantee.
+
+  advance:
+    purpose: Advance an instance by an explicit transition.
+    puda_mapping: executeTransition.
+    request:
+      instance_id: required string
+      transition_id: required string
+      actor: required actor
+      current_task_id: optional string
+      payload: optional object
+      remarks: optional string
+    response:
+      instance_id: required string
+      new_state_id: optional string
+      tasks: optional array
+    semantics:
+      - Used for neutral transitions and for pattern execution steps.
+      - Preserves task, fork, and branch identifiers as adapter payload fields.
+
+  approve:
+    purpose: Record an approval decision and advance the instance.
+    puda_mapping: executeTransition with decision APPROVE.
+    request: same_as advance
+    response: same_as advance
+    semantics:
+      - Writes one workflow action per idempotency key.
+      - Re-runs configured guards at decision time where the workflow definition requires it.
+
+  reject:
+    purpose: Record a rejection decision and move to the configured rejection state.
+    puda_mapping: executeTransition with decision REJECT.
+    request: same_as advance
+    response: same_as advance
+    semantics:
+      - Requires reason text when configured by the workflow definition.
+      - Terminal and non-terminal rejection behavior is definition-driven.
+
+  sendBack:
+    purpose: Return a task or instance to a prior stage for correction.
+    puda_mapping: returnTaskToPreviousOfficer.
+    request:
+      task_id: required string
+      actor: required actor
+      remarks: required string
+      target_stage_id: optional string
+    response:
+      instance_id: optional string
+      new_state_id: optional string
+    semantics:
+      - Reopens only the affected stage path.
+      - Later PH-01 work must normalize PUDA return semantics to HRMS stage ids.
+
+  delegate:
+    purpose: Reassign a task to another user under a delegation rule.
+    puda_mapping: reassignTask.
+    request:
+      task_id: required string
+      target_user_id: required string
+      actor: required actor
+      reason: required string
+    response:
+      task_id: required string
+    semantics:
+      - Generic delegation is facade-visible, but PH-00B delegates to the current PUDA reassignment primitive.
+      - PH-01 must add delegation policy checks through the approver resolver SPI.
+
+  cancel:
+    purpose: Cancel or recall an in-flight instance where policy permits.
+    puda_mapping: executeTransition with decision CANCEL.
+    request: same_as advance
+    response: same_as advance
+    semantics:
+      - Cancellation is definition-driven.
+      - Branch cleanup and notification effects remain adapter responsibilities.
+
+  query:
+    purpose: Raise a query or request correction from a participant.
+    puda_mapping: takeActionOnTask.
+    request:
+      task_id: required string
+      action_id: required string
+      actor: required actor
+      query_message: optional string
+      unlocked_fields: optional string array
+      unlocked_documents: optional string array
+      payload: optional object
+    response:
+      instance_id: optional string
+      new_state_id: optional string
+    semantics:
+      - Unlocked form fields and documents are data, not code paths.
+      - Citizen response handling remains a configured workflow action.
+
+  listTasks:
+    purpose: Return task queue items visible to the actor.
+    puda_mapping: getInboxTasks.
+    request:
+      actor: required actor
+      authority_id: adapter-only optional string
+      status: optional string or string array
+      limit: optional integer
+      offset: optional integer
+    response:
+      tasks: required array
+    semantics:
+      - Public HRMS callers must not depend on PUDA queue keys.
+      - PH-01 must add tenant/entity/person scope enforcement before HRMS feature modules use this endpoint.
+
+  satisfyWait:
+    purpose: Resume an instance waiting on a timer, hearing, external event, or department response.
+    puda_mapping: satisfyWorkflowWait.
+    request:
+      wait_id: required string
+      actor: required actor
+      event_key: optional string
+      remarks: optional string
+      payload: optional object
+    response:
+      instance_id: optional string
+      new_state_id: optional string
+    semantics:
+      - Wait satisfaction does not reimplement wait processing in the facade.
+      - Timer/SLA policy remains definition and adapter driven.
+
+  createReference:
+    purpose: Open one or more department reference tasks from a source task.
+    puda_mapping: createDepartmentReferencesForTask.
+    request:
+      source_task_id: required string
+      actor: required actor
+      target_org_unit_ids: required string array
+      remarks: required string
+    response:
+      reference_count: required integer
+    semantics:
+      - Used by reference/fork-style workflows until PH-01 normalizes reference DTOs.
+
+spis:
+  approverResolver:
+    purpose: Resolve named role, reporting-chain, statutory authority, named individual, cost-centre head, and delegation candidates.
+    phase_status: required_for_PH_01_PH_02
+    interface: resolve(rule, subject_ref, actor, as_of_date, tenant_scope) -> candidates + evidence + fallback_applied
+    evidence_required: Immutable routing evidence must be attached to workflow action records.
+
+  guardProvider:
+    purpose: Evaluate branch, skip, SoD, eligibility, and statutory guard predicates.
+    phase_status: adapter_in_PH_00B_platform_in_PH_01
+    interface: evaluate(predicate_code, context, actor) -> allow/deny + reasons
+
+  actionAdapter:
+    purpose: Execute side effects after workflow decisions without embedding module behavior in the engine.
+    phase_status: adapter_in_PH_00B_platform_in_PH_01
+    interface: execute(action_code, instance_ref, payload, actor) -> result + audit_ref
+
+  formAdapter:
+    purpose: Load, validate, and write back configured forms used by workflow stages.
+    phase_status: required_before_module_buildout
+    interface: loadForm(form_code, version), validateSubmission(form_code, payload), writeBack(subject_ref, payload)
+
+  auditAdapter:
+    purpose: Map every facade action to P05 workflow action and audit records.
+    phase_status: required_before_HRMS_feature_use
+    interface: record(action, actor, before_state, after_state, evidence)
+
+  notificationAdapter:
+    purpose: Emit notification events without binding workflow core to delivery channels.
+    phase_status: required_before_HRMS_feature_use
+    interface: publish(event_code, recipients, payload, correlation_id)
+
+  documentAdapter:
+    purpose: Generate orders, letters, references, and statutory documents after workflow stages.
+    phase_status: required_before_G05_G08_G09_G10_G11
+    interface: generate(template_code, subject_ref, payload) -> document_ref
+
+persistence:
+  phase_status: added_in_PH_00D
+  package: /Users/n15318/workflow-platform/packages/workflow-postgres
+  tenant_model: Every repository call requires TenantScope and must reject missing tenant_id.
+  rls_compatibility: Tables carry tenant_id, optional entity_id, and are listed in the platform RLS tenant-isolation block.
+  durable_records:
+    - workflow_idempotency_records
+    - workflow_resolution_snapshots
+    - workflow_tasks
+    - workflow_waits
+    - workflow_fork_executions
+    - workflow_fork_branches
+    - workflow_references
+  guarantees:
+    - In-flight instances pin workflow definition version.
+    - Retried unsafe calls use idempotency records instead of duplicate writes.
+    - Approver resolution evidence is immutable stage-entry evidence for later audit/dispute review.
+    - Wait, fork/join, task, and reference records survive process restarts.
+
+config_governance:
+  phase_status: added_in_PH_00D
+  package: /Users/n15318/workflow-platform/packages/workflow-config
+  lifecycle: DRAFT -> PENDING_REVIEW -> ACTIVE -> DEPRECATED
+  evidence_pack:
+    - config_hash
+    - validation_result
+    - reviewer
+    - publisher
+    - superseded_version
+  version_pinning: New instances bind to the active definition version at start; in-flight instances continue on the pinned version.
+
+known_gaps:
+  - gap: Full HRMS person-hierarchy and statutory-authority routing is not implemented in PH-00B.
+    disposition: Captured as approverResolver SPI and scheduled for PH-01/PH-02.
+  - gap: PUDA aggregate golden corpus is not fully clean in the committed repo configuration.
+    disposition: PH-00B uses focused facade conformance plus PUDA queue-routing smoke; full aggregate cleanup remains a caveat from PH-00A.
+  - gap: PUDA license/provenance must be approved before shared package extraction.
+    disposition: Human gate before PH-00C extraction.

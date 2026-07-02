@@ -28,6 +28,22 @@ info:
     name: API Architecture / Platform Foundation
   license:
     name: Proprietary — Government HRMS Programme
+  x-ph06-vertical-slice:
+    implementedRoutes:
+      - POST /api/v1/atl/leave-applications
+      - POST /api/v1/atl/leave-applications/{id}/decision
+      - GET /api/v1/atl/leave-sr-outbox
+    workflowResolver: REPORTING_CHAIN
+    srWriter: G04
+  x-ph07-employee-wave:
+    implementedRoutes:
+      - POST /api/v1/atl/leave-accruals
+      - POST /api/v1/atl/attendance-captures
+      - POST /api/v1/atl/attendance-captures/{id}:regularise
+      - POST /api/v1/atl/overtime
+      - GET /api/v1/atl/payroll-signals
+    payrollSignalStatus: READY_FOR_G10
+    srWriter: G04
 
 servers:
   - url: /api/v1

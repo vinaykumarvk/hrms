@@ -1,0 +1,48 @@
+export interface FoundationServiceEntry {
+  service: string;
+  operation: string;
+  protected: true;
+  permission: string;
+}
+
+export const foundationServiceRegistry: FoundationServiceEntry[] = [
+  { service: "P01", operation: "workflow.start", protected: true, permission: "p01.workflow.start" },
+  { service: "P01", operation: "workflow.act", protected: true, permission: "p01.workflow.act" },
+  { service: "G01", operation: "employee.read", protected: true, permission: "g01.employee.read" },
+  { service: "G01", operation: "employee.governed_change", protected: true, permission: "g01.employee.governed_change" },
+  { service: "G02", operation: "change.submit", protected: true, permission: "g02.change.submit" },
+  { service: "G02", operation: "change.commit", protected: true, permission: "g02.change.commit" },
+  { service: "G03", operation: "leave.submit", protected: true, permission: "g03.leave.submit" },
+  { service: "G03", operation: "leave.approve", protected: true, permission: "g03.leave.approve" },
+  { service: "G03", operation: "attendance.capture", protected: true, permission: "g03.attendance.capture" },
+  { service: "G04", operation: "relay.write", protected: true, permission: "g04.relay.write" },
+  { service: "G04", operation: "relay.replay", protected: true, permission: "g04.relay.replay" },
+  { service: "G05", operation: "transfer.initiate", protected: true, permission: "g05.transfer.initiate" },
+  { service: "G05", operation: "transfer.join", protected: true, permission: "g05.transfer.join" },
+  { service: "G05", operation: "transfer.representation", protected: true, permission: "g05.transfer.representation.file" },
+  { service: "G05", operation: "transfer.cancel", protected: true, permission: "g05.transfer.cancel" },
+  { service: "G06", operation: "seniority.write", protected: true, permission: "g06.seniority.write" },
+  { service: "G06", operation: "dpc.hold", protected: true, permission: "g06.dpc.hold" },
+  { service: "G06", operation: "promotion.effect", protected: true, permission: "g06.promotion.order.effect" },
+  { service: "G07", operation: "training.nomination", protected: true, permission: "g07.nomination.submit" },
+  { service: "G07", operation: "training.complete", protected: true, permission: "g07.nomination.complete" },
+  { service: "G08", operation: "apar.open", protected: true, permission: "g08.apar.form.open" },
+  { service: "G08", operation: "apar.post_sr", protected: true, permission: "g08.apar.post_sr" },
+  { service: "G09", operation: "case.open", protected: true, permission: "g09.case.open" },
+  { service: "G09", operation: "penalty.impose", protected: true, permission: "g09.penalty.impose" },
+  { service: "G10", operation: "salary.write", protected: true, permission: "g10.salary.write" },
+  { service: "G10", operation: "payroll.compute", protected: true, permission: "g10.payroll.compute" },
+  { service: "G10", operation: "payroll.approve", protected: true, permission: "g10.payroll.approve" },
+  { service: "G10", operation: "payroll.disburse", protected: true, permission: "g10.payroll.disburse" },
+  { service: "G11", operation: "case.create", protected: true, permission: "g11.case.create" },
+  { service: "G11", operation: "service.verify", protected: true, permission: "g11.service.verify" },
+  { service: "G11", operation: "pension.compute", protected: true, permission: "g11.pension.compute" },
+  { service: "G11", operation: "ppo.issue", protected: true, permission: "g11.ppo.issue" },
+  { service: "G12", operation: "sr.ingest", protected: true, permission: "g12.sr.ingest" },
+  { service: "G13", operation: "document.create", protected: true, permission: "g13.document.create" },
+  { service: "G13", operation: "document.attach", protected: true, permission: "g13.document.attach" },
+  { service: "G14", operation: "analytics.read", protected: true, permission: "g14.analytics.read" },
+  { service: "G14", operation: "analytics.refresh", protected: true, permission: "g14.analytics.refresh" },
+  { service: "G14", operation: "analytics.drill_through", protected: true, permission: "g14.analytics.drill_through" },
+  { service: "P06", operation: "migration.stage", protected: true, permission: "p06.migration.stage" },
+];

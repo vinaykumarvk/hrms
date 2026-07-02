@@ -7,6 +7,15 @@ info:
   description: 'Government HRMS module G09 (Disciplinary Cases & Punishment). Statutory due-process engine running on the PrimeSoft platform (workflow P01, RBAC P02, audit P05, notifications X.2). Adopts the platform API conventions verbatim (PLATFORM_FOUNDATION §4): bearer auth, X-Correlation-Id response header, Idempotency-Key on state-changing POSTs (24h replay), cursor pagination (limit default 25/max 100 + cursor → next_cursor), and the canonical error envelope with the 8 platform wire codes plus the ERR-G09-* catalog (error-taxonomy.yaml). Penalty/exoneration/suspension outcomes post to the G12 SR ledger via the single canonical write-port POST /api/v1/sr/ingest (MINOR_PENALTY/MAJOR_PENALTY/CENSURE/SUSPENSION/SUSPENSION_REVOKED + *_REVERSAL), deduplicated on (source_module, source_reference_id, source_event_version) + fact_key. Confidentiality and sealed-cover are enforced by P02 field masking.'
   contact:
     name: API Architecture / Platform Foundation
+  x-ph08-statutory-wave:
+    implementedRoutes:
+      - POST /api/v1/disciplinary/cases
+      - POST /api/v1/disciplinary/cases/{id}:charge
+      - POST /api/v1/disciplinary/cases/{id}:inquiry-report
+      - POST /api/v1/disciplinary/cases/{id}:penalty
+      - POST /api/v1/disciplinary/cases/{id}:appeal
+    statutoryScope: authority competence, charge, inquiry, penalty, appeal, sealed routing, SR posting
+    srWriter: G09
 servers:
 - url: /api/v1
   description: All endpoints under the /api/v1 major prefix (Foundation §4).

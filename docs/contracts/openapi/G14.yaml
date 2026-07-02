@@ -26,6 +26,7 @@ openapi: 3.1.0
 info:
   title: Government HRMS — G14 Dashboard & Analytics API
   version: 3.0.0
+  x-ph10-release-analytics: read-only-mart-release-readiness
   description: >
     Cross-module intelligence layer of the government HRMS, delivered as an
     extension of PrimeSoft M16 Reports & Analytics on the `analytics.*`

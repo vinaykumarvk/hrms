@@ -28,6 +28,19 @@ meta:
   version: "v3-consolidated-1"
   modules_covered: [G01, G02, G03, G04, G05, G06, G07, G08, G09, G10, G11, G12, G13, G14]
   p01_patterns: [SEQUENTIAL, PARALLEL_ALL_OF, PARALLEL_ANY_OF, CONDITIONAL, DYNAMIC_APPROVER]
+  p01_runtime_contract:
+    schema_amendment: docs/spec/p01-schema-amendment.yaml
+    action_log_table: workflow_actions
+    actionable_work_item_table: workflow_tasks
+    resolver_snapshot_table: workflow_resolution_snapshots
+    wait_table: workflow_waits
+    fork_tables: [workflow_fork_executions, workflow_fork_branches]
+    reference_table: workflow_references
+    rule: "workflow_tasks is P01-owned runtime inbox state; modules must not create local approval-task engines."
+  authority_resolution_contract:
+    contract: docs/spec/authority-resolution-contract.yaml
+    resolver_types: [WORK_QUEUE, NAMED_ROLE, REPORTING_CHAIN, STATUTORY_AUTHORITY, NAMED_INDIVIDUAL, COST_CENTRE_HEAD, COMMITTEE]
+    replay_rule: "Explain historical decisions from stored workflow_resolution_snapshots, not from today's hierarchy."
   invariants:
     - "In-flight P01 instances continue on the workflow definition version they started on; new versions affect only new instances (deprecation, not deletion)."
     - "Every P01 transition writes one workflow_actions row and a P05 audit row; terminal actions are immutable."

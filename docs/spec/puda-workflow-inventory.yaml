@@ -1,0 +1,200 @@
+artifact: puda-workflow-inventory
+phase: PH-00A
+status: complete_with_grouped_evidence
+generated_from:
+  hrms_plan: docs/spec/phased-plan.yaml
+  puda_repo: /Users/n15318/PUDA_workflow_engine
+  puda_commit: cadf39739e6f27c17d44767ca61d1a362034ac64
+  puda_worktree_dirty_state:
+    modified_files: 10
+    untracked_files: 14
+    evidence: "git -C /Users/n15318/PUDA_workflow_engine status --short"
+
+counts:
+  candidate_entries_in_plan: 43
+  expanded_candidate_paths: 113
+  golden_test_paths: 24
+  adapter_only_or_excluded_patterns: 10
+  count_classified_candidate_paths: 113
+  count_classified_golden_paths: 24
+  count_classified_adapter_patterns: 10
+  missing_paths: 0
+  evidence: "candidate_entries=43 expanded_files=113 golden_files=24 missing=0"
+
+classification_legend:
+  reusable-core: "Maps to a P01/HRMS capability and can be reused behind a facade after SPI hardening."
+  reusable-core-with-adapter: "Contains reusable mechanics plus PUDA-domain leakage that must be pushed behind adapters."
+  reusable-ui-reference: "Useful as a design/runtime reference, not a direct HRMS dependency without product fit review."
+  characterization-test: "Existing PUDA tests used or queued as golden behavior fixtures."
+  puda-domain-only: "Considered and excluded from engine extraction; keep as adapter/example only."
+  unclear-risk: "Insufficient evidence for extraction without a targeted PH-00B review."
+
+evidence_summary:
+  command_candidate_expansion: "candidate_entries=43 expanded_files=113 golden_files=24 missing=0"
+  command_routing_vocabulary: "role=64 queue=54 lane=10 designation=8 hierarchy=0 reports_to=0 reporting_manager=0 manager_id=0 HOD=0 reporting_officer=0"
+  focused_api_test: "work-queues.test.ts: 1 file passed, 6 tests passed"
+  focused_officer_test: "TaskDetail.workflow-engine-behavior.test.ts + WorkflowSwimlanes.test.ts: 2 files passed, 22 tests passed"
+
+classified_candidate_groups:
+  reusable_core_runtime:
+    count: 12
+    default_classification: reusable-core
+    extraction: wrap_behind_facade_first
+    evidence:
+      - "apps/api/src/workflow.ts:880-958 task creation by WORK_QUEUE/SYSTEM_ROLE"
+      - "apps/api/src/workflow.ts:1158-1266 transition execution and authorization"
+      - "apps/api/src/workflow.route-model.ts:1-10 pure route graph"
+      - "apps/api/src/work-queues.ts:34-82 queue key and assignment resolution"
+      - "apps/api/src/officer-routing-reconciliation.ts:50-80 designation-role-queue alignment"
+    paths:
+      - { path: apps/api/src/workflow.ts, classification: reusable-core-with-adapter, coupling: "Imports LAC/payment/document side effects; see apps/api/src/workflow.ts:1296-1319 and apps/api/src/workflow.ts:1926-2025." }
+      - { path: apps/api/src/workflow.route-model.ts, classification: reusable-core, coupling: "Pure transformation; see apps/api/src/workflow.route-model.ts:1-10." }
+      - { path: apps/api/src/workflow.static-loader.ts, classification: reusable-core, coupling: "Plan-listed runtime loader; existence covered by command_candidate_expansion." }
+      - { path: apps/api/src/workflow-action-catalog.ts, classification: reusable-core-with-adapter, coupling: "Core owners and LAC owners mixed; see apps/api/src/workflow-action-catalog.ts:1-58 and apps/api/src/workflow-action-catalog.ts:60-103." }
+      - { path: apps/api/src/workflow-routing-normalization.ts, classification: reusable-core, coupling: "Plan-listed routing normalizer; existence covered by command_candidate_expansion." }
+      - { path: apps/api/src/workflow-simulation.ts, classification: reusable-core, coupling: "Simulation report/paths; see apps/api/src/workflow-simulation.ts:1-50 and apps/api/src/workflow-simulation.ts:98-120." }
+      - { path: apps/api/src/tasks.ts, classification: reusable-core-with-adapter, coupling: "Task/query API surface; needs facade review before direct reuse." }
+      - { path: apps/api/src/work-queues.ts, classification: reusable-core, coupling: "Queue model; see apps/api/src/work-queues.ts:34-82." }
+      - { path: apps/api/src/officer-routing-reconciliation.ts, classification: reusable-core-with-adapter, coupling: "Officer designation map, not HR hierarchy; see apps/api/src/officer-routing-reconciliation.ts:50-80." }
+      - { path: apps/api/src/route-access.ts, classification: reusable-core-with-adapter, coupling: "Route authorization candidate; existence covered by command_candidate_expansion." }
+      - { path: apps/api/src/workflow-diagnostics.ts, classification: reusable-core, coupling: "Diagnostics/evidence candidate; existence covered by command_candidate_expansion." }
+      - { path: apps/api/src/workflow.test-helpers.ts, classification: characterization-test, coupling: "Golden test harness candidate; existence covered by command_candidate_expansion." }
+
+  sla_and_waits:
+    count: 3
+    default_classification: reusable-core
+    extraction: wrap_behind_facade_first
+    evidence:
+      - "apps/api/src/sla-checker.ts:25-47 breach detection"
+      - "apps/api/src/sla-checker.ts:90-115 audit/notification writes"
+      - "apps/api/src/workflow-waits.ts:49-180 wait satisfaction and resume"
+      - "apps/api/migrations/043_workflow_waits_and_waiting_states.sql:6-40 persisted waits"
+    paths:
+      - { path: apps/api/src/sla.ts, classification: reusable-core, coupling: "SLA runtime candidate; existence covered by command_candidate_expansion." }
+      - { path: apps/api/src/sla-checker.ts, classification: reusable-core-with-adapter, coupling: "Direct notification/audit writes; see apps/api/src/sla-checker.ts:90-115." }
+      - { path: apps/api/src/workflow-waits.ts, classification: reusable-core-with-adapter, coupling: "Calls executeTransition and public-notice hook; see apps/api/src/workflow-waits.ts:152-180." }
+
+  config_governance:
+    count: 6
+    default_classification: reusable-core
+    extraction: wrap_behind_facade_first
+    evidence:
+      - "apps/api/src/workflow-config-capabilities.ts:24-35 publish role map"
+      - "apps/api/src/workflow-config-validation.ts:1-72 validation result model"
+      - "apps/api/src/service-version.ts:3-28 effective-date active version"
+      - "apps/api/migrations/096_workflow_config_publish_review.sql:1-38 publish review"
+    paths:
+      - { path: apps/api/src/workflow-config-capabilities.ts, classification: reusable-core, coupling: "Workflow config capability map; see apps/api/src/workflow-config-capabilities.ts:24-35." }
+      - { path: apps/api/src/workflow-config-validation.ts, classification: reusable-core, coupling: "Validation engine; see apps/api/src/workflow-config-validation.ts:1-72." }
+      - { path: apps/api/src/workflow-service-pack-certification.ts, classification: reusable-core-with-adapter, coupling: "Service-pack certification candidate; existence covered by command_candidate_expansion." }
+      - { path: apps/api/src/service-version.ts, classification: reusable-core, coupling: "Active version resolver; see apps/api/src/service-version.ts:3-28." }
+      - { path: apps/api/src/service-pack-sync.ts, classification: reusable-core-with-adapter, coupling: "Boot/package sync likely PUDA deployment-specific; existence covered by command_candidate_expansion." }
+      - { path: apps/api/src/domain-workflow-config.ts, classification: reusable-core-with-adapter, coupling: "Domain config bridge; requires adapter split." }
+
+  visibility_and_privacy:
+    count: 1
+    default_classification: reusable-core
+    extraction: wrap_behind_facade_first
+    evidence:
+      - "apps/api/src/workflow-privacy.ts:1-18 PII context keys"
+      - "apps/api/src/workflow-privacy.ts:120-148 open task/document masking"
+    paths:
+      - { path: apps/api/src/workflow-privacy.ts, classification: reusable-core, coupling: "PII masking reusable; sealed-cover still needs HRMS overlay." }
+
+  migrations:
+    count: 17
+    default_classification: reusable-core
+    extraction: schema_reference_not_direct_import
+    evidence:
+      - "apps/api/migrations/002_complete_schema.sql:203-257 service_version/application/task"
+      - "apps/api/migrations/039_work_queue_routing_foundation.sql:1-89 queue routing foundation"
+      - "apps/api/migrations/046_workflow_fork_join.sql:1-66 fork/join persistence"
+      - "apps/api/migrations/096_workflow_config_publish_review.sql:1-38 publish governance"
+      - "apps/api/migrations/168_one_published_version_per_service.sql:1-15 active-version invariant"
+    paths:
+      - { path: apps/api/migrations/002_complete_schema.sql, classification: reusable-core-with-adapter, coupling: "Single-authority scope; see apps/api/migrations/002_complete_schema.sql:216-235." }
+      - { path: apps/api/migrations/036_task_arn_index.sql, classification: reusable-core, coupling: "Task index candidate; existence covered by command_candidate_expansion." }
+      - { path: apps/api/migrations/039_work_queue_routing_foundation.sql, classification: reusable-core, coupling: "Queue routing schema; see apps/api/migrations/039_work_queue_routing_foundation.sql:50-89." }
+      - { path: apps/api/migrations/043_workflow_waits_and_waiting_states.sql, classification: reusable-core, coupling: "Wait-state schema; see apps/api/migrations/043_workflow_waits_and_waiting_states.sql:6-40." }
+      - { path: apps/api/migrations/044_fix_application_state_constraint_after_waits.sql, classification: reusable-core, coupling: "Wait-compatible state constraint; existence covered by command_candidate_expansion." }
+      - { path: apps/api/migrations/046_workflow_fork_join.sql, classification: reusable-core, coupling: "Fork/join schema; see apps/api/migrations/046_workflow_fork_join.sql:6-24." }
+      - { path: apps/api/migrations/070_workflow_version_evidence_pack.sql, classification: reusable-core, coupling: "Evidence packs; see apps/api/migrations/070_workflow_version_evidence_pack.sql:4-27." }
+      - { path: apps/api/migrations/077_domain_workflow_services.sql, classification: reusable-core-with-adapter, coupling: "Domain-service bridge; existence covered by command_candidate_expansion." }
+      - { path: apps/api/migrations/089_workflow_references.sql, classification: reusable-core, coupling: "Workflow references candidate; existence covered by command_candidate_expansion." }
+      - { path: apps/api/migrations/090_parallel_reference_workflow_versions.sql, classification: reusable-core, coupling: "Parallel reference versions candidate; existence covered by command_candidate_expansion." }
+      - { path: apps/api/migrations/096_workflow_config_publish_review.sql, classification: reusable-core, coupling: "Publish review; see apps/api/migrations/096_workflow_config_publish_review.sql:1-38." }
+      - { path: apps/api/migrations/109_lac_reader_delegation.sql, classification: puda-domain-only, coupling: "LAC reader delegation only; see apps/api/migrations/109_lac_reader_delegation.sql:1-21." }
+      - { path: apps/api/migrations/133_workflow_foundation_returns_and_document_reviews.sql, classification: reusable-core-with-adapter, coupling: "Return/document review candidate; existence covered by command_candidate_expansion." }
+      - { path: apps/api/migrations/153_department_reference_workflow.sql, classification: reusable-core-with-adapter, coupling: "Department reference workflow; existence covered by command_candidate_expansion." }
+      - { path: apps/api/migrations/154_drop_lane_from_queue_key.sql, classification: reusable-core, coupling: "Lane removed; see apps/api/migrations/154_drop_lane_from_queue_key.sql:1-7." }
+      - { path: apps/api/migrations/164_workflow_routing_normalization_support.sql, classification: reusable-core, coupling: "Routing normalization support; existence covered by command_candidate_expansion." }
+      - { path: apps/api/migrations/168_one_published_version_per_service.sql, classification: reusable-core, coupling: "Active version invariant; see apps/api/migrations/168_one_published_version_per_service.sql:1-15." }
+
+  officer_ui:
+    count: 74
+    default_classification: reusable-ui-reference
+    extraction: reference_or_port_selectively_after_facade
+    evidence:
+      - "Focused officer test command: 2 files passed, 22 tests passed"
+      - "apps/officer/src/workflow-config/graph/WorkflowSwimlanes.test.ts groups by role/queue"
+      - "apps/officer/src/TaskDetail.workflow-engine-behavior.test.ts covers query/document behavior"
+    paths_classified_by_group:
+      - "apps/officer/src/WorkflowConfigConsole.tsx"
+      - "apps/officer/src/workflow-config/** expanded to 71 child paths/directories; all classified reusable-ui-reference or characterization-test if *.test.*"
+      - "apps/officer/src/ServiceRoutingPreview.tsx"
+      - "apps/officer/src/TaskDetail.tsx"
+    expanded_path_note: "The full 74-path expansion is generated by command_candidate_expansion and includes component, helper, graph, actor-card, shared, and test files. Tests under this group are characterization-test; components/helpers are reusable-ui-reference."
+
+golden_test_corpus:
+  classification: characterization-test
+  count: 24
+  evidence:
+    - "Focused API queue test: 1 file passed, 6 tests passed."
+    - "Focused officer UI tests: 2 files passed, 22 tests passed."
+    - "Aggregate API corpus partial run: 2 failed, 3 passed, 2 failed tests, 63 passed tests before manual interrupt."
+  paths:
+    - apps/api/src/workflow.group1-simple-linear.test.ts
+    - apps/api/src/workflow.group5-complex-branching.test.ts
+    - apps/api/src/workflow.group7-fork-join.test.ts
+    - apps/api/src/workflow.group8-special.test.ts
+    - apps/api/src/workflow.engine.integration.test.ts
+    - apps/api/src/workflow.combinatorial.integration.test.ts
+    - apps/api/src/workflow.path-walker.integration.test.ts
+    - apps/api/src/workflow-branch-aware-stages.test.ts
+    - apps/api/src/sla.test.ts
+    - apps/api/src/sla-checker.test.ts
+    - apps/api/src/workflow.waits.integration.test.ts
+    - apps/api/src/admin-workflow-config.in-flight.test.ts
+    - apps/api/src/admin-workflow-config.publish-guard.test.ts
+    - apps/api/src/admin-workflow-config.concurrency.test.ts
+    - apps/api/src/admin-workflow-config.copy-and-make-active.test.ts
+    - apps/api/src/workflow-config-validation.test.ts
+    - apps/api/src/work-queues.test.ts
+    - apps/api/src/officer-routing-reconciliation.test.ts
+    - apps/api/src/workflow-routing-normalization.test.ts
+    - apps/api/src/workflow-privacy.test.ts
+    - apps/api/src/workflow.output-template-parity.test.ts
+    - apps/api/src/workflow-service-pack-certification.test.ts
+    - apps/officer/src/TaskDetail.workflow-engine-behavior.test.ts
+    - apps/officer/src/workflow-config/graph/WorkflowSwimlanes.test.ts
+
+adapter_only_or_excluded:
+  count: 10
+  classification: puda-domain-only
+  evidence:
+    - "apps/api/src/workflow.ts:1296-1319 imports LAC litigation hold guard inside transition execution"
+    - "apps/api/src/workflow.ts:1926-2025 executes LAC certificate/LoI output side effects"
+    - "apps/api/src/workflow-action-catalog.ts:60-103 LAC-owned actions"
+  patterns:
+    - { pattern: apps/api/src/lac.ts, reason: "PUDA LAC domain service, not workflow core." }
+    - { pattern: apps/api/src/lac-*.ts, reason: "PUDA LAC domain service family." }
+    - { pattern: apps/api/src/applications.ts, reason: "PUDA application/case domain boundary." }
+    - { pattern: apps/api/src/loi-*.ts, reason: "LoI domain side effects; HRMS should use document adapter." }
+    - { pattern: apps/api/src/workflow-payment-collections.ts, reason: "PUDA payment collection domain; keep as action adapter example." }
+    - { pattern: "apps/api/migrations/*lac_*", reason: "Land-acquisition domain schema." }
+    - { pattern: "apps/api/migrations/*land_pooling*", reason: "Land-pooling domain schema." }
+    - { pattern: "apps/api/migrations/*election*", reason: "Election domain schema." }
+    - { pattern: "service-packs/lac_*", reason: "LAC configured service packs." }
+    - { pattern: "service-packs/*_as_is", reason: "PUDA service-pack fixtures, not engine core." }
+
+decision_note: "Inventory supports facade-first reuse. Core state, task, wait, fork/join, validation, publish, simulation, and UI concepts are reusable; hierarchy/person-authority resolution, tenant/entity scoping, and side-effect adapters are not present as HRMS-ready core."

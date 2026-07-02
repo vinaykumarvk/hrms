@@ -1,0 +1,38 @@
+phase: PH-06
+slice: G05_TRANSFER_RELIEVING_JOINING
+goal: Prove transfer order approval through authority routing, parallel clearance, deemed clearance, document generation, joining, SR posting, audit, and notification.
+state_machine_contract: docs/contracts/state-machines.yaml#/modules/G05/machines/transfer_order
+openapi_contract: docs/contracts/openapi/G05.yaml
+implemented_routes:
+  - POST /api/v1/transfers/orders
+  - GET /api/v1/transfers/orders
+  - POST /api/v1/transfers/orders/{id}/approve
+  - GET /api/v1/transfers/orders/{id}/clearance
+  - POST /api/v1/transfers/orders/{id}/clearances/{clearance_code}:complete
+  - POST /api/v1/transfers/orders/{id}/clearances/{clearance_code}:deem
+  - POST /api/v1/transfers/orders/{id}:relieve-and-join
+workflow:
+  transfer_order:
+    code: WF-G05-TRANSFER-ORDER
+    resolver: POSITION_AUTHORITY
+    authority_code: G05_TRANSFER_REVENUE
+  clearance:
+    code: WF-G05-CLEARANCE-PARALLEL_ALL_OF
+    p01_pattern: PARALLEL_ALL_OF
+domain_steps:
+  - initiate validates transfer dates and resolves the transfer authority
+  - approve creates a WORM G13 transfer order document and opens parallel clearance
+  - clearances can be CLEARED or DEEMED_CLEARED after SLA breach
+  - relieve-and-join creates a G13 joining report and posts TRANSFER_JOINED through G12 as sourceModule G05
+platform_evidence:
+  P01: transfer workflow and clearance workflow actions
+  P02: Authorization.check on protected routes and service operations
+  P05: G05_TRANSFER_INITIATE, G05_TRANSFER_APPROVE, G05_CLEARANCE_DEEMED, G05_TRANSFER_RELIEVE_JOIN
+  G01: employee master lookup before transfer initiation
+  G12: TRANSFER_JOINED SR event
+  G13: transfer order and joining report documents attached to G05
+  X.2: G05_TRANSFER_INITIATED, G05_TRANSFER_APPROVED, G05_TRANSFER_JOINED notifications
+acceptance_tests:
+  - apps/api/test/ph06-g05-transfer.test.cjs
+rollback:
+  feature_flag: disable G05 transfer routes; G03 can remain enabled if P01/P02/P05/G12 stay green

@@ -140,6 +140,12 @@ The platform services are **already built**. Modules reference the service and c
 | **W.2 Form Definitions** | Fields/types, validation by `VAL-*` id, conditional show/required-if, entity data-binding, per-role visibility, i18n, versioning. | APAR, charge memo, pension forms, exit/joining reports are W.2 forms consumed by the React front end. |
 | **W.3 Notification Configuration** | Per-event recipient resolution, channel selection, reminder vs escalation, suppression/dedup, per-tenant overrides. | Government notification events configured here; templates by `MSG-*` id. |
 
+### 3.3 P01 runtime contract freeze
+
+PH-01 freezes the P01 runtime split in `docs/spec/p01-schema-amendment.yaml`: `workflow_actions` is the immutable action/decision log, while `workflow_tasks` is the P01-owned actionable inbox/work-item state derived from stage entry and approver resolution. Modules may reference these rows but must not create local approval-task engines.
+
+Authority resolution is frozen as an SPI contract in `docs/spec/authority-resolution-contract.yaml`. WORK_QUEUE routing is available from PH-00; reporting-chain, statutory-authority, cost-centre-head, delegation, acting-charge, and committee/quorum resolution remain PH-02 data-backed implementations behind the same SPI. Historical decisions are explained from `workflow_resolution_snapshots`, not by re-evaluating today's hierarchy.
+
 ---
 
 ## 4. Module Architecture

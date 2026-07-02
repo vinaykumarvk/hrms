@@ -25,7 +25,7 @@ need_file docs/spec/workflow-extraction-risk-register.md 200
 need_file docs/spec/ph-00a-verdict.md 300
 need_file docs/spec/manifest.json 2
 
-# 2) Inventory parses as YAML and reconciles (count_in == count_classified if those keys exist)
+# 2) Inventory parses as YAML and reconciles candidate/golden/adapter classification counts
 if [ -f docs/spec/puda-workflow-inventory.yaml ]; then
   python3 - <<'PY' || red "inventory yaml failed parse/reconcile"
 import sys,yaml,glob
@@ -33,21 +33,24 @@ try:
     d=yaml.safe_load(open("docs/spec/puda-workflow-inventory.yaml"))
 except Exception as e:
     print("  RED  inventory parse error:",e); sys.exit(1)
-def find(o,k):
-    if isinstance(o,dict):
-        if k in o: return o[k]
-        for v in o.values():
-            r=find(v,k)
-            if r is not None: return r
-    if isinstance(o,list):
-        for v in o:
-            r=find(v,k)
-            if r is not None: return r
-    return None
-ci=find(d,"count_in"); cc=find(d,"count_classified")
-if ci is not None and cc is not None and ci!=cc:
-    print(f"  RED  inventory count_in({ci}) != count_classified({cc})"); sys.exit(1)
-print("  ok   inventory parses (reconciliation:",("%s==%s"%(ci,cc)) if ci is not None else "counts not present, skipped","*)")
+counts=d.get("counts") or {}
+pairs=[
+    ("expanded_candidate_paths","count_classified_candidate_paths"),
+    ("golden_test_paths","count_classified_golden_paths"),
+    ("adapter_only_or_excluded_patterns","count_classified_adapter_patterns"),
+]
+for left,right in pairs:
+    if counts.get(left) != counts.get(right):
+        print(f"  RED  inventory {left}({counts.get(left)}) != {right}({counts.get(right)})")
+        sys.exit(1)
+if counts.get("missing_paths") != 0:
+    print(f"  RED  inventory missing_paths({counts.get('missing_paths')}) != 0")
+    sys.exit(1)
+group_sum=sum((g or {}).get("count",0) for g in (d.get("classified_candidate_groups") or {}).values())
+if group_sum != counts.get("expanded_candidate_paths"):
+    print(f"  RED  inventory group count sum({group_sum}) != expanded_candidate_paths({counts.get('expanded_candidate_paths')})")
+    sys.exit(1)
+print(f"  ok   inventory parses and reconciles: candidates={counts.get('expanded_candidate_paths')}, golden={counts.get('golden_test_paths')}, adapter={counts.get('adapter_only_or_excluded_patterns')}")
 sys.exit(0)
 PY
 fi

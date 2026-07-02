@@ -1,0 +1,94 @@
+meta:
+  phase: PH-00D
+  status: implemented_agentic_gate_green
+  generated_on: "2026-07-01"
+  target_repo: /Users/n15318/workflow-platform
+
+capabilities:
+  persistence:
+    status: partial_implemented
+    implemented:
+      - tenant-aware repository contracts
+      - idempotency records
+      - version-pinned workflow instance records
+      - task snapshots
+      - wait snapshots
+      - fork/join snapshots
+      - department-reference snapshots
+      - approver-resolution evidence snapshots
+      - deterministic in-memory contract implementation
+    deferred:
+      - live PostgreSQL adapter implementation
+      - migration from PUDA runtime tables into reusable persistence package
+    evidence:
+      - /Users/n15318/workflow-platform/packages/workflow-postgres/src
+      - docs/data-model/00-platform-core.sql
+
+  config_governance:
+    status: implemented
+    implemented:
+      - draft lifecycle
+      - validation gate using workflow-core validation
+      - publish-review gate
+      - active-version resolution
+      - old-version deprecation
+      - evidence pack hash and issue/warning codes
+    deferred:
+      - UI publish workflow
+      - signed evidence pack export
+    evidence:
+      - /Users/n15318/workflow-platform/packages/workflow-config/src
+
+  resolver_spi:
+    status: partial_implemented
+    implemented:
+      - ApproverResolver interface
+      - WORK_QUEUE resolver
+      - immutable resolution evidence result
+    deferred:
+      - REPORTING_CHAIN resolver
+      - STATUTORY_AUTHORITY resolver
+      - COST_CENTRE_HEAD resolver
+      - delegation fallback resolver
+    evidence:
+      - /Users/n15318/workflow-platform/packages/workflow-resolvers/src
+
+  hrms_hooks:
+    status: stubs_implemented
+    implemented:
+      - employee hook
+      - position/authority hook
+      - org-unit hook
+      - document hook
+      - notification hook
+      - audit hook
+      - Service Register hook
+    deferred:
+      - adapters backed by G01/G12/G13/X.2/P05 runtime services
+    evidence:
+      - /Users/n15318/workflow-platform/packages/adapters-hrms/src
+
+  schema:
+    status: implemented
+    implemented:
+      - durable P01 snapshot tables in 00-platform-core.sql
+      - RLS inclusion for new tenant-scoped tables
+      - full 00-to-14 disposable PostgreSQL schema load
+    deferred: []
+    evidence:
+      - docs/data-model/00-platform-core.sql
+      - docs/spec/pipeline/checks/ph-00d.sh
+
+risks:
+  - id: PH00D-R1
+    status: open
+    risk: Live PostgreSQL adapter is not yet implemented; PH-00D provides interfaces and contract implementation.
+    next_phase: PH-00E or PH-01
+  - id: PH00D-R2
+    status: open
+    risk: Hierarchy/statutory resolver remains future work behind the SPI.
+    next_phase: PH-01/PH-02
+  - id: PH00D-R3
+    status: accepted
+    risk: PUDA aggregate golden corpus remains a PH-00A caveat.
+    next_phase: PH-00E

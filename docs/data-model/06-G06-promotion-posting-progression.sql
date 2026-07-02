@@ -620,7 +620,9 @@ CREATE TABLE g06_promotion_panels (
     updated_at                  timestamptz NOT NULL DEFAULT now(),
     created_by                  uuid,
     updated_by                  uuid,
-    is_deleted                  boolean NOT NULL DEFAULT false
+    is_deleted                  boolean NOT NULL DEFAULT false,
+    CONSTRAINT ck_g06_panel_dates CHECK (panel_valid_until IS NULL OR panel_valid_from IS NULL OR panel_valid_until >= panel_valid_from),
+    CONSTRAINT ck_g06_panel_quorum CHECK (quorum_required > 0)
 );
 CREATE INDEX ix_g06_panel_tenant ON g06_promotion_panels(tenant_id);
 CREATE INDEX ix_g06_panel_entity ON g06_promotion_panels(entity_id);
@@ -645,7 +647,11 @@ CREATE TABLE g06_promotion_panel_members (
     created_by                  uuid,
     updated_by                  uuid,
     is_deleted                  boolean NOT NULL DEFAULT false,
-    CONSTRAINT ck_g06_pm_member CHECK (member_employee_id IS NOT NULL OR external_member_name IS NOT NULL)
+    CONSTRAINT ck_g06_pm_member CHECK (
+        (member_employee_id IS NOT NULL AND external_member_name IS NULL)
+        OR (member_employee_id IS NULL AND external_member_name IS NOT NULL)
+    ),
+    CONSTRAINT ck_g06_pm_recusal CHECK ((attendance = 'RECUSED' AND recusal_reason IS NOT NULL) OR attendance <> 'RECUSED' OR attendance IS NULL)
 );
 CREATE INDEX ix_g06_pm_tenant ON g06_promotion_panel_members(tenant_id);
 CREATE INDEX ix_g06_pm_entity ON g06_promotion_panel_members(entity_id);
@@ -1186,7 +1192,9 @@ COMMENT ON COLUMN g06_eligibility_rules.id          IS 'BRD eligibility_rule_id'
 COMMENT ON COLUMN g06_eligibility_assessments.id    IS 'BRD assessment_id; APAR/disc/category cols are P02 field-masked PII';
 COMMENT ON COLUMN g06_promotion_cases.id            IS 'BRD promotion_case_id';
 COMMENT ON COLUMN g06_promotion_panels.id           IS 'BRD panel_id';
+COMMENT ON TABLE g06_promotion_panels               IS 'PH-02 resolver committee source for DPC/screening panels; P01 stores quorum/recusal evidence in workflow_resolution_snapshots.';
 COMMENT ON COLUMN g06_promotion_panel_members.id    IS 'BRD panel_member_id';
+COMMENT ON TABLE g06_promotion_panel_members        IS 'PH-02 committee membership source; recused members are excluded before quorum evaluation.';
 COMMENT ON COLUMN g06_promotion_candidates.id       IS 'BRD candidate_id';
 COMMENT ON COLUMN g06_dpc_proceedings.id            IS 'BRD proceeding_id';
 COMMENT ON COLUMN g06_promotion_orders.id           IS 'BRD order_id; sr_event_id = G12 establishment event (PROMOTION)';

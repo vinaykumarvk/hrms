@@ -1,0 +1,67 @@
+meta:
+  phase: PH-01
+  status: implemented_agentic_contract
+  generated_on: "2026-07-01"
+  scope: Workflow migration/coexistence contract before HRMS module coding.
+
+runtime_strategy:
+  puda_existing_cases:
+    decision: retain_in_puda_runtime
+    rule: Existing PUDA workflow cases are not migrated in PH-01.
+  hrms_new_cases:
+    decision: start_on_P01_platform_contract
+    rule: New HRMS workflow cases use the P01 contract and HRMS adapters.
+  direct_case_migration:
+    decision: prohibited_without_dedicated_migration_phase
+    required_gate: human_if_destructive_or_irreversible
+
+state_mapping:
+  PUDA_PENDING_QUEUE_TASK:
+    p01_target:
+      instance: workflow_instances.status=RUNNING
+      task: workflow_tasks.status=PENDING
+      snapshot: workflow_resolution_snapshots
+    migration_rule: Map only in a future migration wave after assignee and queue evidence are reconciled.
+  PUDA_APPROVED_ACTION:
+    p01_target:
+      action: workflow_actions.action_type=APPROVE
+      audit: P05 audit_log/security_audit_log
+    migration_rule: Import as historical action evidence, not as a live task.
+  PUDA_REJECTED_ACTION:
+    p01_target:
+      action: workflow_actions.action_type=REJECT
+    migration_rule: Import as terminal action evidence.
+  PUDA_RETURNED_OR_SENT_BACK:
+    p01_target:
+      task: workflow_tasks.status=RETURNED
+      action: workflow_actions.action_type=SEND_BACK
+    migration_rule: Preserve comments and return target stage when available.
+  PUDA_WAITING_STATE:
+    p01_target:
+      wait: workflow_waits.status=WAITING
+    migration_rule: Reconcile due_at/event_key and SLA pause semantics before import.
+  PUDA_FORK_BRANCH:
+    p01_target:
+      fork_execution: workflow_fork_executions
+      branch: workflow_fork_branches
+    migration_rule: Import only if branch completion count can be reconciled.
+  PUDA_REFERENCE_DEPARTMENT:
+    p01_target:
+      reference: workflow_references
+    migration_rule: Preserve source task, target org unit, remarks, response, and due date.
+
+coexistence_controls:
+  - PUDA source commit is pinned for characterization and facade tests.
+  - PUDA core workflow runtime files remain unchanged in PH-00/PH-01.
+  - HRMS modules must call P01 contracts, not PUDA repositories.
+  - P06 migration dry runs are required before any historical workflow import.
+  - Imported historical decisions must keep original actor, timestamp, source id, comments, and evidence hash.
+
+cutover_prerequisites:
+  - source case inventory by tenant/entity/status
+  - duplicate/idempotency key strategy
+  - assignee and queue reconciliation
+  - historical resolver snapshot generation from source facts
+  - dry-run reconciliation report
+  - rollback plan
+  - human approval for destructive or irreversible data movement

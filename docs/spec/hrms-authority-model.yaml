@@ -1,0 +1,194 @@
+meta:
+  phase: PH-02
+  status: implemented_agentic_gate_green
+  generated_on: "2026-07-01"
+  purpose: >
+    Define the data substrate consumed by P01 ApproverResolver for HRMS reporting-chain, statutory-authority,
+    org-unit-head, delegation/acting-charge, and committee/quorum routing.
+
+resolver_types:
+  REPORTING_CHAIN:
+    primary_sources: [employee_job_assignments.reporting_manager_id, positions.reports_to_position_id]
+    snapshot_evidence:
+      - subject_employee_id
+      - subject_assignment_id
+      - subject_position_id
+      - reporting_manager_id
+      - reports_to_position_id
+      - as_of
+      - source_data_version
+    fail_closed:
+      - no current assignment
+      - manager missing and fallback disabled
+      - manager equals subject employee
+  ORG_UNIT_HEAD:
+    primary_sources: [org_units.head_employee_id, g01_authority_assignments]
+    fallback_order: [g01_authority_assignments, org_units.head_employee_id, parent_org_unit]
+  STATUTORY_AUTHORITY:
+    primary_sources: [g01_authority_assignments]
+    supported_authority_types:
+      - APPOINTING_AUTHORITY
+      - TRANSFER_AUTHORITY
+      - DISCIPLINARY_AUTHORITY
+      - APPELLATE_AUTHORITY
+      - REVIEWING_AUTHORITY
+      - ACCEPTING_AUTHORITY
+      - PENSION_SANCTIONING_AUTHORITY
+      - PAYROLL_SANCTIONING_AUTHORITY
+      - SR_CUSTODIAN
+    deterministic_tie_break: [priority_asc, effective_from_desc, authority_code_asc]
+    fail_closed:
+      - no active row for as_of
+      - multiple active rows with same priority and no deterministic tie-break
+      - selected assignee blocked by P02 SoD
+  DELEGATION:
+    primary_sources: [g01_authority_delegations]
+    precedence: [active_delegation, acting_charge, base_authority]
+    fail_closed:
+      - delegation expired
+      - delegate equals subject employee
+      - delegate lacks P02 scope
+  COMMITTEE:
+    primary_sources: [g01_committees, g01_committee_members, g06_promotion_panels, g06_promotion_panel_members, inquiry_appointments]
+    quorum_rule: Count ACTIVE/non-recused required members as of stage entry.
+    fail_closed:
+      - quorum not met
+      - required member recused without replacement
+      - member identity absent or ambiguous
+  NAMED_ROLE:
+    primary_sources: [g01_authority_assignments, rbac_role_assignments]
+    resolution_rule: >
+      Given a configured RBAC role code plus the subject tenant/entity/org scope, resolve the active user(s)
+      holding that role as of as_of. The concrete assignee is the single scope-matched holder that survives
+      the deterministic tie-break, after P02 scope and SoD filtering.
+    inputs: [tenant_id, entity_id, subject_org_scope, role_code, as_of]
+    deterministic_tie_break: [org_scope_specificity_desc, effective_from_desc, user_id_asc]
+    fail_closed:
+      - no active holder of the role for as_of within scope
+      - multiple holders and no deterministic tie-break (ambiguous -> BLOCKED)
+      - selected holder blocked by P02 SoD
+  NAMED_INDIVIDUAL:
+    primary_sources: [g01_authority_assignments, workflow_stage_config]
+    resolution_rule: >
+      Resolve an explicitly configured user id for exceptional statutory assignments (e.g. a named inquiry
+      officer or named appellate signatory). The concrete assignee is exactly the configured user id,
+      validated as active as of as_of; there is no fallback and no inference.
+    inputs: [tenant_id, entity_id, configured_named_user_id, as_of]
+    deterministic_tie_break: [single_configured_id]
+    fail_closed:
+      - configured user id absent or inactive as of as_of
+      - configured user equals the subject employee (self-approval)
+      - configured user blocked by P02 SoD
+  WORK_QUEUE:
+    primary_sources: [puda_role_queues, workflow_queue_config]
+    resolution_rule: >
+      PUDA-compatible role/queue routing. The stage is assigned to a shared work queue keyed by role/queue code;
+      the resolver returns the queue identity (not a single user) and the concrete assignee is the active member
+      who claims the item, with the claim recorded on pick-up under P02 SoD at claim time.
+    inputs: [tenant_id, entity_id, queue_code, as_of]
+    deterministic_tie_break: [queue_identity_is_deterministic]
+    fail_closed:
+      - queue code not configured for tenant/entity
+      - queue has zero active members as of as_of
+      - claimant blocked by P02 SoD at claim time
+  SR_CUSTODIAN:
+    specializes: STATUTORY_AUTHORITY
+    bound_authority_type: SR_CUSTODIAN
+    primary_sources: [g01_authority_assignments]
+    resolution_rule: >
+      Statutory-authority specialization: resolves the Service-Record custodian through STATUTORY_AUTHORITY over
+      g01_authority_assignments with authority_type fixed to SR_CUSTODIAN. Inherits STATUTORY_AUTHORITY tie-break
+      and fail-closed semantics; recorded as the specific authority parameter on the snapshot.
+    inputs: [tenant_id, entity_id, subject_ref, authority_type=SR_CUSTODIAN, as_of]
+    deterministic_tie_break: [priority_asc, effective_from_desc, authority_code_asc]
+    fail_closed:
+      - inherits STATUTORY_AUTHORITY.fail_closed
+      - no active SR_CUSTODIAN assignment for as_of (ambiguous/absent -> BLOCKED)
+  APPELLATE_AUTHORITY:
+    specializes: STATUTORY_AUTHORITY
+    bound_authority_type: APPELLATE_AUTHORITY
+    primary_sources: [g01_authority_assignments]
+    resolution_rule: >
+      Statutory-authority specialization: resolves the appellate authority through STATUTORY_AUTHORITY over
+      g01_authority_assignments with authority_type fixed to APPELLATE_AUTHORITY. The appellate authority MUST NOT
+      equal the original deciding/disciplinary authority. Inherits STATUTORY_AUTHORITY tie-break and fail-closed
+      semantics; recorded as the specific authority parameter on the snapshot.
+    inputs: [tenant_id, entity_id, subject_ref, authority_type=APPELLATE_AUTHORITY, original_deciding_authority_id, as_of]
+    deterministic_tie_break: [priority_asc, effective_from_desc, authority_code_asc]
+    fail_closed:
+      - inherits STATUTORY_AUTHORITY.fail_closed
+      - appellate authority equals the original deciding authority (ambiguous/conflicted -> BLOCKED)
+
+state_machine_trigger_map:
+  coverage_rule: >
+    Every P01 approval transition resolves through one of these resolver families. PH-02 supplies the data substrate;
+    later module implementation binds each W.1 stage to a concrete resolver rule.
+  modules:
+    G01:
+      resolver_families: [NAMED_ROLE, STATUTORY_AUTHORITY]
+      examples: [bank_account approval, governed_field_change approval]
+    G02:
+      resolver_families: [REPORTING_CHAIN, STATUTORY_AUTHORITY, NAMED_ROLE]
+      examples: [sensitive personal-detail approval]
+    G03:
+      resolver_families: [REPORTING_CHAIN, ORG_UNIT_HEAD, NAMED_ROLE]
+      examples: [leave_application submit/approve, attendance_regularisation approve]
+    G04:
+      resolver_families: [SR_CUSTODIAN, NAMED_ROLE]
+      examples: [leave-to-SR posting reconciliation]
+    G05:
+      resolver_families: [STATUTORY_AUTHORITY, ORG_UNIT_HEAD, WORK_QUEUE]
+      examples: [transfer sanction, relieving clearance, joining acceptance]
+    G06:
+      resolver_families: [STATUTORY_AUTHORITY, COMMITTEE, WORK_QUEUE]
+      examples: [DPC proceeding, promotion sanction]
+    G07:
+      resolver_families: [REPORTING_CHAIN, ORG_UNIT_HEAD]
+      examples: [training nomination approval]
+    G08:
+      resolver_families: [REPORTING_CHAIN, STATUTORY_AUTHORITY]
+      examples: [reporting/reviewing/accepting officer APAR chain]
+    G09:
+      resolver_families: [STATUTORY_AUTHORITY, COMMITTEE, NAMED_INDIVIDUAL]
+      examples: [charge approval, inquiry officer appointment, appeal]
+    G10:
+      resolver_families: [STATUTORY_AUTHORITY, NAMED_ROLE]
+      examples: [payroll approval, DDO sanction]
+    G11:
+      resolver_families: [STATUTORY_AUTHORITY, SR_CUSTODIAN]
+      examples: [pension sanction, qualifying-service verification]
+    G12:
+      resolver_families: [SR_CUSTODIAN, APPELLATE_AUTHORITY]
+      examples: [SR attestation, SR appeal]
+    G13:
+      resolver_families: [NAMED_ROLE, STATUTORY_AUTHORITY]
+      examples: [document disposition approval, legal-hold release]
+    G14:
+      resolver_families: [NAMED_ROLE]
+      examples: [KPI publish, analytics data-governance approval]
+
+vertical_slice_bindings:
+  G03_leave:
+    subject_fixture_employee_id: 99999999-9999-9999-9999-999999999902
+    primary_resolver: REPORTING_CHAIN
+    fallback_resolver: ORG_UNIT_HEAD
+    expected_primary_assignee: 99999999-9999-9999-9999-999999999901
+    evidence_tables: [employee_job_assignments, positions, g01_authority_assignments]
+  G05_transfer:
+    subject_org_unit_id: 33333333-3333-3333-3333-333333333301
+    primary_resolver: STATUTORY_AUTHORITY
+    authority_type: TRANSFER_AUTHORITY
+    expected_primary_assignee: 99999999-9999-9999-9999-999999999901
+    delegation_fixture: d1000000-0000-0000-0000-000000000001
+    evidence_tables: [g01_authority_assignments, g01_authority_delegations]
+
+snapshot_rule:
+  table: workflow_resolution_snapshots
+  immutable_fields:
+    - resolver_type
+    - resolver_rule
+    - candidates
+    - selected_assignees
+    - fallback_applied
+    - evidence
+  replay: Historical workflow decisions are replayed from the stored snapshot, not re-resolved from current hierarchy.

@@ -29,6 +29,15 @@ info:
     name: API Architecture / Platform Foundation
   license:
     name: Government HRMS Internal
+  x-ph07-employee-wave:
+    implementedRoutes:
+      - GET /api/v1/leave-sr/outbox
+      - POST /api/v1/leave-sr/outbox/{id}:relay
+      - POST /api/v1/leave-sr/outbox/{id}:replay
+      - POST /api/v1/leave-sr/outbox/{id}:discard
+      - GET /api/v1/leave-sr/reconciliation
+    srWriter: G04
+    dlqStates: [DEAD_LETTERED, DISCARDED]
 servers:
   - url: /api/v1
     description: Platform API v1 base path

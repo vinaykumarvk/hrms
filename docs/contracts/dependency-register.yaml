@@ -74,6 +74,112 @@ shared_contracts:
     capture: DB-trigger, immutable, 7-yr, tamper-evidence tracks OPEN-PLAT-03
     consumed_by: all_modules
     grounding: PLATFORM_FOUNDATION.md §5(P05); MODULE_RECONCILIATION.md §C
+  workflow_platform:
+    name: P01 workflow execution substrate and SPI boundary
+    owner: P01
+    core_entities:
+      - workflows
+      - workflow_instances
+      - workflow_actions
+      - workflow_idempotency_records
+      - workflow_resolution_snapshots
+      - workflow_tasks
+      - workflow_waits
+      - workflow_fork_executions
+      - workflow_fork_branches
+      - workflow_references
+    reusable_packages:
+      - /Users/n15318/workflow-platform/packages/workflow-core
+      - /Users/n15318/workflow-platform/packages/workflow-postgres
+      - /Users/n15318/workflow-platform/packages/workflow-config
+      - /Users/n15318/workflow-platform/packages/workflow-resolvers
+      - /Users/n15318/workflow-platform/packages/adapters-hrms
+    resolver_spi: ApproverResolver with WORK_QUEUE default; reporting-chain/statutory authority implemented in PH-01/PH-02
+    consumed_by: [G02, G03, G04, G05, G06, G07, G08, G09, G10, G11, G13, G14]
+    grounding: PLATFORM_FOUNDATION.md §5(P01); docs/spec/workflow-platform-contract.yaml; docs/spec/workflow-platform-governance.md
+  ph03_foundation_services:
+    name: PH-03 core platform service layer
+    owner: platform/core-services
+    implementation_root: apps/api/src
+    build_contract:
+      package: package.json
+      typecheck: npm run typecheck
+      test: npm run check
+      gate: bash docs/spec/pipeline/checks/ph-03.sh
+    service_boundaries:
+      p01_workflow_adapter:
+        path: apps/api/src/platform/workflow
+        consumes: [workflow_platform, authority_resolution, audit, notifications]
+        exposes: [workflow.start, workflow.act, workflow.synthetic_hrms_flow]
+      authority_resolution:
+        path: apps/api/src/platform/authority-resolution
+        consumes: [employee_master, ph02_authority_fixture_contract]
+        exposes: [REPORTING_CHAIN, POSITION_AUTHORITY, STATUTORY_AUTHORITY, ORG_UNIT_HEAD, NAMED_ROLE, NAMED_USER, WORK_QUEUE, COMMITTEE, DELEGATION_OR_ACTING_CHARGE]
+      p05_audit:
+        path: apps/api/src/platform/audit
+        exposes: [mutation_audit, security_audit, pii_metadata_redaction]
+      p02_authorization:
+        path: apps/api/src/platform/authorization
+        exposes: [Authorization.check, field_masking]
+      g01_employee_master:
+        path: apps/api/src/modules/g01
+        exposes: [read_by_id, read_profile_masked, governed_identity_change]
+        writes_to: [g12_sr_ingestion]
+      g12_sr_ingestion:
+        path: apps/api/src/modules/g12
+        exposes: [sr_ingest, source_reversal, employee_timeline]
+        properties: [append_only, idempotent, semantic_dedup, source_driven_reversal]
+      g13_document_vault:
+        path: apps/api/src/modules/g13
+        exposes: [document_create, document_attach, legal_hold, disposal_guard]
+        properties: [legal_hold_fail_closed, worm_fail_closed, module_attachment_contract]
+      x1_jobs:
+        path: apps/api/src/jobs
+        exposes: [idempotent_job_run]
+      x2_notifications:
+        path: apps/api/src/notifications
+        exposes: [publish, list_scoped]
+      p06_migration_staging:
+        path: apps/api/src/migration/staging
+        exposes: [stage_employee_identity, reconciliation_report_without_production_mutation]
+    grounding: docs/spec/phased-plan.yaml PH-03; docs/tests/foundation-services-tests.md
+  ph04_api_contract_layer:
+    name: PH-04 /api/v1 route and contract layer
+    owner: platform/api
+    status: planned_pipeline_ready
+    implementation_roots:
+      - apps/api/src/http
+      - apps/api/src/openapi
+      - apps/api/src/routes
+    phase_plan: docs/spec/ph-04-api-contract-implementation-plan.md
+    pipeline:
+      - PH-04A: API kernel and contract harness
+      - PH-04B: P01 workflow and G01 employee routes
+      - PH-04C: G12 Service Register and G13 document routes
+      - PH-04D: API conformance and freeze packet
+    protected_route_rule: Every route is explicitly public or protected; PH-04 minimum route set is protected.
+    cross_cutting_contracts:
+      base_path: /api/v1
+      auth: Bearer/JWT context + P02 Authorization.check on protected routes
+      idempotency: Idempotency-Key required on unsafe/workflow-initiating POSTs
+      correlation: X-Correlation-Id echoed on every response and written to audit/log evidence
+      pagination: cursor pagination, default 25, max 100
+      errors: canonical 8-code envelope from docs/contracts/error-taxonomy.yaml
+    route_groups:
+      p01_workflow:
+        contract: docs/contracts/openapi/P01-workflow.yaml
+        planned_file: apps/api/src/routes/p01-workflow.routes.ts
+      g01_employee_master:
+        contract: docs/contracts/openapi/G01.yaml
+        planned_file: apps/api/src/routes/g01.routes.ts
+      g12_sr_ingestion:
+        contract: docs/contracts/openapi/G12.yaml
+        planned_file: apps/api/src/routes/g12.routes.ts
+      g13_document_vault:
+        contract: docs/contracts/openapi/G13.yaml
+        planned_file: apps/api/src/routes/g13.routes.ts
+    freeze_gate: PH-04D is human-gated after GREEN machine checks because API compatibility feeds PH-05 and module waves.
+    grounding: docs/spec/phased-plan.yaml PH-04; docs/spec/ph-04-api-contract-implementation-plan.md
 
 conflict_resolution:
   arbiter: Lead Architect

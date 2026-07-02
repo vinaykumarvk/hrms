@@ -1,0 +1,117 @@
+meta:
+  phase: PH-01
+  status: implemented_agentic_contract
+  generated_on: "2026-07-01"
+  owner: P01 Workflow Engine
+  implementation_boundary: ApproverResolver SPI
+
+resolver_types:
+  WORK_QUEUE:
+    status: implemented_in_PH-00D
+    purpose: PUDA-compatible role/queue routing and transition bridge.
+  NAMED_ROLE:
+    status: contract_frozen
+    purpose: Resolve a configured RBAC role under P02 scope and SoD checks.
+  NAMED_INDIVIDUAL:
+    status: contract_frozen
+    purpose: Resolve an explicit user id for exceptional statutory assignments.
+  REPORTING_CHAIN:
+    status: PH-02_data_required
+    purpose: Resolve L1/L2/skip-level reporting managers by employee and as-of date.
+  STATUTORY_AUTHORITY:
+    status: PH-02_data_required
+    purpose: Resolve appointing, transfer, disciplinary, appellate, reviewing, accepting, pension, payroll, and SR-custodian authorities.
+  SR_CUSTODIAN:
+    status: PH-02_data_required
+    specializes: STATUTORY_AUTHORITY
+    purpose: Statutory specialization resolving the Service-Record custodian (authority_type=SR_CUSTODIAN); shares STATUTORY_AUTHORITY input/output/error, ambiguous->BLOCKED.
+  APPELLATE_AUTHORITY:
+    status: PH-02_data_required
+    specializes: STATUTORY_AUTHORITY
+    purpose: Statutory specialization resolving the appellate authority (authority_type=APPELLATE_AUTHORITY); must differ from the deciding authority; shares STATUTORY_AUTHORITY input/output/error, ambiguous->BLOCKED.
+  COST_CENTRE_HEAD:
+    status: PH-02_data_required
+    purpose: Resolve org-unit/cost-centre head by effective-dated position assignment.
+  COMMITTEE:
+    status: PH-02_data_required
+    purpose: Resolve configured committee/panel members with quorum, recusal, and external-member evidence.
+
+resolution_request:
+  required_fields:
+    - tenant_id
+    - entity_id
+    - workflow_instance_id
+    - stage
+    - subject_ref
+    - resolver_type
+    - resolver_rule
+    - as_of
+    - actor_user_id
+    - correlation_id
+  rule: The resolver must fail closed when tenant/entity, subject, or as_of context is missing.
+
+resolution_snapshot:
+  table: workflow_resolution_snapshots
+  immutable: true
+  required_evidence:
+    - resolver_type
+    - resolver_rule
+    - input_facts
+    - as_of
+    - candidate_set
+    - selected_assignees
+    - exclusion_reasons
+    - fallback_applied
+    - hierarchy_version
+    - authority_matrix_version
+    - config_version
+    - source_data_version
+    - sod_check_result
+  replay_rule: A past decision is explained from the stored snapshot, never by re-resolving against today's hierarchy.
+
+error_taxonomy:
+  P01_RESOLVER_NOT_RESOLVED:
+    http: 422
+    meaning: No eligible approver could be resolved.
+  P01_RESOLVER_AMBIGUOUS:
+    http: 422
+    meaning: Multiple eligible candidates exist and the rule does not define deterministic tie-break.
+  P01_RESOLVER_SOD_BLOCKED:
+    http: 403
+    meaning: Candidate was found but blocked by maker-checker/no-self-approval/recusal policy.
+  P01_DELEGATION_EXPIRED:
+    http: 412
+    meaning: Delegation or acting-charge authority existed but expired before stage entry.
+  P01_AUTHORITY_CONFIG_MISSING:
+    http: 422
+    meaning: Required statutory authority matrix or rule version is missing for the as-of date.
+
+sod_rules:
+  - maker_user_id must not equal checker_user_id.
+  - applicant/subject employee must not approve their own transaction.
+  - delegated approver must inherit only the source approver's permitted scope and PII ceiling.
+  - committee member recusal removes that member before quorum evaluation.
+
+adapter_contract:
+  workflow_core_must_not_import:
+    - HRMS employee tables
+    - PUDA/LAC/LoI domain code
+    - module business services
+  allowed_hooks:
+    - employee lookup
+    - position/statutory authority lookup
+    - org-unit lookup
+    - delegation/acting-charge lookup
+    - audit recording
+    - notification publish
+    - document generation
+    - Service Register outbox
+
+tests_required_in_PH-02:
+  - reporting-chain L1/L2/skip-level resolution
+  - statutory authority by employee/cadre/org/as-of date
+  - vacant manager fallback
+  - delegation and acting-charge precedence
+  - SoD self-approval denial
+  - ambiguity fail-closed
+  - historical replay after hierarchy correction

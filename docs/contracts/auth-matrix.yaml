@@ -26,6 +26,31 @@ meta:
   scope_types: [self, team, entity, tenant, cross-tenant]
   action_verbs: [View, Edit, Approve/Reject, Download, Admin]   # RBAC §5
   sod_principle: "maker != checker; no self-approval; multi-role INTERSECTION (most restrictive) — enforced by P01/P02, not re-coded per endpoint"
+  authority_resolution_contract:
+    source: docs/spec/authority-resolution-contract.yaml
+    p01_resolver_types: [WORK_QUEUE, NAMED_ROLE, REPORTING_CHAIN, STATUTORY_AUTHORITY, NAMED_INDIVIDUAL, COST_CENTRE_HEAD, COMMITTEE]
+    p02_duty: "P02 supplies role grants, scope filters, PII ceilings, and SoD checks to P01 resolver decisions."
+    failure_rule: "Resolver ambiguity, no eligible candidate, and SoD blocks fail closed; no default all-tenant/all-entity approval queue."
+  ph02_authority_fixture_contract:
+    source: docs/spec/hrms-authority-model.yaml
+    seed_plan: docs/spec/hrms-seed-data-plan.yaml
+    vertical_slice_actor_coverage:
+      G03_leave:
+        resolver_types: [REPORTING_CHAIN, ORG_UNIT_HEAD]
+        required_roles: [employee, l1_manager, leave_admin, sanctioning_authority]
+        fixture_tables: [employee_job_assignments, positions, g01_authority_assignments]
+      G05_transfer:
+        resolver_types: [STATUTORY_AUTHORITY, WORK_QUEUE]
+        required_roles: [hr_admin, transfer_authority, sr_custodian]
+        fixture_tables: [g01_authority_assignments, g01_authority_delegations]
+      G06_DPC:
+        resolver_types: [STATUTORY_AUTHORITY, COMMITTEE]
+        required_roles: [g06_dpc_secretary, g06_dpc_member, g06_appointing_authority]
+        fixture_tables: [g01_committees, g01_committee_members, g06_promotion_panels, g06_promotion_panel_members]
+      G09_inquiry:
+        resolver_types: [STATUTORY_AUTHORITY, COMMITTEE]
+        required_roles: [disciplinary_authority, inquiry_officer, appellate_authority]
+        fixture_tables: [authority_competence, inquiry_appointments]
 
 # -----------------------------------------------------------------------------
 # 1. ROLES  — RBAC v1.7 base roles + every gov-added role

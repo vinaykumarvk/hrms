@@ -3,6 +3,11 @@
 .DS_Store
 **/.DS_Store
 
+# Node / TypeScript build output
+node_modules/
+dist/
+coverage/
+
 # pipeline runtime
 docs/spec/pipeline/.state/
 docs/spec/pipeline/logs/

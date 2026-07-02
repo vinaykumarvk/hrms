@@ -252,6 +252,19 @@ migration_and_coexistence_stream:
 
 delivery_controls:
   critical_path: [PH-00, PH-01, PH-02, PH-03, PH-04, PH-05, PH-06]
+  gating_model:
+    default: agentic_gate
+    agentic_gate: >
+      A phase auto-advances when its executable exit criteria pass outside the model, structural evidence is
+      recorded in the manifest, and no critical-decision trigger fires.
+    human_gate_only_when:
+      - Architecture strategy changes beyond the approved modulith/workflow-platform plan.
+      - A phase requires copying, extracting, distributing, or productizing code whose legal/provenance/IP status cannot be verified.
+      - Destructive or irreversible data/schema/migration operations are required.
+      - Security, auth, RBAC, RLS, PII, or audit policy would be weakened or materially changed.
+      - Production, UAT, go-live, cutover, or rollback approval is required.
+      - The phase has prose-only evidence and no executable oracle.
+      - A RED gate requires explicit risk acceptance after repair attempts.
   rule: >
     Do not start broad module implementation until gate_3_vertical_slice_exit
     passes. G03 and G05 are the proof that the workflow platform, hierarchy,
@@ -443,8 +456,8 @@ phases:
         - /Users/n15318/workflow-platform/packages/workflow-config/**
         - /Users/n15318/workflow-platform/packages/workflow-resolvers/**
         - /Users/n15318/workflow-platform/packages/workflow-test-kit/**
-        - /Users/n15318/workflow-platform/adapters/puda/**
-        - /Users/n15318/workflow-platform/adapters/hrms/**
+        - /Users/n15318/workflow-platform/packages/adapters-puda/**
+        - /Users/n15318/workflow-platform/packages/adapters-hrms/**
       modify:
         - docs/architecture.md
         - docs/brd/PLATFORM_FOUNDATION.md
@@ -1132,20 +1145,287 @@ phases:
       - Migration dry runs complete with accepted reconciliation.
       - Production runbooks and rollback plan approved.
 
+  - id: PH-11
+    name: UAT and Cutover Governance Rehearsal
+    planner_stage: implementation
+    status: planned
+    goal: >
+      Rehearse UAT execution, defect triage, cutover control, rollback authority,
+      support handoff, operational RACI, and hypercare governance after PH-10
+      release readiness, while keeping real UAT sign-off and production go-live
+      approval as human-only decisions.
+    requirements:
+      - UAT scripts from PH-10 are converted into an execution journal with rehearsal outcomes.
+      - UAT sign-off remains explicitly marked `UAT_SIGNOFF_HUMAN_REQUIRED`.
+      - Defects, exceptions, and residual risks have severity, owner, target date, and decision path.
+      - Cutover rehearsal uses non-production checks only and records `NO_PRODUCTION_MUTATION`.
+      - Go-live, CAB approval, rollback execution, and production cutover remain `GO_LIVE_HUMAN_APPROVAL_PENDING`.
+      - Hypercare, support handoff, incident severity, SLA ownership, and operational RACI are documented.
+    dependencies: [PH-10]
+    expected_files:
+      create:
+        - docs/spec/ph-11-uat-cutover-governance-plan.md
+        - docs/spec/ph-11-verdict.md
+        - docs/release/uat-execution-journal.md
+        - docs/release/uat-defect-triage.md
+        - docs/release/cutover-control-board.md
+        - docs/release/hypercare-plan.md
+        - docs/release/support-handoff.md
+        - docs/release/operational-raci.md
+        - ops/cutover-rehearsal-runbook.md
+        - ops/local-release-smoke.sh
+        - apps/api/test/ph11-uat-governance.test.cjs
+      modify:
+        - docs/spec/pipeline/phases.yaml
+        - docs/spec/manifest.json
+        - docs/phased-plan.md
+    implementation_steps:
+      - Freeze the PH-11 detailed plan and wire PH-11A through PH-11E as agentic gates with external checks.
+      - Execute UAT rehearsal evidence from the PH-10 UAT pack and record unresolved business sign-off explicitly.
+      - Build defect triage governance with owner/date/severity/decision-path evidence.
+      - Rehearse cutover locally with release-freeze, rollback-authority, and no-production-mutation controls.
+      - Prepare support handoff, operational RACI, hypercare, incident severity, and SLA owner evidence.
+      - Run full API and web regressions before declaring governance rehearsal complete.
+    generated_tests:
+      governance:
+        - UAT sign-off cannot be marked agent-approved.
+        - Go-live approval remains human pending.
+        - Operational readiness documents contain owner/date markers.
+      release:
+        - local release smoke validates non-production artifacts only.
+        - PH-11A through PH-11E pipeline checks pass.
+        - full API and web checks pass.
+    review_criteria:
+      - PH-11 never performs or approves production cutover.
+      - Every approval-sensitive artifact contains a human-pending marker.
+      - Defects, residual risks, and operational tasks have named owners and dates.
+      - Local release smoke cannot use production credentials, URLs, or destructive operations.
+    rollback_retry_policy:
+      rollback: Revert PH-11 governance artifacts only; no production state exists to roll back.
+      retry: Re-run failed rehearsal checks after correcting the evidence artifact or local smoke condition.
+      quarantine: A blocked business approval parks production release but does not invalidate completed development evidence.
+    exit_criteria:
+      - UAT/cutover governance rehearsal is complete.
+      - PH-11A through PH-11E checks pass.
+      - Full API and web regression passes.
+      - Manifest records `GO_LIVE_HUMAN_APPROVAL_PENDING`.
+
+  - id: PH-12
+    name: Release Board Readiness and Target-Environment Dry Run
+    planner_stage: implementation
+    status: planned
+    goal: >
+      Prepare the complete human release-board decision package and target-
+      environment readiness dry-run checks after PH-11 governance rehearsal,
+      while keeping UAT sign-off, CAB approval, go-live, production cutover,
+      production credentials, and rollback execution as human-only decisions.
+    requirements:
+      - Release-board dossier summarizes PH-10 and PH-11 evidence with owner/date/status.
+      - Human approval checklist distinguishes UAT, CAB, go-live, rollback, legal, security, migration, and operations decisions.
+      - Target-environment readiness check defaults to dry-run and requires no production credentials.
+      - Board agenda, go/no-go decision record, and rollback authorization templates are complete but not pre-approved.
+      - Final verdict records release-board ready state while preserving `GO_LIVE_HUMAN_APPROVAL_PENDING`.
+    dependencies: [PH-11]
+    expected_files:
+      create:
+        - docs/spec/ph-12-release-board-readiness-plan.md
+        - docs/spec/ph-12-verdict.md
+        - docs/release/release-board-dossier.md
+        - docs/release/human-approval-checklist.md
+        - docs/release/target-environment-readiness.md
+        - docs/release/environment-evidence-manifest.md
+        - docs/release/release-board-agenda.md
+        - docs/release/go-no-go-decision-record-template.md
+        - docs/release/rollback-authorization-template.md
+        - ops/target-environment-readiness-check.sh
+        - apps/api/test/ph12-release-board-readiness.test.cjs
+      modify:
+        - docs/spec/pipeline/phases.yaml
+        - docs/spec/manifest.json
+        - docs/phased-plan.md
+    implementation_steps:
+      - Freeze the PH-12 detailed plan and wire PH-12A through PH-12E as executable agentic gates.
+      - Build a release-board dossier from PH-10/PH-11 evidence and explicit pending human decisions.
+      - Build a human approval checklist with owner/date/status for each release decision.
+      - Build a target-environment dry-run readiness script that does not require production credentials or mutate infrastructure.
+      - Prepare board agenda, go/no-go decision record template, and rollback authorization template.
+      - Run full API and web regressions before declaring release-board readiness complete.
+    generated_tests:
+      governance:
+        - Release-board documents cannot claim UAT, CAB, go-live, cutover, or rollback approval.
+        - Approval checklist contains owner/date/status for every critical decision.
+      target_environment:
+        - Dry-run script refuses production-like values and emits `PH12_TARGET_READINESS_DRY_RUN_GREEN`.
+        - Target-environment execution remains human-run after approval.
+      release:
+        - PH-12A through PH-12E pipeline checks pass.
+        - Full API and web checks pass.
+    review_criteria:
+      - PH-12 never performs production deployment or cutover.
+      - Every approval-sensitive artifact contains human-pending markers.
+      - Dry-run checks cannot require or leak production credentials.
+      - Templates are ready for human signing but contain no pre-filled approval.
+    rollback_retry_policy:
+      rollback: Revert PH-12 readiness artifacts only; no production state exists to roll back.
+      retry: Re-run failed readiness checks after correcting the dossier, checklist, target dry-run, or templates.
+      quarantine: Missing human approvals park release-board progression but do not invalidate completed development evidence.
+    exit_criteria:
+      - Release-board package is complete and machine-checked.
+      - Target-environment readiness dry-run passes without production credentials.
+      - PH-12A through PH-12E checks pass.
+      - Full API and web regression passes.
+      - Manifest records release-board ready with human approval pending.
+
+  - id: PH-13
+    name: Release Candidate Seal and Approval Intake
+    planner_stage: implementation
+    status: planned
+    goal: >
+      Seal the PH-12 release-board package as a machine-verifiable release
+      candidate, prepare human approval intake and change-ticket guardrails,
+      and create archive/handoff evidence while keeping all human release
+      decisions pending.
+    requirements:
+      - Release-candidate manifest identifies the sealed evidence package and its scope.
+      - Evidence checksum manifest records SHA-256 hashes for release-board artifacts.
+      - Checksum verifier recomputes hashes without mutating source artifacts.
+      - Human approval intake and change-ticket template keep approvals pending and require external human records.
+      - Evidence archive index, handoff memo, and post-board action register have owner/date/status.
+      - Final verdict records release-candidate sealed with `GO_LIVE_HUMAN_APPROVAL_PENDING`.
+    dependencies: [PH-12]
+    expected_files:
+      create:
+        - docs/spec/ph-13-release-candidate-seal-plan.md
+        - docs/spec/ph-13-verdict.md
+        - docs/release/release-candidate-manifest.md
+        - docs/release/evidence-checksum-manifest.json
+        - docs/release/human-approval-intake.md
+        - docs/release/change-ticket-template.md
+        - docs/release/evidence-archive-index.md
+        - docs/release/release-handoff-memo.md
+        - docs/release/post-board-action-register.md
+        - ops/verify-release-candidate-seal.sh
+        - ops/validate-human-approval-intake.sh
+        - apps/api/test/ph13-release-candidate-seal.test.cjs
+      modify:
+        - docs/spec/pipeline/phases.yaml
+        - docs/spec/manifest.json
+        - docs/phased-plan.md
+    implementation_steps:
+      - Freeze PH-13 plan and wire PH-13A through PH-13E as executable gates.
+      - Build the release-candidate manifest and checksum manifest from PH-12 board artifacts.
+      - Add a non-mutating checksum verifier and governance tests.
+      - Add human approval intake and change-ticket templates that keep approvals pending.
+      - Add evidence archive index, release handoff memo, and post-board action register.
+      - Run full API and web regressions before declaring release-candidate seal complete.
+    generated_tests:
+      seal:
+        - Checksum manifest parses and every sealed artifact exists.
+        - Checksum verifier recomputes hashes and fails on mismatch.
+      approval_intake:
+        - Approval intake cannot claim UAT, CAB, go-live, target smoke, cutover, or rollback approval.
+        - Change-ticket template requires human owner/date/status.
+      release:
+        - PH-13A through PH-13E pipeline checks pass.
+        - Full API and web checks pass.
+    review_criteria:
+      - PH-13 never performs production deployment or approval.
+      - Every approval-sensitive artifact contains human-pending markers.
+      - Checksum verification is read-only.
+      - No production credentials are required or stored.
+    rollback_retry_policy:
+      rollback: Revert PH-13 seal/intake/archive artifacts only; no production state exists to roll back.
+      retry: Recompute and re-verify the seal after correcting any release evidence drift.
+      quarantine: Missing human approvals keep the release candidate sealed but not approved.
+    exit_criteria:
+      - Release candidate evidence package is sealed and machine-verified.
+      - Approval-intake guardrails are complete.
+      - Archive and handoff package is complete.
+      - PH-13A through PH-13E checks pass.
+      - Full API and web regression passes.
+
+  - id: PH-14
+    name: Post-Seal Drift Watch and Board-Day Readiness
+    planner_stage: implementation
+    status: planned
+    goal: >
+      Watch the sealed PH-13 release candidate for evidence drift, prepare
+      board-day run cards and no-go quarantine handling, and define approval-
+      evidence quarantine/redaction rules while keeping human approvals and
+      production execution outside the agentic pipeline.
+    requirements:
+      - PH-13 checksum seal still verifies with no sealed artifact drift.
+      - Drift watch documents and report record `DRIFT_STATUS_GREEN` or fail closed.
+      - Board-day run card and no-go quarantine plan are ready without executing production actions.
+      - Approval evidence quarantine and redaction rules prevent secrets/PII from entering the repository.
+      - Final verdict records post-seal drift watch green with `GO_LIVE_HUMAN_APPROVAL_PENDING`.
+    dependencies: [PH-13]
+    expected_files:
+      create:
+        - docs/spec/ph-14-post-seal-drift-watch-plan.md
+        - docs/spec/ph-14-verdict.md
+        - docs/release/release-candidate-drift-watch.md
+        - docs/release/post-seal-drift-report.md
+        - docs/release/board-day-run-card.md
+        - docs/release/no-go-quarantine-plan.md
+        - docs/release/approval-evidence-quarantine.md
+        - docs/release/approval-evidence-redaction-guide.md
+        - docs/release/board-decision-intake-playbook.md
+        - ops/check-release-candidate-drift.sh
+        - ops/board-day-readiness-check.sh
+        - apps/api/test/ph14-post-seal-drift-watch.test.cjs
+      modify:
+        - docs/spec/pipeline/phases.yaml
+        - docs/spec/manifest.json
+        - docs/phased-plan.md
+    implementation_steps:
+      - Freeze PH-14 plan and wire PH-14A through PH-14E as executable gates.
+      - Add a drift-watch checker that runs the PH-13 checksum verifier and fails closed on drift.
+      - Add board-day run card and no-go quarantine materials for human release-board use.
+      - Add approval-evidence quarantine, redaction guide, and decision-intake playbook.
+      - Run full API and web regressions before declaring post-seal drift watch complete.
+    generated_tests:
+      drift_watch:
+        - PH-13 seal verifier passes.
+        - Drift report records `SEALED_ARTIFACTS_UNCHANGED`.
+      board_day:
+        - Board-day checks require no production credentials or execution.
+        - No-go quarantine rules keep release blocked on drift or missing approval.
+      release:
+        - PH-14A through PH-14E pipeline checks pass.
+        - Full API and web checks pass.
+    review_criteria:
+      - PH-14 never performs approval, target smoke, production cutover, or rollback.
+      - Drift checks fail closed.
+      - Approval evidence handling rejects secrets and PII in repository artifacts.
+      - Every board-day action remains human-owned.
+    rollback_retry_policy:
+      rollback: Revert PH-14 drift-watch/readiness artifacts only; no production state exists to roll back.
+      retry: Rerun PH-13B reseal if drift is legitimate and approved by the release board.
+      quarantine: Any checksum drift, missing approval evidence, or production credential request quarantines release progression.
+    exit_criteria:
+      - Post-seal drift watch passes.
+      - Board-day readiness and no-go quarantine checks pass.
+      - Approval-evidence quarantine/redaction package is complete.
+      - PH-14A through PH-14E checks pass.
+      - Full API and web regression passes.
+
 phase_gates:
   gate_0_workflow_platform_extraction:
     after: PH-00
+    gate: agentic
     pass_when:
       - PUDA golden workflow behavior preserved.
       - PUDA strangler boundary proves existing workflows can call the platform facade.
       - HRMS adapter synthetic workflows pass.
-      - P01 contract/schema gap report approved.
-      - Extraction provenance/IP review completed.
+      - P01 contract/schema gap report passes the executable PH-00 gate.
+      - No PUDA code is copied into reusable packages without provenance clearance; unresolved provenance blocks external distribution/productization, not internal facade-only HRMS build.
     blocks:
       - PH-01
       - all HRMS workflow-dependent coding
   gate_1_platform_contract_freeze:
     after: PH-01
+    gate: agentic
     pass_when:
       - P01 OpenAPI exists.
       - P01 schema amendments approved.
@@ -1154,6 +1434,7 @@ phase_gates:
       - PH-02
   gate_2_authority_resolution:
     after: PH-02
+    gate: agentic
     pass_when:
       - Reporting-chain and position-authority resolution pass tests.
       - Ambiguous and SoD-blocked cases fail closed.
@@ -1161,6 +1442,7 @@ phase_gates:
       - PH-03
   gate_3_vertical_slice_exit:
     after: PH-06
+    gate: agentic
     pass_when:
       - G03 and G05 flows run from UI through API to workflow, audit, notification, document, and SR evidence.
       - No hardcoded approval path remains.

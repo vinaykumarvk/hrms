@@ -1,0 +1,2160 @@
+{
+ "phases": {
+  "PH-00A": {
+   "status": "completed_with_caveats",
+   "gate_verdict": "proceed_to_PH-00B_facade_first",
+   "reuse_verdict": "wrap-behind-facade + reuse-with-enhancements",
+   "confidence": 0.78,
+   "puda_commit": "cadf39739e6f27c17d44767ca61d1a362034ac64",
+   "candidate_counts": {
+    "candidate_entries_in_plan": 43,
+    "expanded_candidate_paths": 113,
+    "golden_test_paths": 24,
+    "missing_paths": 0
+   },
+   "capability_rollup": {
+    "present": 8,
+    "partial": 19,
+    "absent": 3,
+    "unclear": 1,
+    "total_rows": 31
+   },
+   "artifacts": [
+    "docs/spec/puda-workflow-inventory.yaml",
+    "docs/spec/puda-workflow-provenance-map.md",
+    "docs/spec/puda-vs-hrms-capability-gap.md",
+    "docs/spec/puda-golden-behavior-baseline.md",
+    "docs/spec/workflow-extraction-risk-register.md",
+    "docs/spec/ph-00b-facade-boundary-recommendation.md",
+    "docs/spec/ph-00a-verdict.md"
+   ],
+   "tests": [
+    {
+     "name": "PUDA API work-queues characterization",
+     "status": "passed",
+     "result": "1 file passed, 6 tests passed"
+    },
+    {
+     "name": "PUDA officer workflow UI characterization",
+     "status": "passed",
+     "result": "2 files passed, 22 tests passed"
+    },
+    {
+     "name": "PUDA API aggregate golden corpus",
+     "status": "partial_failed_interrupted",
+     "result": "2 failed tests, 63 passed tests before manual interrupt; committed config also has default runtime ERR_REQUIRE_ESM issue"
+    }
+   ],
+   "open_caveats": [
+    "Resolve PUDA repository license/provenance before package extraction.",
+    "Freeze a clean PUDA branch/tag and rerun golden corpus against an isolated DB.",
+    "Build HRMS hierarchy/statutory resolver and ApproverResolver SPI in PH-01/PH-02.",
+    "Move PUDA domain actions behind adapters before reuse."
+   ]
+  },
+  "PH-00B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-00C",
+   "reuse_verdict": "wrap-behind-facade",
+   "confidence": 0.82,
+   "puda_commit": "cadf39739e6f27c17d44767ca61d1a362034ac64",
+   "artifacts": [
+    "docs/spec/workflow-platform-contract.yaml",
+    "docs/contracts/openapi/P01-workflow.yaml",
+    "/Users/n15318/PUDA_workflow_engine/apps/api/src/p01-workflow-facade.ts",
+    "/Users/n15318/PUDA_workflow_engine/apps/api/src/p01-workflow-facade.test.ts",
+    "docs/spec/pipeline/checks/ph-00b-conformance.sh",
+    "docs/spec/ph-00b-conformance.md",
+    "docs/spec/ph-00b-verdict.md"
+   ],
+   "tests": [
+    {
+     "name": "PH-00B PUDA P01 facade conformance",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-00b-conformance.sh",
+     "result": "2 files passed, 14 tests passed"
+    },
+    {
+     "name": "P01 OpenAPI internal reference validation",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-00b.sh",
+     "result": "PH-00B gate GREEN; P01 OpenAPI 3.x with 105 internal refs resolved"
+    }
+   ],
+   "scope_guards": [
+    "No PUDA workflow.ts/tasks.ts runtime behavior change.",
+    "No code extracted into /Users/n15318/workflow-platform/packages/workflow-core.",
+    "PUDA queue keys, LAC actions, and raw service-version semantics remain adapter internals."
+   ],
+   "open_caveats": [
+    "Full HRMS reporting-chain/statutory-authority routing is deferred to PH-01/PH-02 through the approverResolver SPI.",
+    "PUDA license/provenance remains tracked before production/external reuse of the extracted package.",
+    "Full PUDA aggregate golden corpus remains a PH-00A caveat; PH-00B only proves focused facade conformance and work-queue smoke."
+   ]
+  },
+  "PH-00C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-00D",
+   "reuse_verdict": "minimum_pure_core_extraction",
+   "confidence": 0.76,
+   "puda_commit": "cadf39739e6f27c17d44767ca61d1a362034ac64",
+   "target_repo": "/Users/n15318/workflow-platform",
+   "artifacts": [
+    "/Users/n15318/workflow-platform/package.json",
+    "/Users/n15318/workflow-platform/packages/workflow-core/src/index.ts",
+    "/Users/n15318/workflow-platform/packages/workflow-core/src/assignments.ts",
+    "/Users/n15318/workflow-platform/packages/workflow-core/src/conditions.ts",
+    "/Users/n15318/workflow-platform/packages/workflow-core/src/actions.ts",
+    "/Users/n15318/workflow-platform/packages/workflow-core/src/pattern-config.ts",
+    "/Users/n15318/workflow-platform/packages/workflow-core/src/config-validation.ts",
+    "/Users/n15318/workflow-platform/packages/workflow-test-kit/src/fixtures.ts",
+    "docs/spec/pipeline/checks/ph-00c.sh",
+    "docs/spec/workflow-platform-extraction.md",
+    "docs/spec/ph-00c-verdict.md"
+   ],
+   "tests": [
+    {
+     "name": "workflow-platform check",
+     "status": "passed",
+     "command": "cd /Users/n15318/workflow-platform && npm run check",
+     "result": "workflow-core and workflow-test-kit typecheck/build passed; 2 files passed, 7 tests passed"
+    },
+    {
+     "name": "PUDA facade conformance consuming workflow-core/test-kit",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-00b-conformance.sh",
+     "result": "2 files passed, 14 tests passed"
+    },
+    {
+     "name": "PH-00C gate",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-00c.sh",
+     "result": "PH-00C gate GREEN; workflow-platform check passed, domain scan clean, PUDA facade conformance passed"
+    }
+   ],
+   "scope_guards": [
+    "workflow-core has no DB access and no PUDA runtime imports.",
+    "PUDA workflow.ts/tasks.ts remain unmodified.",
+    "Domain actions, hierarchy resolution, persistence, and notifications remain adapter/SPIs."
+   ],
+   "open_caveats": [
+    "Runtime execution still lives in PUDA; production dependency wiring is deferred to PH-00D.",
+    "The extracted validation is the generic subset, not the full PUDA document-registry/domain warning layer.",
+    "Full PUDA aggregate golden corpus remains a PH-00A caveat."
+   ]
+  },
+  "PH-00D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-00E",
+   "reuse_verdict": "persistence_config_resolver_spi_foundation",
+   "confidence": 0.74,
+   "target_repo": "/Users/n15318/workflow-platform",
+   "artifacts": [
+    "/Users/n15318/workflow-platform/packages/workflow-postgres/src/index.ts",
+    "/Users/n15318/workflow-platform/packages/workflow-config/src/index.ts",
+    "/Users/n15318/workflow-platform/packages/workflow-resolvers/src/index.ts",
+    "/Users/n15318/workflow-platform/packages/adapters-hrms/src/index.ts",
+    "docs/data-model/00-platform-core.sql",
+    "docs/brd/PLATFORM_FOUNDATION.md",
+    "docs/contracts/dependency-register.yaml",
+    "docs/spec/workflow-platform-contract.yaml",
+    "docs/spec/pipeline/checks/ph-00d.sh",
+    "docs/spec/workflow-platform-governance.md",
+    "docs/spec/workflow-platform-gap-analysis.yaml",
+    "docs/spec/ph-00d-verdict.md"
+   ],
+   "tests": [
+    {
+     "name": "workflow-platform check",
+     "status": "passed",
+     "command": "cd /Users/n15318/workflow-platform && npm run check",
+     "result": "workflow-core, workflow-config, workflow-resolvers, workflow-postgres, adapters-hrms, and workflow-test-kit typecheck/build passed; 6 files passed, 16 tests passed"
+    },
+    {
+     "name": "full HRMS schema load",
+     "status": "passed",
+     "command": "disposable PostgreSQL load of docs/data-model/00-platform-core.sql through 14-G14-dashboard-analytics.sql",
+     "result": "all 15 schema files loaded successfully"
+    },
+    {
+     "name": "PH-00D gate",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-00d.sh",
+     "result": "PH-00D gate GREEN; workflow-platform check passed, domain scan clean, full 00->14 schema load passed"
+    }
+   ],
+   "scope_guards": [
+    "HRMS hierarchy/statutory resolver is not implemented in PH-00D.",
+    "PUDA workflow.ts/tasks.ts remain unmodified.",
+    "Reusable packages contain no PUDA/LAC/LOI domain leakage.",
+    "Durable snapshot tables are tenant-scoped and included in RLS."
+   ],
+   "open_caveats": [
+    "Live SQL-backed workflow-postgres adapter is still deferred; PH-00D ships repository contracts and an in-memory contract implementation.",
+    "PUDA live runtime remains unchanged.",
+    "Full PUDA aggregate golden corpus remains a PH-00A caveat."
+   ]
+  },
+  "PH-00E": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-01",
+   "reuse_verdict": "internal_hrms_build_can_proceed_external_puda_productization_on_human_legal_hold",
+   "confidence": 0.76,
+   "target_repo": "/Users/n15318/workflow-platform",
+   "puda_commit": "cadf39739e6f27c17d44767ca61d1a362034ac64",
+   "artifacts": [
+    "/Users/n15318/workflow-platform/packages/adapters-puda/src/conformance.ts",
+    "/Users/n15318/workflow-platform/packages/adapters-puda/test/conformance.test.ts",
+    "/Users/n15318/workflow-platform/packages/adapters-hrms/src/synthetic-flow.ts",
+    "/Users/n15318/workflow-platform/packages/adapters-hrms/test/synthetic-flow.test.ts",
+    "docs/spec/pipeline/checks/ph-00e.sh",
+    "docs/spec/workflow-conformance-suite.md",
+    "docs/spec/migration-coexistence-inventory.md",
+    "docs/spec/ph-00-gate-verdict.md"
+   ],
+   "tests": [
+    {
+     "name": "workflow-platform conformance package check",
+     "status": "passed",
+     "command": "cd /Users/n15318/workflow-platform && npm run check",
+     "result": "8 test files passed, 18 tests passed"
+    },
+    {
+     "name": "focused adapter conformance tests",
+     "status": "passed",
+     "command": "cd /Users/n15318/workflow-platform && npm --workspace @hrms-workflow/adapters-puda run test && npm --workspace @hrms-workflow/adapters-hrms run test",
+     "result": "adapters-puda: 1 test file passed, 1 test passed; adapters-hrms: 2 test files passed, 2 tests passed"
+    },
+    {
+     "name": "PH-00E gate",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-00e.sh",
+     "result": "PH-00E gate GREEN; workflow-platform check passed, adapter conformance passed, PH-00B/PH-00D regressions passed"
+    }
+   ],
+   "scope_guards": [
+    "No PUDA workflow.ts/tasks.ts runtime behavior change.",
+    "No HRMS module imports PUDA/LAC/LoI domain code.",
+    "PUDA repository provenance remains a human/legal gate for external distribution or productization.",
+    "Historical PUDA workflow cases are not migrated in PH-00."
+   ],
+   "open_caveats": [
+    "Full PUDA aggregate golden corpus remains decision-grade rather than release-grade.",
+    "Live SQL-backed workflow-postgres adapter remains future work.",
+    "External distribution/productization of PUDA-derived code requires provenance/legal approval."
+   ]
+  },
+  "PH-01": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-02",
+   "reuse_verdict": "p01_contract_schema_freeze",
+   "confidence": 0.78,
+   "artifacts": [
+    "docs/spec/p01-schema-amendment.yaml",
+    "docs/spec/authority-resolution-contract.yaml",
+    "docs/spec/legacy-workflow-coexistence-map.yaml",
+    "docs/tests/P01-workflow-platform-tests.md",
+    "docs/spec/pipeline/prompts/PH-01.md",
+    "docs/spec/pipeline/checks/ph-01.sh",
+    "docs/architecture.md",
+    "docs/brd/PLATFORM_FOUNDATION.md",
+    "docs/brd/MODULE_RECONCILIATION.md",
+    "docs/contracts/state-machines.yaml",
+    "docs/contracts/auth-matrix.yaml"
+   ],
+   "tests": [
+    {
+     "name": "PH-01 gate",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-01.sh",
+     "result": "PH-01 gate GREEN; YAML/OpenAPI/schema checks passed, PH-00D schema-load regression passed, PH-00B facade regression passed"
+    }
+   ],
+   "scope_guards": [
+    "P01 workflow_tasks are platform-owned work items, not module-owned local task tables.",
+    "workflow_actions remains the immutable action/decision history.",
+    "Hierarchy/statutory authority logic remains behind ApproverResolver for PH-02.",
+    "No PUDA runtime source is copied into HRMS modules."
+   ],
+   "open_caveats": [
+    "PH-02 must supply the actual HRMS hierarchy, authority, delegation, acting-charge, and committee data fixtures.",
+    "Live SQL-backed workflow-postgres adapter remains future implementation work.",
+    "External distribution/productization of PUDA-derived code remains on human/legal hold."
+   ]
+  },
+  "PH-02": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-03",
+   "reuse_verdict": "hierarchy_authority_fixture_substrate",
+   "confidence": 0.77,
+   "artifacts": [
+    "docs/spec/hrms-authority-model.yaml",
+    "docs/spec/hrms-seed-data-plan.yaml",
+    "docs/tests/authority-resolution-tests.md",
+    "docs/spec/pipeline/prompts/PH-02.md",
+    "docs/spec/pipeline/checks/ph-02.sh",
+    "docs/data-model/01-G01-employee-profile.sql",
+    "docs/data-model/06-G06-promotion-posting-progression.sql",
+    "docs/data-model/09-G09-disciplinary-punishment.sql",
+    "docs/contracts/auth-matrix.yaml",
+    "docs/contracts/state-machines.yaml",
+    "docs/spec/authority-resolution-contract.yaml"
+   ],
+   "tests": [
+    {
+     "name": "PH-02 gate",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-02.sh",
+     "result": "PH-02 gate GREEN; PH-01 regression passed, full schema load passed, G03/G05 authority fixtures and forced RLS verified"
+    }
+   ],
+   "scope_guards": [
+    "PH-02 supplies resolver facts and fixtures only; broad G01/G05/G06/G09 services remain future phases.",
+    "Hierarchy/statutory authority logic remains behind ApproverResolver.",
+    "All new resolver substrate tables are tenant-scoped and RLS-forced.",
+    "Ambiguous authority resolution must fail closed."
+   ],
+   "open_caveats": [
+    "Production authority imports from government orders/service books remain future P06 migration work.",
+    "Live resolver implementation remains a later phase; PH-02 freezes data contracts and fixtures.",
+    "Committee workflow execution remains future work; PH-02 supplies quorum/recusal data contracts."
+   ]
+  },
+  "PH-02D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "PH-02D_GREEN_review_packet_ready_for_signoff",
+   "reuse_verdict": "authority_resolution_test_suite_and_review_packet",
+   "artifacts": [
+    "docs/tests/authority-resolution-tests.md",
+    "docs/spec/ph-02-verdict.md",
+    "docs/spec/pipeline/prompts/PH-02D.md",
+    "docs/spec/pipeline/checks/ph-02d.sh"
+   ],
+   "tests": [
+    {
+     "name": "PH-02D oracle",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-02d.sh",
+     "result": "GREEN - PH-02D met; resolution tests cover reporting-chain, position as-of, org-unit-head, delegation, acting-charge, committee quorum/recusal, no-overlap, tenant scoping, SoD self-approval, historical; review packet present with 0 coverage gaps"
+    }
+   ],
+   "scope_guards": [
+    "PH-02D adds tests and the PH-02 review packet only; model/schema/seed unchanged.",
+    "Suite is black-box against the resolver contract; no test-only bypasses of the authority model.",
+    "Every resolver_type has >= 1 test; ambiguity fails closed with P01_RESOLVER_AMBIGUOUS."
+   ],
+   "open_caveats": [
+    "Point-in-time and no-overlap invariants are contract-level until the live resolver lands in PH-03.",
+    "DB-level exclusion/daterange constraint on g01_authority_assignments recommended as future hardening."
+   ]
+  },
+  "PH-03": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-04",
+   "reuse_verdict": "foundation_services_available_for_api_contract_phase",
+   "confidence": 0.74,
+   "artifacts": [
+    "package.json",
+    "tsconfig.json",
+    "apps/api/src/platform/foundationServices.ts",
+    "apps/api/src/platform/authority-resolution/authorityResolutionService.ts",
+    "apps/api/src/platform/audit/auditService.ts",
+    "apps/api/src/platform/authorization/authorizationService.ts",
+    "apps/api/src/platform/workflow/hrmsWorkflowService.ts",
+    "apps/api/src/modules/g01/employeeMasterService.ts",
+    "apps/api/src/modules/g12/serviceRegisterService.ts",
+    "apps/api/src/modules/g13/documentVaultService.ts",
+    "apps/api/src/jobs/jobService.ts",
+    "apps/api/src/notifications/notificationService.ts",
+    "apps/api/src/migration/staging/migrationStagingService.ts",
+    "apps/api/src/security/foundationServiceRegistry.ts",
+    "apps/api/src/seed/ph03Seed.ts",
+    "apps/api/test/ph03-foundation.test.cjs",
+    "docs/tests/foundation-services-tests.md",
+    "docs/spec/pipeline/prompts/PH-03.md",
+    "docs/spec/pipeline/checks/ph-03.sh",
+    "docs/contracts/dependency-register.yaml"
+   ],
+   "tests": [
+    {
+     "name": "PH-03 local service check",
+     "status": "passed",
+     "command": "npm run check",
+     "result": "TypeScript typecheck/build passed; 8 Node test subtests passed for authority resolution, G01, G12, G13, workflow, tenant isolation, migration staging, and security hygiene."
+    },
+    {
+     "name": "PH-03 gate",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-03.sh",
+     "result": "PH-03 gate GREEN; PH-02 regression passed, npm check passed, OpenAPI contracts parsed, dependency and manifest evidence verified."
+    }
+   ],
+   "scope_guards": [
+    "PH-03 implements service internals only; PH-04 owns HTTP route handlers and OpenAPI request/response enforcement.",
+    "G12 append-only semantics are represented as ingest/reversal APIs; no update/delete event API is exposed.",
+    "G13 disposal fails closed under legal hold or WORM retention.",
+    "Migration staging reconciliation cannot mutate production employee records.",
+    "PUDA runtime code remains outside HRMS; workflow-platform is referenced as a local path dependency."
+   ],
+   "open_caveats": [
+    "PH-03 uses in-memory repositories for service conformance; SQL-backed repositories and route adapters are future implementation work.",
+    "Production object storage, KMS, AV scan, and RFC 3161 timestamp integrations remain adapter seams for later phases.",
+    "PH-04 must bind these services to protected /api/v1 routes with request/response validation and idempotency headers."
+   ]
+  },
+  "PH-02A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green",
+   "branch": "ph02-rerun",
+   "summary": "Closed resolver-model internal inconsistency: every resolver_family referenced by the trigger map is now a defined resolver_type.",
+   "artifacts": [
+    "docs/spec/hrms-authority-model.yaml",
+    "docs/spec/authority-resolution-contract.yaml",
+    "docs/spec/pipeline/prompts/PH-02A.md",
+    "docs/spec/pipeline/checks/ph-02a.sh"
+   ],
+   "resolver_types_added": {
+    "NAMED_ROLE": "defined primitive (RBAC role holder, scope+SoD, ambiguous->BLOCKED)",
+    "NAMED_INDIVIDUAL": "defined primitive (explicit configured user id, no inference)",
+    "WORK_QUEUE": "defined primitive (PUDA queue routing, claim-on-pickup)",
+    "SR_CUSTODIAN": "specialization of STATUTORY_AUTHORITY (authority_type=SR_CUSTODIAN)",
+    "APPELLATE_AUTHORITY": "specialization of STATUTORY_AUTHORITY (authority_type=APPELLATE_AUTHORITY, must differ from deciding authority)"
+   },
+   "tests": [
+    {
+     "name": "PH-02A oracle",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-02a.sh",
+     "result": "GREEN - PH-02A met; 14 modules mapped, 9 resolver families all defined, 0 dangling; G03/G05 covered+bound; snapshot_rule present"
+    }
+   ],
+   "scope_guards": [
+    "Model/contract artefacts only; schema/seed/tests untouched (PH-02B/C/D).",
+    "Ambiguous authority remains deterministically BLOCKED, never guessed.",
+    "Edits additive/surgical; existing valid content preserved."
+   ]
+  },
+  "PH-02C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green",
+   "branch": "ph02-rerun",
+   "summary": "Added the two missing hard resolver fixture cases (VACANT_MANAGER, CROSS_ENTITY_AUTHORITY) to the seed-data plan with inputs, expected resolver output, and resolver_type; existing fixtures preserved (additive/revertible).",
+   "artifacts": [
+    "docs/spec/hrms-seed-data-plan.yaml"
+   ],
+   "oracle": "docs/spec/pipeline/checks/ph-02c.sh"
+  },
+  "PH-03A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green",
+   "branch": "ph02-rerun",
+   "summary": "Added NAMED_INDIVIDUAL resolver family to the Authority Resolver (explicit configured user id, no fallback/inference; self-approval and inactive/absent -> BLOCKED) and wired it into resolver precedence. Added a typed resolver-precedence unit suite (16 cases) covering all resolver families, the ambiguity->BLOCKED path, and as-of snapshot determinism. Existing code preserved (additive/surgical).",
+   "artifacts": [
+    "apps/api/src/platform/authority-resolution/authorityResolutionService.ts",
+    "apps/api/src/platform/authority-resolution/authorityResolver.precedence.test.ts",
+    "apps/api/test/authorityResolver.precedence.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "authority-resolver precedence (all families, ambiguity->BLOCKED, as-of determinism)",
+     "status": "passed",
+     "result": "24 tests passed (16 new resolver precedence + 8 existing foundation), 0 failed"
+    }
+   ],
+   "verification": {
+    "npm_install": "ran (added 7 packages)",
+    "npm_typecheck": "passed",
+    "npm_test": "passed (24/24)"
+   },
+   "oracle": "docs/spec/pipeline/checks/ph-03a.sh",
+   "oracle_result": "GREEN \u2014 PH-03A met"
+  },
+  "PH-03B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green",
+   "branch": "ph02-rerun",
+   "summary": "Added the missing systems-of-record test suites for the already-implemented G01/G12/G13 services, black-box against the public foundation-service contracts using the ph03 seed fixtures: G12 SR semantic-dedup (idempotent replay, dedup tuple + fact_key collapse to one append-only ledger row, reused-key conflict, supersede-not-delete reversal, no update/delete mutators); G13 legal-hold blocks disposal/retention-delete and retains the document intact; P02 field-masking (PII masked on serialization for an under-privileged viewer, unmasked with field grants, least-privilege partial grant); and a G01->G12 integration test (a governed identity event drives exactly one SR row with correct G01 provenance). Repair-implementation-only: the G01->G12 test revealed a non-atomic multi-step write in EmployeeMasterService.governedIdentityChange (master mutated before the SR ingest, leaving a partial write when the ledger rejected/deduped); fixed by appending the SR fact first and committing the master mutation + audit only on a genuinely new ledger row. Additive/surgical; G12 append-only preserved.",
+   "artifacts": [
+    "apps/api/src/modules/g12/srSemanticDedup.test.ts",
+    "apps/api/test/srSemanticDedup.test.cjs",
+    "apps/api/src/modules/g13/legalHoldDisposal.test.ts",
+    "apps/api/test/legalHoldDisposal.test.cjs",
+    "apps/api/src/modules/g01/p02FieldMasking.test.ts",
+    "apps/api/test/p02FieldMasking.test.cjs",
+    "apps/api/src/modules/g01/g01ToG12SrIngest.test.ts",
+    "apps/api/test/g01ToG12SrIngest.test.cjs",
+    "apps/api/src/modules/g01/employeeMasterService.ts"
+   ],
+   "tests": [
+    {
+     "name": "systems-of-record suites (SR semantic-dedup, G13 legal-hold, P02 masking, G01->G12 SR ingest) + existing PH-03A/PH-03 foundation",
+     "status": "passed",
+     "result": "36 tests passed, 0 failed"
+    }
+   ],
+   "verification": {
+    "npm_install": "already installed",
+    "npm_typecheck": "passed",
+    "npm_test": "passed (36/36)"
+   },
+   "oracle": "docs/spec/pipeline/checks/ph-03b.sh",
+   "oracle_result": "GREEN \u2014 PH-03B met"
+  },
+  "PH-03C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "PH-03C_GREEN_foundation_review_packet_ready_for_human_signoff",
+   "branch": "ph02-rerun",
+   "summary": "Closed the two missing foundation proofs and wrote the PH-03 human-gate review packet. (1) RLS/tenant-isolation suite: black-box against the data-access/repo layer (EmployeeMasterService, DocumentVaultService) with a two-tenant/two-entity fixture proving an entity-A viewer cannot read entity-B or tenant-T2 rows, a tenant-T2 viewer cannot read tenant-T1 rows, and an authorized cross-entity (tenant-scoped) viewer can read across entities but not across tenants; the authz-enforced readProfile path fails closed. (2) Read-only migration staging + reconciliation suite: staged legacy records load into staging without touching the SoR, a reconciliation report classifies matched/missing/duplicate, and the new gated promote() is BLOCKED on any reconciliation mismatch (missing or duplicate) and never writes the employee master; only a clean reconciliation permits promotion and even then the production count is unchanged. Repair-implementation: added listStaged(), STAGED->PROMOTED status, reconciled flag, and the fail-closed promote() to MigrationStagingService (additive/surgical; existing behaviour preserved). (3) docs/spec/ph-03-verdict.md review packet covering PH-03A/B/C build, resolver-family coverage, SR append-only + legal-hold guarantees, 48-test inventory, RLS/security proof, known gaps, and an explicit ready-for-PH-04 = YES with deferred-not-blocking residual risks.",
+   "artifacts": [
+    "apps/api/src/migration/staging/migrationStagingService.ts",
+    "apps/api/src/migration/staging/migrationStagingReconciliation.test.ts",
+    "apps/api/test/migrationStagingReconciliation.test.cjs",
+    "apps/api/src/security/rlsTenantIsolation.test.ts",
+    "apps/api/test/rlsTenantIsolation.test.cjs",
+    "docs/spec/ph-03-verdict.md"
+   ],
+   "tests": [
+    {
+     "name": "foundation RLS isolation + read-only migration staging/reconciliation + existing PH-03/03A/03B suites",
+     "status": "passed",
+     "result": "48 tests passed, 0 failed (12 new: 6 RLS isolation + 6 migration staging reconciliation)"
+    }
+   ],
+   "verification": {
+    "npm_install": "already installed",
+    "npm_typecheck": "passed",
+    "npm_test": "passed (48/48)"
+   },
+   "scope_guards": [
+    "Migration staging holds no write handle into the employee master; promotion is BLOCKED on any reconciliation mismatch and cannot mutate the system of record.",
+    "RLS proven black-box at the data-access/repo layer; no test-only bypass of tenant/entity scoping.",
+    "Additive/surgical: only migrationStagingService gained listStaged/status/reconciled/promote; no existing behaviour changed. Oracle not weakened.",
+    "No production console.log; no stack-trace leak in error responses; service registry entries all protected."
+   ],
+   "open_caveats": [
+    "In-memory repositories: RLS is enforced at the inScope repo predicate, not by Postgres ROW LEVEL SECURITY; must be re-proven at the SQL boundary when persistent repositories land.",
+    "promote() gates on clean reconciliation and by design performs no SoR insert on the clean path; the real transactional upsert + audit land with SQL-backed repositories.",
+    "Endpoint protection is proven via the service registry, not live route guards; PH-04 owns per-route auth and request/response validation."
+   ],
+   "oracle": "docs/spec/pipeline/checks/ph-03c.sh",
+   "oracle_result": "GREEN \u2014 PH-03C met"
+  },
+  "PH-04": {
+   "status": "completed_machine_green_pending_human_api_freeze",
+   "gate_verdict": "PH-04D_GREEN_pending_human_API_freeze",
+   "reuse_verdict": "PH03_foundation_services_bound_to_stable_api_contracts",
+   "artifacts": [
+    "apps/api/src/http/apiKernel.ts",
+    "apps/api/src/http/apiTypes.ts",
+    "apps/api/src/http/body.ts",
+    "apps/api/src/http/correlation.ts",
+    "apps/api/src/http/errors.ts",
+    "apps/api/src/http/idempotency.ts",
+    "apps/api/src/http/pagination.ts",
+    "apps/api/src/openapi/contractRegistry.ts",
+    "apps/api/src/routes/index.ts",
+    "apps/api/src/routes/p01-workflow.routes.ts",
+    "apps/api/src/routes/g01.routes.ts",
+    "apps/api/src/routes/g12.routes.ts",
+    "apps/api/src/routes/g13.routes.ts",
+    "apps/api/test/ph04-api-kernel.test.cjs",
+    "apps/api/test/ph04-p01-g01-routes.test.cjs",
+    "apps/api/test/ph04-g12-g13-routes.test.cjs",
+    "apps/api/test/ph04-contract-conformance.test.cjs",
+    "docs/spec/ph-04-verdict.md"
+   ],
+   "subphases": [
+    {
+     "id": "PH-04A",
+     "name": "API kernel and contract harness",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-04a.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-04B",
+     "name": "P01 workflow and G01 employee routes",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-04b.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-04C",
+     "name": "G12 Service Register and G13 document routes",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-04c.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-04D",
+     "name": "API conformance and freeze packet",
+     "gate": "human",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-04d.sh",
+     "status": "machine_green_pending_human_api_freeze"
+    }
+   ],
+   "tests": [
+    {
+     "name": "PH-04 full project check",
+     "status": "passed",
+     "command": "npm run check",
+     "result": "TypeScript typecheck/build passed; 61 Node test subtests passed."
+    },
+    {
+     "name": "PH-04 machine oracles",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-04a.sh && bash docs/spec/pipeline/checks/ph-04b.sh && bash docs/spec/pipeline/checks/ph-04c.sh && bash docs/spec/pipeline/checks/ph-04d.sh",
+     "result": "PH-04D oracle passed and recursively confirmed PH-04A, PH-04B, and PH-04C GREEN; npm run check passed with 61 Node test subtests."
+    }
+   ],
+   "scope_guards": [
+    "PH-04 is API binding only; PH-05 owns UI and PH-06 owns G03/G05 vertical slices.",
+    "Every implemented PH-04 minimum route is explicitly protected and permissioned.",
+    "OpenAPI and error-taxonomy contracts were not changed in PH-04.",
+    "G12 remains append-only through ingest/reversal/annotation APIs; no direct SR ledger mutation route exists.",
+    "G13 legal hold and WORM retention continue to fail closed through service-layer preconditions."
+   ],
+   "open_caveats": [
+    "PH-04 route handlers are in-process contract handlers, not a deployed HTTP server.",
+    "SQL-backed repositories and DB RLS must be re-proven when persistence replaces in-memory service fixtures.",
+    "PH-04D remains a human API-freeze gate after GREEN machine checks."
+   ]
+  },
+  "PH-04A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-04B",
+   "summary": "Added the shared /api/v1 API kernel, route metadata registry, Authorization.check enforcement, correlation-id handling, idempotency-key enforcement, bounded cursor pagination, canonical error-envelope mapping, and OpenAPI contract registry.",
+   "artifacts": [
+    "apps/api/src/http/apiKernel.ts",
+    "apps/api/src/http/apiTypes.ts",
+    "apps/api/src/http/body.ts",
+    "apps/api/src/http/correlation.ts",
+    "apps/api/src/http/errors.ts",
+    "apps/api/src/http/idempotency.ts",
+    "apps/api/src/http/pagination.ts",
+    "apps/api/src/openapi/contractRegistry.ts",
+    "apps/api/test/ph04-api-kernel.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-04A API kernel tests",
+     "status": "passed",
+     "command": "npm run check",
+     "result": "Kernel tests cover missing actor, forbidden permission, correlation echo/generation, idempotency enforcement, pagination max 100, and sanitized INTERNAL errors."
+    }
+   ]
+  },
+  "PH-04B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-04C",
+   "summary": "Added P01 workflow and G01 employee route groups over PH-03 services, including workflow start/actions/tasks, employee list/detail/profile-360, governed changes, P02 masking, and G01-to-G12 SR posting.",
+   "artifacts": [
+    "apps/api/src/routes/p01-workflow.routes.ts",
+    "apps/api/src/routes/g01.routes.ts",
+    "apps/api/src/routes/index.ts",
+    "apps/api/src/platform/workflow/hrmsWorkflowService.ts",
+    "apps/api/src/modules/g01/employeeMasterService.ts",
+    "apps/api/test/ph04-p01-g01-routes.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-04B P01/G01 route tests",
+     "status": "passed",
+     "command": "npm run check",
+     "result": "Route tests cover workflow start/list/approve, employee pagination/detail/profile masking, and governed identity change posting an SR event."
+    }
+   ]
+  },
+  "PH-04C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-04D",
+   "summary": "Added G12 Service Register and G13 document vault route groups, including SR ingest/reversal/timeline/event/corrigendum/dispute/resolve and document create/list/read/attach/versions/checkin/supersede/legal-hold/retention.",
+   "artifacts": [
+    "apps/api/src/routes/g12.routes.ts",
+    "apps/api/src/routes/g13.routes.ts",
+    "apps/api/src/modules/g12/serviceRegisterService.ts",
+    "apps/api/src/modules/g13/documentVaultService.ts",
+    "apps/api/test/ph04-g12-g13-routes.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-04C G12/G13 route tests",
+     "status": "passed",
+     "command": "npm run check",
+     "result": "Route tests cover SR idempotent replay, semantic dedup, reversal, corrigendum/dispute annotations, document create/attach, legal hold, retention fail-closed state, and blocked checkin."
+    }
+   ]
+  },
+  "PH-04D": {
+   "status": "machine_green_pending_human_api_freeze",
+   "gate_verdict": "machine_green_human_gate_required",
+   "summary": "Added PH-04 conformance tests and freeze verdict. Machine evidence confirms minimum route coverage, protected route metadata, idempotency metadata for unsafe routes, pagination metadata, canonical errors, auth, correlation, and no contract delta.",
+   "artifacts": [
+    "apps/api/test/ph04-contract-conformance.test.cjs",
+    "docs/spec/ph-04-verdict.md",
+    "docs/spec/manifest.json"
+   ],
+   "tests": [
+    {
+     "name": "PH-04D conformance tests",
+     "status": "passed",
+     "command": "npm run check",
+     "result": "Contract conformance tests cover frozen minimum route set, auth metadata, idempotency metadata, pagination metadata, and canonical error/correlation behavior."
+    }
+   ]
+  },
+  "PH-05": {
+   "status": "completed_human_approved",
+   "gate_verdict": "PH-05E_human_approved_ready_for_PH-06",
+   "reuse_verdict": "consume_PH04_API_contracts_for_operational_UI",
+   "artifacts": [
+    "docs/spec/ph-05-ui-implementation-plan.md",
+    "docs/spec/pipeline/prompts/PH-05A.md",
+    "docs/spec/pipeline/prompts/PH-05B.md",
+    "docs/spec/pipeline/prompts/PH-05C.md",
+    "docs/spec/pipeline/prompts/PH-05D.md",
+    "docs/spec/pipeline/prompts/PH-05E.md",
+    "docs/spec/pipeline/checks/ph-05a.sh",
+    "docs/spec/pipeline/checks/ph-05b.sh",
+    "docs/spec/pipeline/checks/ph-05c.sh",
+    "docs/spec/pipeline/checks/ph-05d.sh",
+    "docs/spec/pipeline/checks/ph-05e.sh",
+    "docs/spec/pipeline/phases.yaml"
+   ],
+   "subphases": [
+    {
+     "id": "PH-05A",
+     "name": "Web scaffold and API client foundation",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-05a.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-05B",
+     "name": "HRMS shell, workspaces, and route guards",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-05b.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-05C",
+     "name": "Workflow inbox, task actions, and config UI",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-05c.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-05D",
+     "name": "G01/G12/G13 foundation record views",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-05d.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-05E",
+     "name": "UI conformance and review packet",
+     "gate": "human",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-05e.sh",
+     "status": "machine_green_pending_human_ui_demo_freeze"
+    }
+   ],
+   "tests": [
+    {
+     "name": "PH-05 machine oracles",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-05e.sh",
+     "result": "PH-05E oracle passed and recursively confirmed PH-05A, PH-05B, PH-05C, and PH-05D GREEN; web and API checks passed."
+    }
+   ],
+   "scope_guards": [
+    "PH-05 is UI foundation only; PH-06 owns G03/G05 vertical slices.",
+    "PH-05A ran only after PH-04D was approved/done.",
+    "Workflow config UI may be YAML-backed; advanced graph editing is deferred unless fully checked.",
+    "PUDA workflow config UI sources are read-only references and must not leak PUDA/LAC/LOI domain assumptions.",
+    "Every PH-05 route and screen must consume PH-04 API contract names or explicitly marked fixture mode."
+   ],
+   "open_caveats": [
+    "PH-05A created the web scaffold and fixture-backed API client; PH-05B owns the full shell/workspace implementation.",
+    "PH-05E is a human UI/demo freeze gate because visual acceptance and workspace IA are judgment-bearing.",
+    "PH-06 must replace fixture-backed UI data with live G03/G05 vertical-slice calls."
+   ]
+  },
+  "PH-05A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-05B",
+   "summary": "Created the PH-05 web scaffold with React, TypeScript, Vite, root web verification scripts, typed PH-04 API route constants/client, and a fixture adapter for contract-backed UI development.",
+   "artifacts": [
+    "package.json",
+    "package-lock.json",
+    "apps/web/index.html",
+    "apps/web/tsconfig.json",
+    "apps/web/vite.config.ts",
+    "apps/web/src/api/hrmsClient.ts",
+    "apps/web/src/api/fixtureHrmsClient.ts",
+    "apps/web/src/main.tsx",
+    "apps/web/src/App.tsx",
+    "apps/web/src/styles.css",
+    "apps/web/test/ph05-api-client.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-05A web scaffold and API client check",
+     "status": "passed",
+     "command": "npm run web:check",
+     "result": "Web typecheck passed, Vite production build passed, and 3 API-client fixture tests passed."
+    }
+   ]
+  },
+  "PH-05B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-05C",
+   "summary": "Implemented the HRMS operational shell with Me/My Team/Admin workspace switcher, primary navigation, permission route guard, and loading/empty/error/no-permission/partial-data operational states.",
+   "artifacts": [
+    "apps/web/src/app/AppShell.tsx",
+    "apps/web/src/app/WorkspaceSwitcher.tsx",
+    "apps/web/src/app/navigation.ts",
+    "apps/web/src/app/RouteGuard.tsx",
+    "apps/web/src/app/OperationalStates.tsx",
+    "apps/web/test/ph05-shell.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-05B shell and workspace check",
+     "status": "passed",
+     "command": "npm run web:check",
+     "result": "Web typecheck/build passed and 5 web test subtests passed, including shell workspace/navigation and operational state coverage."
+    }
+   ]
+  },
+  "PH-05C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-05D",
+   "summary": "Implemented fixture-backed P01 inbox, task detail, task action panel with mandatory reason enforcement, audit history panel, and YAML-backed workflow configuration validate/simulate/review/publish/evidence-export surface with maker-checker gating.",
+   "artifacts": [
+    "apps/web/src/workflow/Inbox.tsx",
+    "apps/web/src/workflow/TaskDetail.tsx",
+    "apps/web/src/workflow/TaskActionPanel.tsx",
+    "apps/web/src/workflow/WorkflowConfigConsole.tsx",
+    "apps/web/src/workflow/workflowConfigModel.ts",
+    "apps/web/test/ph05-workflow.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-05C workflow operations UI check",
+     "status": "passed",
+     "command": "npm run web:check",
+     "result": "Web typecheck/build passed and 10 web test subtests passed, including P01 actions, mandatory reason handling, audit history, and workflow config lifecycle markers."
+    }
+   ]
+  },
+  "PH-05D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-05E",
+   "summary": "Implemented G01 employee profile view with P02 masked PII evidence, G12 append-only Service Register timeline with hash/provenance cues, and G13 document vault view with legal-hold/WORM/retention fail-closed states.",
+   "artifacts": [
+    "apps/web/src/modules/g01/EmployeeProfile.tsx",
+    "apps/web/src/modules/g12/ServiceRegisterTimeline.tsx",
+    "apps/web/src/modules/g13/DocumentVaultView.tsx",
+    "apps/web/test/ph05-records.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-05D foundation record views check",
+     "status": "passed",
+     "command": "npm run web:check",
+     "result": "Web typecheck/build passed and 13 web test subtests passed, including employee masking, SR append-only cues, and document retention/legal-hold states."
+    }
+   ]
+  },
+  "PH-05E": {
+   "status": "completed_human_approved",
+   "gate_verdict": "human_approved_ready_for_PH-06",
+   "summary": "Added PH-05 UI conformance evidence and verdict packet. Machine evidence confirms shell, workspace, workflow operations, workflow config, G01, G12, G13, fixture-mode, and accessibility markers.",
+   "artifacts": [
+    "apps/web/test/ph05-ui-conformance.test.cjs",
+    "docs/spec/ph-05-verdict.md",
+    "docs/spec/manifest.json"
+   ],
+   "tests": [
+    {
+     "name": "PH-05E UI conformance check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-05e.sh",
+     "result": "PH-05E oracle GREEN; web typecheck/build/tests passed, API regression passed, verdict markers and manifest evidence verified."
+    }
+   ]
+  },
+  "PH-06": {
+   "status": "completed_human_approved",
+   "gate_verdict": "human_approved_ready_for_PH-07",
+   "reuse_verdict": "workflow_platform_spine_proven_for_G03_G05_vertical_slices",
+   "artifacts": [
+    "docs/spec/ph-06-vertical-slice-implementation-plan.md",
+    "docs/spec/vertical-slice-g03-leave.yaml",
+    "docs/spec/vertical-slice-g05-transfer.yaml",
+    "apps/api/src/modules/g03/leaveService.ts",
+    "apps/api/src/modules/g05/transferService.ts",
+    "apps/api/src/routes/g03.routes.ts",
+    "apps/api/src/routes/g05.routes.ts",
+    "apps/web/src/modules/g03/LeaveWorkspace.tsx",
+    "apps/web/src/modules/g05/TransferWorkspace.tsx",
+    "docs/spec/ph-06-verdict.md"
+   ],
+   "subphases": [
+    {
+     "id": "PH-06A",
+     "name": "Vertical-slice plan and contract binding",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-06a.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-06B",
+     "name": "G03 leave backend vertical slice",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-06b.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-06C",
+     "name": "G05 transfer backend vertical slice",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-06c.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-06D",
+     "name": "G03/G05 demo UI proof",
+     "gate": "auto",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-06d.sh",
+     "status": "completed_agentic_gate_green"
+    },
+    {
+     "id": "PH-06E",
+     "name": "Vertical-slice conformance and scale-up gate",
+     "gate": "human",
+     "exit_criteria": "bash docs/spec/pipeline/checks/ph-06e.sh",
+     "status": "completed_human_approved"
+    }
+   ],
+   "tests": [
+    {
+     "name": "PH-06 machine oracles",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-06a.sh && bash docs/spec/pipeline/checks/ph-06b.sh && bash docs/spec/pipeline/checks/ph-06c.sh && bash docs/spec/pipeline/checks/ph-06d.sh",
+     "result": "PH-06A-D oracles GREEN; G03/G05 backend and UI proof checks passed."
+    },
+    {
+     "name": "PH-06 full API regression",
+     "status": "passed",
+     "command": "npm run check",
+     "result": "TypeScript typecheck/build passed; 68 API test subtests passed including PH-06 conformance."
+    },
+    {
+     "name": "PH-06 full web regression",
+     "status": "passed",
+     "command": "npm run web:check",
+     "result": "Web typecheck/build passed; 19 web test subtests passed including PH-06 vertical-slice UI proof."
+    }
+   ],
+   "scope_guards": [
+    "PH-06 proves only G03 leave and G05 transfer slices; PH-07 through PH-10 own full module waves.",
+    "G03 emits a G04-ready outbox and the SR append is attributed to G04, not G03.",
+    "G05 writes TRANSFER_JOINED through G12 and attaches G13 evidence.",
+    "All approval paths use P01 resolver rules rather than local approval-task engines.",
+    "PH-06E remains a human gate because scaling module build is a critical architecture decision."
+   ],
+   "open_caveats": [
+    "Backend stores remain in-memory pending persistence hardening.",
+    "Frontend slice panels are fixture-backed; backend route tests prove live API/service behavior.",
+    "G05 scope is intentionally reduced to order approval, three clearance branches, deemed clearance, relieving, joining, and SR posting."
+   ]
+  },
+  "PH-06A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-06B",
+   "summary": "Created PH-06 detailed implementation plan, G03/G05 vertical-slice YAML, OpenAPI PH-06 binding markers, prompts, checks, and pipeline phase wiring.",
+   "artifacts": [
+    "docs/spec/ph-06-vertical-slice-implementation-plan.md",
+    "docs/spec/vertical-slice-g03-leave.yaml",
+    "docs/spec/vertical-slice-g05-transfer.yaml",
+    "docs/spec/pipeline/prompts/PH-06A.md",
+    "docs/spec/pipeline/checks/ph-06a.sh",
+    "docs/spec/pipeline/phases.yaml"
+   ],
+   "tests": [
+    {
+     "name": "PH-06A plan and wiring check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-06a.sh",
+     "result": "PH-06A oracle GREEN; plan, slice YAML, OpenAPI markers, prompts, and PH-06A-E wiring verified."
+    }
+   ]
+  },
+  "PH-06B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-06C",
+   "summary": "Implemented G03 leave application, balance reservation/debit, P01 REPORTING_CHAIN workflow and delegate action, G04-ready outbox, G12 leave-approved SR append, audit, notification, and API routes.",
+   "artifacts": [
+    "apps/api/src/modules/g03/leaveService.ts",
+    "apps/api/src/routes/g03.routes.ts",
+    "apps/api/test/ph06-g03-leave.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-06B G03 leave backend check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-06b.sh",
+     "result": "PH-06B oracle GREEN; two G03 leave backend/route subtests passed."
+    }
+   ]
+  },
+  "PH-06C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-06D",
+   "summary": "Implemented G05 transfer order, P01 POSITION_AUTHORITY approval, PARALLEL_ALL_OF clearance workflow marker, deemed clearance SLA, G13 transfer/joining documents, G12 transfer-joined SR append, audit, notification, and API routes.",
+   "artifacts": [
+    "apps/api/src/modules/g05/transferService.ts",
+    "apps/api/src/routes/g05.routes.ts",
+    "apps/api/test/ph06-g05-transfer.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-06C G05 transfer backend check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-06c.sh",
+     "result": "PH-06C oracle GREEN; three G05 transfer backend/route subtests passed."
+    }
+   ]
+  },
+  "PH-06D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-06E",
+   "summary": "Implemented fixture-backed G03 leave and G05 transfer vertical-slice panels in the PH-05 shell, including resolver, workflow, SR, G13, audit, and notification evidence markers.",
+   "artifacts": [
+    "apps/web/src/modules/g03/LeaveWorkspace.tsx",
+    "apps/web/src/modules/g05/TransferWorkspace.tsx",
+    "apps/web/test/ph06-vertical-slices.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-06D UI proof check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-06d.sh",
+     "result": "PH-06D oracle GREEN; web typecheck/build and 19 web subtests passed."
+    }
+   ]
+  },
+  "PH-06E": {
+   "status": "completed_human_approved",
+   "gate_verdict": "human_approved_ready_for_PH-07",
+   "summary": "Prepared PH-06 conformance evidence and verdict. Machine evidence is GREEN and human approval was granted to scale module waves.",
+   "artifacts": [
+    "apps/api/test/ph06-vertical-slice-conformance.test.cjs",
+    "docs/spec/ph-06-verdict.md",
+    "docs/spec/manifest.json"
+   ],
+   "tests": [
+    {
+     "name": "PH-06E full conformance check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-06e.sh",
+     "result": "PH-06E oracle GREEN; PH-06A-D regressions passed, npm run check passed with 68 API subtests, npm run web:check passed with 19 web subtests, conformance tests passed, verdict and manifest evidence verified."
+    }
+   ]
+  },
+  "PH-07": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-08",
+   "summary": "Built the employee transaction wave: G02 governed personal-details workflow, G03 attendance/leave/payroll-ready signals, and G04 leave-to-SR relay with idempotency, reconciliation, and DLQ operations.",
+   "artifacts": [
+    "docs/spec/ph-07-employee-transaction-wave-plan.md",
+    "docs/spec/ph-07-verdict.md",
+    "apps/api/src/modules/g02/personalDetailsService.ts",
+    "apps/api/src/modules/g03/leaveService.ts",
+    "apps/api/src/modules/g04/leaveSrRelayService.ts",
+    "apps/web/src/modules/g02/PersonalDetailsWorkspace.tsx",
+    "apps/web/src/modules/g03/LeaveWorkspace.tsx",
+    "apps/web/src/modules/g04/LeaveSrRelayWorkspace.tsx"
+   ],
+   "tests": [
+    {
+     "name": "PH-07E employee wave conformance",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-07e.sh",
+     "result": "PH-07E oracle GREEN; PH-07A-D regressions, full API regression passed with 77 API subtests, full web regression passed with 22 web subtests, web hygiene, verdict markers, and manifest evidence verified."
+    }
+   ],
+   "scope_guards": [
+    "G02 does not write identity SR events directly; it commits through G01 governed identity change.",
+    "G04 is the leave-to-SR relay owner for G03 leave facts and owns DLQ handling.",
+    "G03 emits READY_FOR_G10 payroll-input signals only; G10 remains the payroll computation owner.",
+    "PH-07 remains in-memory pending persistence hardening in a later phase."
+   ],
+   "open_caveats": [
+    "Persistent outbox locking and scheduled retries are deferred.",
+    "Frontend PH-07 panels are fixture-backed proof surfaces.",
+    "Payroll computation, deductions, arrears, and bank files are out of scope until G10."
+   ]
+  },
+  "PH-07A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-07B",
+   "summary": "Created the PH-07 detailed plan, prompts, executable checks, pipeline wiring, and G02/G03/G04 OpenAPI binding markers.",
+   "artifacts": [
+    "docs/spec/ph-07-employee-transaction-wave-plan.md",
+    "docs/spec/pipeline/prompts/PH-07A.md",
+    "docs/spec/pipeline/checks/ph-07a.sh",
+    "docs/contracts/openapi/G02.yaml",
+    "docs/contracts/openapi/G03.yaml",
+    "docs/contracts/openapi/G04.yaml"
+   ],
+   "tests": [
+    {
+     "name": "PH-07A plan and wiring check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-07a.sh",
+     "result": "PH-07A oracle GREEN; plan, prompts, OpenAPI markers, and PH-07A-E auto-gate wiring verified."
+    }
+   ]
+  },
+  "PH-07B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-07C",
+   "summary": "Implemented G04 leave-to-SR relay with idempotent posting, reconciliation, DLQ failure state, replay, discard, audit, and API routes.",
+   "artifacts": [
+    "apps/api/src/modules/g04/leaveSrRelayService.ts",
+    "apps/api/src/routes/g04.routes.ts",
+    "apps/api/test/ph07-g04-relay.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-07B G04 relay check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-07b.sh",
+     "result": "PH-07B oracle GREEN; G04 relay backend and route tests passed."
+    }
+   ]
+  },
+  "PH-07C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-07D",
+   "summary": "Implemented G02 personal-details change workflow with sensitivity routing, G13 evidence, approve/reject, commit/reverse, G01-owned identity commit, audit, and API routes.",
+   "artifacts": [
+    "apps/api/src/modules/g02/personalDetailsService.ts",
+    "apps/api/src/routes/g02.routes.ts",
+    "apps/api/test/ph07-g02-personal-details.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-07C G02 personal details check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-07c.sh",
+     "result": "PH-07C oracle GREEN; G02 personal-details workflow backend and route tests passed."
+    }
+   ]
+  },
+  "PH-07D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-07E",
+   "summary": "Extended G03 with leave accrual/cancellation, attendance capture, regularisation recompute, overtime, anomaly state, and READY_FOR_G10 payroll signals.",
+   "artifacts": [
+    "apps/api/src/modules/g03/leaveService.ts",
+    "apps/api/src/routes/g03.routes.ts",
+    "apps/api/test/ph07-g03-attendance-payroll.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-07D G03 attendance/payroll-signal check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-07d.sh",
+     "result": "PH-07D oracle GREEN; G03 attendance, leave cancellation, overtime, regularisation, and payroll-signal tests passed."
+    }
+   ]
+  },
+  "PH-07E": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-08",
+   "summary": "Added PH-07 UI proof surfaces, conformance verdict, manifest evidence, and full API/web regression coverage for the employee transaction wave.",
+   "artifacts": [
+    "apps/web/src/modules/g02/PersonalDetailsWorkspace.tsx",
+    "apps/web/src/modules/g03/LeaveWorkspace.tsx",
+    "apps/web/src/modules/g04/LeaveSrRelayWorkspace.tsx",
+    "apps/web/test/ph07-employee-wave.test.cjs",
+    "docs/spec/ph-07-verdict.md",
+    "docs/spec/manifest.json"
+   ],
+   "tests": [
+    {
+     "name": "PH-07E full employee wave conformance check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-07e.sh",
+     "result": "PH-07E oracle GREEN; PH-07A-D regressions passed, npm run check passed with 77 API subtests, npm run web:check passed with 22 web subtests, verdict markers and manifest evidence verified."
+    }
+   ]
+  },
+  "PH-08": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-09",
+   "summary": "Built the statutory administration wave: G05 full transfer administration, G06 promotion/seniority/DPC/MACP, G07 training/certification, G08 APAR/sealed-cover, and G09 disciplinary due process with SR conformance.",
+   "artifacts": [
+    "docs/spec/ph-08-statutory-administration-wave-plan.md",
+    "docs/spec/ph-08-verdict.md",
+    "apps/api/src/modules/g05/transferService.ts",
+    "apps/api/src/modules/g06/promotionService.ts",
+    "apps/api/src/modules/g07/trainingService.ts",
+    "apps/api/src/modules/g08/aparService.ts",
+    "apps/api/src/modules/g09/disciplinaryService.ts",
+    "apps/web/src/modules/g06/PromotionWorkspace.tsx",
+    "apps/web/src/modules/g07/TrainingWorkspace.tsx",
+    "apps/web/src/modules/g08/AparWorkspace.tsx",
+    "apps/web/src/modules/g09/DisciplinaryWorkspace.tsx"
+   ],
+   "tests": [
+    {
+     "name": "PH-08F statutory wave conformance",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-08f.sh",
+     "result": "PH-08F oracle GREEN; PH-08A-E regressions, full API regression passed with 90 API subtests, full web regression passed with 25 web subtests, web hygiene, verdict markers, and manifest evidence verified."
+    }
+   ],
+   "scope_guards": [
+    "Every statutory SR writer posts through G12; no module edits SR ledger rows.",
+    "G06 emits pay-impact signals only; G10 owns pay fixation and money calculation.",
+    "G08 sealed-cover forms suppress G06 feed until released.",
+    "G09 disciplinary impact signals are ready for G06/G11 consumption; downstream pension effects remain PH-09."
+   ],
+   "open_caveats": [
+    "Stores remain in-memory pending persistence hardening.",
+    "UI statutory panels are fixture-backed proof surfaces.",
+    "PH-08 proves representative statutory paths, not every BRD edge case in the full statutory domain."
+   ]
+  },
+  "PH-08A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-08B",
+   "summary": "Created the PH-08 detailed plan, prompts, executable checks, pipeline wiring, and G05/G06/G07/G08/G09 OpenAPI binding markers.",
+   "artifacts": [
+    "docs/spec/ph-08-statutory-administration-wave-plan.md",
+    "docs/spec/pipeline/prompts/PH-08A.md",
+    "docs/spec/pipeline/checks/ph-08a.sh",
+    "docs/contracts/openapi/G05.yaml",
+    "docs/contracts/openapi/G06.yaml",
+    "docs/contracts/openapi/G07.yaml",
+    "docs/contracts/openapi/G08.yaml",
+    "docs/contracts/openapi/G09.yaml"
+   ],
+   "tests": [
+    {
+     "name": "PH-08A plan and wiring check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-08a.sh",
+     "result": "PH-08A oracle GREEN; plan, prompts, OpenAPI markers, and PH-08A-F auto-gate wiring verified."
+    }
+   ]
+  },
+  "PH-08B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-08C",
+   "summary": "Extended G05 with representation, retention, cancellation, deemed relief, statutory documents, audit, notifications, routes, and SR events.",
+   "artifacts": [
+    "apps/api/src/modules/g05/transferService.ts",
+    "apps/api/src/routes/g05.routes.ts",
+    "apps/api/test/ph08-g05-transfer-full.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-08B G05 full-scope check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-08b.sh",
+     "result": "PH-08B oracle GREEN; PH-06 G05 regression and PH-08 G05 full-scope tests passed with 6 focused subtests."
+    }
+   ]
+  },
+  "PH-08C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-08D",
+   "summary": "Implemented G06 seniority tie-breaks, finalisation, promotion cases, DPC quorum/recusal, promotion effecting, MACP, G12 SR events, and G10-ready pay-impact signals.",
+   "artifacts": [
+    "apps/api/src/modules/g06/promotionService.ts",
+    "apps/api/src/routes/g06.routes.ts",
+    "apps/api/test/ph08-g06-promotion.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-08C G06 promotion check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-08c.sh",
+     "result": "PH-08C oracle GREEN; G06 promotion/seniority/DPC/MACP tests passed with 4 focused subtests."
+    }
+   ]
+  },
+  "PH-08D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-08E",
+   "summary": "Implemented G07 training nomination/certification and G08 APAR final-grade/sealed-cover behavior with SR posting and feed-suppression evidence.",
+   "artifacts": [
+    "apps/api/src/modules/g07/trainingService.ts",
+    "apps/api/src/modules/g08/aparService.ts",
+    "apps/api/src/routes/g07.routes.ts",
+    "apps/api/src/routes/g08.routes.ts",
+    "apps/api/test/ph08-g07-g08-training-apar.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-08D G07/G08 check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-08d.sh",
+     "result": "PH-08D oracle GREEN; G07 training/certification and G08 APAR tests passed with 3 focused subtests."
+    }
+   ]
+  },
+  "PH-08E": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-08F",
+   "summary": "Implemented G09 disciplinary due-process case lifecycle, authority competence, charge memo, inquiry report, penalty, appeal, confidential routing, SR posting, and downstream impact signals.",
+   "artifacts": [
+    "apps/api/src/modules/g09/disciplinaryService.ts",
+    "apps/api/src/routes/g09.routes.ts",
+    "apps/api/test/ph08-g09-disciplinary.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-08E G09 disciplinary check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-08e.sh",
+     "result": "PH-08E oracle GREEN; G09 disciplinary tests passed with 3 focused subtests."
+    }
+   ]
+  },
+  "PH-08F": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-09",
+   "summary": "Added PH-08 statutory UI panels, conformance verdict, manifest evidence, state files, and full API/web regression coverage.",
+   "artifacts": [
+    "apps/web/src/modules/g06/PromotionWorkspace.tsx",
+    "apps/web/src/modules/g07/TrainingWorkspace.tsx",
+    "apps/web/src/modules/g08/AparWorkspace.tsx",
+    "apps/web/src/modules/g09/DisciplinaryWorkspace.tsx",
+    "apps/web/test/ph08-statutory-wave.test.cjs",
+    "docs/spec/ph-08-verdict.md",
+    "docs/spec/manifest.json"
+   ],
+   "tests": [
+    {
+     "name": "PH-08F full statutory wave conformance check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-08f.sh",
+     "result": "PH-08F oracle GREEN; PH-08A-E regressions passed, npm run check passed with 90 API subtests, npm run web:check passed with 25 web subtests, verdict markers and manifest evidence verified."
+    }
+   ]
+  },
+  "PH-09": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-10",
+   "summary": "Built the payroll and pension wave: G10 deterministic payroll with rule snapshots, input locking, SoD, X.3 bank sandbox export, and last-pay-drawn; G11 Service Register gate, qualifying service, deterministic pension calculation, SoD sanction, PPO, and SR posting.",
+   "artifacts": [
+    "docs/spec/ph-09-payroll-pension-wave-plan.md",
+    "docs/spec/ph-09-verdict.md",
+    "apps/api/src/modules/g10/payrollService.ts",
+    "apps/api/src/modules/g11/pensionService.ts",
+    "apps/api/src/routes/g10.routes.ts",
+    "apps/api/src/routes/g11.routes.ts",
+    "apps/web/src/modules/g10/PayrollWorkspace.tsx",
+    "apps/web/src/modules/g11/PensionWorkspace.tsx"
+   ],
+   "tests": [
+    {
+     "name": "PH-09E payroll/pension conformance",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-09e.sh",
+     "result": "PH-09E oracle GREEN; PH-09A-D regressions, full API regression, full web regression, web hygiene, verdict markers, and manifest evidence verified."
+    }
+   ],
+   "scope_guards": [
+    "Money calculations use deterministic integer minor-unit arithmetic.",
+    "No calculation proceeds without provenance completeness and rule-version snapshots.",
+    "Payroll and pension maker-checker SoD are enforced.",
+    "Financial exports use X.3 sandbox markers only.",
+    "G11 posts separation/PPO facts through G12 and does not mutate SR directly."
+   ],
+   "open_caveats": [
+    "Stores remain in-memory pending persistence hardening.",
+    "UI compensation panels are fixture-backed proof surfaces.",
+    "PH-09 proves representative deterministic compensation paths, not every statutory payroll/pension edge case."
+   ]
+  },
+  "PH-09A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-09B",
+   "summary": "Created the PH-09 detailed plan, prompts, executable checks, pipeline wiring, and G10/G11 OpenAPI binding markers.",
+   "artifacts": [
+    "docs/spec/ph-09-payroll-pension-wave-plan.md",
+    "docs/spec/pipeline/prompts/PH-09A.md",
+    "docs/spec/pipeline/checks/ph-09a.sh",
+    "docs/contracts/openapi/G10.yaml",
+    "docs/contracts/openapi/G11.yaml"
+   ],
+   "tests": [
+    {
+     "name": "PH-09A plan and wiring check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-09a.sh",
+     "result": "PH-09A oracle GREEN; plan, prompts, OpenAPI markers, and PH-09A-E auto-gate wiring verified."
+    }
+   ]
+  },
+  "PH-09B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-09C",
+   "summary": "Implemented G10 deterministic payroll with salary structures, adjustments, input lock, calculation trace, SoD approval, X.3 bank sandbox export, and last-pay-drawn feed.",
+   "artifacts": [
+    "apps/api/src/modules/g10/payrollService.ts",
+    "apps/api/src/routes/g10.routes.ts",
+    "apps/api/test/ph09-g10-payroll.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-09B G10 payroll check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-09b.sh",
+     "result": "PH-09B oracle GREEN; G10 payroll tests passed with 3 focused subtests."
+    }
+   ]
+  },
+  "PH-09C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-09D",
+   "summary": "Implemented G11 Service Register verification gate, qualifying-service lock, deterministic pension calculation trace, SoD sanction, PPO issue, and G12 SR posting.",
+   "artifacts": [
+    "apps/api/src/modules/g11/pensionService.ts",
+    "apps/api/src/routes/g11.routes.ts",
+    "apps/api/test/ph09-g11-pension.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-09C G11 pension check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-09c.sh",
+     "result": "PH-09C oracle GREEN; G11 pension tests passed with 3 focused subtests."
+    }
+   ]
+  },
+  "PH-09D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-09E",
+   "summary": "Proved G03 LOP and G09 penalty impacts through G10/G11, G10 last-pay-drawn handoff, payroll/pension SoD, and provenance completeness.",
+   "artifacts": [
+    "apps/api/test/ph09-compensation-integration.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-09D compensation integration check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-09d.sh",
+     "result": "PH-09D oracle GREEN; G10/G11 integration tests passed with 1 focused subtest."
+    }
+   ]
+  },
+  "PH-09E": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-10",
+   "summary": "Added PH-09 compensation UI panels, conformance verdict, manifest evidence, state files, and full API/web regression coverage.",
+   "artifacts": [
+    "apps/web/src/modules/g10/PayrollWorkspace.tsx",
+    "apps/web/src/modules/g11/PensionWorkspace.tsx",
+    "apps/web/test/ph09-compensation-wave.test.cjs",
+    "docs/spec/ph-09-verdict.md",
+    "docs/spec/manifest.json"
+   ],
+   "tests": [
+    {
+     "name": "PH-09E full compensation wave conformance check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-09e.sh",
+     "result": "PH-09E oracle GREEN; PH-09A-D regressions passed, npm run check passed with 97 API subtests, npm run web:check passed with 28 web subtests, verdict markers and manifest evidence verified."
+    }
+   ]
+  },
+  "PH-10": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "development_release_readiness_green_human_cutover_required",
+   "summary": "Built G14 read-only analytics, migration dry-run certification, security/NFR/backup evidence, deployment and rollback runbooks, coexistence plan, UAT scripts, release evidence pack, and G14 UI proof.",
+   "artifacts": [
+    "docs/spec/ph-10-analytics-hardening-release-plan.md",
+    "docs/spec/ph-10-verdict.md",
+    "apps/api/src/modules/g14/analyticsService.ts",
+    "apps/api/src/routes/g14.routes.ts",
+    "apps/api/src/migration/ph10MigrationDryRun.ts",
+    "docs/release/release-evidence-pack.md",
+    "ops/backup-restore-drill.md",
+    "apps/web/src/modules/g14/AnalyticsWorkspace.tsx"
+   ],
+   "tests": [
+    {
+     "name": "PH-10E analytics/release conformance",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-10e.sh",
+     "result": "PH-10E oracle GREEN; PH-10A-D regressions, full API regression, full web regression, web hygiene, verdict markers, and manifest evidence verified."
+    }
+   ],
+   "scope_guards": [
+    "G14 is read-only and does not mutate source modules.",
+    "Analytics uses P02/RLS scope filters and PII suppression.",
+    "Migration dry-run evidence does not promote or mutate production records.",
+    "Production/UAT/cutover approval remains human-controlled."
+   ],
+   "open_caveats": [
+    "Production-scale performance and live restore drills require target infrastructure.",
+    "UAT sign-off and go-live approval are outside agentic execution.",
+    "G14 in this build uses in-process marts; deployment may externalize marts/read replicas."
+   ]
+  },
+  "PH-10A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-10B",
+   "summary": "Created the PH-10 detailed plan, prompts, executable checks, pipeline wiring, G14 OpenAPI binding marker, and phased-plan evidence note.",
+   "artifacts": [
+    "docs/spec/ph-10-analytics-hardening-release-plan.md",
+    "docs/spec/pipeline/prompts/PH-10A.md",
+    "docs/spec/pipeline/checks/ph-10a.sh",
+    "docs/contracts/openapi/G14.yaml",
+    "docs/phased-plan.md"
+   ],
+   "tests": [
+    {
+     "name": "PH-10A plan and wiring check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-10a.sh",
+     "result": "PH-10A oracle GREEN; plan, prompts, OpenAPI marker, phased-plan note, and PH-10A-E auto-gate wiring verified."
+    }
+   ]
+  },
+  "PH-10B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-10C",
+   "summary": "Implemented G14 read-only analytics marts, dashboard APIs, P02 scope filtering, drill-through authorization, PII suppression, mart idempotency, and read audit.",
+   "artifacts": [
+    "apps/api/src/modules/g14/analyticsService.ts",
+    "apps/api/src/routes/g14.routes.ts",
+    "apps/api/test/ph10-g14-analytics.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-10B G14 analytics check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-10b.sh",
+     "result": "PH-10B oracle GREEN; G14 analytics tests passed with 5 focused subtests."
+    }
+   ]
+  },
+  "PH-10C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-10D",
+   "summary": "Implemented migration dry-run service and enterprise hardening evidence for security, NFR, backup/restore, accessibility, and non-production readiness.",
+   "artifacts": [
+    "apps/api/src/migration/ph10MigrationDryRun.ts",
+    "apps/api/test/ph10-hardening-migration.test.cjs",
+    "docs/release/security-hardening-evidence.md",
+    "docs/release/nfr-validation.md",
+    "ops/backup-restore-drill.md"
+   ],
+   "tests": [
+    {
+     "name": "PH-10C hardening and migration check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-10c.sh",
+     "result": "PH-10C oracle GREEN; hardening/migration tests passed with 2 focused subtests."
+    }
+   ]
+  },
+  "PH-10D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-10E",
+   "summary": "Prepared deployment runbook, rollback plan, coexistence plan, UAT scripts, release evidence pack, owner/date risk evidence, and human cutover approval marker.",
+   "artifacts": [
+    "docs/release/deployment-runbook.md",
+    "docs/release/rollback-plan.md",
+    "docs/release/coexistence-plan.md",
+    "docs/release/uat-scripts.md",
+    "docs/release/release-evidence-pack.md",
+    "apps/api/test/ph10-release-evidence.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-10D release evidence check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-10d.sh",
+     "result": "PH-10D oracle GREEN; release evidence tests passed with 4 focused subtests."
+    }
+   ]
+  },
+  "PH-10E": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "development_release_readiness_green_human_cutover_required",
+   "summary": "Added G14 analytics UI, PH-10 verdict, manifest evidence, state files, and full API/web regression coverage.",
+   "artifacts": [
+    "apps/web/src/modules/g14/AnalyticsWorkspace.tsx",
+    "apps/web/test/ph10-analytics-release.test.cjs",
+    "docs/spec/ph-10-verdict.md",
+    "docs/spec/manifest.json"
+   ],
+   "tests": [
+    {
+     "name": "PH-10E full analytics/release conformance check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-10e.sh",
+     "result": "PH-10E oracle GREEN; PH-10A-D regressions passed, npm run check and npm run web:check passed, verdict markers and manifest evidence verified."
+    }
+   ]
+  },
+  "PH-11": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "governance_rehearsal_green_go_live_human_approval_pending",
+   "summary": "Prepared and rehearsed UAT execution, defect triage, non-production cutover control, rollback authority assignment, support handoff, operational RACI, hypercare, local release smoke, and PH-11 verdict evidence while preserving human-only UAT/go-live decisions.",
+   "artifacts": [
+    "docs/spec/ph-11-uat-cutover-governance-plan.md",
+    "docs/spec/ph-11-verdict.md",
+    "docs/release/uat-execution-journal.md",
+    "docs/release/uat-defect-triage.md",
+    "docs/release/cutover-control-board.md",
+    "ops/cutover-rehearsal-runbook.md",
+    "ops/local-release-smoke.sh",
+    "docs/release/hypercare-plan.md",
+    "docs/release/support-handoff.md",
+    "docs/release/operational-raci.md",
+    "apps/api/test/ph11-uat-governance.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-11E UAT/cutover governance conformance",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-11e.sh",
+     "result": "PH-11E oracle GREEN; PH-11A-D regressions, local release smoke, full API regression, full web regression, verdict markers, and manifest evidence verified."
+    }
+   ],
+   "scope_guards": [
+    "PH-11 performs rehearsal and evidence checks only.",
+    "UAT sign-off remains UAT_SIGNOFF_HUMAN_REQUIRED.",
+    "Go-live remains GO_LIVE_HUMAN_APPROVAL_PENDING.",
+    "Local release smoke enforces NO_PRODUCTION_MUTATION.",
+    "Rollback authority is assigned but rollback execution remains human-controlled."
+   ],
+   "open_caveats": [
+    "Formal UAT and release board approval must occur outside the agentic pipeline.",
+    "Target-environment smoke must be run after human release authorization.",
+    "Production cutover and rollback execution require named human approvals."
+   ]
+  },
+  "PH-11A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-11B",
+   "summary": "Created PH-11 detailed plan, prompts, executable checks, pipeline wiring, source phased-plan entry, and human-readable implementation evidence note.",
+   "artifacts": [
+    "docs/spec/ph-11-uat-cutover-governance-plan.md",
+    "docs/spec/pipeline/prompts/PH-11A.md",
+    "docs/spec/pipeline/checks/ph-11a.sh",
+    "docs/spec/pipeline/phases.yaml",
+    "docs/spec/phased-plan.yaml",
+    "docs/phased-plan.md"
+   ],
+   "tests": [
+    {
+     "name": "PH-11A plan and wiring check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-11a.sh",
+     "result": "PH-11A oracle GREEN; plan, prompts, checks, phased-plan entry, evidence note, and PH-11A-E auto-gate wiring verified."
+    }
+   ]
+  },
+  "PH-11B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-11C",
+   "summary": "Prepared UAT execution journal, defect triage register, and governance tests that keep UAT sign-off and go-live human pending.",
+   "artifacts": [
+    "docs/release/uat-execution-journal.md",
+    "docs/release/uat-defect-triage.md",
+    "apps/api/test/ph11-uat-governance.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-11B UAT rehearsal evidence check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-11b.sh",
+     "result": "PH-11B oracle GREEN; UAT rehearsal markers and governance tests passed with 4 focused subtests."
+    }
+   ]
+  },
+  "PH-11C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-11D",
+   "summary": "Prepared non-production cutover rehearsal runbook, cutover control board evidence, local release smoke, release freeze marker, rollback authority marker, and no-production-mutation guard.",
+   "artifacts": [
+    "ops/cutover-rehearsal-runbook.md",
+    "docs/release/cutover-control-board.md",
+    "ops/local-release-smoke.sh"
+   ],
+   "tests": [
+    {
+     "name": "PH-11C cutover rehearsal check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-11c.sh",
+     "result": "PH-11C oracle GREEN; cutover markers verified and local release smoke printed PH11_LOCAL_RELEASE_SMOKE_GREEN."
+    }
+   ]
+  },
+  "PH-11D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-11E",
+   "summary": "Prepared hypercare plan, support handoff, operational RACI, incident severity matrix, SLA ownership, and owner/date risk evidence.",
+   "artifacts": [
+    "docs/release/hypercare-plan.md",
+    "docs/release/support-handoff.md",
+    "docs/release/operational-raci.md",
+    "apps/api/test/ph11-uat-governance.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-11D operational handoff check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-11d.sh",
+     "result": "PH-11D oracle GREEN; operational readiness markers and governance tests passed with 4 focused subtests."
+    }
+   ]
+  },
+  "PH-11E": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "governance_rehearsal_green_go_live_human_approval_pending",
+   "summary": "Added PH-11 verdict, manifest evidence, pipeline state files, and full API/web conformance for UAT/cutover governance rehearsal.",
+   "artifacts": [
+    "docs/spec/ph-11-verdict.md",
+    "docs/spec/manifest.json",
+    "docs/spec/pipeline/.state/PH-11A.status",
+    "docs/spec/pipeline/.state/PH-11B.status",
+    "docs/spec/pipeline/.state/PH-11C.status",
+    "docs/spec/pipeline/.state/PH-11D.status",
+    "docs/spec/pipeline/.state/PH-11E.status"
+   ],
+   "tests": [
+    {
+     "name": "PH-11E full UAT/cutover governance conformance check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-11e.sh",
+     "result": "PH-11E oracle GREEN; PH-11A-D regressions passed, npm run check and npm run web:check passed, verdict markers and manifest evidence verified."
+    }
+   ]
+  },
+  "PH-12": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "release_board_ready_human_go_no_go_pending",
+   "summary": "Prepared release-board dossier, human approval checklist, target-environment readiness dry-run, environment evidence manifest, board agenda, go/no-go template, rollback authorization template, PH-12 verdict, and full conformance evidence while preserving human-only release decisions.",
+   "artifacts": [
+    "docs/spec/ph-12-release-board-readiness-plan.md",
+    "docs/spec/ph-12-verdict.md",
+    "docs/release/release-board-dossier.md",
+    "docs/release/human-approval-checklist.md",
+    "docs/release/target-environment-readiness.md",
+    "docs/release/environment-evidence-manifest.md",
+    "ops/target-environment-readiness-check.sh",
+    "docs/release/release-board-agenda.md",
+    "docs/release/go-no-go-decision-record-template.md",
+    "docs/release/rollback-authorization-template.md",
+    "apps/api/test/ph12-release-board-readiness.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-12E release-board readiness conformance",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-12e.sh",
+     "result": "PH-12E oracle GREEN; PH-12A-D regressions, target dry-run, full API regression, full web regression, verdict markers, and manifest evidence verified."
+    }
+   ],
+   "scope_guards": [
+    "PH-12 prepares release-board readiness only.",
+    "UAT sign-off remains UAT_SIGNOFF_HUMAN_REQUIRED.",
+    "Go-live remains GO_LIVE_HUMAN_APPROVAL_PENDING.",
+    "Target readiness runs in dry-run mode with NO_TARGET_ENV_MUTATION.",
+    "Rollback execution remains ROLLBACK_EXECUTION_HUMAN_REQUIRED."
+   ],
+   "open_caveats": [
+    "The human release board must complete the decision record outside the agentic pipeline.",
+    "Target-environment smoke with credentials must be run only after human authorization.",
+    "Production cutover and rollback execution require named human approvals."
+   ]
+  },
+  "PH-12A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-12B",
+   "summary": "Created PH-12 detailed plan, prompts, executable checks, pipeline wiring, source phased-plan entry, and human-readable implementation evidence note.",
+   "artifacts": [
+    "docs/spec/ph-12-release-board-readiness-plan.md",
+    "docs/spec/pipeline/prompts/PH-12A.md",
+    "docs/spec/pipeline/checks/ph-12a.sh",
+    "docs/spec/pipeline/phases.yaml",
+    "docs/spec/phased-plan.yaml",
+    "docs/phased-plan.md"
+   ],
+   "tests": [
+    {
+     "name": "PH-12A plan and wiring check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-12a.sh",
+     "result": "PH-12A oracle GREEN; plan, prompts, checks, phased-plan entry, evidence note, and PH-12A-E auto-gate wiring verified."
+    }
+   ]
+  },
+  "PH-12B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-12C",
+   "summary": "Prepared release-board dossier, human approval checklist, and governance tests that keep UAT, CAB, go-live, and rollback execution human pending.",
+   "artifacts": [
+    "docs/release/release-board-dossier.md",
+    "docs/release/human-approval-checklist.md",
+    "apps/api/test/ph12-release-board-readiness.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-12B release-board dossier check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-12b.sh",
+     "result": "PH-12B oracle GREEN; board markers and governance tests passed with 4 focused subtests."
+    }
+   ]
+  },
+  "PH-12C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-12D",
+   "summary": "Prepared target-environment readiness dry-run evidence, environment evidence manifest, and a non-mutating target readiness script.",
+   "artifacts": [
+    "docs/release/target-environment-readiness.md",
+    "docs/release/environment-evidence-manifest.md",
+    "ops/target-environment-readiness-check.sh"
+   ],
+   "tests": [
+    {
+     "name": "PH-12C target-environment dry-run check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-12c.sh",
+     "result": "PH-12C oracle GREEN; target markers verified and dry-run printed PH12_TARGET_READINESS_DRY_RUN_GREEN."
+    }
+   ]
+  },
+  "PH-12D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-12E",
+   "summary": "Prepared release-board agenda, go/no-go decision record template, rollback authorization template, and board decision-template tests.",
+   "artifacts": [
+    "docs/release/release-board-agenda.md",
+    "docs/release/go-no-go-decision-record-template.md",
+    "docs/release/rollback-authorization-template.md",
+    "apps/api/test/ph12-release-board-readiness.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-12D board agenda and decision templates check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-12d.sh",
+     "result": "PH-12D oracle GREEN; decision markers and governance tests passed with 4 focused subtests."
+    }
+   ]
+  },
+  "PH-12E": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "release_board_ready_human_go_no_go_pending",
+   "summary": "Added PH-12 verdict, manifest evidence, pipeline state files, and full API/web conformance for release-board readiness.",
+   "artifacts": [
+    "docs/spec/ph-12-verdict.md",
+    "docs/spec/manifest.json",
+    "docs/spec/pipeline/.state/PH-12A.status",
+    "docs/spec/pipeline/.state/PH-12B.status",
+    "docs/spec/pipeline/.state/PH-12C.status",
+    "docs/spec/pipeline/.state/PH-12D.status",
+    "docs/spec/pipeline/.state/PH-12E.status"
+   ],
+   "tests": [
+    {
+     "name": "PH-12E full release-board readiness conformance check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-12e.sh",
+     "result": "PH-12E oracle GREEN; PH-12A-D regressions passed, npm run check and npm run web:check passed, verdict markers and manifest evidence verified."
+    }
+   ]
+  },
+  "PH-13": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "release_candidate_sealed_human_approvals_pending",
+   "summary": "Sealed the PH-12 release-board package as HRMS-RC-PH13, added checksum verification, approval-intake guardrails, change-ticket template, archive index, handoff memo, post-board action register, PH-13 verdict, and full conformance evidence.",
+   "artifacts": [
+    "docs/spec/ph-13-release-candidate-seal-plan.md",
+    "docs/spec/ph-13-verdict.md",
+    "docs/release/release-candidate-manifest.md",
+    "docs/release/evidence-checksum-manifest.json",
+    "ops/verify-release-candidate-seal.sh",
+    "docs/release/human-approval-intake.md",
+    "docs/release/change-ticket-template.md",
+    "ops/validate-human-approval-intake.sh",
+    "docs/release/evidence-archive-index.md",
+    "docs/release/release-handoff-memo.md",
+    "docs/release/post-board-action-register.md",
+    "apps/api/test/ph13-release-candidate-seal.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-13E release-candidate seal conformance",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-13e.sh",
+     "result": "PH-13E oracle GREEN; PH-13A-D regressions, checksum seal, approval-intake guard, full API regression, full web regression, verdict markers, and manifest evidence verified."
+    }
+   ],
+   "scope_guards": [
+    "PH-13 seals evidence only and does not approve release.",
+    "Approval intake remains HUMAN_APPROVAL_INTAKE_PENDING.",
+    "Go-live remains GO_LIVE_HUMAN_APPROVAL_PENDING.",
+    "No production credentials are required or stored.",
+    "Target smoke, production cutover, and rollback execution remain human-run."
+   ],
+   "open_caveats": [
+    "If any sealed artifact changes, PH-13B must be rerun and the checksum manifest updated.",
+    "Human approval evidence must be attached outside the agentic pipeline.",
+    "Target-environment smoke requires human authorization and approved credentials."
+   ]
+  },
+  "PH-13A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-13B",
+   "summary": "Created PH-13 detailed plan, prompts, executable checks, pipeline wiring, source phased-plan entry, and human-readable implementation evidence note.",
+   "artifacts": [
+    "docs/spec/ph-13-release-candidate-seal-plan.md",
+    "docs/spec/pipeline/prompts/PH-13A.md",
+    "docs/spec/pipeline/checks/ph-13a.sh",
+    "docs/spec/pipeline/phases.yaml",
+    "docs/spec/phased-plan.yaml",
+    "docs/phased-plan.md"
+   ],
+   "tests": [
+    {
+     "name": "PH-13A plan and wiring check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-13a.sh",
+     "result": "PH-13A oracle GREEN; plan, prompts, checks, phased-plan entry, evidence note, and PH-13A-E auto-gate wiring verified."
+    }
+   ]
+  },
+  "PH-13B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-13C",
+   "summary": "Prepared release-candidate manifest, checksum manifest, read-only checksum verifier, and seal governance tests.",
+   "artifacts": [
+    "docs/release/release-candidate-manifest.md",
+    "docs/release/evidence-checksum-manifest.json",
+    "ops/verify-release-candidate-seal.sh",
+    "apps/api/test/ph13-release-candidate-seal.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-13B release-candidate seal check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-13b.sh",
+     "result": "PH-13B oracle GREEN; checksum seal verified and seal governance tests passed with 4 focused subtests."
+    }
+   ]
+  },
+  "PH-13C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-13D",
+   "summary": "Prepared human approval intake, change-ticket template, and a validator that keeps approval documents and production credentials absent.",
+   "artifacts": [
+    "docs/release/human-approval-intake.md",
+    "docs/release/change-ticket-template.md",
+    "ops/validate-human-approval-intake.sh"
+   ],
+   "tests": [
+    {
+     "name": "PH-13C approval-intake guard check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-13c.sh",
+     "result": "PH-13C oracle GREEN; intake markers verified and approval-intake guard printed PH13_APPROVAL_INTAKE_PENDING_GREEN."
+    }
+   ]
+  },
+  "PH-13D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-13E",
+   "summary": "Prepared evidence archive index, release handoff memo, post-board action register, and archive/handoff governance tests.",
+   "artifacts": [
+    "docs/release/evidence-archive-index.md",
+    "docs/release/release-handoff-memo.md",
+    "docs/release/post-board-action-register.md",
+    "apps/api/test/ph13-release-candidate-seal.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-13D evidence archive and handoff check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-13d.sh",
+     "result": "PH-13D oracle GREEN; archive/handoff markers and governance tests passed with 4 focused subtests."
+    }
+   ]
+  },
+  "PH-13E": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "release_candidate_sealed_human_approvals_pending",
+   "summary": "Added PH-13 verdict, manifest evidence, pipeline state files, and full API/web conformance for release-candidate sealing.",
+   "artifacts": [
+    "docs/spec/ph-13-verdict.md",
+    "docs/spec/manifest.json",
+    "docs/spec/pipeline/.state/PH-13A.status",
+    "docs/spec/pipeline/.state/PH-13B.status",
+    "docs/spec/pipeline/.state/PH-13C.status",
+    "docs/spec/pipeline/.state/PH-13D.status",
+    "docs/spec/pipeline/.state/PH-13E.status"
+   ],
+   "tests": [
+    {
+     "name": "PH-13E full release-candidate seal conformance check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-13e.sh",
+     "result": "PH-13E oracle GREEN; PH-13A-D regressions passed, npm run check and npm run web:check passed, verdict markers and manifest evidence verified."
+    }
+   ]
+  },
+  "PH-14": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "post_seal_drift_watch_green_human_approvals_pending",
+   "summary": "Added post-seal drift watch, drift report, board-day run card, no-go quarantine plan, approval-evidence quarantine/redaction rules, board-decision intake playbook, PH-14 verdict, and full conformance evidence.",
+   "artifacts": [
+    "docs/spec/ph-14-post-seal-drift-watch-plan.md",
+    "docs/spec/ph-14-verdict.md",
+    "docs/release/release-candidate-drift-watch.md",
+    "docs/release/post-seal-drift-report.md",
+    "ops/check-release-candidate-drift.sh",
+    "docs/release/board-day-run-card.md",
+    "docs/release/no-go-quarantine-plan.md",
+    "ops/board-day-readiness-check.sh",
+    "docs/release/approval-evidence-quarantine.md",
+    "docs/release/approval-evidence-redaction-guide.md",
+    "docs/release/board-decision-intake-playbook.md",
+    "apps/api/test/ph14-post-seal-drift-watch.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-14E post-seal drift-watch conformance",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-14e.sh",
+     "result": "PH-14E oracle GREEN; PH-14A-D regressions, seal drift watch, board-day readiness, quarantine/redaction tests, full API regression, full web regression, verdict markers, and manifest evidence verified."
+    }
+   ],
+   "scope_guards": [
+    "PH-14 verifies post-seal drift only and does not approve release.",
+    "Go-live remains GO_LIVE_HUMAN_APPROVAL_PENDING.",
+    "Approval evidence remains external and pending.",
+    "No production credentials are required or stored.",
+    "Target smoke, production cutover, and rollback execution remain human-run."
+   ],
+   "open_caveats": [
+    "If PH-13 sealed artifacts change, PH-13B must reseal before board progression.",
+    "Human approval evidence must be quarantined and redacted outside the agentic pipeline.",
+    "Board-day actions remain human-owned."
+   ]
+  },
+  "PH-14A": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-14B",
+   "summary": "Created PH-14 detailed plan, prompts, executable checks, pipeline wiring, source phased-plan entry, and human-readable implementation evidence note.",
+   "artifacts": [
+    "docs/spec/ph-14-post-seal-drift-watch-plan.md",
+    "docs/spec/pipeline/prompts/PH-14A.md",
+    "docs/spec/pipeline/checks/ph-14a.sh",
+    "docs/spec/pipeline/phases.yaml",
+    "docs/spec/phased-plan.yaml",
+    "docs/phased-plan.md"
+   ],
+   "tests": [
+    {
+     "name": "PH-14A plan and wiring check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-14a.sh",
+     "result": "PH-14A oracle GREEN; plan, prompts, checks, phased-plan entry, evidence note, and PH-14A-E auto-gate wiring verified."
+    }
+   ]
+  },
+  "PH-14B": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-14C",
+   "summary": "Prepared release-candidate drift-watch evidence, post-seal drift report, drift checker, and drift governance tests.",
+   "artifacts": [
+    "docs/release/release-candidate-drift-watch.md",
+    "docs/release/post-seal-drift-report.md",
+    "ops/check-release-candidate-drift.sh",
+    "apps/api/test/ph14-post-seal-drift-watch.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-14B post-seal drift-watch check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-14b.sh",
+     "result": "PH-14B oracle GREEN; PH-13 seal verified, drift watch printed PH14_DRIFT_WATCH_GREEN, and governance tests passed with 5 focused subtests."
+    }
+   ]
+  },
+  "PH-14C": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-14D",
+   "summary": "Prepared board-day run card, no-go quarantine plan, and board-day readiness checker.",
+   "artifacts": [
+    "docs/release/board-day-run-card.md",
+    "docs/release/no-go-quarantine-plan.md",
+    "ops/board-day-readiness-check.sh"
+   ],
+   "tests": [
+    {
+     "name": "PH-14C board-day readiness check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-14c.sh",
+     "result": "PH-14C oracle GREEN; board-day markers verified and readiness checker printed BOARD_DAY_READINESS_GREEN."
+    }
+   ]
+  },
+  "PH-14D": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "agentic_gate_green_to_PH-14E",
+   "summary": "Prepared approval-evidence quarantine, redaction guide, board-decision intake playbook, and quarantine/redaction governance tests.",
+   "artifacts": [
+    "docs/release/approval-evidence-quarantine.md",
+    "docs/release/approval-evidence-redaction-guide.md",
+    "docs/release/board-decision-intake-playbook.md",
+    "apps/api/test/ph14-post-seal-drift-watch.test.cjs"
+   ],
+   "tests": [
+    {
+     "name": "PH-14D approval-evidence quarantine check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-14d.sh",
+     "result": "PH-14D oracle GREEN; quarantine/redaction markers and governance tests passed with 5 focused subtests."
+    }
+   ]
+  },
+  "PH-14E": {
+   "status": "completed_agentic_gate_green",
+   "gate_verdict": "post_seal_drift_watch_green_human_approvals_pending",
+   "summary": "Added PH-14 verdict, manifest evidence, pipeline state files, and full API/web conformance for post-seal drift watch and board-day readiness.",
+   "artifacts": [
+    "docs/spec/ph-14-verdict.md",
+    "docs/spec/manifest.json",
+    "docs/spec/pipeline/.state/PH-14A.status",
+    "docs/spec/pipeline/.state/PH-14B.status",
+    "docs/spec/pipeline/.state/PH-14C.status",
+    "docs/spec/pipeline/.state/PH-14D.status",
+    "docs/spec/pipeline/.state/PH-14E.status"
+   ],
+   "tests": [
+    {
+     "name": "PH-14E full post-seal drift-watch conformance check",
+     "status": "passed",
+     "command": "bash docs/spec/pipeline/checks/ph-14e.sh",
+     "result": "PH-14E oracle GREEN; PH-14A-D regressions passed, npm run check and npm run web:check passed, verdict markers and manifest evidence verified."
+    }
+   ]
+  }
+ }
+}

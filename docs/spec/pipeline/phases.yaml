@@ -111,9 +111,442 @@ phases:
     gate: human    # Phase-2 ends at a human review gate: after GREEN, park for approvals/PH-02D.approved before PH-03
     depends_on: [PH-02C]
 
-  - id: PH-03
-    name: Core platform services and systems of record
-    prompt: docs/spec/pipeline/prompts/PH-03.md
-    exit_criteria: bash docs/spec/pipeline/checks/ph-03.sh
+  # PH-03 expanded into sub-phases (plan-to-pipeline). Monolithic PH-03.md/ph-03.sh remain on disk, superseded.
+  # NOTE: PH-03 is a code phase — the strong oracle is `npm typecheck && npm test`; checks fall back to
+  # structural + security greps when node_modules is absent. PH-03C is the foundation gate before the module waves.
+  - id: PH-03A
+    name: PH-03 · Platform service layer (P01 embed, Authority Resolver, P05 audit)
+    prompt: docs/spec/pipeline/prompts/PH-03A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-03a.sh
     gate: auto
     depends_on: [PH-02D]
+
+  - id: PH-03B
+    name: PH-03 · Systems of record (G01 master, G12 SR ingest, G13 vault)
+    prompt: docs/spec/pipeline/prompts/PH-03B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-03b.sh
+    gate: auto
+    depends_on: [PH-03A]
+
+  - id: PH-03C
+    name: PH-03 · Infra (X.1/X.2/X.3), migration staging, RLS/security proof
+    prompt: docs/spec/pipeline/prompts/PH-03C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-03c.sh
+    gate: human     # foundation gate before the module waves; test oracle may need `npm install` for full verification
+    depends_on: [PH-03B]
+
+  # PH-04 expanded into sub-phases (plan-to-pipeline). This phase binds the PH-03 services to protected
+  # /api/v1 route surfaces and freezes the API contract for PH-05 UI work.
+  - id: PH-04A
+    name: PH-04 · API kernel and contract harness
+    prompt: docs/spec/pipeline/prompts/PH-04A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-04a.sh
+    gate: auto
+    depends_on: [PH-03C]
+
+  - id: PH-04B
+    name: PH-04 · P01 workflow and G01 employee routes
+    prompt: docs/spec/pipeline/prompts/PH-04B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-04b.sh
+    gate: auto
+    depends_on: [PH-04A]
+
+  - id: PH-04C
+    name: PH-04 · G12 Service Register and G13 document routes
+    prompt: docs/spec/pipeline/prompts/PH-04C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-04c.sh
+    gate: auto
+    depends_on: [PH-04B]
+
+  - id: PH-04D
+    name: PH-04 · API conformance and freeze packet
+    prompt: docs/spec/pipeline/prompts/PH-04D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-04d.sh
+    gate: human     # GREEN machine checks first, then human API-freeze approval before PH-05 UI work.
+    depends_on: [PH-04C]
+
+  # PH-05 expanded into UI sub-phases (plan-to-pipeline). PH-05A depends on PH-04D so the
+  # API-freeze approval remains the hard boundary before frontend work consumes the route contract.
+  - id: PH-05A
+    name: PH-05 · Web scaffold and API client foundation
+    prompt: docs/spec/pipeline/prompts/PH-05A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-05a.sh
+    gate: auto
+    depends_on: [PH-04D]
+
+  - id: PH-05B
+    name: PH-05 · HRMS shell, workspaces, and route guards
+    prompt: docs/spec/pipeline/prompts/PH-05B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-05b.sh
+    gate: auto
+    depends_on: [PH-05A]
+
+  - id: PH-05C
+    name: PH-05 · Workflow inbox, task actions, and config UI
+    prompt: docs/spec/pipeline/prompts/PH-05C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-05c.sh
+    gate: auto
+    depends_on: [PH-05B]
+
+  - id: PH-05D
+    name: PH-05 · G01/G12/G13 foundation record views
+    prompt: docs/spec/pipeline/prompts/PH-05D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-05d.sh
+    gate: auto
+    depends_on: [PH-05C]
+
+  - id: PH-05E
+    name: PH-05 · UI conformance and review packet
+    prompt: docs/spec/pipeline/prompts/PH-05E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-05e.sh
+    gate: human     # GREEN machine checks first, then human UI/demo freeze approval before PH-06.
+    depends_on: [PH-05D]
+
+  # PH-06 proves the workflow platform with two real vertical slices before the module waves.
+  # PH-06A..D use executable agentic gates. PH-06E remains human because it decides whether
+  # to scale PH-07..PH-10 module-wave development from the proof evidence.
+  - id: PH-06A
+    name: PH-06 · Vertical-slice plan and contract binding
+    prompt: docs/spec/pipeline/prompts/PH-06A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-06a.sh
+    gate: auto
+    depends_on: [PH-05E]
+
+  - id: PH-06B
+    name: PH-06 · G03 leave backend vertical slice
+    prompt: docs/spec/pipeline/prompts/PH-06B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-06b.sh
+    gate: auto
+    depends_on: [PH-06A]
+
+  - id: PH-06C
+    name: PH-06 · G05 transfer backend vertical slice
+    prompt: docs/spec/pipeline/prompts/PH-06C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-06c.sh
+    gate: auto
+    depends_on: [PH-06B]
+
+  - id: PH-06D
+    name: PH-06 · G03/G05 demo UI proof
+    prompt: docs/spec/pipeline/prompts/PH-06D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-06d.sh
+    gate: auto
+    depends_on: [PH-06C]
+
+  - id: PH-06E
+    name: PH-06 · Vertical-slice conformance and scale-up gate
+    prompt: docs/spec/pipeline/prompts/PH-06E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-06e.sh
+    gate: human
+    depends_on: [PH-06D]
+
+  # PH-07 builds the employee-facing transaction wave after PH-06 scale-up approval.
+  # All PH-07 gates are agentic because each has a real executable oracle.
+  - id: PH-07A
+    name: PH-07 · Employee wave plan and contract binding
+    prompt: docs/spec/pipeline/prompts/PH-07A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-07a.sh
+    gate: auto
+    depends_on: [PH-06E]
+
+  - id: PH-07B
+    name: PH-07 · G04 leave-to-SR relay
+    prompt: docs/spec/pipeline/prompts/PH-07B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-07b.sh
+    gate: auto
+    depends_on: [PH-07A]
+
+  - id: PH-07C
+    name: PH-07 · G02 personal details workflow
+    prompt: docs/spec/pipeline/prompts/PH-07C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-07c.sh
+    gate: auto
+    depends_on: [PH-07B]
+
+  - id: PH-07D
+    name: PH-07 · G03 attendance, leave, and payroll signals
+    prompt: docs/spec/pipeline/prompts/PH-07D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-07d.sh
+    gate: auto
+    depends_on: [PH-07C]
+
+  - id: PH-07E
+    name: PH-07 · Employee wave UI and conformance
+    prompt: docs/spec/pipeline/prompts/PH-07E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-07e.sh
+    gate: auto
+    depends_on: [PH-07D]
+
+  # PH-08 builds the statutory-administration module wave after PH-07 employee facts are stable.
+  # G06 and G09 stay on separate executable gates because DPC and disciplinary due process
+  # carry the highest statutory complexity in this wave.
+  - id: PH-08A
+    name: PH-08 · Statutory wave plan and contract binding
+    prompt: docs/spec/pipeline/prompts/PH-08A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-08a.sh
+    gate: auto
+    depends_on: [PH-07E]
+
+  - id: PH-08B
+    name: PH-08 · G05 full transfer administration
+    prompt: docs/spec/pipeline/prompts/PH-08B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-08b.sh
+    gate: auto
+    depends_on: [PH-08A]
+
+  - id: PH-08C
+    name: PH-08 · G06 promotion, seniority, DPC, and MACP
+    prompt: docs/spec/pipeline/prompts/PH-08C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-08c.sh
+    gate: auto
+    depends_on: [PH-08B]
+
+  - id: PH-08D
+    name: PH-08 · G07 training and G08 APAR
+    prompt: docs/spec/pipeline/prompts/PH-08D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-08d.sh
+    gate: auto
+    depends_on: [PH-08C]
+
+  - id: PH-08E
+    name: PH-08 · G09 disciplinary due process
+    prompt: docs/spec/pipeline/prompts/PH-08E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-08e.sh
+    gate: auto
+    depends_on: [PH-08D]
+
+  - id: PH-08F
+    name: PH-08 · Statutory wave UI and conformance
+    prompt: docs/spec/pipeline/prompts/PH-08F.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-08f.sh
+    gate: auto
+    depends_on: [PH-08E]
+
+  # PH-09 builds the compensation wave after upstream employee, leave, transfer, promotion,
+  # disciplinary, SR, and document facts are stable. The gates are agentic because payroll,
+  # pension, SoD, provenance, and UI proof all have executable oracles.
+  - id: PH-09A
+    name: PH-09 · Payroll and pension wave plan and contract binding
+    prompt: docs/spec/pipeline/prompts/PH-09A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-09a.sh
+    gate: auto
+    depends_on: [PH-08F]
+
+  - id: PH-09B
+    name: PH-09 · G10 deterministic payroll and benefits
+    prompt: docs/spec/pipeline/prompts/PH-09B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-09b.sh
+    gate: auto
+    depends_on: [PH-09A]
+
+  - id: PH-09C
+    name: PH-09 · G11 deterministic pension and PPO
+    prompt: docs/spec/pipeline/prompts/PH-09C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-09c.sh
+    gate: auto
+    depends_on: [PH-09B]
+
+  - id: PH-09D
+    name: PH-09 · Compensation integration, SoD, and provenance controls
+    prompt: docs/spec/pipeline/prompts/PH-09D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-09d.sh
+    gate: auto
+    depends_on: [PH-09C]
+
+  - id: PH-09E
+    name: PH-09 · Payroll/pension UI and conformance
+    prompt: docs/spec/pipeline/prompts/PH-09E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-09e.sh
+    gate: auto
+    depends_on: [PH-09D]
+
+  # PH-10 closes the current build with read-only G14 analytics and release-readiness evidence.
+  # The gates are executable and agentic for development evidence only. Real UAT, production
+  # cutover, CAB approval, and rollback authorization remain outside this automation.
+  - id: PH-10A
+    name: PH-10 · Analytics and release plan and contract binding
+    prompt: docs/spec/pipeline/prompts/PH-10A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-10a.sh
+    gate: auto
+    depends_on: [PH-09E]
+
+  - id: PH-10B
+    name: PH-10 · G14 read-only analytics and marts
+    prompt: docs/spec/pipeline/prompts/PH-10B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-10b.sh
+    gate: auto
+    depends_on: [PH-10A]
+
+  - id: PH-10C
+    name: PH-10 · Hardening, NFR, and migration dry-run evidence
+    prompt: docs/spec/pipeline/prompts/PH-10C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-10c.sh
+    gate: auto
+    depends_on: [PH-10B]
+
+  - id: PH-10D
+    name: PH-10 · Release runbooks, rollback, coexistence, and UAT pack
+    prompt: docs/spec/pipeline/prompts/PH-10D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-10d.sh
+    gate: auto
+    depends_on: [PH-10C]
+
+  - id: PH-10E
+    name: PH-10 · Analytics UI and release conformance
+    prompt: docs/spec/pipeline/prompts/PH-10E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-10e.sh
+    gate: auto
+    depends_on: [PH-10D]
+
+  # PH-11 rehearses UAT/cutover governance after PH-10 release readiness.
+  # The gates are executable and agentic for readiness evidence only. Real UAT
+  # sign-off, go-live, production cutover, CAB approval, and rollback execution
+  # remain human-required decisions under gate_policy.human_required_when.
+  - id: PH-11A
+    name: PH-11 · UAT and cutover governance plan
+    prompt: docs/spec/pipeline/prompts/PH-11A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-11a.sh
+    gate: auto
+    depends_on: [PH-10E]
+
+  - id: PH-11B
+    name: PH-11 · UAT execution journal and defect triage
+    prompt: docs/spec/pipeline/prompts/PH-11B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-11b.sh
+    gate: auto
+    depends_on: [PH-11A]
+
+  - id: PH-11C
+    name: PH-11 · Cutover rehearsal and local release smoke
+    prompt: docs/spec/pipeline/prompts/PH-11C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-11c.sh
+    gate: auto
+    depends_on: [PH-11B]
+
+  - id: PH-11D
+    name: PH-11 · Hypercare, support handoff, and operational RACI
+    prompt: docs/spec/pipeline/prompts/PH-11D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-11d.sh
+    gate: auto
+    depends_on: [PH-11C]
+
+  - id: PH-11E
+    name: PH-11 · Governance verdict and full conformance
+    prompt: docs/spec/pipeline/prompts/PH-11E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-11e.sh
+    gate: auto
+    depends_on: [PH-11D]
+
+  # PH-12 prepares the human release-board package after PH-11 governance rehearsal.
+  # It is still not a production release. UAT sign-off, CAB approval, go-live,
+  # cutover, production credentials, and rollback execution remain human-required.
+  - id: PH-12A
+    name: PH-12 · Release-board readiness plan
+    prompt: docs/spec/pipeline/prompts/PH-12A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-12a.sh
+    gate: auto
+    depends_on: [PH-11E]
+
+  - id: PH-12B
+    name: PH-12 · Release-board dossier and approval checklist
+    prompt: docs/spec/pipeline/prompts/PH-12B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-12b.sh
+    gate: auto
+    depends_on: [PH-12A]
+
+  - id: PH-12C
+    name: PH-12 · Target-environment readiness dry-run
+    prompt: docs/spec/pipeline/prompts/PH-12C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-12c.sh
+    gate: auto
+    depends_on: [PH-12B]
+
+  - id: PH-12D
+    name: PH-12 · Board agenda and decision templates
+    prompt: docs/spec/pipeline/prompts/PH-12D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-12d.sh
+    gate: auto
+    depends_on: [PH-12C]
+
+  - id: PH-12E
+    name: PH-12 · Release-board readiness verdict and conformance
+    prompt: docs/spec/pipeline/prompts/PH-12E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-12e.sh
+    gate: auto
+    depends_on: [PH-12D]
+
+  # PH-13 seals the release-candidate evidence package and prepares approval intake.
+  # It is still not a production release. UAT sign-off, CAB approval, go-live,
+  # production credentials, cutover, target smoke, and rollback execution remain human-required.
+  - id: PH-13A
+    name: PH-13 · Release-candidate seal plan
+    prompt: docs/spec/pipeline/prompts/PH-13A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-13a.sh
+    gate: auto
+    depends_on: [PH-12E]
+
+  - id: PH-13B
+    name: PH-13 · Evidence checksum seal
+    prompt: docs/spec/pipeline/prompts/PH-13B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-13b.sh
+    gate: auto
+    depends_on: [PH-13A]
+
+  - id: PH-13C
+    name: PH-13 · Human approval intake guardrails
+    prompt: docs/spec/pipeline/prompts/PH-13C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-13c.sh
+    gate: auto
+    depends_on: [PH-13B]
+
+  - id: PH-13D
+    name: PH-13 · Evidence archive and handoff
+    prompt: docs/spec/pipeline/prompts/PH-13D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-13d.sh
+    gate: auto
+    depends_on: [PH-13C]
+
+  - id: PH-13E
+    name: PH-13 · Release-candidate seal verdict and conformance
+    prompt: docs/spec/pipeline/prompts/PH-13E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-13e.sh
+    gate: auto
+    depends_on: [PH-13D]
+
+  # PH-14 watches the sealed release candidate for drift and prepares board-day readiness.
+  # It still does not receive approvals, execute target smoke, introduce credentials,
+  # cut over production, or execute rollback.
+  - id: PH-14A
+    name: PH-14 · Post-seal drift-watch plan
+    prompt: docs/spec/pipeline/prompts/PH-14A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-14a.sh
+    gate: auto
+    depends_on: [PH-13E]
+
+  - id: PH-14B
+    name: PH-14 · Release-candidate drift watch
+    prompt: docs/spec/pipeline/prompts/PH-14B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-14b.sh
+    gate: auto
+    depends_on: [PH-14A]
+
+  - id: PH-14C
+    name: PH-14 · Board-day readiness and no-go quarantine
+    prompt: docs/spec/pipeline/prompts/PH-14C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-14c.sh
+    gate: auto
+    depends_on: [PH-14B]
+
+  - id: PH-14D
+    name: PH-14 · Approval-evidence quarantine and redaction
+    prompt: docs/spec/pipeline/prompts/PH-14D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-14d.sh
+    gate: auto
+    depends_on: [PH-14C]
+
+  - id: PH-14E
+    name: PH-14 · Post-seal drift-watch verdict and conformance
+    prompt: docs/spec/pipeline/prompts/PH-14E.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-14e.sh
+    gate: auto
+    depends_on: [PH-14D]

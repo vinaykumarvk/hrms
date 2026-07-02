@@ -13,6 +13,14 @@ info:
     response, and the canonical error envelope. Grounded on
     docs/brd/v3/G07-training-skill-development.md, docs/contracts/error-taxonomy.yaml
     (ERR-G07-*), and PLATFORM_FOUNDATION.md §4.
+  x-ph08-statutory-wave:
+    implementedRoutes:
+      - POST /api/v1/training/sessions
+      - POST /api/v1/training/nominations
+      - POST /api/v1/training/nominations/{id}:approve
+      - POST /api/v1/training/nominations/{id}:complete
+    statutoryScope: nominations, capacity, certification, significant-certification SR posting
+    srWriter: G07 significant certifications through G12
 servers:
   - url: /api/v1
 security:
@@ -2603,4 +2611,3 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/Internal' }
-

@@ -87,3 +87,33 @@ headline finding (matrix row B4) rather than let the agent rediscover it late.
 **Bottom line:** the candidate set roughly doubles once runtime + migrations + tests + UI are included, and the
 most important PH‑00A output is already foreshadowed — reuse the PUDA engine, and build the person‑hierarchy
 resolver as the first enhancement.
+
+## 8. PH-00A confirmation
+
+PH-00A confirmed the expanded plan set:
+
+```text
+candidate_entries=43 expanded_files=113 golden_files=24 missing=0
+```
+
+The routing-model finding was also confirmed against the current pinned PUDA commit
+`cadf39739e6f27c17d44767ca61d1a362034ac64`, with a narrower scan over
+`workflow.route-model.ts`, `work-queues.ts`, and `officer-routing-reconciliation.ts`:
+
+```text
+role=64
+queue=54
+lane=10
+designation=8
+hierarchy=0
+reports_to=0
+reporting_manager=0
+manager_id=0
+HOD=0
+reporting_officer=0
+```
+
+This supersedes the earlier pre-scan counts but not the conclusion: PUDA routes by role/queue/designation, not
+by HRMS person reporting hierarchy. Focused characterization also passed for queue routing (`6/6`) and officer
+workflow UI behavior (`22/22`); the aggregate API corpus remains partial with known PUDA-domain failures recorded
+in `docs/spec/puda-golden-behavior-baseline.md`.

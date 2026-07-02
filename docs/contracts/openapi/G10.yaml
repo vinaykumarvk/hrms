@@ -3,6 +3,7 @@ openapi: 3.1.0
 info:
   title: G10 — Payroll and Benefits Management API
   version: 3.1.0
+  x-ph09-compensation-wave: deterministic-payroll-rule-snapshot
   description: '**Phase-2** government-HRMS module **G10 — Payroll and Benefits Management**, a platform-native
     extension of the PrimeSoft HRMS platform (M06/M07/M14 roadmap). Grounded in docs/brd/v3/G10-payroll-and-benefits.md
     (Section 6 FR API tables + Section 8), docs/contracts/error-taxonomy.yaml (ERR-G10-*) and docs/brd/PLATFORM_FOUNDATION.md

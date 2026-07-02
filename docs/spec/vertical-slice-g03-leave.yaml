@@ -1,0 +1,30 @@
+phase: PH-06
+slice: G03_LEAVE
+goal: Prove employee leave submission through workflow, balance ledger, G04-ready SR outbox, audit, and notification.
+state_machine_contract: docs/contracts/state-machines.yaml#/modules/G03/machines/leave_application
+openapi_contract: docs/contracts/openapi/G03.yaml
+implemented_routes:
+  - POST /api/v1/atl/leave-applications
+  - GET /api/v1/atl/leave-applications
+  - POST /api/v1/atl/leave-applications/{id}/decision
+  - GET /api/v1/atl/leave-balances
+  - GET /api/v1/atl/leave-sr-outbox
+workflow:
+  code: WF-G03-LEAVE
+  resolver: REPORTING_CHAIN
+  actions: [DELEGATE, APPROVE, REJECT]
+domain_steps:
+  - submit reserves leave balance and writes a P05 audit row
+  - P01 delegate records delegation evidence without changing module approval logic
+  - approve debits leave balance, creates a G04 outbox event, and posts LEAVE_APPROVED through G12 as sourceModule G04
+platform_evidence:
+  P01: workflow_instances, workflow_tasks, workflow_actions
+  P02: Authorization.check on protected routes and service operations
+  P05: G03_LEAVE_SUBMIT, G03_LEAVE_DELEGATE, G03_LEAVE_APPROVE
+  G01: employee master lookup before submit
+  G12: LEAVE_APPROVED SR event with sourceModule G04
+  X.2: G03_LEAVE_SUBMITTED, G03_LEAVE_DELEGATED, G03_LEAVE_APPROVED notifications
+acceptance_tests:
+  - apps/api/test/ph06-g03-leave.test.cjs
+rollback:
+  feature_flag: disable G03 leave routes; keep P01/G12/G13 online

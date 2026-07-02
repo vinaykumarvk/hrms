@@ -36,7 +36,8 @@
 --     employee_photos reference the core consent_records(id). (See core-table assumptions
 --     at the foot of this file.)
 --
--- SCOPE — 32 module-owned tables (BRD's 35 physical tables minus the 3 core-owned:
+-- SCOPE — 36 module-owned tables (BRD's 35 physical tables minus the 3 core-owned,
+-- plus PH-02 workflow-authority fixture substrates:
 --   employees, employee_dependents, consent_records):
 --     E2  employee_contacts            E3  employee_addresses
 --     E5  employee_nominees            E6  employee_emergency_contacts
@@ -54,6 +55,8 @@
 --     E29 breach_incidents             E30 retention_policies
 --     E31 legal_holds                  E32 governed_field_change_requests
 --     E33 outbox_events (append-only)  E34 break_glass_reveals (append-only)
+--     PH02 g01_authority_assignments   PH02 g01_authority_delegations
+--     PH02 g01_committees              PH02 g01_committee_members
 --
 -- CONVENTIONS (inherited from CONVENTIONS.md):
 --   uuid PK default gen_random_uuid(); tenant_id NOT NULL + entity_id; standard audit
@@ -110,6 +113,19 @@ CREATE TYPE g01_retention_action      AS ENUM ('ARCHIVE','ANONYMISE','PURGE');
 CREATE TYPE g01_hold_type             AS ENUM ('DISCIPLINARY','LITIGATION','PENSION','AUDIT','RTI');
 CREATE TYPE g01_hold_status           AS ENUM ('ACTIVE','RELEASED');
 CREATE TYPE g01_governed_change_status AS ENUM ('DRAFT','SUBMITTED','UNDER_REVIEW','APPROVED','REJECTED','APPLIED');
+CREATE TYPE g01_authority_type        AS ENUM (
+    'APPOINTING_AUTHORITY','TRANSFER_AUTHORITY','DISCIPLINARY_AUTHORITY','APPELLATE_AUTHORITY',
+    'REVIEWING_AUTHORITY','ACCEPTING_AUTHORITY','PENSION_SANCTIONING_AUTHORITY',
+    'PAYROLL_SANCTIONING_AUTHORITY','SR_CUSTODIAN','ORG_UNIT_HEAD'
+);
+CREATE TYPE g01_authority_scope       AS ENUM ('TENANT','ENTITY','ORG_UNIT','CADRE','DESIGNATION','EMPLOYEE');
+CREATE TYPE g01_authority_status      AS ENUM ('ACTIVE','INACTIVE','SUSPENDED');
+CREATE TYPE g01_delegation_kind       AS ENUM ('DELEGATION','ACTING_CHARGE','ADDITIONAL_CHARGE');
+CREATE TYPE g01_delegation_status     AS ENUM ('ACTIVE','EXPIRED','REVOKED');
+CREATE TYPE g01_committee_type        AS ENUM ('DPC','INQUIRY_COMMITTEE','POSH_ICC','SCREENING_COMMITTEE','TRANSFER_CLEARANCE');
+CREATE TYPE g01_committee_status      AS ENUM ('CONSTITUTED','ACTIVE','CONCLUDED','EXPIRED','DISSOLVED');
+CREATE TYPE g01_committee_member_role AS ENUM ('CHAIRPERSON','MEMBER','SECRETARY','INQUIRY_OFFICER','PRESENTING_OFFICER','EXPERT');
+CREATE TYPE g01_committee_member_status AS ENUM ('ACTIVE','RECUSED','INACTIVE');
 
 
 -- =====================================================================================
@@ -556,6 +572,165 @@ CREATE INDEX ix_job_assignments_manager   ON employee_job_assignments(reporting_
 -- r1: at most one current (open-ended) assignment per employee
 CREATE UNIQUE INDEX uq_job_assignments_current
     ON employee_job_assignments(employee_id) WHERE effective_to IS NULL AND is_deleted = false;
+
+-- ---------------------------------------------------------------------------------
+-- PH-02 — statutory authority assignments (P01 ApproverResolver input)
+-- ---------------------------------------------------------------------------------
+CREATE TABLE g01_authority_assignments (
+    id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id               uuid NOT NULL REFERENCES tenants(id)       ON DELETE RESTRICT,
+    entity_id               uuid REFERENCES entities(id)               ON DELETE RESTRICT,
+    authority_type          g01_authority_type NOT NULL,
+    authority_code          varchar(60) NOT NULL,
+    scope_type              g01_authority_scope NOT NULL,
+    scope_org_unit_id       uuid REFERENCES org_units(id)              ON DELETE RESTRICT,
+    scope_cadre_id          uuid REFERENCES cadres(id)                 ON DELETE RESTRICT,
+    scope_designation_id    uuid REFERENCES designations(id)           ON DELETE RESTRICT,
+    subject_employee_id     uuid REFERENCES employees(id)              ON DELETE RESTRICT,
+    authority_position_id   uuid REFERENCES positions(id)              ON DELETE RESTRICT,
+    authority_employee_id   uuid REFERENCES employees(id)              ON DELETE RESTRICT,
+    priority                integer NOT NULL DEFAULT 100,
+    effective_from          date NOT NULL,
+    effective_to            date,
+    rule_version            varchar(40) NOT NULL DEFAULT 'PH-02',
+    source_order_ref        varchar(120),
+    status                  g01_authority_status NOT NULL DEFAULT 'ACTIVE',
+    row_version             integer NOT NULL DEFAULT 1,
+    created_at              timestamptz NOT NULL DEFAULT now(),
+    updated_at              timestamptz NOT NULL DEFAULT now(),
+    created_by              uuid,
+    updated_by              uuid,
+    is_deleted              boolean NOT NULL DEFAULT false,
+    CONSTRAINT ck_g01_auth_dates CHECK (effective_to IS NULL OR effective_to >= effective_from),
+    CONSTRAINT ck_g01_auth_assignee CHECK (authority_position_id IS NOT NULL OR authority_employee_id IS NOT NULL),
+    CONSTRAINT ck_g01_auth_priority CHECK (priority > 0),
+    CONSTRAINT ck_g01_auth_scope_required CHECK (
+        (scope_type = 'TENANT' AND entity_id IS NULL AND scope_org_unit_id IS NULL AND scope_cadre_id IS NULL AND scope_designation_id IS NULL AND subject_employee_id IS NULL)
+        OR (scope_type = 'ENTITY' AND entity_id IS NOT NULL)
+        OR (scope_type = 'ORG_UNIT' AND scope_org_unit_id IS NOT NULL)
+        OR (scope_type = 'CADRE' AND scope_cadre_id IS NOT NULL)
+        OR (scope_type = 'DESIGNATION' AND scope_designation_id IS NOT NULL)
+        OR (scope_type = 'EMPLOYEE' AND subject_employee_id IS NOT NULL)
+    )
+);
+CREATE INDEX ix_g01_auth_tenant    ON g01_authority_assignments(tenant_id);
+CREATE INDEX ix_g01_auth_entity    ON g01_authority_assignments(entity_id);
+CREATE INDEX ix_g01_auth_type      ON g01_authority_assignments(authority_type);
+CREATE INDEX ix_g01_auth_org       ON g01_authority_assignments(scope_org_unit_id);
+CREATE INDEX ix_g01_auth_cadre     ON g01_authority_assignments(scope_cadre_id);
+CREATE INDEX ix_g01_auth_employee  ON g01_authority_assignments(authority_employee_id);
+CREATE INDEX ix_g01_auth_position  ON g01_authority_assignments(authority_position_id);
+CREATE INDEX ix_g01_auth_effective ON g01_authority_assignments(effective_from, effective_to);
+CREATE UNIQUE INDEX uq_g01_auth_current_priority
+    ON g01_authority_assignments (
+        tenant_id,
+        authority_type,
+        authority_code,
+        COALESCE(entity_id, '00000000-0000-0000-0000-000000000000'::uuid),
+        COALESCE(scope_org_unit_id, '00000000-0000-0000-0000-000000000000'::uuid),
+        COALESCE(scope_cadre_id, '00000000-0000-0000-0000-000000000000'::uuid),
+        COALESCE(scope_designation_id, '00000000-0000-0000-0000-000000000000'::uuid),
+        COALESCE(subject_employee_id, '00000000-0000-0000-0000-000000000000'::uuid),
+        priority
+    )
+    WHERE effective_to IS NULL AND status = 'ACTIVE' AND is_deleted = false;
+
+-- ---------------------------------------------------------------------------------
+-- PH-02 — delegation / acting charge windows (P01 ApproverResolver input)
+-- ---------------------------------------------------------------------------------
+CREATE TABLE g01_authority_delegations (
+    id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id               uuid NOT NULL REFERENCES tenants(id)       ON DELETE RESTRICT,
+    entity_id               uuid REFERENCES entities(id)               ON DELETE RESTRICT,
+    authority_assignment_id uuid NOT NULL REFERENCES g01_authority_assignments(id) ON DELETE RESTRICT,
+    from_employee_id        uuid NOT NULL REFERENCES employees(id)     ON DELETE RESTRICT,
+    to_employee_id          uuid NOT NULL REFERENCES employees(id)     ON DELETE RESTRICT,
+    delegation_kind         g01_delegation_kind NOT NULL,
+    effective_from          date NOT NULL,
+    effective_to            date NOT NULL,
+    reason                  text NOT NULL,
+    source_order_ref        varchar(120),
+    status                  g01_delegation_status NOT NULL DEFAULT 'ACTIVE',
+    created_at              timestamptz NOT NULL DEFAULT now(),
+    updated_at              timestamptz NOT NULL DEFAULT now(),
+    created_by              uuid,
+    updated_by              uuid,
+    is_deleted              boolean NOT NULL DEFAULT false,
+    CONSTRAINT ck_g01_del_dates CHECK (effective_to >= effective_from),
+    CONSTRAINT ck_g01_del_distinct CHECK (from_employee_id <> to_employee_id)
+);
+CREATE INDEX ix_g01_del_tenant     ON g01_authority_delegations(tenant_id);
+CREATE INDEX ix_g01_del_assignment ON g01_authority_delegations(authority_assignment_id);
+CREATE INDEX ix_g01_del_from       ON g01_authority_delegations(from_employee_id);
+CREATE INDEX ix_g01_del_to         ON g01_authority_delegations(to_employee_id);
+CREATE INDEX ix_g01_del_effective  ON g01_authority_delegations(effective_from, effective_to);
+
+-- ---------------------------------------------------------------------------------
+-- PH-02 — reusable committee fixtures for resolver quorum/recusal evidence
+-- ---------------------------------------------------------------------------------
+CREATE TABLE g01_committees (
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id             uuid NOT NULL REFERENCES tenants(id)       ON DELETE RESTRICT,
+    entity_id             uuid REFERENCES entities(id)               ON DELETE RESTRICT,
+    committee_code        varchar(60) NOT NULL,
+    committee_type        g01_committee_type NOT NULL,
+    name                  varchar(160) NOT NULL,
+    scope_org_unit_id     uuid REFERENCES org_units(id)              ON DELETE RESTRICT,
+    scope_cadre_id        uuid REFERENCES cadres(id)                 ON DELETE RESTRICT,
+    quorum_required       integer NOT NULL,
+    effective_from        date NOT NULL,
+    effective_to          date,
+    source_module         varchar(10),
+    source_ref_id         uuid,
+    status                g01_committee_status NOT NULL DEFAULT 'CONSTITUTED',
+    created_at            timestamptz NOT NULL DEFAULT now(),
+    updated_at            timestamptz NOT NULL DEFAULT now(),
+    created_by            uuid,
+    updated_by            uuid,
+    is_deleted            boolean NOT NULL DEFAULT false,
+    CONSTRAINT uq_g01_committees_code UNIQUE (tenant_id, committee_code),
+    CONSTRAINT ck_g01_committee_dates CHECK (effective_to IS NULL OR effective_to >= effective_from),
+    CONSTRAINT ck_g01_committee_quorum CHECK (quorum_required > 0)
+);
+CREATE INDEX ix_g01_committee_tenant ON g01_committees(tenant_id);
+CREATE INDEX ix_g01_committee_entity ON g01_committees(entity_id);
+CREATE INDEX ix_g01_committee_type   ON g01_committees(committee_type);
+CREATE INDEX ix_g01_committee_org    ON g01_committees(scope_org_unit_id);
+CREATE INDEX ix_g01_committee_cadre  ON g01_committees(scope_cadre_id);
+
+CREATE TABLE g01_committee_members (
+    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id              uuid NOT NULL REFERENCES tenants(id)       ON DELETE RESTRICT,
+    entity_id              uuid REFERENCES entities(id)               ON DELETE RESTRICT,
+    committee_id           uuid NOT NULL REFERENCES g01_committees(id) ON DELETE RESTRICT,
+    member_employee_id     uuid REFERENCES employees(id)              ON DELETE RESTRICT,
+    external_member_name   varchar(160),
+    member_role            g01_committee_member_role NOT NULL,
+    voting_weight          numeric(5,2) NOT NULL DEFAULT 1.00,
+    is_required_for_quorum boolean NOT NULL DEFAULT true,
+    recusal_reason         text,
+    status                 g01_committee_member_status NOT NULL DEFAULT 'ACTIVE',
+    effective_from         date NOT NULL,
+    effective_to           date,
+    created_at             timestamptz NOT NULL DEFAULT now(),
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    created_by             uuid,
+    updated_by             uuid,
+    is_deleted             boolean NOT NULL DEFAULT false,
+    CONSTRAINT ck_g01_committee_member_identity CHECK (
+        (member_employee_id IS NOT NULL AND external_member_name IS NULL)
+        OR (member_employee_id IS NULL AND external_member_name IS NOT NULL)
+    ),
+    CONSTRAINT ck_g01_committee_member_dates CHECK (effective_to IS NULL OR effective_to >= effective_from),
+    CONSTRAINT ck_g01_committee_member_weight CHECK (voting_weight > 0),
+    CONSTRAINT ck_g01_committee_member_recusal CHECK (
+        (status = 'RECUSED' AND recusal_reason IS NOT NULL) OR status <> 'RECUSED'
+    )
+);
+CREATE INDEX ix_g01_cm_tenant    ON g01_committee_members(tenant_id);
+CREATE INDEX ix_g01_cm_entity    ON g01_committee_members(entity_id);
+CREATE INDEX ix_g01_cm_committee ON g01_committee_members(committee_id);
+CREATE INDEX ix_g01_cm_employee  ON g01_committee_members(member_employee_id);
 
 -- ---------------------------------------------------------------------------------
 -- E14 — profile_sections (Phase 2 config)
@@ -1123,6 +1298,7 @@ DECLARE
         'employee_contacts','employee_addresses','employee_nominees','employee_emergency_contacts',
         'employee_education','employee_experience','employee_identity_documents','employee_bank_accounts',
         'employee_photos','positions','position_history','employee_job_assignments',
+        'g01_authority_assignments','g01_authority_delegations','g01_committees','g01_committee_members',
         'profile_sections','custom_field_definitions','employee_custom_field_values','field_access_policies',
         'employee_profile_completeness','dedup_candidates','employee_import_batches','import_staging_rows',
         'employee_id_aliases','aadhaar_vault','employee_attribute_history','employee_certificates',
@@ -1195,16 +1371,37 @@ VALUES
  ('bb000000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999902','Mohan Kumar','HDFC','HDFC0000456','XXXXXX8899','tok-acc-8899','SAVINGS', true, false,'1996-06-01');
 
 -- positions ---------------------------------------------------------------------------
-INSERT INTO positions (id, tenant_id, entity_id, position_code, title, designation_id, cadre_id, pay_scale_id, org_unit_id, sanctioned_count, is_vacant, status)
+INSERT INTO positions (id, tenant_id, entity_id, position_code, title, designation_id, cadre_id, pay_scale_id, org_unit_id, reports_to_position_id, sanctioned_count, is_vacant, status)
 VALUES
- ('b0000000-0000-0000-0000-000000000201','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','POS-REV-DC-01','Deputy Commissioner (Revenue)','77777777-7777-7777-7777-777777777701','44444444-4444-4444-4444-444444444401','66666666-6666-6666-6666-666666666601','33333333-3333-3333-3333-333333333301', 2, false, 'ACTIVE'),
- ('b0000000-0000-0000-0000-000000000150','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','POS-REV-AS-05','Assessment Officer','77777777-7777-7777-7777-777777777701','44444444-4444-4444-4444-444444444401','66666666-6666-6666-6666-666666666601','33333333-3333-3333-3333-333333333302', 5, true, 'ACTIVE');
+ ('b0000000-0000-0000-0000-000000000201','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','POS-REV-DC-01','Deputy Commissioner (Revenue)','77777777-7777-7777-7777-777777777701','44444444-4444-4444-4444-444444444401','66666666-6666-6666-6666-666666666601','33333333-3333-3333-3333-333333333301', NULL, 2, false, 'ACTIVE'),
+ ('b0000000-0000-0000-0000-000000000150','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','POS-REV-AS-05','Assessment Officer','77777777-7777-7777-7777-777777777701','44444444-4444-4444-4444-444444444401','66666666-6666-6666-6666-666666666601','33333333-3333-3333-3333-333333333302', 'b0000000-0000-0000-0000-000000000201', 5, true, 'ACTIVE');
 
 -- employee_job_assignments ------------------------------------------------------------
-INSERT INTO employee_job_assignments (id, tenant_id, entity_id, employee_id, position_id, designation_id, cadre_id, org_unit_id, pay_scale_id, assignment_type, effective_from, effective_to, change_reason)
+INSERT INTO employee_job_assignments (id, tenant_id, entity_id, employee_id, position_id, designation_id, cadre_id, org_unit_id, pay_scale_id, reporting_manager_id, assignment_type, effective_from, effective_to, change_reason)
 VALUES
- ('da000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','b0000000-0000-0000-0000-000000000201','77777777-7777-7777-7777-777777777701','44444444-4444-4444-4444-444444444401','33333333-3333-3333-3333-333333333301','66666666-6666-6666-6666-666666666601','SUBSTANTIVE','2019-06-01', NULL,'PROMOTION'),
- ('da000000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999902','b0000000-0000-0000-0000-000000000150','77777777-7777-7777-7777-777777777701','44444444-4444-4444-4444-444444444401','33333333-3333-3333-3333-333333333302','66666666-6666-6666-6666-666666666601','SUBSTANTIVE','1996-06-01', NULL,'HIRE');
+ ('da000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999901','b0000000-0000-0000-0000-000000000201','77777777-7777-7777-7777-777777777701','44444444-4444-4444-4444-444444444401','33333333-3333-3333-3333-333333333301','66666666-6666-6666-6666-666666666601', NULL,'SUBSTANTIVE','2019-06-01', NULL,'PROMOTION'),
+ ('da000000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','99999999-9999-9999-9999-999999999902','b0000000-0000-0000-0000-000000000150','77777777-7777-7777-7777-777777777701','44444444-4444-4444-4444-444444444401','33333333-3333-3333-3333-333333333302','66666666-6666-6666-6666-666666666601','99999999-9999-9999-9999-999999999901','SUBSTANTIVE','1996-06-01', NULL,'HIRE');
+
+-- PH-02 resolver authority/delegation/committee fixtures ------------------------------
+INSERT INTO g01_authority_assignments (id, tenant_id, entity_id, authority_type, authority_code, scope_type, scope_org_unit_id, scope_cadre_id, authority_position_id, authority_employee_id, priority, effective_from, rule_version, source_order_ref, status)
+VALUES
+ ('a1000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','TRANSFER_AUTHORITY','G05_TRANSFER_REVENUE','ORG_UNIT','33333333-3333-3333-3333-333333333301',NULL,'b0000000-0000-0000-0000-000000000201','99999999-9999-9999-9999-999999999901',10,'2026-01-01','PH-02','GO-TRF-2026-001','ACTIVE'),
+ ('a1000000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','ORG_UNIT_HEAD','G03_LEAVE_HEAD_ASSESSMENT','ORG_UNIT','33333333-3333-3333-3333-333333333302',NULL,'b0000000-0000-0000-0000-000000000201','99999999-9999-9999-9999-999999999901',10,'2026-01-01','PH-02','GO-LV-2026-001','ACTIVE'),
+ ('a1000000-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','APPOINTING_AUTHORITY','G06_APPOINTING_GROUP_B','CADRE',NULL,'44444444-4444-4444-4444-444444444401','b0000000-0000-0000-0000-000000000201','99999999-9999-9999-9999-999999999901',10,'2026-01-01','PH-02','GO-APP-2026-001','ACTIVE'),
+ ('a1000000-0000-0000-0000-000000000004','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','SR_CUSTODIAN','G12_SR_CUSTODIAN_ENTITY','ENTITY',NULL,NULL,'b0000000-0000-0000-0000-000000000201','99999999-9999-9999-9999-999999999901',10,'2026-01-01','PH-02','GO-SR-2026-001','ACTIVE');
+
+INSERT INTO g01_authority_delegations (id, tenant_id, entity_id, authority_assignment_id, from_employee_id, to_employee_id, delegation_kind, effective_from, effective_to, reason, source_order_ref, status)
+VALUES
+ ('d1000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','a1000000-0000-0000-0000-000000000001','99999999-9999-9999-9999-999999999901','99999999-9999-9999-9999-999999999902','ACTING_CHARGE','2026-07-01','2026-07-31','PH-02 acting-charge fixture; P01 SoD still blocks self-approval','GO-ACT-2026-001','ACTIVE');
+
+INSERT INTO g01_committees (id, tenant_id, entity_id, committee_code, committee_type, name, scope_org_unit_id, scope_cadre_id, quorum_required, effective_from, source_module, status)
+VALUES
+ ('c1000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','PH02-DPC-REVENUE','DPC','PH-02 Revenue DPC Fixture','33333333-3333-3333-3333-333333333301','44444444-4444-4444-4444-444444444401',2,'2026-01-01','G06','ACTIVE');
+
+INSERT INTO g01_committee_members (id, tenant_id, entity_id, committee_id, member_employee_id, external_member_name, member_role, voting_weight, is_required_for_quorum, status, effective_from)
+VALUES
+ ('c2000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','c1000000-0000-0000-0000-000000000001','99999999-9999-9999-9999-999999999901',NULL,'CHAIRPERSON',1.00,true,'ACTIVE','2026-01-01'),
+ ('c2000000-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222201','c1000000-0000-0000-0000-000000000001',NULL,'External PSC Nominee','EXPERT',1.00,true,'ACTIVE','2026-01-01');
 
 -- employee_attribute_history (append-only; name change spine) -------------------------
 INSERT INTO employee_attribute_history (id, tenant_id, entity_id, employee_id, attribute_path, value_text, effective_from, effective_to, change_reason, source, gazette_ref, recorded_by, created_by)

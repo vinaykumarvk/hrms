@@ -1,0 +1,50 @@
+{
+  "marker": "EVIDENCE_CHECKSUM_MANIFEST",
+  "seal": "SHA256_EVIDENCE_SEAL",
+  "releaseCandidate": "HRMS-RC-PH13",
+  "approvalState": "NO_APPROVAL_IMPLIED",
+  "humanApprovalState": "GO_LIVE_HUMAN_APPROVAL_PENDING",
+  "sealedOn": "2026-07-02",
+  "artifacts": [
+    {
+      "path": "docs/spec/ph-12-verdict.md",
+      "sha256": "b5c435d3c45d2a9ded957be787c631ad2f61acb34d6eb84ca61de0bb7d3b9b19",
+      "purpose": "PH-12 release-board readiness verdict"
+    },
+    {
+      "path": "docs/release/release-board-dossier.md",
+      "sha256": "c2534e9ef7673b9d5a82c3759f30372e33a5dee9e4f97694cca50abd0daaba01",
+      "purpose": "release-board evidence packet"
+    },
+    {
+      "path": "docs/release/human-approval-checklist.md",
+      "sha256": "5a6e057561eea572ec654054be644fdb29f5e94348fd23f4998175940a39029c",
+      "purpose": "human approval checklist"
+    },
+    {
+      "path": "docs/release/target-environment-readiness.md",
+      "sha256": "c98369958e08c776873ee8c3aa9d4980c32049d7080a56accd2513842c113fa3",
+      "purpose": "target-environment dry-run readiness"
+    },
+    {
+      "path": "docs/release/environment-evidence-manifest.md",
+      "sha256": "30e20f301473f263a558b42c6ef3689d5368ffd56a6a2073ca1d039b033db9ac",
+      "purpose": "environment evidence manifest"
+    },
+    {
+      "path": "docs/release/release-board-agenda.md",
+      "sha256": "697a09cf165d8f55c8ab22a5f6fd92314fa8c4ebbbb3dbd86f8f350cbb458df2",
+      "purpose": "release-board agenda"
+    },
+    {
+      "path": "docs/release/go-no-go-decision-record-template.md",
+      "sha256": "4b580d950c68d9a70826a02cdf978c6989cea05916f59b39e4197a11dac64a50",
+      "purpose": "go/no-go decision template"
+    },
+    {
+      "path": "docs/release/rollback-authorization-template.md",
+      "sha256": "5157c5159c8e93af7f277b68ece8dc88a600f8c42b368460d961e428fa6dda91",
+      "purpose": "rollback authorization template"
+    }
+  ]
+}

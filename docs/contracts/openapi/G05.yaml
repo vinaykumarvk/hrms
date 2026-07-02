@@ -21,6 +21,23 @@ info:
         map onto the 8 platform HTTP codes; ERR-G05-* ids carried in error.details.errorId.
   contact:
     name: Government HRMS — API Architecture
+  x-ph06-vertical-slice:
+    implementedRoutes:
+      - POST /api/v1/transfers/orders
+      - POST /api/v1/transfers/orders/{id}/approve
+      - POST /api/v1/transfers/orders/{id}/clearances/{clearance_code}:deem
+      - POST /api/v1/transfers/orders/{id}:relieve-and-join
+    workflowResolver: POSITION_AUTHORITY
+    clearancePattern: PARALLEL_ALL_OF
+    srWriter: G05
+  x-ph08-statutory-wave:
+    implementedRoutes:
+      - POST /api/v1/transfers/orders/{id}/representations
+      - POST /api/v1/transfers/representations/{id}:retain
+      - POST /api/v1/transfers/orders/{id}:cancel
+      - POST /api/v1/transfers/orders/{id}:deem-relieved
+    statutoryScope: representation, retention, cancellation, deemed relief
+    srWriter: G05
 servers:
   - url: /api/v1
 security:

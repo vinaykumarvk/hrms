@@ -22,6 +22,26 @@ Phase 0 Platform Core  →  G01 (Employee Master)  →  G12 (SR ingestion contra
 **Single-line critical-path module sequence:**
 `Platform Core → G01 → G12 → G03 → G10 → G11 → G14` (with G04 + G09 merging into G11).
 
+## PH-10 implementation evidence
+
+PH-10 is now represented in the executable pipeline as `PH-10A` through `PH-10E`. The phase produces G14 read-only analytics, migration dry-run certification, hardening/NFR evidence, deployment and rollback runbooks, UAT scripts, and release evidence. Production cutover and UAT sign-off remain explicit human approvals outside the agentic development pipeline.
+
+## PH-11 implementation evidence
+
+PH-11 is now represented in the executable pipeline as `PH-11A` through `PH-11E`. The phase rehearses UAT execution, defect triage, cutover control, rollback authority, support handoff, operational RACI, and hypercare readiness after PH-10. It is agentic only where executable checks can verify evidence; UAT sign-off, CAB/go-live approval, production cutover, and rollback execution remain human-only decisions marked `GO_LIVE_HUMAN_APPROVAL_PENDING`.
+
+## PH-12 implementation evidence
+
+PH-12 is now represented in the executable pipeline as `PH-12A` through `PH-12E`. The phase prepares the release-board dossier, human approval checklist, target-environment readiness dry-run, release-board agenda, go/no-go decision record template, and rollback authorization template. It remains a readiness phase: UAT sign-off, CAB approval, go-live, production cutover, production credentials, and rollback execution stay human-only decisions.
+
+## PH-13 implementation evidence
+
+PH-13 is now represented in the executable pipeline as `PH-13A` through `PH-13E`. The phase seals the release-candidate evidence package, verifies checksums, prepares human approval intake and change-ticket guardrails, and creates archive/handoff evidence. It remains pre-approval work: UAT sign-off, CAB approval, go-live, production cutover, target-environment smoke, credentials, and rollback execution stay human-only decisions.
+
+## PH-14 implementation evidence
+
+PH-14 is now represented in the executable pipeline as `PH-14A` through `PH-14E`. The phase watches the sealed release candidate for drift, prepares board-day run cards and no-go quarantine handling, and defines approval-evidence quarantine/redaction rules. It remains pre-execution work: approvals, target-environment smoke, production credentials, cutover, and rollback execution stay human-only decisions.
+
 ---
 
 ## Per-module effort / complexity

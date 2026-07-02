@@ -15,6 +15,14 @@ info:
     pagination (limit default 25 / max 100, next_cursor), canonical error envelope.
   contact:
     name: Government HRMS — API Architecture / Platform Foundation
+  x-ph07-employee-wave:
+    implementedRoutes:
+      - POST /api/v1/personal-details/change-requests
+      - POST /api/v1/personal-details/change-requests/{id}:approve
+      - POST /api/v1/personal-details/change-requests/{id}:commit
+      - POST /api/v1/personal-details/change-requests/{id}:reverse
+    srOwner: G01
+    workflow: WF-G02-PERSONAL-DETAILS
 servers:
   - url: /api/v1
     description: Platform API v1 (all endpoints; P02-enforced)
