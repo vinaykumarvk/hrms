@@ -26,6 +26,8 @@ import { PayRuleService } from "../modules/g10/payRuleService";
 import { InMemoryPayRuleRepository } from "../modules/g10/payRuleRepository";
 import { CompensationIntegrationService } from "../modules/g10/compensationIntegrationService";
 import { InMemoryCompensationIntegrationRepository } from "../modules/g10/compensationIntegrationRepository";
+import { TaxEngineService } from "../modules/g10/taxEngineService";
+import { InMemoryTaxEngineRepository } from "../modules/g10/taxEngineRepository";
 import { PensionService } from "../modules/g11/pensionService";
 import { PensionDisbursementService } from "../modules/g11/pensionDisbursementService";
 import { InMemoryPensionDisbursementRepository } from "../modules/g11/pensionDisbursementRepository";
@@ -65,6 +67,7 @@ export interface FoundationServices {
   payrollEngine: PayrollEngineService;
   payRules: PayRuleService;
   compensationIntegration: CompensationIntegrationService;
+  taxEngine: TaxEngineService;
   pension: PensionService;
   pensionDisbursement: PensionDisbursementService;
   pensionRules: PensionRuleService;
@@ -210,6 +213,13 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     serviceRegister,
     new InMemoryCompensationIntegrationRepository()
   );
+  // PH-15A: G10 income-tax/TDS engine — E15 tax_declarations with the full persisted FR-07
+  // pipeline (regime switch recomputes every stage + per-month TDS from the payslip_lines
+  // ledger, cutoff lock -> ERR-G10-SNAPSHOT-FROZEN) and E29 statutory_remittances
+  // (ACCRUED -> DEPOSITED -> MATCHED) gating Form-16 Part A; Form-24Q reconciles quarterly
+  // totals to the monthly TDS ledger (migration 0022). Slab/surcharge/cess/87A/std-deduction
+  // values are effective-dated TAX_SLAB rate rows on the PH-09A substrate, never constants.
+  const taxEngine = new TaxEngineService(employeeMaster, authorization, audit, payRuleRepository, payrollEngineRepository, new InMemoryTaxEngineRepository());
   const pensionRules = new PensionRuleService(authorization, audit, new InMemoryPensionRuleRepository());
   // PH-09C: G11 benefit records E07-E10/E41 behind the repository pattern (migration 0016);
   // the scheme-branched pension engine consumes the PH-09A rule substrate above and the
@@ -250,6 +260,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     payrollEngine,
     payRules,
     compensationIntegration,
+    taxEngine,
     pension,
     pensionDisbursement,
     pensionRules,

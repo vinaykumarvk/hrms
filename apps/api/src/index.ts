@@ -29,6 +29,8 @@ export * from "./modules/g10/payRuleRepository";
 export * from "./modules/g10/payRuleService";
 export * from "./modules/g10/compensationIntegrationRepository";
 export * from "./modules/g10/compensationIntegrationService";
+export * from "./modules/g10/taxEngineRepository";
+export * from "./modules/g10/taxEngineService";
 export * from "./modules/g11/pensionService";
 export * from "./modules/g11/pensionDisbursementRepository";
 export * from "./modules/g11/pensionDisbursementService";

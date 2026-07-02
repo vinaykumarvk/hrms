@@ -3,6 +3,7 @@ import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requir
 import { ApiQuery, RouteDefinition } from "../http/apiTypes";
 import { PayrollAdjustmentCode, PayrollAdjustmentSource } from "../modules/g10/payrollService";
 import { PayCalcMethod, PayComponentCategory, RateTableType, TaxRegime } from "../modules/g10/payRuleRepository";
+import { PreviousEmployerIncome, Relief891, RemittanceScheme } from "../modules/g10/taxEngineRepository";
 import { FoundationError } from "../platform/types";
 import { ph03Ids } from "../seed/ph03Seed";
 
@@ -17,6 +18,13 @@ export const g10RouteEvidence = {
   payRules: "/api/v1/payroll/pay-rules",
   rateTables: "/api/v1/payroll/rate-tables",
   rateResolve: "/api/v1/payroll/rate-tables/resolve",
+  // PH-15A tax/TDS engine (BRD G10 FR-07/FR-17/FR-19): tax_declarations with the full
+  // pipeline + regime switch, statutory_remittances lifecycle, Form-16/Form-24Q outputs.
+  taxDeclarations: "/api/v1/payroll/tax-declarations",
+  taxSwitchRegime: "/api/v1/payroll/tax-declarations:switch-regime",
+  remittances: "/api/v1/payroll/statutory/remittances",
+  form16: "/api/v1/payroll/statutory/form16:generate",
+  form24q: "/api/v1/payroll/statutory/form24q:generate",
   markers: ["PAYROLL_TRACE", "RULE_VERSION_SNAPSHOT", "INPUT_LOCKED", "BANK_X3_EXPORT", "LAST_PAY_DRAWN"],
 };
 
@@ -228,6 +236,184 @@ export function registerG10Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // ---- PH-15A tax/TDS engine: E15 tax_declarations / E29 statutory_remittances ----
+    {
+      method: "POST",
+      path: "/api/v1/payroll/tax-declarations",
+      operationId: "g10.upsertTaxDeclaration",
+      protected: true,
+      permission: "g10.tax.declare",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          taxDeclaration: context.services.taxEngine.upsertDeclaration(context.actor, {
+            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+            financialYear: requiredString(body, "financialYear"),
+            regime: readRegime(optionalString(body, "regime")),
+            declared80cPaise: optionalNumber(body, "declared80cPaise"),
+            declared80dPaise: optionalNumber(body, "declared80dPaise"),
+            hraExemptionPaise: optionalNumber(body, "hraExemptionPaise"),
+            homeLoanInterestPaise: optionalNumber(body, "homeLoanInterestPaise"),
+            previousEmployerIncome: readPreviousEmployerIncome(body),
+            relief891: readRelief891(body),
+            perquisiteTotalPaise: optionalNumber(body, "perquisiteTotalPaise"),
+            asOf: optionalString(body, "asOf"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/tax-declarations:switch-regime",
+      operationId: "g10.switchTaxRegime",
+      protected: true,
+      permission: "g10.tax.declare",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          taxDeclaration: context.services.taxEngine.switchRegime(context.actor, {
+            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+            financialYear: requiredString(body, "financialYear"),
+            regime: readRegime(optionalString(body, "regime")),
+            asOf: optionalString(body, "asOf"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/tax-declarations:set-cutoff",
+      operationId: "g10.setTaxProofCutoff",
+      protected: true,
+      permission: "g10.tax.cutoff",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          taxDeclaration: context.services.taxEngine.setProofCutoff(context.actor, {
+            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+            financialYear: requiredString(body, "financialYear"),
+            cutoffDate: requiredString(body, "cutoffDate"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/payroll/tax-declarations",
+      operationId: "g10.getTaxDeclaration",
+      protected: true,
+      permission: "g10.tax.read",
+      handler: (context) => {
+        const query = context.request.query ?? {};
+        return ok({
+          taxDeclaration: context.services.taxEngine.getDeclaration(
+            context.scope,
+            query.employeeId ?? ph03Ids.employee,
+            requiredQuery(query, "financialYear")
+          ),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/statutory/remittances:accrue",
+      operationId: "g10.accrueRemittance",
+      protected: true,
+      permission: "g10.statutory.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          remittance: context.services.taxEngine.accrueRemittance(context.actor, {
+            scheme: readRemittanceScheme(requiredString(body, "scheme")),
+            period: requiredString(body, "period"),
+            statutoryDueDate: requiredString(body, "statutoryDueDate"),
+            employerTotalPaise: optionalNumber(body, "employerTotalPaise"),
+            state: optionalString(body, "state"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/statutory/remittances/{id}:deposit",
+      operationId: "g10.captureRemittanceDeposit",
+      protected: true,
+      permission: "g10.statutory.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          remittance: context.services.taxEngine.captureDeposit(context.actor, requiredParam(context.params, "id"), {
+            challanNo: requiredString(body, "challanNo"),
+            cin: optionalString(body, "cin"),
+            depositDate: requiredString(body, "depositDate"),
+            depositedAmountPaise: optionalNumber(body, "depositedAmountPaise") ?? 0,
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/statutory/remittances/{id}:match",
+      operationId: "g10.matchRemittance",
+      protected: true,
+      permission: "g10.statutory.certify",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          remittance: context.services.taxEngine.matchRemittance(context.actor, requiredParam(context.params, "id"), {
+            tolerancePaise: optionalNumber(body, "tolerancePaise"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/statutory/form16:generate",
+      operationId: "g10.generateForm16",
+      protected: true,
+      permission: "g10.statutory.certify",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          form16: context.services.taxEngine.generateForm16(context.actor, {
+            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+            financialYear: requiredString(body, "financialYear"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/statutory/form24q:generate",
+      operationId: "g10.generateForm24Q",
+      protected: true,
+      permission: "g10.statutory.certify",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          form24q: context.services.taxEngine.generateForm24Q(context.actor, {
+            financialYear: requiredString(body, "financialYear"),
+            quarter: readQuarter(requiredString(body, "quarter")),
+          }),
+        });
+      },
+    },
     {
       method: "GET",
       path: "/api/v1/payroll/rate-tables/resolve",
@@ -317,4 +503,55 @@ function readOptionalRegime(value: string | undefined): TaxRegime | undefined {
     return value;
   }
   throw new FoundationError("VALIDATION_FAILED", `Unsupported tax regime ${value}`, { field: "regime" });
+}
+
+function readRegime(value: string | undefined): TaxRegime {
+  return readOptionalRegime(value) ?? "NEW";
+}
+
+function readRemittanceScheme(value: string): RemittanceScheme {
+  if (value === "TDS" || value === "PT" || value === "GPF" || value === "CPF" || value === "NPS" || value === "PENSION" || value === "INSURANCE") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported remittance scheme ${value}`, { field: "scheme" });
+}
+
+function readQuarter(value: string): "Q1" | "Q2" | "Q3" | "Q4" {
+  if (value === "Q1" || value === "Q2" || value === "Q3" || value === "Q4") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported Form-24Q quarter ${value}`, { field: "quarter" });
+}
+
+/** Form-12B previous-employer income block (FR-07 AC6). */
+function readPreviousEmployerIncome(body: Record<string, unknown>): PreviousEmployerIncome | undefined {
+  const block = body.previousEmployerIncome;
+  if (block === undefined || block === null) {
+    return undefined;
+  }
+  if (typeof block !== "object" || Array.isArray(block)) {
+    throw new FoundationError("VALIDATION_FAILED", "previousEmployerIncome must be an object", { field: "previousEmployerIncome" });
+  }
+  const record = block as Record<string, unknown>;
+  return {
+    incomePaise: optionalNumber(record, "incomePaise") ?? 0,
+    tdsPaise: optionalNumber(record, "tdsPaise") ?? 0,
+    employerTan: optionalString(record, "employerTan"),
+  };
+}
+
+/** Form-10E / 89(1) relief block (FR-07 AC7). */
+function readRelief891(body: Record<string, unknown>): Relief891 | undefined {
+  const block = body.relief891;
+  if (block === undefined || block === null) {
+    return undefined;
+  }
+  if (typeof block !== "object" || Array.isArray(block)) {
+    throw new FoundationError("VALIDATION_FAILED", "relief891 must be an object", { field: "relief891" });
+  }
+  const record = block as Record<string, unknown>;
+  return {
+    reliefPaise: optionalNumber(record, "reliefPaise") ?? 0,
+    form10eRef: optionalString(record, "form10eRef"),
+  };
 }

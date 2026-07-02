@@ -80,6 +80,9 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G10-RECON-TIEOUT":
     case "ERR-G10-RECON-UNSIGNED":
     case "ERR-G10-RECOVERY-BARRED":
+    // BRD G10 §12: mutation after snapshot/cutoff freeze (incl. tax-declaration mutation
+    // after the FY proof cutoff, FR-07 AC3) is 409 CONFLICT.
+    case "ERR-G10-SNAPSHOT-FROZEN":
     // BRD G11 FR-05/FR-22: cross-scheme benefit requests and DCRG release attempts while the
     // Rule 9 proceeding is still ACTIVE are 409 CONFLICT.
     case "ERR-G11-SCHEME-MISMATCH":
@@ -104,6 +107,8 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G10-RULE-EXPR":
     case "ERR-G10-RATE-NOTFOUND":
     case "ERR-G10-PT-STATE":
+    // BRD G10 FR-07: no TAX_SLAB rows for the regime/FY resolves 422 (fail closed).
+    case "ERR-G10-TAXSLAB-NOTFOUND":
     // BRD G11 §12: rule-row/commutation-factor resolution misses are 422 (fail closed);
     // FR-06 AC1: an over-limit commuted fraction is 422, rejected — never clamped.
     case "ERR-G11-RULE-NOT-EFFECTIVE":

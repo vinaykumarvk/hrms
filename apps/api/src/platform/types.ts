@@ -60,7 +60,7 @@ export type G09DomainErrorCode =
   | "ERR-G09-ACTOR-CONFLICT"
   | "ERR-G09-DUE-PROCESS-INCOMPLETE";
 
-/** BRD G10 §12 named domain error codes (docs/brd/v3/G10-payroll-and-benefits.md FR-01/02/04/09/13/14/15/16 error catalogue). */
+/** BRD G10 §12 named domain error codes (docs/brd/v3/G10-payroll-and-benefits.md FR-01/02/04/07/09/13/14/15/16/22 error catalogue). */
 export type G10DomainErrorCode =
   | "ERR-G10-RULE-EXPR"
   | "ERR-G10-RATE-OVERLAP"
@@ -72,7 +72,13 @@ export type G10DomainErrorCode =
   | "ERR-G10-RECOVERY-NET"
   | "ERR-G10-RECON-TIEOUT"
   | "ERR-G10-RECON-UNSIGNED"
-  | "ERR-G10-RECOVERY-BARRED";
+  | "ERR-G10-RECOVERY-BARRED"
+  // FR-07: missing TAX_SLAB rate rows for the regime/FY fail closed (422).
+  | "ERR-G10-TAXSLAB-NOTFOUND"
+  // FR-22/§12: mutation attempted after a snapshot/cutoff freeze (409) — also thrown for
+  // tax-declaration mutation after the FY proof cutoff (FR-07 AC3; no declaration-specific
+  // code is registered, so the registered freeze code is reused, never a new identifier).
+  | "ERR-G10-SNAPSHOT-FROZEN";
 
 /** BRD G11 §12 named domain error codes (docs/brd/v3/G11-retirement-and-pension.md FR-05/06/14/19/22 error catalogue). */
 export type G11DomainErrorCode =
