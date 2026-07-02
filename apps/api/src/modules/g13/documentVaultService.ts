@@ -1,12 +1,17 @@
 import { AuditService } from "../../platform/audit/auditService";
 import { FoundationError, TenantScope, inScope, nextId, requireTenantScope, sha256Hex, sha256HexBytes } from "../../platform/types";
 import {
+  DataSubjectRequestRecord,
   DispositionRecord,
   DocumentAuditRecord,
   DocumentSecurityRepository,
+  DsrDocumentOutcome,
   G13AccessAuditAction,
   G13DispositionAction,
+  G13DsrType,
+  G13ErasureMethod,
   InMemoryDocumentSecurityRepository,
+  KeyRotationReport,
   RetentionClassRecord,
   ScanResultRecord,
   SecurityClearanceRecord,
@@ -34,6 +39,11 @@ export interface DocumentRecord {
   legalHold: boolean;
   /** E8/E9 retention class binding — disposition eligibility (FR-009). */
   retentionClassCode?: string;
+  /**
+   * FR-G13-018: set when a DPDP request resolves — EXEMPT_RETAINED (lattice override) or
+   * CRYPTO_SHRED (redaction-marker erasure executed). Mirrors documents.dpdp_erasure_state.
+   */
+  dpdpErasureState?: G13ErasureMethod;
   links: DocumentLink[];
 }
 
@@ -167,6 +177,12 @@ const CLEARANCE_GATED_RANK = CLASSIFICATION_RANK.CONFIDENTIAL;
 const NOT_ATTACHABLE_STATUSES: ReadonlyArray<DocumentRecord["status"]> = ["DELETED", "DISPOSED", "ORPHANED"];
 
 const VIEW_RENDER_TTL_SECONDS = 300;
+
+/**
+ * P05 right-to-erasure redaction marker (FR-G13-018 AC5): DPDP erasure NEVER physically deletes
+ * held content or audit rows — PII is overwritten with this marker and the rows remain.
+ */
+export const DPDP_REDACTION_MARKER = "[DPDP-REDACTED]";
 
 /** Checkout locks auto-expire (BRD G13 E14 `expires_at`, e.g. +8h) to prevent stuck locks. */
 const CHECKOUT_LOCK_TTL_MS = 8 * 60 * 60 * 1000;
@@ -865,6 +881,287 @@ export class DocumentVaultService {
       throw new FoundationError("NOT_FOUND", "Disposition record not found");
     }
     return disposition;
+  }
+
+  // --- FR-G13-005 key rotation (JOB-G13-KEYROTATE) ------------------------------------------
+
+  /**
+   * JOB-G13-KEYROTATE: rotates the master key behind the KeyProvider seam and re-wraps every
+   * stored per-object DEK under the new key. Object ciphertext is never re-encrypted or
+   * rewritten — previously stored objects still decrypt afterwards (FR-G13-005 AC4).
+   */
+  rotateEncryptionKeys(scope: TenantScope): KeyRotationReport {
+    this.requireActor(scope);
+    const report = this.security.rewrapDataKeys();
+    this.audit.recordSecurity(scope, {
+      eventType: "G13_KEY_ROTATE",
+      result: "SUCCESS",
+      metadata: { jobId: "JOB-G13-KEYROTATE", kmsKeyId: report.kmsKeyId, rewrappedObjects: report.rewrappedObjects },
+    });
+    return report;
+  }
+
+  // --- FR-G13-018 DPDP data-subject requests + VAL-G13-LATTICE (E22) -------------------------
+
+  /** FR-G13-018 AC1: register a DSR — subject, type, received timestamp (statutory clock). */
+  registerDataSubjectRequest(
+    scope: TenantScope,
+    input: { dataSubjectEmployeeId: string; requestType: G13DsrType; consentRefId?: string }
+  ): DataSubjectRequestRecord {
+    this.requireActor(scope);
+    const receivedAt = new Date().toISOString();
+    const request: DataSubjectRequestRecord = {
+      id: nextId("dsr", this.security.countDataSubjectRequests()),
+      tenantId: scope.tenantId,
+      entityId: scope.entityId,
+      dsrNo: `DSR/${receivedAt.slice(0, 4)}/${String(this.security.countDataSubjectRequests() + 1).padStart(4, "0")}`,
+      dataSubjectEmployeeId: input.dataSubjectEmployeeId,
+      requestType: input.requestType,
+      consentRefId: input.consentRefId,
+      receivedAt,
+      status: "RECEIVED",
+      outcomes: [],
+    };
+    const saved = this.security.saveDataSubjectRequest(request);
+    this.audit.recordMutation(scope, {
+      action: "G13_DSR_REGISTER",
+      subjectRef: `data_subject_requests:${saved.id}`,
+      metadata: { dsrNo: saved.dsrNo, requestType: saved.requestType, dataSubjectEmployeeId: saved.dataSubjectEmployeeId },
+    });
+    return saved;
+  }
+
+  /**
+   * FR-G13-018 AC2 adjudication (DPO): moves RECEIVED -> UNDER_REVIEW (or REJECTED) and, for
+   * ERASURE, evaluates every in-scope document against the VAL-G13-LATTICE precedence —
+   * statutory retention / active legal hold / WORM override erasure (EXEMPT_RETAINED with the
+   * legal basis recorded); only where none applies is the document marked for erasure.
+   */
+  adjudicateDataSubjectRequest(
+    scope: TenantScope,
+    dsrId: string,
+    input: { decision?: "PROCEED" | "REJECT"; resolutionNote?: string } = {}
+  ): DataSubjectRequestRecord {
+    const dpo = this.requireActor(scope);
+    const request = this.requireDataSubjectRequest(scope, dsrId);
+    if (request.status !== "RECEIVED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only a RECEIVED data-subject request can be adjudicated", {
+        details: { status: request.status },
+      });
+    }
+    request.adjudicatedBy = dpo;
+    request.resolutionNote = input.resolutionNote ?? request.resolutionNote;
+    if (input.decision === "REJECT") {
+      request.status = "REJECTED";
+      const saved = this.security.saveDataSubjectRequest(request);
+      this.audit.recordMutation(scope, { action: "G13_DSR_REJECT", subjectRef: `data_subject_requests:${saved.id}` });
+      return saved;
+    }
+    request.status = "UNDER_REVIEW";
+    if (request.requestType === "ERASURE") {
+      const inScopeDocuments = this.documents.filter(
+        (document) =>
+          inScope(document, scope) &&
+          document.ownerEmployeeId === request.dataSubjectEmployeeId &&
+          document.status !== "DISPOSED" &&
+          document.status !== "DELETED"
+      );
+      request.outcomes = inScopeDocuments.map((document) => this.evaluateErasureLattice(document));
+      request.affectedDocumentCount = request.outcomes.length;
+      const bases = request.outcomes.filter((outcome) => outcome.basis).map((outcome) => outcome.basis as string);
+      request.legalBasisExemption = bases.length > 0 ? bases.join("; ") : undefined;
+    }
+    const saved = this.security.saveDataSubjectRequest(request);
+    this.audit.recordMutation(scope, {
+      action: "G13_DSR_ADJUDICATE",
+      subjectRef: `data_subject_requests:${saved.id}`,
+      metadata: {
+        validationId: "VAL-G13-LATTICE",
+        affectedDocumentCount: saved.affectedDocumentCount,
+        exempted: saved.outcomes.filter((outcome) => outcome.decision === "EXEMPT_RETAINED").length,
+      },
+    });
+    return saved;
+  }
+
+  /**
+   * FR-G13-018 execution (custodian, SoD AC7: executor != adjudicating DPO). Without a
+   * documentId the whole request executes: exempt documents are recorded EXEMPT_RETAINED with
+   * their legal basis; non-exempt documents are erased on the redaction-marker path. With a
+   * documentId, a single-document erasure is attempted — if the lattice exempts that document
+   * the attempt is BLOCKED with the registered 409 code ERR-G13-ERASURE_EXEMPTED.
+   */
+  executeDataSubjectRequest(scope: TenantScope, dsrId: string, documentId?: string): DataSubjectRequestRecord {
+    const executor = this.requireActor(scope);
+    const request = this.requireDataSubjectRequest(scope, dsrId);
+    if (request.status !== "UNDER_REVIEW") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only an UNDER_REVIEW data-subject request can be executed", {
+        details: { status: request.status },
+      });
+    }
+    if (request.requestType !== "ERASURE") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only an ERASURE request has an execution path", {
+        details: { requestType: request.requestType },
+      });
+    }
+    if (request.adjudicatedBy === executor) {
+      // FR-G13-018 AC7 SoD: the DPO who exempts/adjudicates is never the executing custodian.
+      throw new FoundationError("ERR-G13-SOD_VIOLATION", "DSR execution requires a custodian different from the adjudicating DPO", {
+        details: { messageId: "ERR-G13-SOD_VIOLATION", dsrId: request.id },
+      });
+    }
+    if (documentId !== undefined) {
+      return this.executeSingleDocumentErasure(scope, request, documentId);
+    }
+    for (const outcome of request.outcomes) {
+      const document = this.requireDocument(scope, outcome.documentId);
+      if (outcome.decision === "EXEMPT_RETAINED") {
+        this.recordExemptRetained(scope, document, outcome);
+      } else if (!outcome.executedAt) {
+        this.eraseDocumentViaRedactionMarker(scope, document);
+        outcome.erasureMethod = "CRYPTO_SHRED";
+        outcome.executedAt = new Date().toISOString();
+      }
+    }
+    const exempted = request.outcomes.filter((outcome) => outcome.decision === "EXEMPT_RETAINED").length;
+    const erased = request.outcomes.length - exempted;
+    request.status = exempted === request.outcomes.length ? "EXEMPTED" : exempted > 0 ? "PARTIALLY_FULFILLED" : "FULFILLED";
+    request.erasureMethod = erased > 0 ? "CRYPTO_SHRED" : "EXEMPT_RETAINED";
+    request.resolutionNote = `Erased ${erased} document(s) via the P05 redaction-marker path; ${exempted} exempted (EXEMPT_RETAINED).`;
+    const saved = this.security.saveDataSubjectRequest(request);
+    this.audit.recordMutation(scope, {
+      action: "G13_DSR_EXECUTE",
+      subjectRef: `data_subject_requests:${saved.id}`,
+      metadata: { status: saved.status, erased, exempted, executedBy: executor },
+    });
+    return saved;
+  }
+
+  getDataSubjectRequest(scope: TenantScope, dsrId: string): DataSubjectRequestRecord {
+    return this.requireDataSubjectRequest(scope, dsrId);
+  }
+
+  listDataSubjectRequests(scope: TenantScope): DataSubjectRequestRecord[] {
+    requireTenantScope(scope);
+    return this.security.listDataSubjectRequests(scope.tenantId);
+  }
+
+  /**
+   * VAL-G13-LATTICE (DI-15) — deny-erasure-first precedence: statutory retention, then active
+   * legal hold, then WORM override erasure with outcome EXEMPT_RETAINED and a recorded legal
+   * basis. Only where none applies is the document marked ERASE (redaction-marker path).
+   */
+  private evaluateErasureLattice(document: DocumentRecord): DsrDocumentOutcome {
+    const retentionClass = document.retentionClassCode
+      ? this.security.getRetentionClass(document.tenantId, document.retentionClassCode)
+      : null;
+    if (retentionClass?.isPermanent) {
+      return {
+        documentId: document.id,
+        decision: "EXEMPT_RETAINED",
+        basis: `STATUTORY_RETENTION: permanent retention class ${retentionClass.code}`,
+        erasureMethod: "EXEMPT_RETAINED",
+      };
+    }
+    const retentionUntil = this.retentionExtensions.get(document.id);
+    if (retentionUntil && Date.parse(retentionUntil) > Date.now()) {
+      return {
+        documentId: document.id,
+        decision: "EXEMPT_RETAINED",
+        basis: `STATUTORY_RETENTION: retain-until ${retentionUntil}`,
+        erasureMethod: "EXEMPT_RETAINED",
+      };
+    }
+    if (document.legalHold) {
+      return {
+        documentId: document.id,
+        decision: "EXEMPT_RETAINED",
+        basis: "LEGAL_HOLD: active legal hold overrides DPDP erasure",
+        erasureMethod: "EXEMPT_RETAINED",
+      };
+    }
+    if (document.isWorm) {
+      return {
+        documentId: document.id,
+        decision: "EXEMPT_RETAINED",
+        basis: "WORM: object-lock retention overrides DPDP erasure",
+        erasureMethod: "EXEMPT_RETAINED",
+      };
+    }
+    return { documentId: document.id, decision: "ERASE" };
+  }
+
+  /** Single-document erasure attempt: exempt documents BLOCK with ERR-G13-ERASURE_EXEMPTED (409). */
+  private executeSingleDocumentErasure(scope: TenantScope, request: DataSubjectRequestRecord, documentId: string): DataSubjectRequestRecord {
+    const outcome = request.outcomes.find((entry) => entry.documentId === documentId);
+    if (!outcome) {
+      throw new FoundationError("NOT_FOUND", "Document is not in scope of this data-subject request", { field: "documentId" });
+    }
+    const document = this.requireDocument(scope, documentId);
+    if (outcome.decision === "EXEMPT_RETAINED") {
+      this.recordExemptRetained(scope, document, outcome);
+      this.security.saveDataSubjectRequest(request);
+      // Registered taxonomy code (409): DPDP erasure overridden by statutory/hold/WORM basis (R8).
+      throw new FoundationError("ERR-G13-ERASURE_EXEMPTED", "DPDP erasure is overridden by a statutory retention, legal hold, or WORM basis", {
+        details: { messageId: "ERR-G13-ERASURE_EXEMPTED", documentId: document.id, legalBasisExemption: outcome.basis },
+      });
+    }
+    if (!outcome.executedAt) {
+      this.eraseDocumentViaRedactionMarker(scope, document);
+      outcome.erasureMethod = "CRYPTO_SHRED";
+      outcome.executedAt = new Date().toISOString();
+    }
+    return this.security.saveDataSubjectRequest(request);
+  }
+
+  /** Marks a lattice-exempt document EXEMPT_RETAINED and lands the DENIED ERASURE audit row. */
+  private recordExemptRetained(scope: TenantScope, document: DocumentRecord, outcome: DsrDocumentOutcome): void {
+    if (document.dpdpErasureState !== "EXEMPT_RETAINED") {
+      document.dpdpErasureState = "EXEMPT_RETAINED";
+      this.appendAccessAudit(scope, document, "ERASURE", "DENIED", "ERR-G13-ERASURE_EXEMPTED");
+      this.audit.recordSecurity(scope, {
+        eventType: "G13_DSR_ERASURE_EXEMPTED",
+        result: "DENIED",
+        metadata: { documentId: document.id, legalBasisExemption: outcome.basis, erasureMethod: "EXEMPT_RETAINED" },
+      });
+    }
+  }
+
+  /**
+   * FR-G13-018 AC3/AC5 redaction-marker erasure of a NON-exempt document — never physical
+   * deletion: existing audit PII is overwritten with the P05 redaction marker (rows retained),
+   * the per-object wrapped DEK is destroyed (crypto-shred, dek_shared=false BR-2), the header
+   * title is redacted, and documents.dpdp_erasure_state records the method. The chained
+   * document_audit (ERASURE) row lands after redaction so the execution record stays legible.
+   */
+  private eraseDocumentViaRedactionMarker(scope: TenantScope, document: DocumentRecord): void {
+    this.security.applyDpdpRedactionMarker(document.id, DPDP_REDACTION_MARKER);
+    this.security.destroyWrappedDek(document.id);
+    for (let index = 0; index < this.versions.length; index += 1) {
+      const version = this.versions[index];
+      if (version && version.documentId === document.id) {
+        // Version rows stay (append-only) — only the PII-bearing title is overwritten.
+        this.versions[index] = Object.freeze({ ...version, title: DPDP_REDACTION_MARKER });
+      }
+    }
+    document.title = DPDP_REDACTION_MARKER;
+    document.dpdpErasureState = "CRYPTO_SHRED";
+    document.status = "DISPOSED";
+    this.appendAccessAudit(scope, document, "ERASURE", "SUCCESS");
+    this.audit.recordMutation(scope, {
+      action: "G13_DSR_ERASURE_EXECUTE",
+      subjectRef: `documents:${document.id}`,
+      metadata: { erasureMethod: "CRYPTO_SHRED", redactionMarker: DPDP_REDACTION_MARKER },
+    });
+  }
+
+  private requireDataSubjectRequest(scope: TenantScope, dsrId: string): DataSubjectRequestRecord {
+    requireTenantScope(scope);
+    const request = this.security.getDataSubjectRequest(dsrId);
+    if (!request || request.tenantId !== scope.tenantId) {
+      throw new FoundationError("NOT_FOUND", "Data-subject request not found");
+    }
+    return request;
   }
 
   get(scope: TenantScope, documentId: string): DocumentRecord | null {

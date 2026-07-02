@@ -106,14 +106,16 @@ export type G11DomainErrorCode =
  * 409 checked out by another user; 422 stored-bytes SHA-256 mismatch on fetch (FR-015, content
  * withheld + quarantined); 422 infected upload (FR-007/DI-11, QUARANTINED); 403 deny-by-default
  * classification gate miss (FR-006, E21 security_clearances); 403 maker==checker SoD breach on
- * disposition/clearance approval (FR-009/FR-017, DI-10/DI-16).
+ * disposition/clearance approval (FR-009/FR-017, DI-10/DI-16); 409 DPDP erasure overridden by
+ * statutory retention / legal hold / WORM basis (FR-018, R8 precedence lattice).
  */
 export type G13DomainErrorCode =
   | "ERR-G13-DOCUMENT_LOCKED"
   | "ERR-G13-INTEGRITY_FAILED"
   | "ERR-G13-MALWARE_DETECTED"
   | "ERR-G13-CLEARANCE_INSUFFICIENT"
-  | "ERR-G13-SOD_VIOLATION";
+  | "ERR-G13-SOD_VIOLATION"
+  | "ERR-G13-ERASURE_EXEMPTED";
 
 /**
  * BRD G14 §8.3 named domain error codes (docs/brd/v3/G14-dashboard-and-analytics.md

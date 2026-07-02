@@ -48,6 +48,7 @@ import { SrAdmissibilityService } from "../modules/g12/srAdmissibilityService";
 import { InMemorySrAdmissibilityRepository } from "../modules/g12/srAdmissibilityRepository";
 import { DocumentVaultService, ScanProvider, StubScanProvider } from "../modules/g13/documentVaultService";
 import { InMemoryDocumentSecurityRepository } from "../modules/g13/documentSecurityRepository";
+import { KeyProvider, LocalMasterKeyProvider } from "../modules/g13/keyProvider";
 import { AnalyticsService } from "../modules/g14/analyticsService";
 import { AnalyticsEngineService } from "../modules/g14/analyticsEngineService";
 import { InMemoryAnalyticsEngineRepository } from "../modules/g14/analyticsEngineRepository";
@@ -104,6 +105,12 @@ export interface FoundationServicesOptions {
   g12TimestampAuthority?: TimestampAuthority;
   /** PH-10C: DI-11 malware-scan seam override for the G13 vault (a deterministic fake in tests; a real engine in production). */
   g13ScanProvider?: ScanProvider;
+  /**
+   * PH-15E: FR-G13-005 envelope-encryption key seam override. Defaults to the local
+   * master-key implementation (key material from G13_MASTER_KEY env/config — never hardcoded);
+   * production binds a real KMS/HSM client behind the same KeyProvider interface.
+   */
+  g13KeyProvider?: KeyProvider;
 }
 
 /**
@@ -133,7 +140,9 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const documentVault = new DocumentVaultService(
     ph03Documents(),
     audit,
-    new InMemoryDocumentSecurityRepository(),
+    // PH-15E: E19 content is envelope-encrypted behind the injectable KeyProvider seam —
+    // per-object AES-256-GCM DEKs, only wrapped_dek + kms_key_id persisted (FR-G13-005).
+    new InMemoryDocumentSecurityRepository(options.g13KeyProvider ?? new LocalMasterKeyProvider()),
     options.g13ScanProvider ?? new StubScanProvider()
   );
   const authorityResolution = new AuthorityResolutionService(ph03AuthorityFacts());

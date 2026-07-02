@@ -98,6 +98,8 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G11-REVISION-IMMUTABLE":
     // BRD G13 error catalogue: document checked out by another user is 409 CONFLICT.
     case "ERR-G13-DOCUMENT_LOCKED":
+    // BRD G13 §10.3 (R8): DPDP erasure overridden by statutory retention / legal hold / WORM.
+    case "ERR-G13-ERASURE_EXEMPTED":
     // BRD G14 FR-02 AC7: cross-version KPI aggregation without acknowledgement is 409 CONFLICT.
     case "ERR-G14-XVER-AGG":
       return 409;

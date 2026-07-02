@@ -50,6 +50,7 @@ export * from "./modules/g12/srAdmissibilityRepository";
 export * from "./modules/g12/srAdmissibilityService";
 export * from "./modules/g13/documentSecurityRepository";
 export * from "./modules/g13/documentVaultService";
+export * from "./modules/g13/keyProvider";
 export * from "./modules/g14/analyticsService";
 export * from "./modules/g14/analyticsEngineRepository";
 export * from "./modules/g14/analyticsEngineService";

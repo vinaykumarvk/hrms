@@ -314,6 +314,107 @@ export function registerG13Routes(kernel: ApiKernel): void {
     requiresIdempotencyKey: true,
     handler: (context) => accepted({ disposition: context.services.documentVault.executeDisposition(context.scope, requiredParam(context.params, "id")) }),
   });
+  // FR-G13-005 AC4 (JOB-G13-KEYROTATE): rotate the master key and re-wrap every stored
+  // wrapped_dek under the new kms_key_id — object ciphertext is never rewritten.
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/admin/keys:rotate",
+    operationId: "g13.rotateEncryptionKeys",
+    protected: true,
+    permission: "g13.key.rotate",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => accepted({ rotation: context.services.documentVault.rotateEncryptionKeys(context.scope) }),
+  });
+  // FR-G13-018 (E22 data_subject_requests): DPDP DSR lifecycle — register (statutory clock),
+  // adjudicate against VAL-G13-LATTICE (DPO), execute (dual-control custodian, SoD).
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/dsr",
+    operationId: "g13.registerDataSubjectRequest",
+    protected: true,
+    permission: "g13.dsr.register",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        dataSubjectRequest: context.services.documentVault.registerDataSubjectRequest(context.scope, {
+          dataSubjectEmployeeId: requiredString(body, "dataSubjectEmployeeId"),
+          requestType: readDsrType(body),
+          consentRefId: optionalString(body, "consentRefId"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/dsr/{id}",
+    operationId: "g13.getDataSubjectRequest",
+    protected: true,
+    permission: "g13.dsr.read",
+    handler: (context) => ok({ dataSubjectRequest: context.services.documentVault.getDataSubjectRequest(context.scope, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/dsr/{id}:adjudicate",
+    operationId: "g13.adjudicateDataSubjectRequest",
+    protected: true,
+    permission: "g13.dsr.adjudicate",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body ?? {});
+      return accepted({
+        dataSubjectRequest: context.services.documentVault.adjudicateDataSubjectRequest(context.scope, requiredParam(context.params, "id"), {
+          decision: readDsrDecision(body),
+          resolutionNote: optionalString(body, "resolutionNote"),
+        }),
+      });
+    },
+  });
+  // Erasure attempted against a held/retained/WORM document is blocked with 409
+  // ERR-G13-ERASURE_EXEMPTED (pass body.documentId for the single-document attempt).
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/dsr/{id}:execute",
+    operationId: "g13.executeDataSubjectRequest",
+    protected: true,
+    permission: "g13.dsr.execute",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body ?? {});
+      return accepted({
+        dataSubjectRequest: context.services.documentVault.executeDataSubjectRequest(
+          context.scope,
+          requiredParam(context.params, "id"),
+          optionalString(body, "documentId")
+        ),
+      });
+    },
+  });
+}
+
+function readDsrType(body: Record<string, unknown>): "ACCESS" | "ERASURE" | "RECTIFICATION" | "PORTABILITY" {
+  const value = requiredString(body, "requestType");
+  switch (value) {
+    case "ACCESS":
+    case "ERASURE":
+    case "RECTIFICATION":
+    case "PORTABILITY":
+      return value;
+    default:
+      throw new FoundationError("VALIDATION_FAILED", "Unsupported data-subject request type", { field: "requestType" });
+  }
+}
+
+function readDsrDecision(body: Record<string, unknown>): "PROCEED" | "REJECT" | undefined {
+  const value = optionalString(body, "decision");
+  if (value === undefined || value === "PROCEED" || value === "REJECT") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", "decision must be PROCEED or REJECT", { field: "decision" });
 }
 
 function readPrincipalType(body: Record<string, unknown>): "USER" | "ROLE" {
