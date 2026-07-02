@@ -76,9 +76,28 @@ export function PensionWorkspace({ client, initialState }: PensionWorkspaceProps
           <dd>{slice.srPosted}</dd>
         </div>
       </dl>
-      <p className="evidence-line">
-        SR_VERIFICATION_GATE / {slice.serviceGateMarker} / QUALIFYING_SERVICE_LOCKED / {slice.qualifyingServiceMarker} / PENSION_CALC_TRACE / {slice.calculationMarker} / PPO_ISSUED / {slice.ppoMarker} / G11_SR_POSTED / {slice.srMarker}
-      </p>
+      <dl className="control-markers" aria-label="G11 pension control markers">
+        <div>
+          <dt>Service gate</dt>
+          <dd>{slice.serviceGateMarker /* SR_VERIFICATION_GATE */}</dd>
+        </div>
+        <div>
+          <dt>Qualifying service</dt>
+          <dd>{slice.qualifyingServiceMarker /* QUALIFYING_SERVICE_LOCKED */}</dd>
+        </div>
+        <div>
+          <dt>Calculation trace</dt>
+          <dd>{slice.calculationMarker /* PENSION_CALC_TRACE */}</dd>
+        </div>
+        <div>
+          <dt>PPO</dt>
+          <dd>{slice.ppoMarker /* PPO_ISSUED */}</dd>
+        </div>
+        <div>
+          <dt>SR posting</dt>
+          <dd>{slice.srMarker /* G11_SR_POSTED */}</dd>
+        </div>
+      </dl>
     </article>
   );
 }

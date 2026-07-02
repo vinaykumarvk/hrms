@@ -63,6 +63,16 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G10-RUN-IMMUTABLE":
     case "ERR-G10-REOPEN-BLOCKED":
     case "ERR-G10-RECOVERY-NET":
+    // BRD G10 §12: control totals that do not tie out (incl. disbursed+held+failed),
+    // approval/disbursement before reconciliation sign-off, and a legally-barred recovery
+    // (FR-09 AC5) are 409 CONFLICT.
+    case "ERR-G10-RECON-TIEOUT":
+    case "ERR-G10-RECON-UNSIGNED":
+    case "ERR-G10-RECOVERY-BARRED":
+    // BRD G11 FR-05/FR-22: cross-scheme benefit requests and DCRG release attempts while the
+    // Rule 9 proceeding is still ACTIVE are 409 CONFLICT.
+    case "ERR-G11-SCHEME-MISMATCH":
+    case "ERR-G11-PROVISIONAL-PENDING":
       return 409;
     case "ELIGIBILITY_FAILED":
     case "WINDOW_EXPIRED":
@@ -79,9 +89,15 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G10-RULE-EXPR":
     case "ERR-G10-RATE-NOTFOUND":
     case "ERR-G10-PT-STATE":
-    // BRD G11 §12: rule-row/commutation-factor resolution misses are 422 (fail closed).
+    // BRD G11 §12: rule-row/commutation-factor resolution misses are 422 (fail closed);
+    // FR-06 AC1: an over-limit commuted fraction is 422, rejected — never clamped.
     case "ERR-G11-RULE-NOT-EFFECTIVE":
     case "ERR-G11-FACTOR-NOT-FOUND":
+    case "ERR-G11-COMMUTATION-LIMIT":
+    // BRD G11 FR-14: invalid destination account and a failed/absent pre-credit account
+    // verification (IR16 fail-closed gate) are 422.
+    case "ERR-G11-INVALID-ACCOUNT":
+    case "ERR-G11-ACCOUNT-VERIFY":
       return 422;
     case "PRECONDITION_FAILED":
     // BRD G06 §9.4: effecting blocked by an active interim stay is a 412 precondition failure.

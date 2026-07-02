@@ -76,9 +76,28 @@ export function PayrollWorkspace({ client, initialState }: PayrollWorkspaceProps
           <dd>{slice.lastPayDrawnFeeds}</dd>
         </div>
       </dl>
-      <p className="evidence-line">
-        PAYROLL_TRACE / {slice.calculationMarker} / RULE_VERSION_SNAPSHOT / {slice.ruleSnapshotMarker} / INPUT_LOCKED / {slice.inputLockMarker} / BANK_X3_EXPORT / {slice.x3Marker} / LAST_PAY_DRAWN / {slice.lastPayMarker}
-      </p>
+      <dl className="control-markers" aria-label="G10 payroll control markers">
+        <div>
+          <dt>Calculation trace</dt>
+          <dd>{slice.calculationMarker /* PAYROLL_TRACE */}</dd>
+        </div>
+        <div>
+          <dt>Rule snapshot</dt>
+          <dd>{slice.ruleSnapshotMarker /* RULE_VERSION_SNAPSHOT */}</dd>
+        </div>
+        <div>
+          <dt>Input lock</dt>
+          <dd>{slice.inputLockMarker /* INPUT_LOCKED */}</dd>
+        </div>
+        <div>
+          <dt>Bank export</dt>
+          <dd>{slice.x3Marker /* BANK_X3_EXPORT */}</dd>
+        </div>
+        <div>
+          <dt>Last pay drawn</dt>
+          <dd>{slice.lastPayMarker /* LAST_PAY_DRAWN */}</dd>
+        </div>
+      </dl>
     </article>
   );
 }

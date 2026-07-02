@@ -25,7 +25,9 @@ import { AparTierForms } from "./modules/g08/AparTierForms";
 import { DisciplinaryWorkspace } from "./modules/g09/DisciplinaryWorkspace";
 import { DisciplinaryCaseWorkbench } from "./modules/g09/DisciplinaryCaseWorkbench";
 import { PayrollWorkspace } from "./modules/g10/PayrollWorkspace";
+import { PayrollRunConsole } from "./modules/g10/PayrollRunConsole";
 import { PensionWorkspace } from "./modules/g11/PensionWorkspace";
+import { PensionCaseConsole } from "./modules/g11/PensionCaseConsole";
 import { AnalyticsWorkspace } from "./modules/g14/AnalyticsWorkspace";
 import { ServiceRegisterTimeline } from "./modules/g12/ServiceRegisterTimeline";
 import { DocumentVaultView } from "./modules/g13/DocumentVaultView";
@@ -123,9 +125,11 @@ export function App() {
       <section className="workspace-grid" aria-label="Phase 09 compensation wave">
         <RouteGuard permissions={permissions} requiredPermission="g10.payroll.read" routeLabel="Payroll workspace (G10)">
           <PayrollWorkspace client={client} />
+          <PayrollRunConsole client={client} permissions={permissions} />
         </RouteGuard>
         <RouteGuard permissions={permissions} requiredPermission="g11.pension.read" routeLabel="Pension & Retirement workspace (G11)">
           <PensionWorkspace client={client} />
+          <PensionCaseConsole client={client} permissions={permissions} />
         </RouteGuard>
       </section>
       <section className="workspace-grid" aria-label="Phase 10 analytics and release readiness">

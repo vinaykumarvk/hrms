@@ -791,6 +791,30 @@ export class DisciplinaryService {
     return { verified: true, eventCount: rows.length };
   }
 
+  /**
+   * G11 FR-22 linkage seam: OPEN proceedings for an employee. The Rule 9 provisional-pension
+   * gate consumes this to withhold DCRG while departmental proceedings are pending.
+   */
+  listOpenProceedings(scope: TenantScope, employeeId: string): DisciplinaryCase[] {
+    requireTenantScope(scope);
+    return this.cases
+      .filter((item) => this.inScope(item, scope) && item.chargedEmployeeId === employeeId && item.caseStatus === "OPEN")
+      .map((item) => ({ ...item }));
+  }
+
+  /**
+   * G10 FR-09 linkage seam: scoped read of one penalty order. The G10 recovery scheduler
+   * consumes this so every scheduled recovery ties to a real upstream G09 order — never a stub.
+   */
+  getPenaltyOrder(scope: TenantScope, penaltyOrderId: string): PenaltyOrder {
+    requireTenantScope(scope);
+    const order = this.penaltyOrders.find((item) => this.inScope(item, scope) && item.id === penaltyOrderId);
+    if (!order) {
+      throw new FoundationError("NOT_FOUND", "Penalty order not found");
+    }
+    return { ...order, penaltyItems: order.penaltyItems ? [...order.penaltyItems] : undefined };
+  }
+
   summary(scope: TenantScope): { cases: number; penalties: number; confidential: number; impactSignals: number } {
     requireTenantScope(scope);
     const cases = this.cases.filter((item) => this.inScope(item, scope));

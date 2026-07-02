@@ -21,7 +21,12 @@ export const HRMS_API_ROUTES = {
   disciplinarySummary: "/api/v1/disciplinary/summary",
   disciplinaryCases: "/api/v1/disciplinary/cases",
   payrollSummary: "/api/v1/payroll/summary",
+  // PH-09E: run-lifecycle console + payslip line source (the compute response carries the
+  // per-employee component lines the payslip view renders — no separate payslip read route exists).
+  payrollSalaryStructures: "/api/v1/payroll/salary-structures",
+  payrollRuns: "/api/v1/payroll/runs",
   pensionSummary: "/api/v1/pension/summary",
+  pensionCases: "/api/v1/pension/cases",
   analyticsSummary: "/api/v1/analytics/summary",
   srIngest: "/api/v1/sr/ingest",
   srEmployees: "/api/v1/sr/employees",
@@ -210,6 +215,169 @@ export interface PensionSliceSummary {
   calculationMarker: "PENSION_CALC_TRACE";
   ppoMarker: "PPO_ISSUED";
   srMarker: "G11_SR_POSTED";
+}
+
+// ---- PH-09E: G10 payroll run lifecycle + payslip projection ----
+
+/** g10_payroll_runs status machine the run console mirrors (invalid verbs stay hidden). */
+export type PayrollRunStatus = "OPEN" | "INPUT_LOCKED" | "COMPUTED" | "RECONCILED" | "APPROVED" | "LOCKED" | "DISBURSED" | "CLOSED";
+
+/** Lifecycle verbs on POST /api/v1/payroll/runs/{id}:{verb} (PH-09 routes). */
+export type PayrollRunLifecycleVerb = "lock-inputs" | "compute" | "reconcile" | "approve" | "lock" | "disburse";
+
+/** One payslip component line (BASIC/DA/HRA earnings, NPS/PT/LOP deductions) from the run's PAYROLL_TRACE. */
+export interface PayslipComponentLine {
+  code: string;
+  amountCents: number;
+  marker: string;
+  sourceRef?: string;
+}
+
+/**
+ * One employee's computed payslip projection inside a payroll run. The API exposes no
+ * separate payslip read route; the compute response's per-employee line (with its
+ * component trace) IS the payslip data the payslip view renders.
+ */
+export interface PayrollRunLineView {
+  employeeId: string;
+  salaryStructureId: string;
+  basicPayCents: number;
+  earnedBasicCents: number;
+  daCents: number;
+  hraCents: number;
+  grossCents: number;
+  deductionsCents: number;
+  netPayCents: number;
+  trace: PayslipComponentLine[];
+}
+
+/** The payroll run as the g10 lifecycle routes return it (201 create, 202 verbs). */
+export interface PayrollRunView {
+  id: string;
+  period: string;
+  status: PayrollRunStatus;
+  makerUserId: string;
+  approvedByUserId?: string;
+  ruleVersionSnapshot?: string;
+  inputSnapshotHash?: string;
+  lines: PayrollRunLineView[];
+  totals: { grossCents: number; deductionsCents: number; netPayCents: number };
+  bankBatch?: {
+    id: string;
+    adapter: "X3_BANK_SANDBOX";
+    marker: "BANK_X3_EXPORT";
+    status: "TRANSMITTED" | "RECONCILED";
+    totalNetCents: number;
+  };
+}
+
+/** 201/202 body of the g10 run routes. */
+export interface PayrollRunActionResult {
+  payrollRun: PayrollRunView;
+}
+
+/** Request body for POST /api/v1/payroll/salary-structures (g10.createSalaryStructure). */
+export interface SalaryStructureCreateInput {
+  employeeId: string;
+  effectiveFrom: string;
+  basicPayCents?: number;
+  daRateBps?: number;
+  hraRateBps?: number;
+  npsRateBps?: number;
+  professionalTaxCents?: number;
+  ruleVersion?: string;
+}
+
+/** 201 body of POST /api/v1/payroll/salary-structures. */
+export interface SalaryStructureCreateResult {
+  salaryStructure: {
+    id: string;
+    employeeId: string;
+    basicPayCents: number;
+    ruleVersion: string;
+    effectiveFrom: string;
+  };
+}
+
+// ---- PH-09E: G11 pension case lifecycle + benefit estimator ----
+
+export type PensionScheme = "OPS" | "NPS" | "UPS";
+export type PensionCaseStatus =
+  | "DRAFT"
+  | "SR_VERIFICATION"
+  | "CALCULATION"
+  | "PENDING_SANCTION"
+  | "SANCTIONED"
+  | "PPO_ISSUED"
+  | "SETTLED"
+  | "CLOSED"
+  | "ON_HOLD";
+
+/** NPS benefit event branch for the estimator (FR-G11-05 AC4/AC4a). */
+export type PensionNpsEvent = "SUPERANNUATION" | "DEATH_IN_SERVICE" | "INVALIDATION";
+
+/** The scheme-branched calculation the estimator round-trips — figures are SERVER-computed only. */
+export interface PensionCalculationView {
+  calculationId: string;
+  scheme: PensionScheme;
+  benefitOutcome: string;
+  pensionCents: number;
+  trace: {
+    marker: "PENSION_CALC_TRACE";
+    ruleVersion: string;
+    ruleVersionRef: string;
+    formula: string;
+    inputs: { lastBasicPayCents: number; qualifyingServiceMonths: number };
+  };
+}
+
+/** The pension case as the g11 routes return it. */
+export interface PensionCaseView {
+  id: string;
+  caseNo: string;
+  employeeId: string;
+  separationDate: string;
+  scheme: PensionScheme;
+  status: PensionCaseStatus;
+  serviceVerification?: {
+    srVerified: boolean;
+    totalServiceMonths: number;
+    penaltyExclusionMonths: number;
+    qualifyingServiceMonths: number;
+    status: "QUALIFYING_SERVICE_LOCKED";
+  };
+  calculation?: PensionCalculationView;
+}
+
+/** Request body for POST /api/v1/pension/cases (g11.createCase). */
+export interface PensionCaseCreateInput {
+  employeeId: string;
+  separationDate: string;
+  scheme: PensionScheme;
+}
+
+/** Request body for POST /api/v1/pension/cases/{id}:verify-service (SR_VERIFICATION_GATE). */
+export interface PensionServiceVerifyInput {
+  totalServiceMonths: number;
+  penaltyExclusionMonths?: number;
+  srCertified: boolean;
+}
+
+/**
+ * Estimator input for POST /api/v1/pension/cases/{id}:compute — the scheme-branched
+ * benefit estimation endpoint. The browser validates presence/shape only; every
+ * statutory figure comes back from the server.
+ */
+export interface PensionEstimateInput {
+  ruleVersion?: string;
+  asOf?: string;
+  upsOptedIn?: boolean;
+  npsEvent?: PensionNpsEvent;
+}
+
+/** 201/202 body of the g11 case routes. */
+export interface PensionCaseActionResult {
+  pensionCase: PensionCaseView;
 }
 
 export interface AnalyticsSliceSummary {
@@ -657,7 +825,16 @@ export interface HrmsClient {
   recordAparReview(formId: string, input: AparReviewInput, idempotencyKey: string): Promise<AparFormActionResult>;
   nominateForTraining(input: TrainingNominationInput, idempotencyKey: string): Promise<TrainingNominationResult>;
   getPayrollSlice(): Promise<PayrollSliceSummary>;
+  // PH-09E G10: salary structure + run lifecycle (create -> lock-inputs -> compute -> reconcile
+  // -> approve -> lock -> disburse); the compute response carries the payslip lines.
+  createSalaryStructure(input: SalaryStructureCreateInput, idempotencyKey: string): Promise<SalaryStructureCreateResult>;
+  createPayrollRun(period: string, idempotencyKey: string): Promise<PayrollRunActionResult>;
+  actOnPayrollRun(runId: string, verb: PayrollRunLifecycleVerb, idempotencyKey: string): Promise<PayrollRunActionResult>;
   getPensionSlice(): Promise<PensionSliceSummary>;
+  // PH-09E G11: pension case lifecycle + benefit estimator (scheme-branched server compute).
+  createPensionCase(input: PensionCaseCreateInput, idempotencyKey: string): Promise<PensionCaseActionResult>;
+  verifyPensionService(caseId: string, input: PensionServiceVerifyInput, idempotencyKey: string): Promise<PensionCaseActionResult>;
+  estimatePensionBenefits(caseId: string, input: PensionEstimateInput, idempotencyKey: string): Promise<PensionCaseActionResult>;
   getAnalyticsSlice(): Promise<AnalyticsSliceSummary>;
   ingestServiceRegister(input: ServiceRegisterIngestInput, idempotencyKey: string): Promise<unknown>;
 }
@@ -887,6 +1064,28 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
       const summary = await request<Omit<PayrollSliceSummary, "inputLockMarker" | "lastPayMarker">>(HRMS_API_ROUTES.payrollSummary);
       return { ...summary, inputLockMarker: "INPUT_LOCKED", lastPayMarker: "LAST_PAY_DRAWN" };
     },
+    createSalaryStructure: (input, idempotencyKey) =>
+      postWithIdempotency<SalaryStructureCreateResult>(HRMS_API_ROUTES.payrollSalaryStructures, input, idempotencyKey),
+    createPayrollRun: (period, idempotencyKey) =>
+      postWithIdempotency<PayrollRunActionResult>(HRMS_API_ROUTES.payrollRuns, { period }, idempotencyKey),
+    actOnPayrollRun: (runId, verb, idempotencyKey) =>
+      postWithIdempotency<PayrollRunActionResult>(`${HRMS_API_ROUTES.payrollRuns}/${encodeURIComponent(runId)}:${verb}`, {}, idempotencyKey),
+    createPensionCase: (input, idempotencyKey) =>
+      postWithIdempotency<PensionCaseActionResult>(HRMS_API_ROUTES.pensionCases, input, idempotencyKey),
+    verifyPensionService: (caseId, input, idempotencyKey) =>
+      postWithIdempotency<PensionCaseActionResult>(
+        `${HRMS_API_ROUTES.pensionCases}/${encodeURIComponent(caseId)}:verify-service`,
+        input,
+        idempotencyKey
+      ),
+    // The estimator posts to the scheme-branched compute endpoint; the browser never
+    // computes statutory figures itself.
+    estimatePensionBenefits: (caseId, input, idempotencyKey) =>
+      postWithIdempotency<PensionCaseActionResult>(
+        `${HRMS_API_ROUTES.pensionCases}/${encodeURIComponent(caseId)}:compute`,
+        { ruleVersion: input.ruleVersion ?? "PENSION-RULE-2026-01", asOf: input.asOf, upsOptedIn: input.upsOptedIn, npsEvent: input.npsEvent },
+        idempotencyKey
+      ),
     getPensionSlice: async () => {
       const summary = await request<Omit<PensionSliceSummary, "qualifyingServiceMarker" | "srMarker">>(HRMS_API_ROUTES.pensionSummary);
       return { ...summary, qualifyingServiceMarker: "QUALIFYING_SERVICE_LOCKED", srMarker: "G11_SR_POSTED" };

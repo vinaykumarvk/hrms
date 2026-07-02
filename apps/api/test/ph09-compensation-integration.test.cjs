@@ -79,8 +79,18 @@ test("PH-09 G03 LOP, G09 penalty, G10_LAST_PAY_DRAWN_FEED, SoD, and PROVENANCE_C
     srCertified: true,
   });
   assert.equal(verified.serviceVerification.penaltyMarker, "G09_PENALTY_QS_EXCLUSION");
+  // PH-09C: the scheme-branched FR-05 engine resolves E35/E36 as-of the separation date
+  // (fail closed) — seed the effective rule rows (integer-cents test fixtures).
+  services.pensionRules.addPensionLimitRule(maker, {
+    ruleCode: "E35-INTEGRATION",
+    minPensionCents: 900000,
+    maxPensionCents: 12500000,
+    effectiveFrom: "2026-01-01",
+  });
+  services.pensionRules.addRoundingRule(maker, { ruleCode: "E36-INTEGRATION", effectiveFrom: "2026-01-01" });
   const calculated = services.pension.computeBenefits(maker, pensionCase.id, { ruleVersion: "PENSION-RULE-2026-01" });
   assert.equal(calculated.calculation.trace.marker, "PENSION_CALC_TRACE");
+  assert.equal(calculated.calculation.benefitOutcome, "FULL_PENSION");
   assert.throws(
     () => services.pension.sanction(maker, pensionCase.id),
     (error) => error instanceof FoundationError && error.code === "PRECONDITION_FAILED" && String(error.details.marker) === "PENSION_SOD"

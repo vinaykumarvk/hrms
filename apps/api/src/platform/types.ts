@@ -58,7 +58,7 @@ export type G09DomainErrorCode =
   | "ERR-G09-ACTOR-CONFLICT"
   | "ERR-G09-DUE-PROCESS-INCOMPLETE";
 
-/** BRD G10 §12 named domain error codes (docs/brd/v3/G10-payroll-and-benefits.md FR-01/02/04/09/13/16 error catalogue). */
+/** BRD G10 §12 named domain error codes (docs/brd/v3/G10-payroll-and-benefits.md FR-01/02/04/09/13/14/15/16 error catalogue). */
 export type G10DomainErrorCode =
   | "ERR-G10-RULE-EXPR"
   | "ERR-G10-RATE-OVERLAP"
@@ -67,12 +67,20 @@ export type G10DomainErrorCode =
   | "ERR-G10-RUN-INFLIGHT"
   | "ERR-G10-RUN-IMMUTABLE"
   | "ERR-G10-REOPEN-BLOCKED"
-  | "ERR-G10-RECOVERY-NET";
+  | "ERR-G10-RECOVERY-NET"
+  | "ERR-G10-RECON-TIEOUT"
+  | "ERR-G10-RECON-UNSIGNED"
+  | "ERR-G10-RECOVERY-BARRED";
 
-/** BRD G11 §12 named domain error codes (docs/brd/v3/G11-retirement-and-pension.md FR-19/FR-06 error catalogue). */
+/** BRD G11 §12 named domain error codes (docs/brd/v3/G11-retirement-and-pension.md FR-05/06/14/19/22 error catalogue). */
 export type G11DomainErrorCode =
   | "ERR-G11-RULE-NOT-EFFECTIVE"
-  | "ERR-G11-FACTOR-NOT-FOUND";
+  | "ERR-G11-FACTOR-NOT-FOUND"
+  | "ERR-G11-SCHEME-MISMATCH"
+  | "ERR-G11-COMMUTATION-LIMIT"
+  | "ERR-G11-PROVISIONAL-PENDING"
+  | "ERR-G11-INVALID-ACCOUNT"
+  | "ERR-G11-ACCOUNT-VERIFY";
 
 export type WireErrorCode =
   | CanonicalErrorCode

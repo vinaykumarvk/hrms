@@ -3,6 +3,13 @@ import { optionalNumber, optionalString, readBodyRecord, requiredString } from "
 import { ApiContext, ApiQuery, ApiResponse, RouteDefinition } from "../http/apiTypes";
 import { PensionScheme } from "../modules/g11/pensionService";
 import { G11MoneyRounding, G11RuleAppliesTo } from "../modules/g11/pensionRuleRepository";
+import {
+  G11EnhancedBasis,
+  G11GratuityType,
+  G11ProceedingsType,
+  G11ProvisionalOutcome,
+  NpsBenefitEvent,
+} from "../modules/g11/pensionBenefitRepository";
 import { FoundationError } from "../platform/types";
 import { ph03Ids } from "../seed/ph03Seed";
 
@@ -16,6 +23,12 @@ export const g11RouteEvidence = {
   // pen_rounding_rules) with as-of resolution.
   rules: "/api/v1/pension/rules/{table}",
   rulesResolve: "/api/v1/pension/rules/{table}/resolve",
+  // PH-09C / BRD FR-06/07/08/22: scheme-branched benefit engines on the rule substrate.
+  commutation: "/api/v1/pension/cases/{id}/commutation",
+  gratuityCompute: "/api/v1/pension/cases/{id}/gratuity:compute",
+  familyPensionCompute: "/api/v1/pension/cases/{id}/family-pension:compute",
+  provisionalPension: "/api/v1/pension/cases/{id}/provisional-pension",
+  provisionalConclude: "/api/v1/pension/provisional-pension/{id}:conclude",
   markers: ["SR_VERIFICATION_GATE", "QUALIFYING_SERVICE_LOCKED", "PENSION_CALC_TRACE", "PPO_ISSUED", "G11_SR_POSTED"],
 };
 
@@ -69,7 +82,127 @@ export function registerG11Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted({ pensionCase: context.services.pension.computeBenefits(context.actor, requiredParam(context.params, "id"), { ruleVersion: optionalString(body, "ruleVersion") ?? "PENSION-RULE-2026-01" }) });
+        return accepted({
+          pensionCase: context.services.pension.computeBenefits(context.actor, requiredParam(context.params, "id"), {
+            ruleVersion: optionalString(body, "ruleVersion") ?? "PENSION-RULE-2026-01",
+            asOf: optionalString(body, "asOf"),
+            scheme: optionalString(body, "scheme") === undefined ? undefined : readPensionSchemeValue(requiredString(body, "scheme")),
+            upsOptedIn: readOptionalBoolean(body, "upsOptedIn"),
+            npsEvent: readNpsEvent(optionalString(body, "npsEvent")),
+          }),
+        });
+      },
+    },
+    // ---- PH-09C / FR-G11-06: commutation (factor lookup by age-next-birthday) ----
+    {
+      method: "POST",
+      path: "/api/v1/pension/cases/{id}/commutation",
+      operationId: "g11.computeCommutation",
+      protected: true,
+      permission: "g11.pension.compute",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          commutation: context.services.pensionBenefits.computeCommutation(context.actor, requiredParam(context.params, "id"), {
+            commutedFractionBps: requiredNumber(body, "commutedFractionBps"),
+            ageNextBirthday: requiredNumber(body, "ageNextBirthday"),
+            reductionEffectiveDate: requiredString(body, "reductionEffectiveDate"),
+            asOf: optionalString(body, "asOf"),
+          }),
+        });
+      },
+    },
+    // ---- PH-09C / FR-G11-07: gratuity by type with E33 ceiling clamp ----
+    {
+      method: "POST",
+      path: "/api/v1/pension/cases/{id}/gratuity:compute",
+      operationId: "g11.computeGratuity",
+      protected: true,
+      permission: "g11.pension.compute",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          gratuity: context.services.pensionBenefits.computeGratuity(context.actor, requiredParam(context.params, "id"), {
+            gratuityType: readGratuityType(requiredString(body, "gratuityType")),
+            asOf: optionalString(body, "asOf"),
+            serviceSlabFactorTenThousandths: optionalNumber(body, "serviceSlabFactorTenThousandths"),
+            serviceGratuityMonthsTenThousandths: optionalNumber(body, "serviceGratuityMonthsTenThousandths"),
+          }),
+        });
+      },
+    },
+    // ---- PH-09C / FR-G11-08: family pension (normal + ENHANCED window) ----
+    {
+      method: "POST",
+      path: "/api/v1/pension/cases/{id}/family-pension:compute",
+      operationId: "g11.computeFamilyPension",
+      protected: true,
+      permission: "g11.pension.compute",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          familyPension: context.services.pensionBenefits.computeFamilyPension(context.actor, requiredParam(context.params, "id"), {
+            enhancedBasis: readEnhancedBasis(requiredString(body, "enhancedBasis")),
+            eventDate: requiredString(body, "eventDate"),
+            dateOfBirth: optionalString(body, "dateOfBirth"),
+            wouldBeSuperannuationDate: optionalString(body, "wouldBeSuperannuationDate"),
+            asOf: optionalString(body, "asOf"),
+          }),
+        });
+      },
+    },
+    // ---- PH-09C / FR-G11-22: Rule 9 provisional pension (DCRG withheld) ----
+    {
+      method: "POST",
+      path: "/api/v1/pension/cases/{id}/provisional-pension",
+      operationId: "g11.createProvisionalPension",
+      protected: true,
+      permission: "g11.pension.compute",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          provisionalPension: context.services.pensionBenefits.createProvisionalPension(context.actor, requiredParam(context.params, "id"), {
+            proceedingsRef: requiredString(body, "proceedingsRef"),
+            proceedingsType: readProceedingsType(requiredString(body, "proceedingsType")),
+            commencedOn: requiredString(body, "commencedOn"),
+            asOf: optionalString(body, "asOf"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/pension/cases/{id}/provisional-pension",
+      operationId: "g11.getProvisionalPension",
+      protected: true,
+      permission: "g11.pension.read",
+      handler: (context) => ok({ provisionalPensions: context.services.pensionBenefits.getProvisionalPension(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/pension/provisional-pension/{id}:conclude",
+      operationId: "g11.concludeProvisionalPension",
+      protected: true,
+      permission: "g11.pension.sanction",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          provisionalPension: context.services.pensionBenefits.concludeProvisionalPension(context.actor, requiredParam(context.params, "id"), {
+            conclusionOutcome: readProvisionalOutcome(requiredString(body, "conclusionOutcome")),
+            concludedOn: requiredString(body, "concludedOn"),
+            finalRecoveryAmountCents: optionalNumber(body, "finalRecoveryAmountCents"),
+          }),
+        });
       },
     },
     {
@@ -279,11 +412,63 @@ function readMoneyRounding(value: string | undefined): G11MoneyRounding | undefi
 }
 
 function readPensionScheme(body: Record<string, unknown>): PensionScheme {
-  const value = optionalString(body, "scheme") ?? "OPS";
+  return readPensionSchemeValue(optionalString(body, "scheme") ?? "OPS");
+}
+
+function readPensionSchemeValue(value: string): PensionScheme {
   if (value === "OPS" || value === "NPS" || value === "UPS") {
     return value;
   }
-  throw new Error(`Unsupported pension scheme ${value}`);
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported pension scheme ${value}`, { field: "scheme" });
+}
+
+function readNpsEvent(value: string | undefined): NpsBenefitEvent | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "SUPERANNUATION" || value === "DEATH_IN_SERVICE" || value === "INVALIDATION") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported npsEvent ${value}`, { field: "npsEvent" });
+}
+
+function readGratuityType(value: string): G11GratuityType {
+  if (value === "RETIREMENT_GRATUITY" || value === "DEATH_GRATUITY" || value === "SERVICE_GRATUITY") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported gratuityType ${value}`, { field: "gratuityType" });
+}
+
+function readEnhancedBasis(value: string): G11EnhancedBasis {
+  if (value === "IN_SERVICE" || value === "AFTER_RETIREMENT") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported enhancedBasis ${value}`, { field: "enhancedBasis" });
+}
+
+function readProceedingsType(value: string): G11ProceedingsType {
+  if (value === "DEPARTMENTAL" || value === "JUDICIAL") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported proceedingsType ${value}`, { field: "proceedingsType" });
+}
+
+function readProvisionalOutcome(value: string): G11ProvisionalOutcome {
+  if (value === "EXONERATED" || value === "PENALTY_NO_RECOVERY" || value === "PENALTY_WITH_RECOVERY") {
+    return value;
+  }
+  throw new FoundationError("VALIDATION_FAILED", `Unsupported conclusionOutcome ${value}`, { field: "conclusionOutcome" });
+}
+
+function readOptionalBoolean(body: Record<string, unknown>, key: string): boolean | undefined {
+  const value = body[key];
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    throw new FoundationError("VALIDATION_FAILED", `${key} must be a boolean`, { field: key });
+  }
+  return value;
 }
 
 function readBoolean(body: Record<string, unknown>, key: string, fallback: boolean): boolean {

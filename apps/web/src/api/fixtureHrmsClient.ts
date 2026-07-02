@@ -34,8 +34,18 @@ import {
   PersonalDetailChangeRecord,
   TransferInitiateInput,
   TransferOrderRecord,
+  PayrollRunActionResult,
+  PayrollRunLifecycleVerb,
+  PayrollRunStatus,
+  PayrollRunView,
   PayrollSliceSummary,
+  PensionCaseActionResult,
+  PensionCaseCreateInput,
+  PensionCaseView,
+  PensionEstimateInput,
+  PensionServiceVerifyInput,
   PensionSliceSummary,
+  SalaryStructureCreateInput,
   PersonalDetailsSliceSummary,
   PromotionSliceSummary,
   ServiceRegisterIngestInput,
@@ -342,6 +352,91 @@ export function createFixtureHrmsClient(): HrmsClient {
   const trainingSessions = [{ id: "training-session-fixture-000001", capacity: 2, status: "OPEN" as const }];
   const trainingNominations: TrainingNominationView[] = [];
 
+  // --- PH-09E compensation-wave interactive fixtures (stateful, mirroring the API state machines) ---
+  interface FixtureSalaryStructure {
+    id: string;
+    employeeId: string;
+    basicPayCents: number;
+    daRateBps: number;
+    hraRateBps: number;
+    npsRateBps: number;
+    professionalTaxCents: number;
+    ruleVersion: string;
+    effectiveFrom: string;
+  }
+  const salaryStructures: FixtureSalaryStructure[] = [];
+  const payrollRuns: PayrollRunView[] = [];
+  /** Mirrors the g10 route state machine: each lifecycle verb is legal from exactly one status. */
+  const runVerbTransitions: Record<PayrollRunLifecycleVerb, { from: PayrollRunStatus; to: PayrollRunStatus }> = {
+    "lock-inputs": { from: "OPEN", to: "INPUT_LOCKED" },
+    compute: { from: "INPUT_LOCKED", to: "COMPUTED" },
+    reconcile: { from: "COMPUTED", to: "RECONCILED" },
+    approve: { from: "RECONCILED", to: "APPROVED" },
+    lock: { from: "APPROVED", to: "LOCKED" },
+    disburse: { from: "LOCKED", to: "DISBURSED" },
+  };
+
+  function cloneRun(run: PayrollRunView): PayrollRunView {
+    return {
+      ...run,
+      lines: run.lines.map((line) => ({ ...line, trace: line.trace.map((step) => ({ ...step })) })),
+      totals: { ...run.totals },
+      bankBatch: run.bankBatch ? { ...run.bankBatch } : undefined,
+    };
+  }
+
+  /** Deterministic fixture payslip lines from the salary structure — same shape as PAYROLL_TRACE. */
+  function computeFixtureLines(run: PayrollRunView): void {
+    run.lines = salaryStructures.map((structure) => {
+      const daCents = Math.floor((structure.basicPayCents * structure.daRateBps) / 10000);
+      const hraCents = Math.floor((structure.basicPayCents * structure.hraRateBps) / 10000);
+      const npsCents = Math.floor((structure.basicPayCents * structure.npsRateBps) / 10000);
+      const grossCents = structure.basicPayCents + daCents + hraCents;
+      const deductionsCents = npsCents + structure.professionalTaxCents;
+      return {
+        employeeId: structure.employeeId,
+        salaryStructureId: structure.id,
+        basicPayCents: structure.basicPayCents,
+        earnedBasicCents: structure.basicPayCents,
+        daCents,
+        hraCents,
+        grossCents,
+        deductionsCents,
+        netPayCents: grossCents - deductionsCents,
+        trace: [
+          { code: "BASIC", amountCents: structure.basicPayCents, marker: "PAYROLL_TRACE" },
+          { code: "DA", amountCents: daCents, marker: "PAYROLL_TRACE" },
+          { code: "HRA", amountCents: hraCents, marker: "PAYROLL_TRACE" },
+          { code: "NPS", amountCents: -npsCents, marker: "PAYROLL_TRACE" },
+          { code: "PT", amountCents: -structure.professionalTaxCents, marker: "PAYROLL_TRACE" },
+        ],
+      };
+    });
+    run.totals = run.lines.reduce(
+      (totals, line) => ({
+        grossCents: totals.grossCents + line.grossCents,
+        deductionsCents: totals.deductionsCents + line.deductionsCents,
+        netPayCents: totals.netPayCents + line.netPayCents,
+      }),
+      { grossCents: 0, deductionsCents: 0, netPayCents: 0 }
+    );
+  }
+
+  const pensionCases: PensionCaseView[] = [];
+  /** Fixture E35 limits mirroring the seeded pension-limit rule row. */
+  const fixturePensionLimits = { minQualifyingYearsForPension: 10, minPensionCents: 900000, maxPensionCents: 12500000, upsMinGuaranteeCents: 1000000 };
+  const fixtureLastBasicPayCents = 10000000;
+
+  function clonePensionCase(pensionCase: PensionCaseView): PensionCaseView {
+    return {
+      ...pensionCase,
+      serviceVerification: pensionCase.serviceVerification ? { ...pensionCase.serviceVerification } : undefined,
+      calculation: pensionCase.calculation
+        ? { ...pensionCase.calculation, trace: { ...pensionCase.calculation.trace, inputs: { ...pensionCase.calculation.trace.inputs } } }
+        : undefined,
+    };
+  }
+
   /** Mirrors the API's APAR state machine: each tier action is legal only from its expected status. */
   function aparTierAction(
     formId: string,
@@ -530,7 +625,182 @@ export function createFixtureHrmsClient(): HrmsClient {
     getAparSlice: () => Promise.resolve({ ...aparSlice }),
     getDisciplinarySlice: () => Promise.resolve({ ...disciplinarySlice }),
     getPayrollSlice: () => Promise.resolve({ ...payrollSlice }),
+    createSalaryStructure: (input: SalaryStructureCreateInput) => {
+      const structure: FixtureSalaryStructure = {
+        id: `salary-structure-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        employeeId: input.employeeId,
+        basicPayCents: input.basicPayCents ?? fixtureLastBasicPayCents,
+        daRateBps: input.daRateBps ?? 4200,
+        hraRateBps: input.hraRateBps ?? 800,
+        npsRateBps: input.npsRateBps ?? 1000,
+        professionalTaxCents: input.professionalTaxCents ?? 20000,
+        ruleVersion: input.ruleVersion ?? "PAY-RULE-2026-01",
+        effectiveFrom: input.effectiveFrom,
+      };
+      if (structure.basicPayCents <= 0) {
+        return Promise.reject(fixtureError(400, "VALIDATION_FAILED", "basicPayCents must be positive"));
+      }
+      fixtureSequence += 1;
+      salaryStructures.push(structure);
+      return Promise.resolve({
+        salaryStructure: {
+          id: structure.id,
+          employeeId: structure.employeeId,
+          basicPayCents: structure.basicPayCents,
+          ruleVersion: structure.ruleVersion,
+          effectiveFrom: structure.effectiveFrom,
+        },
+      });
+    },
+    createPayrollRun: (period: string) => {
+      const run: PayrollRunView = {
+        id: `payroll-run-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        period,
+        status: "OPEN",
+        makerUserId: "usr-payroll-maker",
+        lines: [],
+        totals: { grossCents: 0, deductionsCents: 0, netPayCents: 0 },
+      };
+      fixtureSequence += 1;
+      payrollRuns.push(run);
+      return Promise.resolve<PayrollRunActionResult>({ payrollRun: cloneRun(run) });
+    },
+    actOnPayrollRun: (runId: string, verb: PayrollRunLifecycleVerb) => {
+      const run = payrollRuns.find((candidate) => candidate.id === runId);
+      if (!run) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture payroll run ${runId} not found`));
+      }
+      const transition = runVerbTransitions[verb];
+      if (run.status !== transition.from) {
+        return Promise.reject(
+          fixtureError(409, "PRECONDITION_FAILED", `Run is ${run.status}; ${verb} requires ${transition.from}`)
+        );
+      }
+      if (verb === "lock-inputs" && salaryStructures.length === 0) {
+        return Promise.reject(
+          fixtureError(409, "PRECONDITION_FAILED", "At least one salary structure is required before payroll lock")
+        );
+      }
+      if (verb === "lock-inputs") {
+        run.ruleVersionSnapshot = salaryStructures[0]?.ruleVersion ?? "PAY-RULE-2026-01";
+        run.inputSnapshotHash = `fixture-snapshot-${run.id}`;
+      }
+      if (verb === "compute") {
+        computeFixtureLines(run);
+      }
+      if (verb === "disburse") {
+        run.bankBatch = {
+          id: `bank-batch-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+          adapter: "X3_BANK_SANDBOX",
+          marker: "BANK_X3_EXPORT",
+          status: "RECONCILED",
+          totalNetCents: run.totals.netPayCents,
+        };
+        fixtureSequence += 1;
+      }
+      run.status = transition.to;
+      return Promise.resolve<PayrollRunActionResult>({ payrollRun: cloneRun(run) });
+    },
     getPensionSlice: () => Promise.resolve({ ...pensionSlice }),
+    createPensionCase: (input: PensionCaseCreateInput) => {
+      const pensionCase: PensionCaseView = {
+        id: `pension-case-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        caseNo: `PEN/${input.separationDate.slice(0, 4)}/${String(fixtureSequence).padStart(5, "0")}`,
+        employeeId: input.employeeId,
+        separationDate: input.separationDate,
+        scheme: input.scheme,
+        status: "DRAFT",
+      };
+      fixtureSequence += 1;
+      pensionCases.push(pensionCase);
+      return Promise.resolve<PensionCaseActionResult>({ pensionCase: clonePensionCase(pensionCase) });
+    },
+    verifyPensionService: (caseId: string, input: PensionServiceVerifyInput) => {
+      const pensionCase = pensionCases.find((candidate) => candidate.id === caseId);
+      if (!pensionCase) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture pension case ${caseId} not found`));
+      }
+      if (!input.srCertified) {
+        return Promise.reject(
+          fixtureError(409, "PRECONDITION_FAILED", "SR_VERIFICATION_GATE requires certified Service Register facts")
+        );
+      }
+      if (!Number.isInteger(input.totalServiceMonths) || input.totalServiceMonths <= 0) {
+        return Promise.reject(fixtureError(400, "VALIDATION_FAILED", "totalServiceMonths must be positive"));
+      }
+      const penaltyExclusionMonths = input.penaltyExclusionMonths ?? 0;
+      pensionCase.status = "SR_VERIFICATION";
+      pensionCase.serviceVerification = {
+        srVerified: true,
+        totalServiceMonths: input.totalServiceMonths,
+        penaltyExclusionMonths,
+        qualifyingServiceMonths: Math.max(0, input.totalServiceMonths - penaltyExclusionMonths),
+        status: "QUALIFYING_SERVICE_LOCKED",
+      };
+      return Promise.resolve<PensionCaseActionResult>({ pensionCase: clonePensionCase(pensionCase) });
+    },
+    estimatePensionBenefits: (caseId: string, input: PensionEstimateInput) => {
+      const pensionCase = pensionCases.find((candidate) => candidate.id === caseId);
+      if (!pensionCase) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture pension case ${caseId} not found`));
+      }
+      const verification = pensionCase.serviceVerification;
+      if (!verification || verification.status !== "QUALIFYING_SERVICE_LOCKED") {
+        return Promise.reject(
+          fixtureError(409, "PRECONDITION_FAILED", "QUALIFYING_SERVICE_LOCKED verification is required before pension calculation")
+        );
+      }
+      // Scheme-BRANCHED fixture mirror of computeSchemeBenefit (FR-G11-05): distinct
+      // OPS / UPS / NPS outcomes, never a silent default.
+      let benefitOutcome: string;
+      let pensionCents: number;
+      let formula: string;
+      if (verification.qualifyingServiceMonths < fixturePensionLimits.minQualifyingYearsForPension * 12) {
+        benefitOutcome = "SERVICE_GRATUITY_ONLY";
+        pensionCents = 0;
+        formula = "qualifying<E35.min_qualifying_years_for_pension => SERVICE_GRATUITY route (FR-05 AC1a; no monthly pension)";
+      } else if (pensionCase.scheme === "OPS") {
+        benefitOutcome = "FULL_PENSION";
+        pensionCents = Math.min(
+          fixturePensionLimits.maxPensionCents,
+          Math.max(fixturePensionLimits.minPensionCents, Math.floor(fixtureLastBasicPayCents / 2))
+        );
+        formula = "OPS: basic_pension=flat 50% of emoluments_base, E35 min/max clamped (FR-05 AC1/AC3)";
+      } else if (pensionCase.scheme === "UPS") {
+        if (!input.upsOptedIn) {
+          return Promise.reject(
+            fixtureError(409, "ERR-G11-SCHEME-MISMATCH", "UPS assured payout requires ups_opted_in on the case")
+          );
+        }
+        benefitOutcome = "UPS_ASSURED";
+        pensionCents = Math.max(fixturePensionLimits.upsMinGuaranteeCents, Math.floor(fixtureLastBasicPayCents / 2));
+        formula = "UPS: assured_payout=50% of 12-month average pay with E35 ups_min_guarantee (FR-05 AC4b)";
+      } else if ((input.npsEvent ?? "SUPERANNUATION") === "SUPERANNUATION") {
+        benefitOutcome = "NPS_INDICATIVE";
+        pensionCents = 0;
+        formula = "NPS superannuation: corpus/PRAN + indicative annuity only — excluded from determinism (FR-05 AC4)";
+      } else {
+        benefitOutcome = input.npsEvent === "DEATH_IN_SERVICE" ? "NPS_DEFAULT_FAMILY" : "NPS_DEFAULT_INVALID";
+        pensionCents = Math.floor(fixtureLastBasicPayCents / 2);
+        formula = "NPS death/invalidation: CCS-NPS Rules 2021 OPS-equivalent default benefit (FR-05 AC4a)";
+      }
+      pensionCase.status = "PENDING_SANCTION";
+      pensionCase.calculation = {
+        calculationId: `pen-pension-calc-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        scheme: pensionCase.scheme,
+        benefitOutcome,
+        pensionCents,
+        trace: {
+          marker: "PENSION_CALC_TRACE",
+          ruleVersion: input.ruleVersion ?? "PENSION-RULE-2026-01",
+          ruleVersionRef: "pen-limit-rule-fixture-000001",
+          formula,
+          inputs: { lastBasicPayCents: fixtureLastBasicPayCents, qualifyingServiceMonths: verification.qualifyingServiceMonths },
+        },
+      };
+      fixtureSequence += 1;
+      return Promise.resolve<PensionCaseActionResult>({ pensionCase: clonePensionCase(pensionCase) });
+    },
     getAnalyticsSlice: () => Promise.resolve({ ...analyticsSlice }),
     openDisciplinaryCase: (input: DisciplinaryCaseOpenInput) => {
       if (input.chargedEmployeeId === input.disciplinaryAuthorityId) {

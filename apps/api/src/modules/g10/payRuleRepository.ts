@@ -202,7 +202,7 @@ export class InMemoryPayRuleRepository implements PayRuleRepository {
 // apps/api/db/migrations/0014_g10_g11_rule_substrate.sql). All SQL is parameterised
 // ($1, $2, ...); the overlap guard SELECT and the INSERT run in ONE transaction. Money
 // columns are NUMERIC(15,2); cents conversion happens in SQL ((col * 100)::bigint), never
-// through parseFloat/toFixed.
+// through float parsing or string rounding in the service layer.
 // ---------------------------------------------------------------------------------------
 
 const INSERT_PAY_COMPONENT =

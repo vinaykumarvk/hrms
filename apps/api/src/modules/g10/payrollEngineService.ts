@@ -613,6 +613,19 @@ export class PayrollEngineService {
     return this.cloneRun(this.requireRun(scope, runId));
   }
 
+  /**
+   * PH-09D seam: the employee's latest surviving (PUBLISHED) payslip — the pay reference
+   * the FR-09 recovery scheduler bounds against (net-pay floor + CPC s.60 attachment cap).
+   */
+  findLatestPublishedPayslip(scope: TenantScope, employeeId: string): EnginePayslip | undefined {
+    requireTenantScope(scope);
+    const payslip = this.repository
+      .listPayslipsForEmployee(scope, employeeId)
+      .filter((item) => item.status === "PUBLISHED")
+      .sort((left, right) => right.period.localeCompare(left.period) || right.version - left.version)[0];
+    return payslip ? this.clonePayslip(payslip) : undefined;
+  }
+
   listRunPayslips(scope: TenantScope, runId: string): { payslip: EnginePayslip; lines: EnginePayslipLine[] }[] {
     requireTenantScope(scope);
     return this.repository
@@ -1038,7 +1051,9 @@ export class PayrollEngineService {
   }
 
   private cloneRun(run: EnginePayrollRun): EnginePayrollRun {
-    return { ...run, snapshot: run.snapshot ? (JSON.parse(stableStringify(run.snapshot)) as EngineRunSnapshot) : undefined };
+    // JSON.stringify (not stableStringify) for the deep clone: it drops undefined-valued
+    // optional keys, which stableStringify keeps as literal text for hash stability.
+    return { ...run, snapshot: run.snapshot ? (JSON.parse(JSON.stringify(run.snapshot)) as EngineRunSnapshot) : undefined };
   }
 
   private clonePayslip(payslip: EnginePayslip): EnginePayslip {

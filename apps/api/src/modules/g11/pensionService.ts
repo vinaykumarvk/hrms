@@ -5,6 +5,14 @@ import { EmployeeMasterService } from "../g01/employeeMasterService";
 import { PayrollService } from "../g10/payrollService";
 import { ServiceRegisterService } from "../g12/serviceRegisterService";
 import { DocumentVaultService } from "../g13/documentVaultService";
+import {
+  G11BenefitOutcome,
+  NpsBenefitEvent,
+  PenPensionCalculation,
+  PensionBenefitRepository,
+  computeSchemeBenefit,
+} from "./pensionBenefitRepository";
+import { PensionRuleService } from "./pensionRuleService";
 
 export type PensionCaseStatus = "DRAFT" | "SR_VERIFICATION" | "CALCULATION" | "PENDING_SANCTION" | "SANCTIONED" | "PPO_ISSUED" | "SETTLED" | "CLOSED" | "ON_HOLD";
 export type PensionScheme = "OPS" | "NPS" | "UPS";
@@ -23,6 +31,8 @@ export interface ServiceVerification {
 export interface PensionCalculationTrace {
   marker: "PENSION_CALC_TRACE";
   ruleVersion: string;
+  /** IR17: id of the E35 pen_pension_limit_rules row EFFECTIVE on the calculation date. */
+  ruleVersionRef: string;
   lastPayDrawnTraceHash: string;
   formula: string;
   inputs: {
@@ -32,9 +42,11 @@ export interface PensionCalculationTrace {
 }
 
 export interface PensionCalculation {
+  /** E07 pen_pension_calculations row id. */
+  calculationId: string;
+  scheme: PensionScheme;
+  benefitOutcome: G11BenefitOutcome;
   pensionCents: number;
-  gratuityCents: number;
-  commutationCents: number;
   trace: PensionCalculationTrace;
 }
 
@@ -83,7 +95,9 @@ export class PensionService {
     private readonly authorization: AuthorizationService,
     private readonly audit: AuditService,
     private readonly serviceRegister: ServiceRegisterService,
-    private readonly documentVault: DocumentVaultService
+    private readonly documentVault: DocumentVaultService,
+    private readonly pensionRules: PensionRuleService,
+    private readonly benefitRepository: PensionBenefitRepository
   ) {}
 
   createCase(actor: ActorContext, input: { employeeId: string; separationDate: string; scheme: PensionScheme }): PensionCase {
@@ -149,27 +163,88 @@ export class PensionService {
     return this.cloneCase(pensionCase);
   }
 
-  computeBenefits(actor: ActorContext, caseId: string, input: { ruleVersion: string }): PensionCase {
+  /**
+   * PH-09C / BRD FR-G11-05 — scheme-BRANCHED pension calculation. The case scheme drives
+   * distinct OPS / NPS / UPS / SERVICE_GRATUITY code paths in computeSchemeBenefit; the E35
+   * pen_pension_limit_rules and E36 pen_rounding_rules rows are resolved as-of the
+   * separation date (fail closed) and the E07 pen_pension_calculations row is persisted
+   * with the rule-version FK (AC5 determinism). A benefit requested under the wrong scheme
+   * fails with ERR-G11-SCHEME-MISMATCH — never a silent default.
+   */
+  computeBenefits(
+    actor: ActorContext,
+    caseId: string,
+    input: { ruleVersion: string; asOf?: string; scheme?: PensionScheme; upsOptedIn?: boolean; npsEvent?: NpsBenefitEvent }
+  ): PensionCase {
     this.authorization.check(actor, "g11.pension.compute", actor);
     const pensionCase = this.requireCase(actor, caseId);
     const verification = pensionCase.serviceVerification;
     if (!verification || !verification.srVerified || verification.status !== "QUALIFYING_SERVICE_LOCKED") {
       throw new FoundationError("PRECONDITION_FAILED", "QUALIFYING_SERVICE_LOCKED verification is required before pension calculation", { details: { marker: "SR_VERIFICATION_GATE" } });
     }
+    if (input.scheme !== undefined && input.scheme !== pensionCase.scheme) {
+      // FR-05 BR1: scheme comes from the case pension_scheme — cross-scheme requests fail.
+      throw new FoundationError("ERR-G11-SCHEME-MISMATCH", `Benefit requested under ${input.scheme} but the case scheme is ${pensionCase.scheme}`, {
+        field: "scheme",
+        details: { requestedScheme: input.scheme, caseScheme: pensionCase.scheme },
+      });
+    }
+    const asOf = input.asOf ?? pensionCase.separationDate;
+    const limits = this.pensionRules.resolvePensionLimits(actor, asOf);
+    const rounding = this.pensionRules.resolveRoundingRule(actor, asOf);
     const lastPay = this.payroll.getLastPayDrawn(actor, pensionCase.employeeId);
-    const pensionCents = Math.round((lastPay.basicPayCents * verification.qualifyingServiceMonths) / 1320);
-    const gratuityCents = Math.round((lastPay.basicPayCents * verification.qualifyingServiceMonths) / 66);
-    const commutationCents = Math.round(pensionCents * 0.4) * 120;
+    const result = computeSchemeBenefit({
+      scheme: pensionCase.scheme,
+      qualifyingServiceMonths: verification.qualifyingServiceMonths,
+      emolumentsBaseCents: lastPay.basicPayCents,
+      avgEmoluments12mCents: lastPay.basicPayCents,
+      limits,
+      rounding,
+      upsOptedIn: input.upsOptedIn,
+      npsEvent: input.npsEvent,
+    });
+    // Recompute SUPERSEDES the prior E07 row (FR-05 data operations); history stays referenced.
+    this.benefitRepository.supersedePensionCalculations(actor, pensionCase.id);
+    const calculationRow: PenPensionCalculation = {
+      id: nextId("pen-pension-calc", this.benefitRepository.countPensionCalculations()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      caseId: pensionCase.id,
+      scheme: pensionCase.scheme,
+      benefitOutcome: result.benefitOutcome,
+      emolumentsBaseCents: lastPay.basicPayCents,
+      emolumentsMethod: result.emolumentsMethod,
+      avgEmolumentsCents: result.emolumentsMethod === "AVG_12_MONTH" ? lastPay.basicPayCents : undefined,
+      qualifyingHalfYears: result.qualifyingHalfYears,
+      pensionFractionBps: result.pensionFractionBps,
+      basicPensionCents: result.basicPensionCents,
+      minimumPensionApplied: result.minimumPensionApplied,
+      maximumPensionCapApplied: result.maximumPensionCapApplied,
+      upsAssuredPayoutCents: result.upsAssuredPayoutCents,
+      upsMinGuaranteeApplied: result.upsMinGuaranteeApplied,
+      npsDefaultBenefitCents: result.npsDefaultBenefitCents,
+      calcTrace: {
+        marker: "PENSION_CALC_TRACE",
+        formula: result.formula,
+        asOf,
+        lastPayDrawnTraceHash: lastPay.traceHash,
+      },
+      ruleVersionRef: limits.id,
+      status: "COMPUTED",
+    };
+    this.benefitRepository.insertPensionCalculation(calculationRow);
     pensionCase.status = "PENDING_SANCTION";
     pensionCase.calculation = {
-      pensionCents,
-      gratuityCents,
-      commutationCents,
+      calculationId: calculationRow.id,
+      scheme: pensionCase.scheme,
+      benefitOutcome: result.benefitOutcome,
+      pensionCents: result.basicPensionCents,
       trace: {
         marker: "PENSION_CALC_TRACE",
         ruleVersion: input.ruleVersion,
+        ruleVersionRef: limits.id,
         lastPayDrawnTraceHash: lastPay.traceHash,
-        formula: "pension=basic*qualifyingMonths/1320;gratuity=basic*qualifyingMonths/66;commutation=40pctPension*120",
+        formula: result.formula,
         inputs: {
           lastBasicPayCents: lastPay.basicPayCents,
           qualifyingServiceMonths: verification.qualifyingServiceMonths,
@@ -178,10 +253,22 @@ export class PensionService {
     };
     this.audit.recordMutation(actor, {
       action: "G11_PENSION_COMPUTED",
-      subjectRef: `g11_pension_cases:${pensionCase.id}`,
-      metadata: { marker: "PENSION_CALC_TRACE", lastPayMarker: lastPay.marker, ruleVersion: input.ruleVersion },
+      subjectRef: `pen_pension_calculations:${calculationRow.id}`,
+      metadata: {
+        marker: "PENSION_CALC_TRACE",
+        lastPayMarker: lastPay.marker,
+        ruleVersion: input.ruleVersion,
+        ruleVersionRef: limits.id,
+        scheme: pensionCase.scheme,
+        benefitOutcome: result.benefitOutcome,
+      },
     });
     return this.cloneCase(pensionCase);
+  }
+
+  /** Scoped case read for sibling G11 services (commutation / gratuity / FP / Rule 9). */
+  getCase(scope: TenantScope, caseId: string): PensionCase {
+    return this.cloneCase(this.requireCase(scope, caseId));
   }
 
   sanction(actor: ActorContext, caseId: string): PensionCase {

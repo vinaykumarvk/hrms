@@ -12,7 +12,7 @@ import { PayCalcMethod, PayComponentCategory } from "./payRuleRepository";
  * E35 deduction_carryforwards (net-pay-floor excess booked forward, ERR-G10-RECOVERY-NET).
  * Physical tables per docs/data-model/10-G10-payroll-benefits.sql: g10_payroll_runs /
  * g10_payslips / g10_payslip_lines / g10_arrears / g10_deduction_carryforwards
- * (migration 0015). All money is integer cents; no parseFloat / no toFixed anywhere.
+ * (migration 0015). All money is integer cents; no float parsing and no string rounding anywhere.
  */
 
 export type EngineRunMode = "DRAFT" | "FINAL";

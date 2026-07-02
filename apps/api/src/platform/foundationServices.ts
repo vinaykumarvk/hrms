@@ -24,9 +24,15 @@ import { PayrollEngineService } from "../modules/g10/payrollEngineService";
 import { InMemoryPayrollEngineRepository } from "../modules/g10/payrollEngineRepository";
 import { PayRuleService } from "../modules/g10/payRuleService";
 import { InMemoryPayRuleRepository } from "../modules/g10/payRuleRepository";
+import { CompensationIntegrationService } from "../modules/g10/compensationIntegrationService";
+import { InMemoryCompensationIntegrationRepository } from "../modules/g10/compensationIntegrationRepository";
 import { PensionService } from "../modules/g11/pensionService";
+import { PensionDisbursementService } from "../modules/g11/pensionDisbursementService";
+import { InMemoryPensionDisbursementRepository } from "../modules/g11/pensionDisbursementRepository";
 import { PensionRuleService } from "../modules/g11/pensionRuleService";
 import { InMemoryPensionRuleRepository } from "../modules/g11/pensionRuleRepository";
+import { PensionBenefitService } from "../modules/g11/pensionBenefitService";
+import { InMemoryPensionBenefitRepository } from "../modules/g11/pensionBenefitRepository";
 import { ServiceRegisterService } from "../modules/g12/serviceRegisterService";
 import { DocumentVaultService } from "../modules/g13/documentVaultService";
 import { AnalyticsService } from "../modules/g14/analyticsService";
@@ -53,8 +59,11 @@ export interface FoundationServices {
   payroll: PayrollService;
   payrollEngine: PayrollEngineService;
   payRules: PayRuleService;
+  compensationIntegration: CompensationIntegrationService;
   pension: PensionService;
+  pensionDisbursement: PensionDisbursementService;
   pensionRules: PensionRuleService;
+  pensionBenefits: PensionBenefitService;
   serviceRegister: ServiceRegisterService;
   documentVault: DocumentVaultService;
   analytics: AnalyticsService;
@@ -164,9 +173,32 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   // PH-09B: deterministic G10 payroll engine at BRD depth — payroll_runs/payslips/payslip_lines/
   // arrears/deduction_carryforwards over the PH-09A rule substrate, with the G03 payroll feed
   // consumed at snapshot time (FR-05) and post-lock supersede-versioning (FR-16).
-  const payrollEngine = new PayrollEngineService(employeeMaster, authorization, audit, leave, payRuleRepository, new InMemoryPayrollEngineRepository());
-  const pension = new PensionService(employeeMaster, payroll, authorization, audit, serviceRegister, documentVault);
+  const payrollEngineRepository = new InMemoryPayrollEngineRepository();
+  const payrollEngine = new PayrollEngineService(employeeMaster, authorization, audit, leave, payRuleRepository, payrollEngineRepository);
+  // PH-09D: G10 compensation integration — E21 bank_disbursements + E31 disbursement_holds
+  // with the FR-15 tie-out equation (ERR-G10-RECON-TIEOUT) and sign-off SoD
+  // (ERR-G10-RECON-UNSIGNED), FR-09 G09 penalty-order recoveries bounded by floor + CPC s.60
+  // cap (ERR-G10-RECOVERY-BARRED), E30 fnf_settlements pulling loans_advances +
+  // deduction_carryforwards, and FR-23 SR postings via the G12 ingest contract (fact_key).
+  const compensationIntegration = new CompensationIntegrationService(
+    authorization,
+    audit,
+    payrollEngine,
+    payrollEngineRepository,
+    disciplinary,
+    serviceRegister,
+    new InMemoryCompensationIntegrationRepository()
+  );
   const pensionRules = new PensionRuleService(authorization, audit, new InMemoryPensionRuleRepository());
+  // PH-09C: G11 benefit records E07-E10/E41 behind the repository pattern (migration 0016);
+  // the scheme-branched pension engine consumes the PH-09A rule substrate above and the
+  // Rule 9 gate consumes the G09 proceedings state.
+  const pensionBenefitRepository = new InMemoryPensionBenefitRepository();
+  const pension = new PensionService(employeeMaster, payroll, authorization, audit, serviceRegister, documentVault, pensionRules, pensionBenefitRepository);
+  const pensionBenefits = new PensionBenefitService(authorization, audit, pension, pensionRules, payroll, disciplinary, pensionBenefitRepository);
+  // PH-09D: G11 FR-14 pre-credit account verification gate (E42) — disbursement fails
+  // closed without an ACTIVE PASSED verification (ERR-G11-ACCOUNT-VERIFY, IR16).
+  const pensionDisbursement = new PensionDisbursementService(authorization, audit, pension, new InMemoryPensionDisbursementRepository());
   const analytics = new AnalyticsService(employeeMaster, workflow, serviceRegister, documentVault, disciplinary, payroll, pension, authorization, audit);
   const migrationStaging = new MigrationStagingService(employeeMaster);
   return {
@@ -185,8 +217,11 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     payroll,
     payrollEngine,
     payRules,
+    compensationIntegration,
     pension,
+    pensionDisbursement,
     pensionRules,
+    pensionBenefits,
     serviceRegister,
     documentVault,
     analytics,
