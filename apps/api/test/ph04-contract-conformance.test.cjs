@@ -49,7 +49,12 @@ test("PH-04D route metadata is protected, permissioned, idempotent, and paginate
   assert.equal(routes.every((route) => route.protected === true), true);
   assert.equal(routes.every((route) => route.permission.length > 0), true);
   assert.equal(routes.filter((route) => route.unsafe).every((route) => route.requiresIdempotencyKey), true);
-  assert.equal(routes.filter((route) => route.path === "/api/v1/employees" || route.path.endsWith("/timeline")).every((route) => route.paginated), true);
+  assert.equal(
+    routes
+      .filter((route) => route.method === "GET" && (route.path === "/api/v1/employees" || route.path.endsWith("/timeline")))
+      .every((route) => route.paginated),
+    true
+  );
 });
 
 test("PH-04D canonical error, auth, idempotency, pagination, and correlation behavior is stable", () => {

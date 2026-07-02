@@ -2,7 +2,13 @@ import { FoundationServices } from "../platform/foundationServices";
 import { FoundationError, TenantScope } from "../platform/types";
 import { ApiRequest, ApiResponse, ApiParams, RouteDefinition, RouteSummary } from "./apiTypes";
 import { CORRELATION_HEADER, normalizeHeaders, resolveCorrelationId } from "./correlation";
-import { IDEMPOTENCY_HEADER, requireIdempotencyKey } from "./idempotency";
+import {
+  IDEMPOTENCY_HEADER,
+  IdempotencyReplayStore,
+  payloadFingerprint,
+  replayStoreKey,
+  requireIdempotencyKey,
+} from "./idempotency";
 import { parsePagination } from "./pagination";
 import { publicError, unauthenticatedError } from "./errors";
 
@@ -16,6 +22,8 @@ interface MatchedRoute {
 
 export class ApiKernel {
   private readonly routes: RouteDefinition[] = [];
+
+  private readonly replayStore = new IdempotencyReplayStore();
 
   constructor(private readonly services: FoundationServices) {}
 
@@ -51,16 +59,34 @@ export class ApiKernel {
       this.services.authorization.check(actor, matched.route.permission, scope);
       const idempotencyKey = matched.route.unsafe && matched.route.requiresIdempotencyKey ? requireIdempotencyKey(normalizedHeaders) : undefined;
       const pagination = matched.route.list ? parsePagination(request.query) : undefined;
-      const response = matched.route.handler({
-        request,
-        params: matched.params,
-        services: this.services,
-        actor: { ...actor, correlationId },
-        scope,
-        correlationId,
-        idempotencyKey,
-        pagination,
-      });
+      const invokeHandler = (): ApiResponse =>
+        matched.route.handler({
+          request,
+          params: matched.params,
+          services: this.services,
+          actor: { ...actor, correlationId },
+          scope,
+          correlationId,
+          idempotencyKey,
+          pagination,
+        });
+      let response: ApiResponse;
+      if (idempotencyKey) {
+        // Idempotency-Key replay: same tenant + key + route returns the stored
+        // response verbatim without re-executing the handler; a different payload
+        // for the same key is rejected as CONFLICT inside the replay store.
+        const replayKey = replayStoreKey(actor.tenantId, idempotencyKey, `${matched.route.method} ${matched.route.path}`);
+        const fingerprint = payloadFingerprint(request.body);
+        const replayed = this.replayStore.replay(replayKey, fingerprint);
+        if (replayed) {
+          response = replayed;
+        } else {
+          response = invokeHandler();
+          this.replayStore.record(replayKey, fingerprint, response);
+        }
+      } else {
+        response = invokeHandler();
+      }
       return this.withCorrelation(response, correlationId);
     } catch (error) {
       const failure = publicError(error);

@@ -141,6 +141,39 @@ export class ServiceRegisterService {
     });
   }
 
+  // BRD G12 FR-02 v2 reversal envelope (is_reversal + reverses_source_reference_id): the reversal
+  // references the original ledger entry by source_reference_id and APPENDS a linked REVERSAL event —
+  // the ledger stays append-only; prior events are never mutated or deleted.
+  reverseBySourceReference(scope: TenantScope, idempotencyKey: string, reversesSourceReferenceId: string, reason: string): SrIngestResult {
+    requireTenantScope(scope);
+    const target = this.events
+      .filter(
+        (event) =>
+          event.tenantId === scope.tenantId &&
+          (!scope.entityId || event.entityId === scope.entityId) &&
+          event.sourceReferenceId === reversesSourceReferenceId
+      )
+      .sort((left, right) => right.sourceEventVersion - left.sourceEventVersion)[0];
+    if (!target) {
+      // Taxonomy SR_REVERSAL_TARGET_NOT_FOUND (BRD G12 FR-02 AC5): reversal references an unknown source_reference_id.
+      throw new FoundationError("NOT_FOUND", "Reversal references an unknown source_reference_id", {
+        field: "reverses_source_reference_id",
+        details: { messageId: "SR_REVERSAL_TARGET_NOT_FOUND", reverses_source_reference_id: reversesSourceReferenceId },
+      });
+    }
+    return this.ingest(scope, idempotencyKey, {
+      sourceModule: target.sourceModule,
+      sourceReferenceId: `${target.sourceReferenceId}:REVERSAL`,
+      sourceEventVersion: target.sourceEventVersion + 1,
+      employeeId: target.employeeId,
+      eventTypeCode: "REVERSAL",
+      eventDate: target.eventDate,
+      payload: { reason, is_reversal: true, reverses_source_reference_id: reversesSourceReferenceId, reverses: target.id },
+      documentIds: [],
+      reversalOfEventId: target.id,
+    });
+  }
+
   getTimeline(scope: TenantScope, employeeId: string): SrEvent[] {
     requireTenantScope(scope);
     return this.events

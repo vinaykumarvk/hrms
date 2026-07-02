@@ -297,6 +297,102 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /workflow/tasks/{task_id}/claim:
+    post:
+      tags: [Workflow Tasks]
+      operationId: claimWorkflowTask
+      summary: Claim an unassigned workflow task for the acting user.
+      description: >
+        Contract amendment 2026-07-02 (PH-04D freeze packet): records the task-level
+        action routes implemented in PH-04B (kernel operationId p01.claimWorkflowTask).
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "202":
+          $ref: "#/components/responses/WorkflowActionOk"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /workflow/tasks/{task_id}/approve:
+    post:
+      tags: [Workflow Tasks]
+      operationId: approveWorkflowTask
+      summary: Approve the workflow task assigned to the acting user.
+      description: >
+        Contract amendment 2026-07-02 (PH-04D freeze packet): records the task-level
+        action routes implemented in PH-04B (kernel operationId p01.approveWorkflowTask).
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "202":
+          $ref: "#/components/responses/WorkflowActionOk"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /workflow/tasks/{task_id}/reject:
+    post:
+      tags: [Workflow Tasks]
+      operationId: rejectWorkflowTask
+      summary: Reject the workflow task assigned to the acting user.
+      description: >
+        Contract amendment 2026-07-02 (PH-04D freeze packet): records the task-level
+        action routes implemented in PH-04B (kernel operationId p01.rejectWorkflowTask).
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "202":
+          $ref: "#/components/responses/WorkflowActionOk"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /workflow/tasks/{task_id}/delegate:
+    post:
+      tags: [Workflow Tasks]
+      operationId: delegateWorkflowTask
+      summary: Delegate the workflow task to another user.
+      description: >
+        Contract amendment 2026-07-02 (PH-04D freeze packet): records the task-level
+        action routes implemented in PH-04B (kernel operationId p01.delegateWorkflowTask).
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskDelegateRequest"
+      responses:
+        "202":
+          $ref: "#/components/responses/WorkflowActionOk"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
   /workflow/waits/{wait_id}/satisfy:
     post:
       tags: [Workflow Waits]
@@ -375,6 +471,12 @@ components:
       description: Echoed in response and logs.
     InstanceId:
       name: instance_id
+      in: path
+      required: true
+      schema:
+        type: string
+    TaskId:
+      name: task_id
       in: path
       required: true
       schema:
@@ -552,6 +654,15 @@ components:
       required: [task_id]
       properties:
         task_id:
+          type: string
+
+    TaskDelegateRequest:
+      type: object
+      required: [toUserId]
+      properties:
+        toUserId:
+          type: string
+        reason:
           type: string
 
     WaitSatisfyRequest:

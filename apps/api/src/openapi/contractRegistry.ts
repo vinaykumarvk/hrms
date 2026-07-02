@@ -31,6 +31,7 @@ export const minimumRouteSet = [
   "GET /api/v1/workflow/instances/{instance_id}",
   "GET /api/v1/workflow/tasks",
   "GET /api/v1/employees",
+  "POST /api/v1/employees",
   "GET /api/v1/employees/{id}",
   "GET /api/v1/employees/{id}/profile-360",
   "GET /api/v1/employees/changes",

@@ -16,7 +16,8 @@ export interface WorkflowTask {
   id: string;
   instanceId: string;
   stage: string;
-  status: "PENDING" | "COMPLETED";
+  status: "PENDING" | "CLAIMED" | "COMPLETED";
+  claimedByUserId?: string;
   resolution: AuthorityResolution;
 }
 
@@ -120,6 +121,60 @@ export class HrmsWorkflowService {
     return { ...instance };
   }
 
+  /** Task-grain claim: the acting user takes ownership of a pending task (state mutation, audited). */
+  claimTask(scope: TenantScope, input: { taskId: string }): WorkflowTask {
+    const task = this.getMutableScopedTask(scope, input.taskId);
+    if (task.status === "COMPLETED") {
+      throw new FoundationError("CONFLICT", "Workflow task is already completed");
+    }
+    task.status = "CLAIMED";
+    task.claimedByUserId = scope.actorUserId;
+    this.audit.recordMutation(scope, {
+      action: "P01_TASK_CLAIM",
+      subjectRef: `workflow_tasks:${task.id}`,
+      metadata: { instanceId: task.instanceId, claimedByUserId: scope.actorUserId },
+    });
+    return this.cloneTask(task);
+  }
+
+  /** Task-grain delegate: reassigns an open task to another user with an audited action record. */
+  delegateTask(scope: TenantScope, input: { taskId: string; toUserId: string; reason?: string }): { task: WorkflowTask; action: WorkflowAction } {
+    if (!input.toUserId) {
+      throw new FoundationError("VALIDATION_FAILED", "toUserId is required", { field: "toUserId" });
+    }
+    const task = this.getMutableScopedTask(scope, input.taskId);
+    if (task.status === "COMPLETED") {
+      throw new FoundationError("CONFLICT", "Workflow task is already completed");
+    }
+    task.status = "CLAIMED";
+    task.claimedByUserId = input.toUserId;
+    const action: WorkflowAction = {
+      id: nextId("workflow-action", this.actions.length),
+      instanceId: task.instanceId,
+      action: "DELEGATE",
+      actorUserId: scope.actorUserId,
+    };
+    this.actions.push(action);
+    this.audit.recordMutation(scope, {
+      action: "P01_TASK_DELEGATE",
+      subjectRef: `workflow_tasks:${task.id}`,
+      metadata: { instanceId: task.instanceId, toUserId: input.toUserId, reason: input.reason ?? "" },
+    });
+    this.notifications.publish(scope, {
+      messageId: "WF_TASK_DELEGATE",
+      channel: "IN_APP",
+      relatedRef: `workflow_tasks:${task.id}`,
+      mergeFields: { toUserId: input.toUserId },
+    });
+    return { task: this.cloneTask(task), action: { ...action } };
+  }
+
+  /** Task-grain approve/reject: completes the task and moves the instance via the audited act() path. */
+  actOnTask(scope: TenantScope, input: { taskId: string; action: "APPROVE" | "REJECT" }): WorkflowAction {
+    this.getMutableScopedTask(scope, input.taskId);
+    return this.act(scope, { taskId: input.taskId, action: input.action });
+  }
+
   actOnInstance(scope: TenantScope, input: { instanceId: string; action: WorkflowAction["action"] }): WorkflowAction {
     this.getInstance(scope, input.instanceId);
     const task = this.tasks
@@ -129,6 +184,21 @@ export class HrmsWorkflowService {
       throw new FoundationError("NOT_FOUND", "Workflow task not found");
     }
     return this.act(scope, { taskId: task.id, action: input.action });
+  }
+
+  private getMutableScopedTask(scope: TenantScope, taskId: string): WorkflowTask {
+    requireTenantScope(scope);
+    const task = this.tasks.find((item) => item.id === taskId);
+    if (!task) {
+      throw new FoundationError("NOT_FOUND", "Workflow task not found");
+    }
+    const instance = this.instances.find(
+      (item) => item.id === task.instanceId && item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId)
+    );
+    if (!instance) {
+      throw new FoundationError("NOT_FOUND", "Workflow instance not found");
+    }
+    return task;
   }
 
   private statusForAction(action: WorkflowAction["action"]): WorkflowInstance["status"] {

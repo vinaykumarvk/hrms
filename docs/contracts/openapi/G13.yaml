@@ -1065,6 +1065,28 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /documents/{id}/retention:
+    get:
+      tags: [retention]
+      summary: Read the effective retention state of a document
+      description: >
+        Returns the resolved retention assignment (most-specific-first) for the document.
+        Contract amendment 2026-07-02 (PH-04D freeze packet): records the read route
+        implemented in PH-04C (kernel operationId for GET /documents/{id}/retention). FR-G13-009.
+      operationId: getRetention
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Effective retention state.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/XCorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionAssignment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
     post:
       tags: [retention]
       summary: Assign a retention class to a document

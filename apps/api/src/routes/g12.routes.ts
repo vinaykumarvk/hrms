@@ -1,5 +1,6 @@
 import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
-import { optionalNumber, optionalRecord, optionalString, optionalStringArray, readBodyRecord, requiredString } from "../http/body";
+import { optionalBoolean, optionalNumber, optionalRecord, optionalString, optionalStringArray, readBodyRecord, requiredString } from "../http/body";
+import { pageItems } from "../http/pagination";
 import { ApiContext, ApiResponse } from "../http/apiTypes";
 import { SrEvent, SrSourceModule } from "../modules/g12/serviceRegisterService";
 import { FoundationError } from "../platform/types";
@@ -53,13 +54,22 @@ export function registerG12Routes(kernel: ApiKernel): void {
     requiresIdempotencyKey: true,
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
+      const idempotencyKey = requiredString({ key: context.idempotencyKey }, "key");
+      const reason = requiredString(body, "reason");
+      // BRD G12 FR-02 v2 reversal envelope: is_reversal + reverses_source_reference_id locate the
+      // reversed ledger entry by its source_reference_id; unknown targets raise SR_REVERSAL_TARGET_NOT_FOUND.
+      if (optionalBoolean(body, "is_reversal")) {
+        return created(
+          context.services.serviceRegister.reverseBySourceReference(
+            context.scope,
+            idempotencyKey,
+            requiredString(body, "reverses_source_reference_id"),
+            reason
+          )
+        );
+      }
       return created(
-        context.services.serviceRegister.reverseFromSource(
-          context.scope,
-          requiredString({ key: context.idempotencyKey }, "key"),
-          requiredString(body, "originalEventId"),
-          requiredString(body, "reason")
-        )
+        context.services.serviceRegister.reverseFromSource(context.scope, idempotencyKey, requiredString(body, "originalEventId"), reason)
       );
     },
   });
@@ -79,8 +89,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.read",
     list: { defaultLimit: 25, maxLimit: 100 },
     handler: (context) => {
+      // Cursor paging via the kernel helper: stable sequenceNo ordering from getTimeline,
+      // limit clamped to 100 by parsePagination, next_cursor computed from the window end.
       const timeline = context.services.serviceRegister.getTimeline(context.scope, requiredParam(context.params, "id"));
-      return ok({ items: timeline, limit: context.pagination?.limit ?? 25, next_cursor: null });
+      return ok(pageItems(timeline, context.pagination ?? { limit: 25 }));
     },
   });
   kernel.register({

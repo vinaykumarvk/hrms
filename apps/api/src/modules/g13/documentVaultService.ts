@@ -1,5 +1,5 @@
 import { AuditService } from "../../platform/audit/auditService";
-import { FoundationError, TenantScope, inScope, nextId, requireTenantScope } from "../../platform/types";
+import { FoundationError, TenantScope, inScope, nextId, pseudoHash64, requireTenantScope } from "../../platform/types";
 
 export interface DocumentLink {
   moduleCode: string;
@@ -15,7 +15,7 @@ export interface DocumentRecord {
   docNo: string;
   title: string;
   ownerEmployeeId?: string;
-  status: "DRAFT" | "ACTIVE" | "SUPERSEDED" | "ORPHANED" | "DISPOSED" | "QUARANTINED";
+  status: "DRAFT" | "ACTIVE" | "SUPERSEDED" | "ORPHANED" | "DELETED" | "DISPOSED" | "QUARANTINED";
   classification: "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "SECRET" | "TOP_SECRET";
   currentVersionNo: number;
   contentHash: string;
@@ -39,6 +39,39 @@ export interface DocumentVersionView {
   contentHash: string;
   status: DocumentRecord["status"];
 }
+
+export type DocumentFetchIntent = "VIEW" | "DOWNLOAD";
+
+// FR-G13-016 AC6: VIEW returns a short-TTL, session-bound, watermarked render descriptor — no raw blob.
+export interface DocumentViewDescriptor {
+  documentId: string;
+  intent: "VIEW";
+  render: {
+    renderToken: string;
+    expiresInSeconds: number;
+    watermarked: true;
+    sessionBound: true;
+    disposition: "inline";
+  };
+}
+
+// FR-G13-016 AC6: DOWNLOAD returns the file grant only, tied to the distinct DOWNLOAD right.
+export interface DocumentDownloadGrant {
+  documentId: string;
+  intent: "DOWNLOAD";
+  grant: {
+    grantToken: string;
+    right: "DOWNLOAD";
+    versionNo: number;
+    contentHash: string;
+    disposition: "attachment";
+  };
+}
+
+// DI-14 (BRD G13 FR-014 BR-1): a DELETED, DISPOSED, or ORPHANED document can never be attached.
+const NOT_ATTACHABLE_STATUSES: ReadonlyArray<DocumentRecord["status"]> = ["DELETED", "DISPOSED", "ORPHANED"];
+
+const VIEW_RENDER_TTL_SECONDS = 300;
 
 export class DocumentVaultService {
   private readonly documents: DocumentRecord[];
@@ -81,6 +114,13 @@ export class DocumentVaultService {
 
   attach(scope: TenantScope, documentId: string, link: DocumentLink): DocumentRecord {
     const document = this.requireDocument(scope, documentId);
+    if (NOT_ATTACHABLE_STATUSES.includes(document.status)) {
+      // Taxonomy ERR-G13-DOCUMENT_NOT_ATTACHABLE (DI-14): rejected before any link is written.
+      throw new FoundationError("CONFLICT", "Document is not attachable in its current lifecycle status", {
+        field: "documentId",
+        details: { messageId: "ERR-G13-DOCUMENT_NOT_ATTACHABLE", status: document.status },
+      });
+    }
     document.links.push({ ...link });
     this.audit.recordMutation(scope, { action: "G13_DOCUMENT_ATTACH", subjectRef: `documents:${document.id}`, metadata: { moduleCode: link.moduleCode, entityRefId: link.entityRefId } });
     return this.clone(document);
@@ -168,6 +208,54 @@ export class DocumentVaultService {
     document.status = "DISPOSED";
     this.audit.recordMutation(scope, { action: "G13_DOCUMENT_DISPOSE", subjectRef: `documents:${document.id}` });
     return this.clone(document);
+  }
+
+  // FR-G13-016 R2: intent-resolved fetch. VIEW and DOWNLOAD return structurally different bodies and
+  // each emits its own access-audit event.
+  fetch(scope: TenantScope, documentId: string, intent: DocumentFetchIntent): DocumentViewDescriptor | DocumentDownloadGrant {
+    const document = this.requireDocument(scope, documentId);
+    if (document.status === "DISPOSED" || document.status === "DELETED") {
+      // Taxonomy ERR-G13-DOCUMENT_DISPOSED: fetch of a disposed document surfaces as NOT_FOUND.
+      throw new FoundationError("NOT_FOUND", "Document is no longer available", {
+        details: { messageId: "ERR-G13-DOCUMENT_DISPOSED", status: document.status },
+      });
+    }
+    const sessionSeed = `${document.id}:${document.currentVersionNo}:${intent}:${scope.actorUserId ?? ""}:${scope.correlationId ?? ""}`;
+    const grantToken = pseudoHash64(sessionSeed).slice(0, 32);
+    if (intent === "VIEW") {
+      this.audit.recordSecurity(scope, {
+        eventType: "G13_DOCUMENT_FETCH_VIEW",
+        result: "SUCCESS",
+        metadata: { documentId: document.id, intent: "VIEW", versionNo: document.currentVersionNo },
+      });
+      return {
+        documentId: document.id,
+        intent: "VIEW",
+        render: {
+          renderToken: grantToken,
+          expiresInSeconds: VIEW_RENDER_TTL_SECONDS,
+          watermarked: true,
+          sessionBound: true,
+          disposition: "inline",
+        },
+      };
+    }
+    this.audit.recordSecurity(scope, {
+      eventType: "G13_DOCUMENT_FETCH_DOWNLOAD",
+      result: "SUCCESS",
+      metadata: { documentId: document.id, intent: "DOWNLOAD", versionNo: document.currentVersionNo },
+    });
+    return {
+      documentId: document.id,
+      intent: "DOWNLOAD",
+      grant: {
+        grantToken,
+        right: "DOWNLOAD",
+        versionNo: document.currentVersionNo,
+        contentHash: document.contentHash,
+        disposition: "attachment",
+      },
+    };
   }
 
   get(scope: TenantScope, documentId: string): DocumentRecord | null {

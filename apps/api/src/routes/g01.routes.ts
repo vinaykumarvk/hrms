@@ -11,7 +11,9 @@ export const g01RouteEvidence = {
   headers: ["X-Correlation-Id", "Idempotency-Key"],
   pagination: { limit: 25, maxLimit: 100, next_cursor: null },
   p02Masking: "P02 fieldGrants mask field access",
-  srPosting: "G01 governed change posts to G12 serviceRegister and returns srEvent",
+  srPosting: "G01 approved governed change posts to G12 serviceRegister and returns srEvent",
+  create: "POST /api/v1/employees creates via employeeMaster.create with PROFILE_CREATED outbox emission (FR-EPM-001)",
+  outboxFeed: "GET /api/v1/employees/changes reads the g01 outbox through pageItems cursor pagination",
 };
 
 export function registerG01Routes(kernel: ApiKernel): void {
@@ -22,7 +24,32 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.employee.change.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) => ok({ items: [], limit: context.pagination?.limit ?? 25, next_cursor: null }),
+    handler: (context) => ok(pageItems(context.services.employeeMaster.listChanges(context.scope), context.pagination ?? { limit: 25 })),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees",
+    operationId: "g01.createEmployee",
+    protected: true,
+    permission: "g01.employee.create",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      const result = context.services.employeeMaster.create(context.actor, {
+        firstName: requiredString(body, "firstName"),
+        lastName: optionalString(body, "lastName"),
+        displayName: optionalString(body, "displayName"),
+        orgUnitId: requiredString(body, "orgUnitId"),
+        designation: optionalString(body, "designation"),
+        dateOfJoining: requiredString(body, "dateOfJoining"),
+        serviceNo: optionalString(body, "serviceNo"),
+        category: optionalString(body, "category"),
+        pan: optionalString(body, "pan"),
+        aadhaarMasked: optionalString(body, "aadhaarMasked"),
+      });
+      return created(result);
+    },
   });
   kernel.register({
     method: "GET",
@@ -62,7 +89,13 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.employee.change.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) => ok({ employeeId: requiredParam(context.params, "id"), items: [], limit: context.pagination?.limit ?? 25, next_cursor: null }),
+    handler: (context) => {
+      const employeeId = requiredParam(context.params, "id");
+      return ok({
+        employeeId,
+        ...pageItems(context.services.employeeMaster.listGovernedChanges(context.scope, employeeId), context.pagination ?? { limit: 25 }),
+      });
+    },
   });
   kernel.register({
     method: "POST",
@@ -74,11 +107,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     requiresIdempotencyKey: true,
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
-      const result = context.services.employeeMaster.governedIdentityChange(context.actor, {
+      const result = context.services.employeeMaster.requestGovernedChange(context.actor, {
         employeeId: requiredParam(context.params, "id"),
         newDisplayName: requiredString(body, "newDisplayName"),
         reason: requiredString(body, "reason"),
-        idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
         effectiveDate: optionalString(body, "effectiveDate") ?? "2026-07-01",
       });
       return created(result);
@@ -92,7 +124,13 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.change.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted({ changeId: requiredParam(context.params, "id"), decision: "APPROVED" }),
+    handler: (context) => {
+      const result = context.services.employeeMaster.approveGovernedChange(context.actor, {
+        changeId: requiredParam(context.params, "id"),
+        idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+      });
+      return accepted(result);
+    },
   });
   kernel.register({
     method: "POST",
@@ -102,7 +140,14 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.change.reject",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted({ changeId: requiredParam(context.params, "id"), decision: "REJECTED" }),
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      const result = context.services.employeeMaster.rejectGovernedChange(context.actor, {
+        changeId: requiredParam(context.params, "id"),
+        reason: requiredString(body, "reason"),
+      });
+      return accepted(result);
+    },
   });
 }
 

@@ -29,9 +29,3 @@ export function pageItems<TItem>(items: TItem[], pagination: PaginationRequest):
     next_cursor: next,
   };
 }
-
-export const paginationContract = {
-  limit: DEFAULT_LIMIT,
-  maxLimit: MAX_LIMIT,
-  next_cursor: null,
-};

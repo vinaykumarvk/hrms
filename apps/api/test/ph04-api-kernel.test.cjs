@@ -108,6 +108,51 @@ test("PH-04A kernel requires idempotency key for unsafe routes", () => {
   assert.equal(createdResponse.body.idempotencyKey, "idem-kernel-001");
 });
 
+test("PH-04A kernel replays stored response for repeated Idempotency-Key without re-executing", () => {
+  const kernel = createApiKernel(createFoundationServices());
+  let executions = 0;
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/kernel/replay-items",
+    operationId: "kernel.createReplayItem",
+    protected: true,
+    permission: "kernel.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      executions += 1;
+      return created({ executions, idempotencyKey: context.idempotencyKey });
+    },
+  });
+
+  const requestShape = {
+    method: "POST",
+    path: "/api/v1/kernel/replay-items",
+    headers: { "Idempotency-Key": "idem-replay-001" },
+    body: { amount: 10 },
+  };
+  const first = kernel.dispatch({ ...requestShape, actor: actor() });
+  const second = kernel.dispatch({ ...requestShape, actor: actor() });
+
+  assert.equal(first.status, 201);
+  assert.equal(second.status, first.status);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(executions, 1, "handler side-effect must execute exactly once for a replayed key");
+
+  const conflicting = kernel.dispatch({ ...requestShape, body: { amount: 999 }, actor: actor() });
+  assert.equal(conflicting.status, 409);
+  assert.equal(conflicting.body.error.code, "CONFLICT");
+  assert.equal(executions, 1);
+
+  const freshKey = kernel.dispatch({
+    ...requestShape,
+    headers: { "Idempotency-Key": "idem-replay-002" },
+    actor: actor(),
+  });
+  assert.equal(freshKey.status, 201);
+  assert.equal(executions, 2);
+});
+
 test("PH-04A kernel sanitizes internal failure output", () => {
   const response = kernelWithProbeRoutes().dispatch({
     method: "GET",

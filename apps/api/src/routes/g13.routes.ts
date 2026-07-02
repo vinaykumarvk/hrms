@@ -1,7 +1,7 @@
 import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalRecord, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { pageItems } from "../http/pagination";
-import { DocumentRecord } from "../modules/g13/documentVaultService";
+import { DocumentFetchIntent, DocumentRecord } from "../modules/g13/documentVaultService";
 import { FoundationError } from "../platform/types";
 
 export const g13RouteEvidence = {
@@ -137,6 +137,22 @@ export function registerG13Routes(kernel: ApiKernel): void {
   });
   kernel.register({
     method: "GET",
+    path: "/api/v1/documents/{id}:fetch",
+    operationId: "g13.fetchDocument",
+    protected: true,
+    permission: "g13.document.read",
+    handler: (context) => {
+      // FR-G13-016 R2 (VAL-G13-FETCH-INTENT): intent=VIEW|DOWNLOAD is mandatory on :fetch.
+      const intent = readFetchIntent(context.request.query?.intent);
+      if (intent === "DOWNLOAD") {
+        // FR-G13-016 AC6: the file grant is served ONLY with the distinct DOWNLOAD right.
+        context.services.authorization.check(context.actor, "g13.document.download", context.scope);
+      }
+      return ok({ fetch: context.services.documentVault.fetch(context.scope, requiredParam(context.params, "id"), intent) });
+    },
+  });
+  kernel.register({
+    method: "GET",
     path: "/api/v1/documents/{id}",
     operationId: "g13.getDocument",
     protected: true,
@@ -187,6 +203,17 @@ export function registerG13Routes(kernel: ApiKernel): void {
       const body = readBodyRecord(context.request.body);
       return accepted({ document: context.services.documentVault.releaseLegalHold(context.scope, requiredParam(context.params, "id"), optionalString(body, "reason") ?? "Released") });
     },
+  });
+}
+
+function readFetchIntent(value: string | undefined): DocumentFetchIntent {
+  if (value === "VIEW" || value === "DOWNLOAD") {
+    return value;
+  }
+  // Taxonomy ERR-G13-FETCH_INTENT_REQUIRED: :fetch without intent=VIEW|DOWNLOAD (FR-G13-016 R2).
+  throw new FoundationError("VALIDATION_FAILED", "Specify intent=VIEW or intent=DOWNLOAD.", {
+    field: "intent",
+    details: { messageId: "ERR-G13-FETCH_INTENT_REQUIRED" },
   });
 }
 

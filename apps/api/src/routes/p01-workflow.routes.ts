@@ -8,6 +8,7 @@ export const p01WorkflowRouteEvidence = {
   base: "/api/v1/workflow/instances",
   taskList: "/api/v1/workflow/tasks",
   actions: ["advance", "approve", "reject", "send-back", "delegate", "cancel", "query"],
+  taskActions: ["claim", "approve", "reject", "delegate"],
   headers: ["X-Correlation-Id", "Idempotency-Key"],
   permission: "p01.workflow",
 };
@@ -64,6 +65,62 @@ export function registerP01WorkflowRoutes(kernel: ApiKernel): void {
     routes.push(action);
   }
   routes.forEach((route) => kernel.register(route));
+  registerP01TaskActionRoutes(kernel);
+}
+
+function registerP01TaskActionRoutes(kernel: ApiKernel): void {
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/workflow/tasks/{task_id}/claim",
+    operationId: "p01.claimWorkflowTask",
+    protected: true,
+    permission: "p01.workflow.task.claim",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted({ task: context.services.workflow.claimTask(context.scope, { taskId: requiredParam(context.params, "task_id") }) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/workflow/tasks/{task_id}/approve",
+    operationId: "p01.approveWorkflowTask",
+    protected: true,
+    permission: "p01.workflow.task.approve",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted({ action: context.services.workflow.actOnTask(context.scope, { taskId: requiredParam(context.params, "task_id"), action: "APPROVE" }) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/workflow/tasks/{task_id}/reject",
+    operationId: "p01.rejectWorkflowTask",
+    protected: true,
+    permission: "p01.workflow.task.reject",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted({ action: context.services.workflow.actOnTask(context.scope, { taskId: requiredParam(context.params, "task_id"), action: "REJECT" }) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/workflow/tasks/{task_id}/delegate",
+    operationId: "p01.delegateWorkflowTask",
+    protected: true,
+    permission: "p01.workflow.task.delegate",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted(
+        context.services.workflow.delegateTask(context.scope, {
+          taskId: requiredParam(context.params, "task_id"),
+          toUserId: requiredString(body, "toUserId"),
+          reason: optionalString(body, "reason"),
+        })
+      );
+    },
+  });
 }
 
 function p01ActionRoutes(): RouteDefinition[] {
