@@ -5,6 +5,7 @@ import { ApiContext, ApiResponse } from "../http/apiTypes";
 import { SrEvent, SrSourceModule } from "../modules/g12/serviceRegisterService";
 import { JOB_G12_ANCHOR, JOB_G12_GAPSCAN, JOB_G12_INTEGRITY } from "../modules/g12/srIntegrityService";
 import type { SrAttestationKind, SrExtractScope, SrGapStatus, SrRedactionPolicy, SrRuleStatus, SrSeverity, SrSignatureMethod } from "../modules/g12/srIntegrityRepository";
+import type { SrLtvRenewalKind, SrLtvSubject, SrLtvTrigger, SrSubscriptionMode } from "../modules/g12/srAdmissibilityRepository";
 import { FoundationError } from "../platform/types";
 
 export const g12RouteEvidence = {
@@ -23,6 +24,11 @@ export const g12RouteEvidence = {
   gapScanJob: JOB_G12_GAPSCAN,
   attestations: "/api/v1/sr/attestations",
   certifiedExtracts: "/api/v1/sr/extracts",
+  // PH-15D admissibility + longevity (BRD G12 FR-18/13/19)
+  authenticityCertificates: "/api/v1/sr/authenticity-certificates",
+  subscriptions: "/api/v1/sr/subscriptions",
+  feed: "/api/v1/sr/feed?since_seq=",
+  ltvRenewals: "/api/v1/sr/ltv/renewals",
 };
 
 export function registerG12Routes(kernel: ApiKernel): void {
@@ -329,6 +335,129 @@ export function registerG12Routes(kernel: ApiKernel): void {
       }
       return ok({ extract });
     },
+  });
+
+  // ------------------------------------------------------------------------------------
+  // PH-15D admissibility + longevity (BRD G12 FR-18/13/19)
+  // ------------------------------------------------------------------------------------
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/extracts/{id}/authenticity-certificate",
+    operationId: "g12.issueSrAuthenticityCertificate",
+    protected: true,
+    permission: "g12.sr.cert.generate",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      // FR-18: §65B/BSA certificate over the VERIFIED chain; the handler passes no custody
+      // narrative — the chain-of-custody block is generated from stored data (BR-18.2).
+      created(context.services.srAdmissibility.issueAuthenticityCertificate(context.scope, requiredParam(context.params, "id"))),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/authenticity-certificates/{id}",
+    operationId: "g12.getSrAuthenticityCertificate",
+    protected: true,
+    permission: "g12.sr.cert.read",
+    handler: (context) => {
+      const certificate = context.services.srAdmissibility.getCertificate(context.scope, requiredParam(context.params, "id"));
+      if (!certificate) {
+        throw new FoundationError("NOT_FOUND", "Authenticity certificate not found");
+      }
+      return ok({ certificate });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/subscriptions",
+    operationId: "g12.registerSrSubscription",
+    protected: true,
+    permission: "g12.sr.subscription.manage",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      // FR-13: PULL_FEED only at launch — WEBHOOK/MESSAGE_BUS rejected (SR_DELIVERY_MODE_DEFERRED).
+      return created(
+        context.services.srAdmissibility.registerSubscription(context.scope, {
+          subscriberModule: requiredString(body, "subscriberModule"),
+          eventCategories: optionalStringArray(body, "eventCategories") ?? [],
+          deliveryMode: optionalString(body, "deliveryMode") as SrSubscriptionMode | undefined,
+          secretRef: optionalString(body, "secretRef"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/subscriptions/{id}/activate",
+    operationId: "g12.activateSrSubscription",
+    protected: true,
+    permission: "g12.sr.subscription.activate",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => ok(context.services.srAdmissibility.activateSubscription(context.scope, requiredParam(context.params, "id"))),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/feed",
+    operationId: "g12.pullSrFeed",
+    protected: true,
+    permission: "g12.sr.feed.read",
+    handler: (context) => {
+      // FR-13: authenticated pull feed resumable by ?since_seq=; cursor state lives on the
+      // subscription (last_delivered_seq) and the read is scoped to the caller's tenant.
+      const query = context.request.query ?? {};
+      const subscriptionId = query.subscription_id;
+      if (!subscriptionId) {
+        throw new FoundationError("VALIDATION_FAILED", "subscription_id is required", { field: "subscription_id" });
+      }
+      const sinceSeqRaw = query.since_seq;
+      const sinceSeq = sinceSeqRaw !== undefined ? Number(sinceSeqRaw) : undefined;
+      if (sinceSeq !== undefined && !Number.isInteger(sinceSeq)) {
+        throw new FoundationError("VALIDATION_FAILED", "since_seq must be an integer", { field: "since_seq" });
+      }
+      return ok(context.services.srAdmissibility.pullFeed(context.scope, subscriptionId, sinceSeq));
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/ltv/renew",
+    operationId: "g12.recordSrLtvRenewal",
+    protected: true,
+    permission: "g12.sr.ltv.renew",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      // FR-19: additive renewal evidence — RE_ANCHOR/ALGORITHM_MIGRATION re-anchor over
+      // existing chain heads; stored hashes are never recomputed or overwritten.
+      return created(
+        context.services.srAdmissibility.recordLtvRenewal(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
+          subjectType: requiredString(body, "subjectType") as SrLtvSubject,
+          subjectId: requiredString(body, "subjectId"),
+          renewalKind: requiredString(body, "renewalKind") as SrLtvRenewalKind,
+          priorAlgorithm: optionalString(body, "priorAlgorithm"),
+          newAlgorithm: optionalString(body, "newAlgorithm"),
+          triggeredBy: optionalString(body, "triggeredBy") as SrLtvTrigger | undefined,
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/ltv/renewals",
+    operationId: "g12.listSrLtvRenewals",
+    protected: true,
+    permission: "g12.sr.ltv.read",
+    list: { defaultLimit: 25, maxLimit: 100 },
+    handler: (context) =>
+      ok(
+        pageItems(
+          context.services.srAdmissibility.listLtvRenewals(context.scope, context.request.query?.subject_id),
+          context.pagination ?? { limit: 25 }
+        )
+      ),
   });
 }
 

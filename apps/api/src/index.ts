@@ -46,6 +46,8 @@ export * from "./modules/g12/serviceRegisterService";
 export * from "./modules/g12/srIntegrity";
 export * from "./modules/g12/srIntegrityRepository";
 export * from "./modules/g12/srIntegrityService";
+export * from "./modules/g12/srAdmissibilityRepository";
+export * from "./modules/g12/srAdmissibilityService";
 export * from "./modules/g13/documentSecurityRepository";
 export * from "./modules/g13/documentVaultService";
 export * from "./modules/g14/analyticsService";

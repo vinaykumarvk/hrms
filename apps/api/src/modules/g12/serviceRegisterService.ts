@@ -289,6 +289,20 @@ export class ServiceRegisterService {
       .map((row) => ({ ...row }));
   }
 
+  /**
+   * FR-13 pull-feed materialisation: every committed ledger append for the tenant in
+   * commit order, each carrying its per-tenant monotonic feed sequence. The ledger is
+   * append-only, so a feed sequence, once assigned, never moves — the subscriber cursor
+   * (last_delivered_seq / since_seq) is stable across pulls. Corrigenda and reversals are
+   * ordinary appends, so they re-emit here naturally (FR-13 AC5).
+   */
+  listFeedEvents(scope: TenantScope): Array<{ feedSeq: number; event: SrEvent }> {
+    requireTenantScope(scope);
+    return this.events
+      .filter((event) => event.tenantId === scope.tenantId)
+      .map((event, index) => ({ feedSeq: index + 1, event: this.toView(event) }));
+  }
+
   count(scope: TenantScope): number {
     requireTenantScope(scope);
     return this.events.filter((event) => event.tenantId === scope.tenantId && (!scope.entityId || event.entityId === scope.entityId)).length;

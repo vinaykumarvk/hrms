@@ -163,6 +163,7 @@ export interface SrIntegrityRepository {
 
   appendAttestation(attestation: SrAttestation): void;
   listAttestations(scope: TenantScope, employeeId: string): SrAttestation[];
+  findAttestation(scope: TenantScope, attestationId: string): SrAttestation | undefined;
   countAttestations(): number;
 
   appendExtract(extract: SrCertifiedExtract): void;
@@ -237,6 +238,11 @@ export class InMemorySrIntegrityRepository implements SrIntegrityRepository {
 
   listAttestations(scope: TenantScope, employeeId: string): SrAttestation[] {
     return this.attestations.filter((row) => inScope(row, scope) && row.employeeId === employeeId).map((row) => ({ ...row }));
+  }
+
+  findAttestation(scope: TenantScope, attestationId: string): SrAttestation | undefined {
+    const row = this.attestations.find((attestation) => inScope(attestation, scope) && attestation.id === attestationId);
+    return row ? { ...row } : undefined;
   }
 
   countAttestations(): number {

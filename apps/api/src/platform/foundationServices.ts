@@ -44,6 +44,8 @@ import { InMemoryPensionRevisionRepository } from "../modules/g11/pensionRevisio
 import { ServiceRegisterService } from "../modules/g12/serviceRegisterService";
 import { SrIntegrityService, TimestampAuthority } from "../modules/g12/srIntegrityService";
 import { InMemorySrIntegrityRepository } from "../modules/g12/srIntegrityRepository";
+import { SrAdmissibilityService } from "../modules/g12/srAdmissibilityService";
+import { InMemorySrAdmissibilityRepository } from "../modules/g12/srAdmissibilityRepository";
 import { DocumentVaultService, ScanProvider, StubScanProvider } from "../modules/g13/documentVaultService";
 import { InMemoryDocumentSecurityRepository } from "../modules/g13/documentSecurityRepository";
 import { AnalyticsService } from "../modules/g14/analyticsService";
@@ -83,6 +85,7 @@ export interface FoundationServices {
   pensionRevisions: PensionRevisionService;
   serviceRegister: ServiceRegisterService;
   srIntegrity: SrIntegrityService;
+  srAdmissibility: SrAdmissibilityService;
   documentVault: DocumentVaultService;
   analytics: AnalyticsService;
   analyticsEngine: AnalyticsEngineService;
@@ -271,6 +274,11 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   // injectable RFC 3161 TSA seam (JOB-G12-ANCHOR), gap register (JOB-G12-GAPSCAN),
   // attestations, and P02-redacted certified extracts — behind the repository pattern.
   const srIntegrity = new SrIntegrityService(authorization, audit, serviceRegister, jobs, new InMemorySrIntegrityRepository(), options.g12TimestampAuthority);
+  // PH-15D: G12 admissibility + longevity — §65B/BSA authenticity certificates over the
+  // verified chain (E24, GENERATE_65B), sr_subscriptions with the single authenticated pull
+  // feed (E16, since_seq/last_delivered_seq, WEBHOOK/MESSAGE_BUS -> SR_DELIVERY_MODE_DEFERRED),
+  // and sr_ltv_renewals re-anchoring over existing heads (E25) — behind the repository pattern.
+  const srAdmissibility = new SrAdmissibilityService(audit, serviceRegister, srIntegrity, new InMemorySrAdmissibilityRepository(), options.g12TimestampAuthority);
   const analytics = new AnalyticsService(employeeMaster, workflow, serviceRegister, documentVault, disciplinary, payroll, pension, authorization, audit);
   // PH-10D: the real G14 analytics engine (migration 0021) — governed/versioned kpi_definitions,
   // append-only bitemporal kpi_snapshots (FR-23), JOB-G14-MART-* refresh over the seeded
@@ -307,6 +315,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     pensionRevisions,
     serviceRegister,
     srIntegrity,
+    srAdmissibility,
     documentVault,
     analytics,
     analyticsEngine,

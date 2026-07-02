@@ -491,6 +491,11 @@ export class SrIntegrityService {
     return this.repository.listAttestations(scope, employeeId);
   }
 
+  getAttestation(scope: TenantScope, attestationId: string): SrAttestation | undefined {
+    requireTenantScope(scope);
+    return this.repository.findAttestation(scope, attestationId);
+  }
+
   // -------------------------------------------------------------------------------------
   // FR-10: E14 sr_certified_extracts — P02-redacted certified rendering.
   // -------------------------------------------------------------------------------------
