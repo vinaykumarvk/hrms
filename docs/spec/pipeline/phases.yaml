@@ -1532,3 +1532,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-57b.sh
     depends_on: [PH-57A]
+
+  # PH-58 — remediation tranche 45 (hand-built; subagent credits exhausted until 2026-07-08). Second-pass
+  # deepening: expose G11 pension disbursement (transmit + list) + pensioner lifecycle reads (life
+  # certificates, pensioner-by-case). Ratchet 532/40.2% -> 536/40.5% (G11 36.7% -> 41.1%).
+  - id: PH-58A
+    name: PH-58 · G11 disbursement route exposure (coverage ratchet 532->536 / 40.5%)
+    prompt: docs/spec/pipeline/prompts/PH-58A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-58a.sh
+    gate: auto
+    depends_on: [PH-57B]
+  - id: PH-58B
+    name: PH-58 · Tranche-45 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-58B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-58b.sh
+    depends_on: [PH-58A]

@@ -23,16 +23,16 @@ attributed to a module by `operationId` prefix.
 | G08 | 133 | 40 | 30.1% |
 | G09 | 89 | 34 | 38.2% |
 | G10 | 87 | 43 | 49.4% |
-| G11 | 90 | 33 | 36.7% |
+| G11 | 90 | 37 | 41.1% |
 | G12 | 65 | 35 | 53.8% |
 | G13 | 114 | 36 | 31.6% |
 | G14 | 90 | 26 | 28.9% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **532** | **40.2%** |
+| **Total** | **1323** | **536** | **40.5%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 40.2%** and **implemented routes ≥ 532**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 40.5%** and **implemented routes ≥ 536**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
 
@@ -57,7 +57,8 @@ reservations, preferences, mutual orders, charge-handovers, relieving/joining re
 (PH-55A: G01 governed write-ports (identity change / transfer posting / probation confirmation) + live-record
 /count reads) → **526 / 39.8%** (PH-56A: G10 FR-16 payroll engine-run lifecycle (create → snapshot → compute
 → approve (SoD) → lock) + reads) → **532 / 40.2%** (PH-57A: G10 FR-20 full-and-final settlement
-(settle → approve SoD) + recovery/loan/hold reads — 6 real, service-tested operations wired to the kernel).
+(settle → approve SoD) + recovery/loan/hold reads) → **536 / 40.5%** (PH-58A: G11 pension disbursement
+(transmit + list) + pensioner lifecycle reads — 4 real, service-tested operations wired to the kernel).
 
 ## Honest limitation (what this metric is NOT)
 
