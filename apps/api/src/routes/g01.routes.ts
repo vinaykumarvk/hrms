@@ -966,6 +966,94 @@ export function registerG01Routes(kernel: ApiKernel): void {
       return ok({ removed: true });
     },
   });
+
+  // PH-65A — FR-EPM-008 bank-account register (NET-NEW backing): list / add (VAL-IFSC, PENDING) / update
+  // (re-enters PENDING) / approve / penny-drop / soft-delete, with the single primary-salary invariant.
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees/{id}/bank-accounts",
+    operationId: "g01.listBankAccounts",
+    protected: true,
+    permission: "g01.employee.read",
+    handler: (context) => ok({ items: context.services.bankAccount.listBankAccounts(context.scope, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/bank-accounts",
+    operationId: "g01.addBankAccount",
+    protected: true,
+    permission: "g01.bank.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        bankAccount: context.services.bankAccount.addBankAccount(context.actor, requiredParam(context.params, "id"), {
+          bankName: requiredString(body, "bankName"),
+          ifsc: requiredString(body, "ifsc"),
+          accountNumberMasked: requiredString(body, "accountNumberMasked"),
+          isPrimarySalary: optionalBoolean(body, "isPrimarySalary"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "PATCH",
+    path: "/api/v1/employees/{id}/bank-accounts/{accountId}",
+    operationId: "g01.updateBankAccount",
+    protected: true,
+    permission: "g01.bank.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return ok({
+        bankAccount: context.services.bankAccount.updateBankAccount(context.actor, requiredParam(context.params, "accountId"), {
+          rowVersion: readNomineeNumber(body, "rowVersion"),
+          bankName: optionalString(body, "bankName"),
+          ifsc: optionalString(body, "ifsc"),
+          accountNumberMasked: optionalString(body, "accountNumberMasked"),
+          isPrimarySalary: optionalBoolean(body, "isPrimarySalary"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/bank-accounts/{accountId}:approve",
+    operationId: "g01.approveBankAccount",
+    protected: true,
+    permission: "g01.bank.approve",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => accepted({ bankAccount: context.services.bankAccount.approveBankAccount(context.actor, requiredParam(context.params, "accountId")) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/bank-accounts/{accountId}:penny-drop",
+    operationId: "g01.recordBankPennyDrop",
+    protected: true,
+    permission: "g01.bank.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted({ bankAccount: context.services.bankAccount.recordPennyDrop(context.actor, requiredParam(context.params, "accountId"), { result: requiredString(body, "result") as "VERIFIED" | "FAILED" }) });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/bank-accounts/{accountId}:remove",
+    operationId: "g01.removeBankAccount",
+    protected: true,
+    permission: "g01.bank.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      context.services.bankAccount.removeBankAccount(context.actor, requiredParam(context.params, "accountId"));
+      return ok({ removed: true });
+    },
+  });
 }
 
 /** A required numeric body field accepting a JSON number or a numeric string. */

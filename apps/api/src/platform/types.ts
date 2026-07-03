@@ -27,7 +27,9 @@ export type G01DomainErrorCode =
   | "LEGAL_HOLD_ACTIVE"
   | "BLOCKING_OBLIGATIONS"
   // FR-EPM-004: nominee benefit shares must sum to <= 100 per benefit type (422).
-  | "VAL-NOMINEE";
+  | "VAL-NOMINEE"
+  // FR-EPM-008: bank IFSC must match the RBI format (422).
+  | "VAL-IFSC";
 
 /** BRD G03 §8 named domain error codes (docs/brd/v3/G03-attendance-and-leave-management.md). */
 export type G03DomainErrorCode =

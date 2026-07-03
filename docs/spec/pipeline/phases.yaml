@@ -1644,3 +1644,20 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-64b.sh
     depends_on: [PH-64A]
+
+  # PH-65 — remediation tranche 52 (hand-built; subagent credits exhausted until 2026-07-08). NET-NEW:
+  # implement the FR-EPM-008 bank-account register end-to-end — new BankAccountService + VAL-IFSC + single
+  # primary-salary invariant + PENDING->APPROVED maker-checker + penny-drop tri-state + soft-delete. Ratchet
+  # 564/42.6% -> 570/43.1%.
+  - id: PH-65A
+    name: PH-65 · G01 bank-account register (net-new; coverage ratchet 564->570 / 43.1%)
+    prompt: docs/spec/pipeline/prompts/PH-65A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-65a.sh
+    gate: auto
+    depends_on: [PH-64B]
+  - id: PH-65B
+    name: PH-65 · Tranche-52 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-65B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-65b.sh
+    depends_on: [PH-65A]
