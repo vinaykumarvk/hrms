@@ -345,6 +345,50 @@ export function registerG08Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-30C — G08 DSC e-signature and continuous feedback (route exposure).
+    {
+      method: "POST",
+      path: "/api/v1/apar/forms/{id}/e-signature",
+      operationId: "g08.signApar",
+      protected: true,
+      permission: "g08.signature.sign",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          signature: context.services.digitalSignature.sign(context.actor, {
+            formId: requiredParam(context.params, "id"),
+            actionType: requiredString(body, "actionType") as "CERTIFY" | "RATIFY" | "EXPUNGE",
+            method: requiredString(body, "method") as "DSC" | "AADHAAR_ESIGN" | "HSM",
+            payload: body.payload ?? {},
+            certificateSerial: optionalString(body, "certificateSerial"),
+            signedAt: requiredString(body, "signedAt"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/apar/continuous-feedback",
+      operationId: "g08.recordContinuousFeedback",
+      protected: true,
+      permission: "g08.feedback.record",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          feedback: context.services.continuousFeedback.recordFeedback(context.actor, {
+            cycleId: requiredString(body, "cycleId"),
+            appraiseeId: requiredString(body, "appraiseeId"),
+            direction: requiredString(body, "direction") as "UPWARD" | "DOWNWARD" | "PEER",
+            note: requiredString(body, "note"),
+            recordedAt: requiredString(body, "recordedAt"),
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
