@@ -1388,3 +1388,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-48b.sh
     depends_on: [PH-48A]
+
+  # PH-49 — remediation tranche 36 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G02 step-up MFA lifecycle + change-request template management
+  # (real, service-tested backing). Ratchet 469/35.4% -> 475/35.9% (G02 38.5% -> 47.7%).
+  - id: PH-49A
+    name: PH-49 · G02 stepup/template route exposure (coverage ratchet 469->475 / 35.9%)
+    prompt: docs/spec/pipeline/prompts/PH-49A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-49a.sh
+    gate: auto
+    depends_on: [PH-48B]
+  - id: PH-49B
+    name: PH-49 · Tranche-36 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-49B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-49b.sh
+    depends_on: [PH-49A]

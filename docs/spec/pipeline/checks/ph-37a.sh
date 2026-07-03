@@ -9,7 +9,7 @@ fail=0; red(){ echo "  RED  $*"; fail=1; }; grn(){ echo "  ok   $*"; }
 have(){ grep -qE "$2" "$1" 2>/dev/null && grn "$3" || red "$3"; }
 REPORT=docs/reviews/contract-coverage-20260703.md
 TOOL=tools/contract-coverage.mjs
-FLOOR_ROUTES=469; FLOOR_PCT=35.4
+FLOOR_ROUTES=475; FLOOR_PCT=35.9
 echo "== PH-37A exit-criteria (contract-coverage gate) =="
 [ -d node_modules ] || red "node_modules absent"
 [ -f "$TOOL" ] && grn "coverage tool present" || red "coverage tool missing"
