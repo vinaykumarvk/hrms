@@ -52,7 +52,10 @@ export type G03DomainErrorCode =
   // PH-18B WFH / on-duty attendance exceptions (BRD G03 FR-07/FR-08).
   | "EXCEPTION_OVERLAP"
   | "WFH_CAP_EXCEEDED"
-  | "DOCUMENT_REQUIRED";
+  | "DOCUMENT_REQUIRED"
+  // PH-19A blackout periods + mass-leave (BRD G03 FR-23).
+  | "BLACKOUT_PERIOD"
+  | "RETURN_TO_WORK_PENDING";
 
 /** BRD G06 §9.4 named domain error codes (docs/brd/v3/G06-promotion-posting-progression.md). */
 export type G06DomainErrorCode =

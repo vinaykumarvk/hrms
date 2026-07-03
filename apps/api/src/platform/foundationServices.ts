@@ -17,6 +17,7 @@ import { VigilanceRegisterService, InMemoryVigilanceRegisterRepository } from ".
 import { AadhaarVaultService, InMemoryAadhaarVaultRepository } from "../modules/g01/aadhaarVaultService";
 import { AttendanceExceptionService, InMemoryAttendanceExceptionRepository } from "../modules/g03/attendanceExceptionService";
 import { JoiningSequenceService, InMemoryJoiningSequenceRepository } from "../modules/g05/joiningSequenceService";
+import { LeaveBlackoutMassService, InMemoryLeaveBlackoutMassRepository } from "../modules/g03/leaveBlackoutMassService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -91,6 +92,7 @@ export interface FoundationServices {
   aadhaarVault: AadhaarVaultService;
   attendanceException: AttendanceExceptionService;
   joiningSequence: JoiningSequenceService;
+  leaveBlackoutMass: LeaveBlackoutMassService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -264,6 +266,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const aadhaarVault = new AadhaarVaultService(authorization, audit, new InMemoryAadhaarVaultRepository());
   const attendanceException = new AttendanceExceptionService(authorization, audit, new InMemoryAttendanceExceptionRepository());
   const joiningSequence = new JoiningSequenceService(authorization, audit, new InMemoryJoiningSequenceRepository());
+  const leaveBlackoutMass = new LeaveBlackoutMassService(authorization, audit, new InMemoryLeaveBlackoutMassRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -421,6 +424,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     aadhaarVault,
     attendanceException,
     joiningSequence,
+    leaveBlackoutMass,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,

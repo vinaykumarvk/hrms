@@ -68,6 +68,9 @@ export function statusForError(code: WireErrorCode): number {
     // BRD G03 FR-07/FR-08: an overlapping attendance exception and a WFH over-cap are 409 CONFLICT.
     case "EXCEPTION_OVERLAP":
     case "WFH_CAP_EXCEEDED":
+    // BRD G03 FR-23: leave inside a blackout window and an unresolved return-to-work are 409.
+    case "BLACKOUT_PERIOD":
+    case "RETURN_TO_WORK_PENDING":
     // BRD G02 FR-015: applying/committing a change without a valid strong e-signature is 409.
     case "ERR-G02-ESIGN":
     case "STRENGTH_INCONSISTENT":
