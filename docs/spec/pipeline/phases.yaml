@@ -1276,3 +1276,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-41b.sh
     depends_on: [PH-41A]
+
+  # PH-42 — remediation tranche 29 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose FR-G07-018 external-credential lifecycle + vendor-empanelment
+  # decisions (real, service-tested backing). Ratchet 421/31.8% -> 430/32.5% (G07 25.2% -> 33.3%).
+  - id: PH-42A
+    name: PH-42 · G07 credential/empanelment route exposure (coverage ratchet 421->430 / 32.5%)
+    prompt: docs/spec/pipeline/prompts/PH-42A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-42a.sh
+    gate: auto
+    depends_on: [PH-41B]
+  - id: PH-42B
+    name: PH-42 · Tranche-29 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-42B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-42b.sh
+    depends_on: [PH-42A]
