@@ -389,6 +389,25 @@ export function registerG08Routes(kernel: ApiKernel): void {
         });
       },
     },
+    {
+      method: "POST",
+      path: "/api/v1/apar/360-feedback",
+      operationId: "g08.open360",
+      protected: true,
+      permission: "g08.360.open",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          feedback360: context.services.feedback360.open360(context.actor, {
+            cycleId: requiredString(body, "cycleId"),
+            appraiseeId: requiredString(body, "appraiseeId"),
+            minRaters: optionalNumber(body, "minRaters"),
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }

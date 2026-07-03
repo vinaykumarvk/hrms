@@ -335,6 +335,25 @@ export function registerG07Routes(kernel: ApiKernel): void {
         });
       },
     },
+    {
+      method: "POST",
+      path: "/api/v1/training/learning-record-stores",
+      operationId: "g07.registerLrs",
+      protected: true,
+      permission: "g07.lrs.register",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          lrs: context.services.lmsIntegration.registerLrs(context.actor, {
+            name: requiredString(body, "name"),
+            endpoint: requiredString(body, "endpoint"),
+            isPrimary: optionalBoolean(body, "isPrimary"),
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
