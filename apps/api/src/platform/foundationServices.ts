@@ -30,6 +30,7 @@ import { DigitalSignatureService, InMemoryDigitalSignatureRepository } from "../
 import { OcrSearchService, InMemoryOcrSearchRepository } from "../modules/g13/ocrSearchService";
 import { NlQueryService, InMemoryNlQueryRepository } from "../modules/g14/nlQueryService";
 import { OutboundIntegrationService, InMemoryOutboundIntegrationRepository, OutboundTransport } from "../modules/g04/outboundIntegrationService";
+import { DigitalDeliveryService, InMemoryDigitalDeliveryRepository } from "../modules/g11/digitalDeliveryService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -117,6 +118,7 @@ export interface FoundationServices {
   ocrSearch: OcrSearchService;
   nlQuery: NlQueryService;
   outboundIntegration: OutboundIntegrationService;
+  digitalDelivery: DigitalDeliveryService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -309,6 +311,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const nlQuery = new NlQueryService(authorization, audit, new InMemoryNlQueryRepository());
   const g04Transport: OutboundTransport = options.g04OutboundTransport ?? { send: () => ({ ok: true }) };
   const outboundIntegration = new OutboundIntegrationService(authorization, audit, g04Transport, new InMemoryOutboundIntegrationRepository());
+  const digitalDelivery = new DigitalDeliveryService(authorization, audit, new InMemoryDigitalDeliveryRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -479,6 +482,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     ocrSearch,
     nlQuery,
     outboundIntegration,
+    digitalDelivery,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
