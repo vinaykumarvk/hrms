@@ -834,6 +834,69 @@ export function registerG01Routes(kernel: ApiKernel): void {
       return ok({ removed: true });
     },
   });
+
+  // PH-63A — FR-EPM-005 emergency-contact register (NET-NEW backing): list / add / update / soft-delete with
+  // the unique call-order priority invariant and row_version optimistic locking.
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees/{id}/emergency-contacts",
+    operationId: "g01.listEmergencyContacts",
+    protected: true,
+    permission: "g01.employee.read",
+    handler: (context) => ok({ items: context.services.emergencyContact.listEmergencyContacts(context.scope, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/emergency-contacts",
+    operationId: "g01.addEmergencyContact",
+    protected: true,
+    permission: "g01.emergency_contact.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        emergencyContact: context.services.emergencyContact.addEmergencyContact(context.actor, requiredParam(context.params, "id"), {
+          name: requiredString(body, "name"),
+          phone: requiredString(body, "phone"),
+          priority: readNomineeNumber(body, "priority"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "PATCH",
+    path: "/api/v1/employees/{id}/emergency-contacts/{contactId}",
+    operationId: "g01.updateEmergencyContact",
+    protected: true,
+    permission: "g01.emergency_contact.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return ok({
+        emergencyContact: context.services.emergencyContact.updateEmergencyContact(context.actor, requiredParam(context.params, "contactId"), {
+          rowVersion: readNomineeNumber(body, "rowVersion"),
+          name: optionalString(body, "name"),
+          phone: optionalString(body, "phone"),
+          priority: optionalNumber(body, "priority"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/emergency-contacts/{contactId}:remove",
+    operationId: "g01.removeEmergencyContact",
+    protected: true,
+    permission: "g01.emergency_contact.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      context.services.emergencyContact.removeEmergencyContact(context.actor, requiredParam(context.params, "contactId"));
+      return ok({ removed: true });
+    },
+  });
 }
 
 /** A required numeric body field accepting a JSON number or a numeric string. */
