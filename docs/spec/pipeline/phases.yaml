@@ -687,3 +687,34 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-17d.sh
     gate: human
     depends_on: [PH-17C]
+
+  # PH-18 — remediation tranche 5 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Targets: G01 Aadhaar vault tokenisation, G03 WFH/on-duty attendance exceptions,
+  # G05 joining-sequence + inter-se seniority.
+  - id: PH-18A
+    name: PH-18 · G01 Aadhaar vault tokenisation and 4-eyes reveal
+    prompt: docs/spec/pipeline/prompts/PH-18A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-18a.sh
+    gate: auto
+    depends_on: [PH-17D]
+
+  - id: PH-18B
+    name: PH-18 · G03 WFH / on-duty attendance exceptions
+    prompt: docs/spec/pipeline/prompts/PH-18B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-18b.sh
+    gate: auto
+    depends_on: [PH-18A]
+
+  - id: PH-18C
+    name: PH-18 · G05 joining-sequence and inter-se seniority
+    prompt: docs/spec/pipeline/prompts/PH-18C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-18c.sh
+    gate: auto
+    depends_on: [PH-18B]
+
+  - id: PH-18D
+    name: PH-18 · Tranche-5 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-18D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-18d.sh
+    gate: human
+    depends_on: [PH-18C]
