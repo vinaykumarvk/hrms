@@ -9,6 +9,7 @@ import { WorkflowConfigConsole } from "./workflow/WorkflowConfigConsole";
 import { EmployeeProfile } from "./modules/g01/EmployeeProfile";
 import { EmployeeContactsPanel } from "./modules/g01/EmployeeContactsPanel";
 import { EmployeeDependentsPanel } from "./modules/g01/EmployeeDependentsPanel";
+import { PrivacyConsole } from "./modules/g01/PrivacyConsole";
 import { PersonalDetailsWorkspace } from "./modules/g02/PersonalDetailsWorkspace";
 import { ChangeRequestEditor } from "./modules/g02/ChangeRequestEditor";
 import { ChangeRequestApproverQueue } from "./modules/g02/ChangeRequestApproverQueue";
@@ -149,6 +150,7 @@ export function App() {
       <section className="workspace-grid" aria-label="Phase 05D foundation record views">
         <RouteGuard permissions={permissions} requiredPermission="g01.employee.read" routeLabel="Employees workspace (G01)">
           <EmployeeProfile client={client} />
+          <PrivacyConsole client={client} />
           <EmployeeContactsPanel client={client} />
           <EmployeeDependentsPanel client={client} />
         </RouteGuard>

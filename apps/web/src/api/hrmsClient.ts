@@ -1,4 +1,5 @@
 export const HRMS_API_ROUTES = {
+  myRightsRequests: "/api/v1/me/rights-requests",
   sealedCovers: "/api/v1/promotions/sealed-covers",
   biKpis: "/api/v1/analytics/bi-kpis",
   dataSubjectRequests: "/api/v1/dsr",
@@ -61,6 +62,19 @@ export interface PageQuery {
 }
 
 /** G13 DPDP data-subject request row (PH-15E engine; PH-27A console). */
+/** G01 data-principal rights request row (DPDP self-service; PH-34C privacy console). */
+export interface MyRightsRequest {
+  id: string;
+  rightType: "ACCESS" | "CORRECTION" | "ERASURE" | "PORTABILITY";
+  status: "RECEIVED" | "IN_PROGRESS" | "FULFILLED" | "REJECTED";
+  raisedOn: string;
+}
+
+export interface RaiseRightsRequestInput {
+  rightType: "ACCESS" | "CORRECTION" | "ERASURE" | "PORTABILITY";
+  detail: string;
+}
+
 /** G06 sealed-cover case row (PH-08C engine; PH-34B review UI). */
 export interface SealedCoverCase {
   id: string;
@@ -929,6 +943,8 @@ export interface HrmsClient {
   getLeaveBalance(employeeId?: string, leaveTypeId?: string): Promise<LeaveBalanceView>;
   getServiceRegisterTimeline(employeeId: string, page?: PageQuery): Promise<PageResult<SrTimelineEntry>>;
   listDocuments(): Promise<PageResult<DocumentSummary>>;
+  listMyRightsRequests(): Promise<PageResult<MyRightsRequest>>;
+  raiseRightsRequest(input: RaiseRightsRequestInput, idempotencyKey: string): Promise<MyRightsRequest>;
   listSealedCovers(): Promise<PageResult<SealedCoverCase>>;
   releaseSealedCover(id: string, input: SealedCoverReleaseInput, idempotencyKey: string): Promise<SealedCoverCase>;
   listBiKpis(): Promise<PageResult<BiKpiTile>>;
@@ -1108,6 +1124,9 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
         `${HRMS_API_ROUTES.srEmployees}/${encodeURIComponent(employeeId)}/timeline${toPageQueryString(page)}`
       ),
     listDocuments: () => request<PageResult<DocumentSummary>>(HRMS_API_ROUTES.documents),
+    listMyRightsRequests: () => request<PageResult<MyRightsRequest>>(HRMS_API_ROUTES.myRightsRequests),
+    raiseRightsRequest: (input, idempotencyKey) =>
+      postWithIdempotency<MyRightsRequest>(HRMS_API_ROUTES.myRightsRequests, input, idempotencyKey),
     listSealedCovers: () => request<PageResult<SealedCoverCase>>(HRMS_API_ROUTES.sealedCovers),
     releaseSealedCover: (id, input, idempotencyKey) =>
       postWithIdempotency<SealedCoverCase>(`${HRMS_API_ROUTES.sealedCovers}/${encodeURIComponent(id)}:release`, input, idempotencyKey),

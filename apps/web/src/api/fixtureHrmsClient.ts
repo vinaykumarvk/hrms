@@ -1,5 +1,6 @@
 import {
   BiKpiTile,
+  MyRightsRequest,
   SealedCoverCase,
   CaseEvidenceItem,
   CounsellingChoiceResult,
@@ -437,6 +438,9 @@ export function createFixtureHrmsClient(): HrmsClient {
       { vacancyId: "vac-b", postLabel: "Revenue Inspector — Circle B", open: true },
     ],
   };
+  const rightsRequests: MyRightsRequest[] = [
+    { id: "rr-1", rightType: "ACCESS", status: "FULFILLED", raisedOn: "2026-06-01" },
+  ];
   const sealedCovers: SealedCoverCase[] = [
     { id: "sc-1", employeeId: "emp-1", reason: "Disciplinary case pending", status: "SEALED" },
     { id: "sc-2", employeeId: "emp-2", reason: "Vigilance case pending", status: "SEALED" },
@@ -755,6 +759,12 @@ export function createFixtureHrmsClient(): HrmsClient {
       return Promise.resolve(diff);
     },
     getLeaveBalance: () => Promise.resolve({ ...leaveBalance }),
+    listMyRightsRequests: () => Promise.resolve(page(rightsRequests.map((r) => ({ ...r })))),
+    raiseRightsRequest: (input) => {
+      const row: MyRightsRequest = { id: `rr-${rightsRequests.length + 1}`, rightType: input.rightType, status: "RECEIVED", raisedOn: "2026-07-03" };
+      rightsRequests.push(row);
+      return Promise.resolve({ ...row });
+    },
     listSealedCovers: () => Promise.resolve(page(sealedCovers.map((r) => ({ ...r })))),
     releaseSealedCover: (id, input) => {
       const row = sealedCovers.find((r) => r.id === id);
