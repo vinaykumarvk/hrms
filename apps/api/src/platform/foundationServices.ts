@@ -14,6 +14,7 @@ import { AttendanceOpsService } from "../modules/g03/attendanceOpsService";
 import { LeaveYearCloseService, InMemoryLeaveYearCloseRepository } from "../modules/g03/leaveYearCloseService";
 import { ChangeEsignStepUpService, InMemoryChangeEsignStepUpRepository } from "../modules/g02/changeEsignStepUpService";
 import { VigilanceRegisterService, InMemoryVigilanceRegisterRepository } from "../modules/g09/vigilanceRegisterService";
+import { AadhaarVaultService, InMemoryAadhaarVaultRepository } from "../modules/g01/aadhaarVaultService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -85,6 +86,7 @@ export interface FoundationServices {
   leaveYearClose: LeaveYearCloseService;
   changeEsignStepUp: ChangeEsignStepUpService;
   vigilanceRegister: VigilanceRegisterService;
+  aadhaarVault: AadhaarVaultService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -255,6 +257,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const leaveYearClose = new LeaveYearCloseService(authorization, audit, new InMemoryLeaveYearCloseRepository());
   const changeEsignStepUp = new ChangeEsignStepUpService(authorization, audit, new InMemoryChangeEsignStepUpRepository());
   const vigilanceRegister = new VigilanceRegisterService(authorization, audit, new InMemoryVigilanceRegisterRepository());
+  const aadhaarVault = new AadhaarVaultService(authorization, audit, new InMemoryAadhaarVaultRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -409,6 +412,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     leaveYearClose,
     changeEsignStepUp,
     vigilanceRegister,
+    aadhaarVault,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
