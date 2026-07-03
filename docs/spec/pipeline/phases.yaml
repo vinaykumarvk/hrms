@@ -907,3 +907,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-25d.sh
     gate: human
     depends_on: [PH-25C]
+
+  # PH-26 — remediation tranche 13 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Targets: G13 OCR extraction engine, G12 RFC-3161 TSA binding, G14 predictive+fairness.
+  - id: PH-26A
+    name: PH-26 · G13 OCR extraction engine binding
+    prompt: docs/spec/pipeline/prompts/PH-26A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-26a.sh
+    gate: auto
+    depends_on: [PH-25D]
+  - id: PH-26B
+    name: PH-26 · G12 RFC-3161 timestamp authority binding
+    prompt: docs/spec/pipeline/prompts/PH-26B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-26b.sh
+    gate: auto
+    depends_on: [PH-26A]
+  - id: PH-26C
+    name: PH-26 · G14 predictive attrition with fairness
+    prompt: docs/spec/pipeline/prompts/PH-26C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-26c.sh
+    gate: auto
+    depends_on: [PH-26B]
+  - id: PH-26D
+    name: PH-26 · Tranche-13 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-26D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-26d.sh
+    gate: human
+    depends_on: [PH-26C]
