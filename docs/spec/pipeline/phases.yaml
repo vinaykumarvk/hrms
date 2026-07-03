@@ -1071,3 +1071,30 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-31d.sh
     depends_on: [PH-31C]
+
+  # PH-32 — remediation tranche 19 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Route-exposure pass 5: G06 career/correction, G12 tsa/offline, G13 certified/ocr.
+  - id: PH-32A
+    name: PH-32 · G06 career-path and correction routes
+    prompt: docs/spec/pipeline/prompts/PH-32A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-32a.sh
+    gate: auto
+    depends_on: [PH-31D]
+  - id: PH-32B
+    name: PH-32 · G12 timestamp and offline-verify routes
+    prompt: docs/spec/pipeline/prompts/PH-32B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-32b.sh
+    gate: auto
+    depends_on: [PH-32A]
+  - id: PH-32C
+    name: PH-32 · G13 certified-copy and OCR-search routes
+    prompt: docs/spec/pipeline/prompts/PH-32C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-32c.sh
+    gate: auto
+    depends_on: [PH-32B]
+  - id: PH-32D
+    name: PH-32 · Tranche-19 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-32D.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-32d.sh
+    depends_on: [PH-32C]
