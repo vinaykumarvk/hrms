@@ -756,6 +756,51 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.leave.read",
       handler: (context) => ok({ items: context.services.attendanceException.listExceptions(context.scope, requiredParam(context.params, "employeeId")) }),
     },
+    // PH-60A — G03 attendance-policy config + leave-ledger/attendance/comp-off-balance reads. Route exposure
+    // for already-tested leave / attendanceOps backing.
+    {
+      method: "POST",
+      path: "/api/v1/attendance/policy",
+      operationId: "g03.configureAttendancePolicy",
+      protected: true,
+      permission: "g03.attendance.configure",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          policy: context.services.leave.configureAttendancePolicy(context.actor, {
+            backdateWindowDays: optionalNumber(body, "backdateWindowDays"),
+            regularisationCapPerPeriod: optionalNumber(body, "regularisationCapPerPeriod"),
+            halfDayUnderMinutes: optionalNumber(body, "halfDayUnderMinutes"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/leave/ledger",
+      operationId: "g03.listLeaveLedger",
+      protected: true,
+      permission: "g03.leave.read",
+      handler: (context) => ok({ items: context.services.leave.listLedger(context.scope) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/attendance/records",
+      operationId: "g03.listAttendance",
+      protected: true,
+      permission: "g03.leave.read",
+      handler: (context) => ok({ items: context.services.leave.listAttendance(context.scope) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/attendance/employees/{employeeId}/comp-off-balance",
+      operationId: "g03.getCompOffBalance",
+      protected: true,
+      permission: "g03.leave.read",
+      handler: (context) => ok(context.services.attendanceOps.getCompOffBalance(context.scope, requiredParam(context.params, "employeeId"), context.request.query?.asOfDate ?? "2026-07-02")),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
