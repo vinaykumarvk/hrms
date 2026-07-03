@@ -854,6 +854,25 @@ export function registerG05Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-31B — G05 joining-sequence + inter-se seniority (route exposure for the PH-18C engine).
+    {
+      method: "POST",
+      path: "/api/v1/transfers/joining-sequence",
+      operationId: "g05.assignJoiningSequence",
+      protected: true,
+      permission: "g05.joining.sequence",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          sequence: context.services.joiningSequence.assignJoiningSequence(context.actor, {
+            batchId: requiredString(body, "batchId"),
+            joiners: Array.isArray(body.joiners) ? (body.joiners as Array<{ employeeId: string; orderDate: string; serviceNo: string }>) : [],
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
