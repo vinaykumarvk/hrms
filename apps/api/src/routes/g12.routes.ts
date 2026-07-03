@@ -560,6 +560,33 @@ export function registerG12Routes(kernel: ApiKernel): void {
     requiresIdempotencyKey: true,
     handler: (context) => ok(context.services.offlineVerification.verifyBundle(readBodyRecord(context.request.body) as unknown as VerificationBundle)),
   });
+
+  // PH-61A — G12 SR admissibility/integrity reads (subscriptions, attestations). Route exposure for tested
+  // srAdmissibility / srIntegrity backing.
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/subscriptions",
+    operationId: "g12.listSubscriptions",
+    protected: true,
+    permission: "g12.sr.read",
+    handler: (context) => ok({ items: context.services.srAdmissibility.listSubscriptions(context.scope) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/employees/{employeeId}/attestations",
+    operationId: "g12.listAttestations",
+    protected: true,
+    permission: "g12.sr.read",
+    handler: (context) => ok({ items: context.services.srIntegrity.listAttestations(context.scope, requiredParam(context.params, "employeeId")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/attestations/{attestationId}",
+    operationId: "g12.getAttestation",
+    protected: true,
+    permission: "g12.sr.read",
+    handler: (context) => ok({ attestation: context.services.srIntegrity.getAttestation(context.scope, requiredParam(context.params, "attestationId")) ?? null }),
+  });
 }
 
 function appendAnnotation(context: ApiContext, eventId: string, eventTypeCode: string): ApiResponse {

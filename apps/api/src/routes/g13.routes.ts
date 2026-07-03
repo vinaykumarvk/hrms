@@ -550,6 +550,36 @@ export function registerG13Routes(kernel: ApiKernel): void {
       return ok({ items: context.services.documentVault.listByModuleRef(context.actor, moduleCode, entityRefId) });
     },
   });
+
+  // PH-61A — G13 OCR index management (index-from-payload + list). Route exposure for tested ocrSearch backing.
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/documents:ocr-index",
+    operationId: "g13.indexDocumentFromPayload",
+    protected: true,
+    permission: "g13.ocr.index",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        entry: context.services.ocrSearch.indexDocumentFromPayload(context.actor, {
+          documentId: requiredString(body, "documentId"),
+          classification: readClassification(body),
+          mimeType: requiredString(body, "mimeType"),
+          content: requiredString(body, "content"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/documents:ocr-index-list",
+    operationId: "g13.listOcrIndex",
+    protected: true,
+    permission: "g13.ocr.search",
+    handler: (context) => ok({ items: context.services.ocrSearch.listIndex(context.scope) }),
+  });
 }
 
 function readDsrType(body: Record<string, unknown>): "ACCESS" | "ERASURE" | "RECTIFICATION" | "PORTABILITY" {

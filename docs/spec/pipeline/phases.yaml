@@ -1580,3 +1580,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-60b.sh
     depends_on: [PH-60A]
+
+  # PH-61 — remediation tranche 48 (hand-built; subagent credits exhausted until 2026-07-08). Second-pass
+  # deepening: expose G12 SR admissibility/integrity reads (subscriptions, attestations) + G13 OCR index
+  # management (index-from-payload, list). Ratchet 547/41.3% -> 552/41.7% (G12 53.8% -> 58.5%, G13 31.6% -> 33.3%).
+  - id: PH-61A
+    name: PH-61 · G12/G13 admissibility/OCR route exposure (coverage ratchet 547->552 / 41.7%)
+    prompt: docs/spec/pipeline/prompts/PH-61A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-61a.sh
+    gate: auto
+    depends_on: [PH-60B]
+  - id: PH-61B
+    name: PH-61 · Tranche-48 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-61B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-61b.sh
+    depends_on: [PH-61A]
