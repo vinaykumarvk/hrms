@@ -718,3 +718,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-18d.sh
     gate: human
     depends_on: [PH-18C]
+
+  # PH-19 — remediation tranche 6 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Targets: G03 blackout/mass-leave, G08 continuous feedback/check-ins, G06 career-path/succession.
+  - id: PH-19A
+    name: PH-19 · G03 blackout periods and mass-leave
+    prompt: docs/spec/pipeline/prompts/PH-19A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-19a.sh
+    gate: auto
+    depends_on: [PH-18D]
+  - id: PH-19B
+    name: PH-19 · G08 continuous feedback and check-ins
+    prompt: docs/spec/pipeline/prompts/PH-19B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-19b.sh
+    gate: auto
+    depends_on: [PH-19A]
+  - id: PH-19C
+    name: PH-19 · G06 career-path and succession planning
+    prompt: docs/spec/pipeline/prompts/PH-19C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-19c.sh
+    gate: auto
+    depends_on: [PH-19B]
+  - id: PH-19D
+    name: PH-19 · Tranche-6 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-19D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-19d.sh
+    gate: human
+    depends_on: [PH-19C]
