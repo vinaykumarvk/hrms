@@ -1044,3 +1044,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-30d.sh
     gate: human
     depends_on: [PH-30C]
+
+  # PH-31 — remediation tranche 18 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Route-exposure pass 4: G02 retro-impact, G05 joining-sequence, G07 vendor empanelment.
+  - id: PH-31A
+    name: PH-31 · G02 retro-impact route
+    prompt: docs/spec/pipeline/prompts/PH-31A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-31a.sh
+    gate: auto
+    depends_on: [PH-30D]
+  - id: PH-31B
+    name: PH-31 · G05 joining-sequence route
+    prompt: docs/spec/pipeline/prompts/PH-31B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-31b.sh
+    gate: auto
+    depends_on: [PH-31A]
+  - id: PH-31C
+    name: PH-31 · G07 vendor-empanelment route
+    prompt: docs/spec/pipeline/prompts/PH-31C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-31c.sh
+    gate: auto
+    depends_on: [PH-31B]
+  - id: PH-31D
+    name: PH-31 · Tranche-18 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-31D.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-31d.sh
+    depends_on: [PH-31C]
