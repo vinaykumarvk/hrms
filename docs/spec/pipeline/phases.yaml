@@ -1548,3 +1548,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-58b.sh
     depends_on: [PH-58A]
+
+  # PH-59 — remediation tranche 46 (hand-built; subagent credits exhausted until 2026-07-08). Second-pass
+  # deepening: expose G06 succession-planning + qualifying-service surface (real, service-tested backing).
+  # Ratchet 536/40.5% -> 543/41% (G06 36% -> 44.2%).
+  - id: PH-59A
+    name: PH-59 · G06 succession/qualifying-service route exposure (coverage ratchet 536->543 / 41%)
+    prompt: docs/spec/pipeline/prompts/PH-59A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-59a.sh
+    gate: auto
+    depends_on: [PH-58B]
+  - id: PH-59B
+    name: PH-59 · Tranche-46 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-59B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-59b.sh
+    depends_on: [PH-59A]
