@@ -23,16 +23,16 @@ attributed to a module by `operationId` prefix.
 | G08 | 133 | 40 | 30.1% |
 | G09 | 89 | 25 | 28.1% |
 | G10 | 87 | 30 | 34.5% |
-| G11 | 90 | 27 | 30% |
+| G11 | 90 | 33 | 36.7% |
 | G12 | 65 | 28 | 43.1% |
 | G13 | 114 | 36 | 31.6% |
 | G14 | 90 | 26 | 28.9% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **456** | **34.5%** |
+| **Total** | **1323** | **462** | **34.9%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 34.5%** and **implemented routes ≥ 456**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 34.9%** and **implemented routes ≥ 462**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
 
@@ -44,7 +44,8 @@ vendor-empanelment decisions) → **436 / 33%** (PH-43A: G14 analytics-engine re
 predictive-score reads) → **443 / 33.5%** (PH-44A: G13 checkout-lock lifecycle + rescan + access-audit/
 scan-result/module-ref reads) → **451 / 34.1%** (PH-45A: G01 Aadhaar reveal 4-eyes lifecycle + employee
 legal-hold/blocking-obligation + service-no lookup) → **456 / 34.5%** (PH-46A: FR-G10-08 loan lifecycle
-(instalment recovery + foreclosure) + Rule-3 concessional perquisite valuation + reads — 6 real,
+(instalment recovery + foreclosure) + Rule-3 concessional perquisite valuation + reads) → **462 / 34.9%**
+(PH-47A: G11 PDA go-live lifecycle + grievance close + pensioner bank-account verification — 6 real,
 service-tested operations wired to the kernel).
 
 ## Honest limitation (what this metric is NOT)
