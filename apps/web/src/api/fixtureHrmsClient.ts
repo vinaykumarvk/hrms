@@ -1,4 +1,6 @@
 import {
+  CounsellingChoiceResult,
+  CounsellingSessionView,
   DsrRecord,
   AparFormActionResult,
   AparFormView,
@@ -424,6 +426,14 @@ const fixtureLeaveTypes: LeaveTypeOption[] = [
 export function createFixtureHrmsClient(): HrmsClient {
   // Interactive PH-06D fixtures are stateful per client so submitted applications
   // and initiated orders show up in subsequent list calls, like the real API.
+  const counsellingSession: CounsellingSessionView = {
+    id: "counsel-1",
+    currentTurnEmployeeId: "emp-1",
+    vacancies: [
+      { vacancyId: "vac-a", postLabel: "Revenue Inspector — Circle A", open: true },
+      { vacancyId: "vac-b", postLabel: "Revenue Inspector — Circle B", open: true },
+    ],
+  };
   const dsrRows: DsrRecord[] = [
     { id: "dsr-1", subjectEmployeeId: "emp-1", requestType: "ERASE", status: "RECEIVED", legalBasis: undefined },
     { id: "dsr-2", subjectEmployeeId: "emp-2", requestType: "ACCESS", status: "UNDER_REVIEW", legalBasis: undefined },
@@ -738,6 +748,14 @@ export function createFixtureHrmsClient(): HrmsClient {
       return Promise.resolve(diff);
     },
     getLeaveBalance: () => Promise.resolve({ ...leaveBalance }),
+    getCounsellingSession: () => Promise.resolve({ ...counsellingSession, vacancies: counsellingSession.vacancies.map((v) => ({ ...v })) }),
+    submitCounsellingChoice: (input) => {
+      const v = counsellingSession.vacancies.find((x) => x.vacancyId === input.vacancyId);
+      if (!v || !v.open) return Promise.reject(new Error("ERR-G05-VACANCY-FULL"));
+      v.open = false;
+      counsellingSession.currentTurnEmployeeId = "emp-2";
+      return Promise.resolve({ reservationId: "resv-1", nextTurnEmployeeId: counsellingSession.currentTurnEmployeeId });
+    },
     listDataSubjectRequests: () => Promise.resolve(page(dsrRows.map((r) => ({ ...r })))),
     adjudicateDsr: (id, input) => {
       const row = dsrRows.find((r) => r.id === id);

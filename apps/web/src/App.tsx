@@ -16,6 +16,7 @@ import { LeaveWorkspace } from "./modules/g03/LeaveWorkspace";
 import { SelfServiceSummary } from "./modules/g03/SelfServiceSummary";
 import { LeaveSrRelayWorkspace } from "./modules/g04/LeaveSrRelayWorkspace";
 import { TransferWorkspace } from "./modules/g05/TransferWorkspace";
+import { CounsellingConsole } from "./modules/g05/CounsellingConsole";
 import { PromotionWorkspace } from "./modules/g06/PromotionWorkspace";
 import { DpcConvenePanel } from "./modules/g06/DpcConvenePanel";
 import { TrainingWorkspace } from "./modules/g07/TrainingWorkspace";
@@ -103,6 +104,7 @@ export function App() {
         </RouteGuard>
         <RouteGuard permissions={permissions} requiredPermission="g05.transfer.read" routeLabel="Transfers workspace (G05)">
           <TransferWorkspace client={client} />
+          <CounsellingConsole client={client} />
         </RouteGuard>
       </section>
       <section className="workspace-grid" aria-label="Phase 08 statutory administration wave">

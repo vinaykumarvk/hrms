@@ -1,5 +1,6 @@
 export const HRMS_API_ROUTES = {
   dataSubjectRequests: "/api/v1/dsr",
+  counsellingSessions: "/api/v1/transfers/counselling",
   workflowTasks: "/api/v1/workflow/tasks",
   workflowInstances: "/api/v1/workflow/instances",
   employees: "/api/v1/employees",
@@ -57,6 +58,24 @@ export interface PageQuery {
 }
 
 /** G13 DPDP data-subject request row (PH-15E engine; PH-27A console). */
+/** G05 counselling session + a vacancy choice (PH-16D engine; PH-27B console). */
+export interface CounsellingSessionView {
+  id: string;
+  currentTurnEmployeeId: string | null;
+  vacancies: Array<{ vacancyId: string; postLabel: string; open: boolean }>;
+}
+
+export interface CounsellingChoiceInput {
+  sessionId: string;
+  employeeId: string;
+  vacancyId: string;
+}
+
+export interface CounsellingChoiceResult {
+  reservationId: string;
+  nextTurnEmployeeId: string | null;
+}
+
 export interface DsrRecord {
   id: string;
   subjectEmployeeId: string;
@@ -878,6 +897,8 @@ export interface HrmsClient {
   getLeaveBalance(employeeId?: string, leaveTypeId?: string): Promise<LeaveBalanceView>;
   getServiceRegisterTimeline(employeeId: string, page?: PageQuery): Promise<PageResult<SrTimelineEntry>>;
   listDocuments(): Promise<PageResult<DocumentSummary>>;
+  getCounsellingSession(): Promise<CounsellingSessionView>;
+  submitCounsellingChoice(input: CounsellingChoiceInput, idempotencyKey: string): Promise<CounsellingChoiceResult>;
   listDataSubjectRequests(): Promise<PageResult<DsrRecord>>;
   adjudicateDsr(id: string, input: DsrAdjudicateInput, idempotencyKey: string): Promise<DsrRecord>;
   listLeaveApplications(): Promise<PageResult<LeaveApplicationRecord>>;
@@ -1051,6 +1072,9 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
         `${HRMS_API_ROUTES.srEmployees}/${encodeURIComponent(employeeId)}/timeline${toPageQueryString(page)}`
       ),
     listDocuments: () => request<PageResult<DocumentSummary>>(HRMS_API_ROUTES.documents),
+    getCounsellingSession: () => request<CounsellingSessionView>(HRMS_API_ROUTES.counsellingSessions),
+    submitCounsellingChoice: (input, idempotencyKey) =>
+      postWithIdempotency<CounsellingChoiceResult>(`${HRMS_API_ROUTES.counsellingSessions}:choose`, input, idempotencyKey),
     listDataSubjectRequests: () => request<PageResult<DsrRecord>>(HRMS_API_ROUTES.dataSubjectRequests),
     adjudicateDsr: (id, input, idempotencyKey) =>
       postWithIdempotency<DsrRecord>(`${HRMS_API_ROUTES.dataSubjectRequests}/${encodeURIComponent(id)}:adjudicate`, input, idempotencyKey),
