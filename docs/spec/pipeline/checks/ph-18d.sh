@@ -19,7 +19,7 @@ if [ -d node_modules ]; then
   web_pass="$(grep -E '^# pass ' "$WEB_LOG" | tail -1 | awk '{print $3}')"
   npm run -s typecheck >/dev/null 2>&1 && grn "typecheck green" || red "typecheck failed"
 fi
-must "verdict chains from tranche-4 verdict::ph-16-verdict" "$V"
+must "verdict chains from tranche-4 verdict::ph-17-verdict" "$V"
 must "verdict cites the coverage delta::brd-coverage-delta-20260703" "$V"
 for m in G01 G03 G05; do must "verdict carries a $m row::$m" "$V"; done
 must "verdict names remaining gaps::NOT_FOUND|remaining|still open|open gap" "$V"
