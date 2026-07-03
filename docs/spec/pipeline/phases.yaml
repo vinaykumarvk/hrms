@@ -1404,3 +1404,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-49b.sh
     depends_on: [PH-49A]
+
+  # PH-50 — remediation tranche 37 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G03 leave year-close simulate + encashment + mass-leave +
+  # punch-review/exception reads (real, service-tested backing). Ratchet 475/35.9% -> 482/36.4% (G03 40.2% -> 47.8%).
+  - id: PH-50A
+    name: PH-50 · G03 leave/attendance route exposure (coverage ratchet 475->482 / 36.4%)
+    prompt: docs/spec/pipeline/prompts/PH-50A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-50a.sh
+    gate: auto
+    depends_on: [PH-49B]
+  - id: PH-50B
+    name: PH-50 · Tranche-37 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-50B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-50b.sh
+    depends_on: [PH-50A]

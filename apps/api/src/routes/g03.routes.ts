@@ -2,6 +2,7 @@ import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
+import { EncashmentContext } from "../modules/g03/leaveYearCloseService";
 
 export const g03RouteEvidence = {
   leaveApplications: "/api/v1/atl/leave-applications",
@@ -647,8 +648,126 @@ export function registerG03Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-50A — G03 leave year-close simulate + encashment + mass-leave/blackout + punch-review + exception
+    // reads. Route exposure for already-tested leaveYearClose / leaveBlackoutMass / punchAnomaly / exception.
+    {
+      method: "POST",
+      path: "/api/v1/leave/year-close:simulate",
+      operationId: "g03.simulateYearClose",
+      protected: true,
+      permission: "g03.yearclose.simulate",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return ok({
+          close: context.services.leaveYearClose.simulateYearClose(context.actor, {
+            orgUnitId: requiredString(body, "orgUnitId"),
+            leaveYear: requiredNumber(body, "leaveYear"),
+            pendingLeaveCount: requiredNumber(body, "pendingLeaveCount"),
+            balances: Array.isArray(body.balances) ? (body.balances as Array<{ leaveTypeId: string; closingBalanceDays: number; carryForwardCapDays: number; isHalfPay?: boolean; hplConversionRatioPct?: number }>) : [],
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/leave/encashments",
+      operationId: "g03.encashLeave",
+      protected: true,
+      permission: "g03.encashment.settle",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          encashment: context.services.leaveYearClose.encashLeave(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            leaveTypeId: requiredString(body, "leaveTypeId"),
+            context: requiredString(body, "context") as EncashmentContext,
+            requestedDays: requiredNumber(body, "requestedDays"),
+            availableEncashableDays: requiredNumber(body, "availableEncashableDays"),
+            isEncashable: optionalBoolean(body, "isEncashable") ?? true,
+            capDays: requiredNumber(body, "capDays"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/leave/employees/{employeeId}/encashments",
+      operationId: "g03.listEncashments",
+      protected: true,
+      permission: "g03.leave.read",
+      handler: (context) => ok({ items: context.services.leaveYearClose.listEncashments(context.scope, requiredParam(context.params, "employeeId")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/leave/mass-leave",
+      operationId: "g03.applyMassLeave",
+      protected: true,
+      permission: "g03.massleave.apply",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          batch: context.services.leaveBlackoutMass.applyMassLeave(context.actor, {
+            orgUnitId: requiredString(body, "orgUnitId"),
+            leaveTypeId: requiredString(body, "leaveTypeId"),
+            fromDate: requiredString(body, "fromDate"),
+            toDate: requiredString(body, "toDate"),
+            memberEmployeeIds: Array.isArray(body.memberEmployeeIds) ? body.memberEmployeeIds.map((m) => String(m)) : [],
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/attendance/punch-reviews/{id}:resolve",
+      operationId: "g03.resolvePunchReview",
+      protected: true,
+      permission: "g03.punch.review",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          review: context.services.punchAnomaly.resolveReview(context.actor, requiredParam(context.params, "id"), {
+            decision: requiredString(body, "decision") as "CONFIRMED_FRAUD" | "VALID",
+            note: requiredString(body, "note"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/attendance/punch-reviews/{id}",
+      operationId: "g03.getPunchReview",
+      protected: true,
+      permission: "g03.leave.read",
+      handler: (context) => ok({ review: context.services.punchAnomaly.getReview(context.scope, requiredParam(context.params, "id")) ?? null }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/attendance/employees/{employeeId}/exceptions",
+      operationId: "g03.listExceptions",
+      protected: true,
+      permission: "g03.leave.read",
+      handler: (context) => ok({ items: context.services.attendanceException.listExceptions(context.scope, requiredParam(context.params, "employeeId")) }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
+}
+
+/** A required numeric body field accepting a JSON number or a numeric string. */
+function requiredNumber(body: Record<string, unknown>, key: string): number {
+  const value = body[key];
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) {
+    throw new Error(`${key} must be a number`);
+  }
+  return n;
 }
 
 function requiredParam(params: Record<string, string>, key: string): string {
