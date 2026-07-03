@@ -1153,3 +1153,30 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-34d.sh
     depends_on: [PH-34C]
+
+  # PH-35 — remediation tranche 22 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Route-exposure for the 3 new UI surfaces: G14 bi-kpis, G01 self-service rights, G06 sealed-cover.
+  - id: PH-35A
+    name: PH-35 · G14 bi-kpis route
+    prompt: docs/spec/pipeline/prompts/PH-35A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-35a.sh
+    gate: auto
+    depends_on: [PH-34D]
+  - id: PH-35B
+    name: PH-35 · G01 self-service rights routes
+    prompt: docs/spec/pipeline/prompts/PH-35B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-35b.sh
+    gate: auto
+    depends_on: [PH-35A]
+  - id: PH-35C
+    name: PH-35 · G06 sealed-cover engine and routes
+    prompt: docs/spec/pipeline/prompts/PH-35C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-35c.sh
+    gate: auto
+    depends_on: [PH-35B]
+  - id: PH-35D
+    name: PH-35 · Tranche-22 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-35D.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-35d.sh
+    depends_on: [PH-35C]
