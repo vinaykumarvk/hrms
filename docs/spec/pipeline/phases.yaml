@@ -989,3 +989,31 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-28d.sh
     gate: human
     depends_on: [PH-28C]
+
+  # PH-29 — remediation tranche 16 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Route-exposure pass 2: wire service-complete engines onto /api/v1 (G10 loans/GL, G11 PDA/death,
+  # G14 NL-query/predictive).
+  - id: PH-29A
+    name: PH-29 · G10 loans and GL-export routes
+    prompt: docs/spec/pipeline/prompts/PH-29A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-29a.sh
+    gate: auto
+    depends_on: [PH-28D]
+  - id: PH-29B
+    name: PH-29 · G11 PDA and death-recovery routes
+    prompt: docs/spec/pipeline/prompts/PH-29B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-29b.sh
+    gate: auto
+    depends_on: [PH-29A]
+  - id: PH-29C
+    name: PH-29 · G14 NL-query and predictive routes
+    prompt: docs/spec/pipeline/prompts/PH-29C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-29c.sh
+    gate: auto
+    depends_on: [PH-29B]
+  - id: PH-29D
+    name: PH-29 · Tranche-16 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-29D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-29d.sh
+    gate: human
+    depends_on: [PH-29C]
