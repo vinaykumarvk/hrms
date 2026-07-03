@@ -880,3 +880,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-24d.sh
     gate: human
     depends_on: [PH-24C]
+
+  # PH-25 — remediation tranche 12 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Targets: G10 GL->ERP posting export, G02 retro-impact fan-out, G03 punch anomaly review.
+  - id: PH-25A
+    name: PH-25 · G10 GL to ERP posting export
+    prompt: docs/spec/pipeline/prompts/PH-25A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-25a.sh
+    gate: auto
+    depends_on: [PH-24D]
+  - id: PH-25B
+    name: PH-25 · G02 retro-impact downstream fan-out
+    prompt: docs/spec/pipeline/prompts/PH-25B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-25b.sh
+    gate: auto
+    depends_on: [PH-25A]
+  - id: PH-25C
+    name: PH-25 · G03 punch anomaly review
+    prompt: docs/spec/pipeline/prompts/PH-25C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-25c.sh
+    gate: auto
+    depends_on: [PH-25B]
+  - id: PH-25D
+    name: PH-25 · Tranche-12 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-25D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-25d.sh
+    gate: human
+    depends_on: [PH-25C]
