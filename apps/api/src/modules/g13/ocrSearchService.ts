@@ -1,6 +1,7 @@
 import { AuditService } from "../../platform/audit/auditService";
 import { AuthorizationService } from "../../platform/authorization/authorizationService";
 import { ActorContext, FoundationError, TenantScope, nextId, requireTenantScope } from "../../platform/types";
+import { BuiltInOcrProvider, OcrProvider } from "./ocrProvider";
 
 /**
  * PH-22B — G13 OCR and permission-aware search at BRD depth
@@ -64,12 +65,40 @@ export class OcrSearchService {
   constructor(
     private readonly authorization: AuthorizationService,
     private readonly audit: AuditService,
-    private readonly repo: OcrSearchRepository = new InMemoryOcrSearchRepository()
+    private readonly repo: OcrSearchRepository = new InMemoryOcrSearchRepository(),
+    private readonly ocrProvider: OcrProvider = new BuiltInOcrProvider()
   ) {}
 
   private next(prefix: string): string {
     this.counter += 1;
     return nextId(prefix, this.counter);
+  }
+
+  /**
+   * PH-26A: index a document by EXTRACTING its text via the bound OCR provider (not caller-supplied).
+   * An unsupported MIME type fails closed through the provider so a blank index is never written.
+   */
+  indexDocumentFromPayload(
+    actor: ActorContext,
+    input: { documentId: string; classification: Classification; mimeType: string; content: string }
+  ): OcrIndexEntry {
+    this.authorization.check(actor, "g13.ocr.index", actor);
+    const extracted = this.ocrProvider.extract({ mimeType: input.mimeType, content: input.content });
+    const entry: OcrIndexEntry = {
+      id: this.next("g13-ocr-index"),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      documentId: input.documentId,
+      classification: input.classification,
+      text: extracted.text,
+    };
+    this.repo.index(entry);
+    this.audit.recordMutation(actor, {
+      action: "G13_OCR_EXTRACTED_INDEXED",
+      subjectRef: `ocr_index:${entry.id}`,
+      metadata: { documentId: entry.documentId, engine: extracted.engine, pageCount: extracted.pageCount },
+    });
+    return { ...entry };
   }
 
   /** Index a document's OCR text (typically from a sandboxed OCR pass). */
