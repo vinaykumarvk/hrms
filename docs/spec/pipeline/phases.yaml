@@ -1500,3 +1500,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-55b.sh
     depends_on: [PH-55A]
+
+  # PH-56 — remediation tranche 43 (hand-built; subagent credits exhausted until 2026-07-08). Second-pass
+  # deepening: expose G10 FR-16 payroll engine-run lifecycle (create -> snapshot -> compute -> approve (SoD)
+  # -> lock) + reads (real, service-tested backing). Ratchet 519/39.2% -> 526/39.8% (G10 34.5% -> 42.5%).
+  - id: PH-56A
+    name: PH-56 · G10 engine-run route exposure (coverage ratchet 519->526 / 39.8%)
+    prompt: docs/spec/pipeline/prompts/PH-56A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-56a.sh
+    gate: auto
+    depends_on: [PH-55B]
+  - id: PH-56B
+    name: PH-56 · Tranche-43 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-56B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-56b.sh
+    depends_on: [PH-56A]
