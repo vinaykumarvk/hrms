@@ -25,6 +25,7 @@ import { AparWorkspace } from "./modules/g08/AparWorkspace";
 import { AparTierForms } from "./modules/g08/AparTierForms";
 import { DisciplinaryWorkspace } from "./modules/g09/DisciplinaryWorkspace";
 import { DisciplinaryCaseWorkbench } from "./modules/g09/DisciplinaryCaseWorkbench";
+import { EvidenceVaultList } from "./modules/g09/EvidenceVaultList";
 import { PayrollWorkspace } from "./modules/g10/PayrollWorkspace";
 import { PayrollRunConsole } from "./modules/g10/PayrollRunConsole";
 import { PensionWorkspace } from "./modules/g11/PensionWorkspace";
@@ -123,6 +124,7 @@ export function App() {
         <RouteGuard permissions={permissions} requiredPermission="g09.case.read" routeLabel="Disciplinary workspace (G09)">
           <DisciplinaryWorkspace client={client} />
           <DisciplinaryCaseWorkbench client={client} />
+          <EvidenceVaultList client={client} />
         </RouteGuard>
       </section>
       <section className="workspace-grid" aria-label="Phase 09 compensation wave">

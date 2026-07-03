@@ -1,4 +1,5 @@
 import {
+  CaseEvidenceItem,
   CounsellingChoiceResult,
   CounsellingSessionView,
   DsrRecord,
@@ -748,6 +749,17 @@ export function createFixtureHrmsClient(): HrmsClient {
       return Promise.resolve(diff);
     },
     getLeaveBalance: () => Promise.resolve({ ...leaveBalance }),
+    listCaseEvidence: (caseId) =>
+      Promise.resolve(
+        page(
+          caseId
+            ? [
+                { documentId: "cdoc-1", artefactType: "CHARGE_MEMO", isWorm: true, legalHold: false, isServed: true },
+                { documentId: "cdoc-2", artefactType: "INQUIRY_REPORT", isWorm: true, legalHold: true, isServed: false },
+              ]
+            : []
+        )
+      ),
     getCounsellingSession: () => Promise.resolve({ ...counsellingSession, vacancies: counsellingSession.vacancies.map((v) => ({ ...v })) }),
     submitCounsellingChoice: (input) => {
       const v = counsellingSession.vacancies.find((x) => x.vacancyId === input.vacancyId);
