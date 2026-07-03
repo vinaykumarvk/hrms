@@ -23,6 +23,7 @@ import { CareerSuccessionService, InMemoryCareerSuccessionRepository } from "../
 import { VendorEmpanelmentService, InMemoryVendorEmpanelmentRepository } from "../modules/g07/vendorEmpanelmentService";
 import { CertifiedCopyService, InMemoryCertifiedCopyRepository } from "../modules/g13/certifiedCopyService";
 import { ChangeRequestTemplateService, InMemoryChangeRequestTemplateRepository } from "../modules/g02/changeRequestTemplateService";
+import { LmsIntegrationService, InMemoryLmsIntegrationRepository } from "../modules/g07/lmsIntegrationService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -103,6 +104,7 @@ export interface FoundationServices {
   vendorEmpanelment: VendorEmpanelmentService;
   certifiedCopy: CertifiedCopyService;
   changeRequestTemplate: ChangeRequestTemplateService;
+  lmsIntegration: LmsIntegrationService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -282,6 +284,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const vendorEmpanelment = new VendorEmpanelmentService(authorization, audit, new InMemoryVendorEmpanelmentRepository());
   const certifiedCopy = new CertifiedCopyService(authorization, audit, documentVault, new InMemoryCertifiedCopyRepository());
   const changeRequestTemplate = new ChangeRequestTemplateService(authorization, audit, new InMemoryChangeRequestTemplateRepository());
+  const lmsIntegration = new LmsIntegrationService(authorization, audit, new InMemoryLmsIntegrationRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -445,6 +448,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     vendorEmpanelment,
     certifiedCopy,
     changeRequestTemplate,
+    lmsIntegration,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
