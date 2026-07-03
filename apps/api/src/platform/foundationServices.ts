@@ -50,6 +50,7 @@ import { InMemoryTransferRepository } from "../modules/g05/transferRepository";
 import { TransferCounsellingService } from "../modules/g05/counsellingVacancyService";
 import { InMemoryCounsellingVacancyRepository } from "../modules/g05/counsellingVacancyRepository";
 import { PromotionService } from "../modules/g06/promotionService";
+import { SealedCoverService } from "../modules/g06/sealedCoverService";
 import { InMemoryEstablishmentQslRepository } from "../modules/g06/establishmentQslRepository";
 import { InMemoryPromotionDepthRepository } from "../modules/g06/promotionDepthRepository";
 import { TrainingService } from "../modules/g07/trainingService";
@@ -142,6 +143,7 @@ export interface FoundationServices {
   transfer: TransferService;
   transferCounselling: TransferCounsellingService;
   promotion: PromotionService;
+  sealedCover: SealedCoverService;
   training: TrainingService;
   apar: AparService;
   disciplinary: DisciplinaryService;
@@ -355,6 +357,8 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     establishmentQslRepository,
     new InMemoryPromotionDepthRepository()
   );
+  // PH-35C: G06 FR-008 sealed-cover register (backs the PH-34B sealed-cover review UI).
+  const sealedCover = new SealedCoverService(authorization, audit);
   // PH-16D: G05 FR-003/019 + BRD rules 5/6 — vacancy_positions/vacancy_reservations with the
   // strength READ-THROUGH from the PH-08A sanctioned-posts kernel above (G05 never owns a
   // strength counter), ranked transfer_preferences, the interactive counselling turn engine
@@ -524,6 +528,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     transfer,
     transferCounselling,
     promotion,
+    sealedCover,
     training,
     apar,
     disciplinary,
