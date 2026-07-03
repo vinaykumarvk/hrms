@@ -709,6 +709,15 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) =>
         accepted({ session: context.services.transferCounselling.startCounsellingSession(context.actor, requiredParam(context.params, "id")) }),
     },
+    // PH-28C — counselling session read (consumed by the G05 counselling console UI, PH-27B).
+    {
+      method: "GET",
+      path: "/api/v1/counselling-sessions/{id}",
+      operationId: "g05.getCounsellingSession",
+      protected: true,
+      permission: "g05.counselling.read",
+      handler: (context) => ok({ session: context.services.transferCounselling.getCounsellingSession(context.actor, requiredParam(context.params, "id")) }),
+    },
     {
       method: "POST",
       path: "/api/v1/counselling-sessions/{id}/record-choice",
