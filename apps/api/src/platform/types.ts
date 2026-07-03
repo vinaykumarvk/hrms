@@ -43,7 +43,12 @@ export type G03DomainErrorCode =
   | "DEVICE_NOT_AUTHORIZED"
   | "INVALID_PUNCH_TIME"
   | "COMP_OFF_INSUFFICIENT"
-  | "COMP_OFF_EXPIRED";
+  | "COMP_OFF_EXPIRED"
+  // PH-17A leave-year close + encashment (BRD G03 FR-15/FR-16).
+  | "YEAR_ALREADY_CLOSED"
+  | "PENDING_LEAVE_BLOCKS_CLOSE"
+  | "ENCASHMENT_CAP_EXCEEDED"
+  | "NOT_ENCASHABLE";
 
 /** BRD G06 §9.4 named domain error codes (docs/brd/v3/G06-promotion-posting-progression.md). */
 export type G06DomainErrorCode =

@@ -11,6 +11,7 @@ import { InMemoryChangeGovernanceRepository } from "../modules/g02/changeGoverna
 import { LeaveService } from "../modules/g03/leaveService";
 import { InMemoryLeaveRepository } from "../modules/g03/leaveRepository";
 import { AttendanceOpsService } from "../modules/g03/attendanceOpsService";
+import { LeaveYearCloseService, InMemoryLeaveYearCloseRepository } from "../modules/g03/leaveYearCloseService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -79,6 +80,7 @@ export interface FoundationServices {
   changeGovernance: ChangeGovernanceService;
   leave: LeaveService;
   attendanceOps: AttendanceOpsService;
+  leaveYearClose: LeaveYearCloseService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -246,6 +248,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   // JOB-G03-COMPOFF-EXPIRE sweep) behind the repository pattern (migration 0024). Daily
   // attendance derivation stays with the PH-07D LeaveService (deriveAttendanceFromPunches wires in).
   const attendanceOps = new AttendanceOpsService(employeeMaster, authorization, audit, jobs, leave, new InMemoryAttendanceOpsRepository());
+  const leaveYearClose = new LeaveYearCloseService(authorization, audit, new InMemoryLeaveYearCloseRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -397,6 +400,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     changeGovernance,
     leave,
     attendanceOps,
+    leaveYearClose,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,

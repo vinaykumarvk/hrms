@@ -57,6 +57,12 @@ export function statusForError(code: WireErrorCode): number {
     case "ENTITLEMENT_EXCEEDED":
     case "PERIOD_ALREADY_LOCKED":
     case "REGULARISATION_LIMIT":
+    // BRD G03 FR-15/FR-16: closing an already-closed leave year, a close blocked by pending
+    // leave, and an over-cap / non-encashable encashment are 409 CONFLICT.
+    case "YEAR_ALREADY_CLOSED":
+    case "PENDING_LEAVE_BLOCKS_CLOSE":
+    case "ENCASHMENT_CAP_EXCEEDED":
+    case "NOT_ENCASHABLE":
     case "STRENGTH_INCONSISTENT":
     case "QUOTA_SPLIT_INVALID":
     case "VACANCY_NOT_RECONCILED":
