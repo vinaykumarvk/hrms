@@ -459,6 +459,41 @@ export function registerG12Routes(kernel: ApiKernel): void {
         )
       ),
   });
+
+  // PH-32B — G12 RFC-3161 timestamp issue + offline-QR bundle issue (route exposure).
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/timestamp",
+    operationId: "g12.issueTimestamp",
+    protected: true,
+    permission: "g12.tsa.issue",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created(context.services.timestampAuthority.issueTimestamp(context.actor, { payload: body.payload ?? {} }));
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/verification-bundle",
+    operationId: "g12.issueVerificationBundle",
+    protected: true,
+    permission: "g12.qr.issue",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        bundle: context.services.offlineVerification.issueBundle(context.actor, {
+          subjectRef: requiredString(body, "subjectRef"),
+          entryHash: requiredString(body, "entryHash"),
+          anchorRef: requiredString(body, "anchorRef"),
+          issuedAt: requiredString(body, "issuedAt"),
+        }),
+      });
+    },
+  });
 }
 
 function appendAnnotation(context: ApiContext, eventId: string, eventTypeCode: string): ApiResponse {
