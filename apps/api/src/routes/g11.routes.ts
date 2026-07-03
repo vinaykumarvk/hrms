@@ -3,7 +3,7 @@ import { optionalNumber, optionalString, readBodyRecord, requiredString } from "
 import { ApiContext, ApiQuery, ApiResponse, RouteDefinition } from "../http/apiTypes";
 import { PensionScheme } from "../modules/g11/pensionService";
 import { G11MoneyRounding, G11RuleAppliesTo } from "../modules/g11/pensionRuleRepository";
-import { AccountVerifyMethod, AccountVerifyResult } from "../modules/g11/pensionDisbursementRepository";
+import { AccountVerifyMethod, AccountVerifyResult, PenDisbursementLineType } from "../modules/g11/pensionDisbursementRepository";
 import {
   G11EnhancedBasis,
   G11GratuityType,
@@ -583,8 +583,65 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.read",
       handler: (context) => ok({ items: context.services.pensionDisbursement.listVerifications(context.scope, requiredParam(context.params, "caseId")) }),
     },
+    // PH-58A — G11 pension disbursement (transmit + list) + pensioner lifecycle reads (life certificates,
+    // pensioner-by-case). Route exposure for already-tested pensionDisbursement / pensionerLifecycle.
+    {
+      method: "POST",
+      path: "/api/v1/pension/disbursements",
+      operationId: "g11.disburse",
+      protected: true,
+      permission: "g11.disbursement.transmit",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          disbursement: context.services.pensionDisbursement.disburse(context.actor, {
+            caseId: requiredString(body, "caseId"),
+            lineType: requiredString(body, "lineType") as PenDisbursementLineType,
+            accountNoMasked: requiredString(body, "accountNoMasked"),
+            ifsc: requiredString(body, "ifsc"),
+            amountPaise: readG11Number(body, "amountPaise"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/pension/cases/{caseId}/disbursements",
+      operationId: "g11.listDisbursements",
+      protected: true,
+      permission: "g11.pension.read",
+      handler: (context) => ok({ items: context.services.pensionDisbursement.listDisbursements(context.scope, requiredParam(context.params, "caseId")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/pension/pensioners/{pensionerId}/life-certificates",
+      operationId: "g11.listLifeCertificates",
+      protected: true,
+      permission: "g11.pension.read",
+      handler: (context) => ok({ items: context.services.pensionerLifecycle.listLifeCertificates(context.scope, requiredParam(context.params, "pensionerId")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/pension/cases/{caseId}/pensioner",
+      operationId: "g11.findPensionerByCase",
+      protected: true,
+      permission: "g11.pension.read",
+      handler: (context) => ok({ pensioner: context.services.pensionerLifecycle.findPensionerByCase(context.scope, requiredParam(context.params, "caseId")) ?? null }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
+}
+
+/** A required numeric body field accepting a JSON number or a numeric string. */
+function readG11Number(body: Record<string, unknown>, key: string): number {
+  const value = body[key];
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) {
+    throw new Error(`${key} must be a number`);
+  }
+  return n;
 }
 
 /** POST /api/v1/pension/rules/{table} — the seven E30-E36 tables keyed by kebab-case table segment. */
