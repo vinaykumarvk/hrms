@@ -27,4 +27,4 @@ must "verdict necessary-not-sufficient::necessary.{0,4}not sufficient" "$V"
 must "verdict contract-op caveat::1,?306|contract-op|OpenAPI" "$V"
 if [ -n "$api_pass" ]; then grep -qE "(^|[^0-9])${api_pass}([^0-9]|$)" "$V" && grn "verdict states api pass ($api_pass)" || red "verdict missing api pass ($api_pass)"; else red "no api pass count"; fi
 if [ -n "$web_pass" ]; then grep -qE "(^|[^0-9])${web_pass}([^0-9]|$)" "$V" && grn "verdict states web pass ($web_pass)" || red "verdict missing web pass ($web_pass)"; else red "no web pass count"; fi
-echo "== $([ "$fail" -eq 0 ] && echo 'GREEN - PH-18D met (await HUMAN gate review)' || echo 'RED - PH-18D not complete') =="; exit "$fail"
+echo "== $([ "$fail" -eq 0 ] && echo 'GREEN - PH-19D met (await HUMAN gate review)' || echo 'RED - PH-19D not complete') =="; exit "$fail"
