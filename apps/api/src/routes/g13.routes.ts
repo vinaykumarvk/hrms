@@ -475,6 +475,81 @@ export function registerG13Routes(kernel: ApiKernel): void {
         })
       ),
   });
+
+  // PH-44A — G13 checkout-lock lifecycle + rescan + access-audit/scan-result/module-ref reads.
+  // Route exposure for already-tested documentVault backing (checkIn is already routed; checkout was not).
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/documents/{id}:checkout",
+    operationId: "g13.checkoutDocument",
+    protected: true,
+    permission: "g13.document.checkin",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted({ lock: context.services.documentVault.checkout(context.actor, requiredParam(context.params, "id"), optionalString(body, "intentNote")) });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/documents/{id}:release-checkout",
+    operationId: "g13.releaseCheckout",
+    protected: true,
+    permission: "g13.document.checkin",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => accepted({ lock: context.services.documentVault.releaseCheckout(context.actor, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/documents/{id}/checkout-lock",
+    operationId: "g13.getCheckoutLock",
+    protected: true,
+    permission: "g13.document.read",
+    handler: (context) => ok({ lock: context.services.documentVault.getCheckoutLock(context.actor, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/documents/{id}:rescan",
+    operationId: "g13.rescanDocument",
+    protected: true,
+    permission: "g13.document.checkin",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => accepted({ document: context.services.documentVault.rescan(context.actor, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/documents/{id}/access-audit",
+    operationId: "g13.listAccessAudit",
+    protected: true,
+    permission: "g13.document.read",
+    handler: (context) => ok({ items: context.services.documentVault.listAccessAudit(context.actor, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/documents/{id}/scan-results",
+    operationId: "g13.listScanResults",
+    protected: true,
+    permission: "g13.document.read",
+    handler: (context) => ok({ items: context.services.documentVault.listScanResults(context.actor, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/documents:by-module-ref",
+    operationId: "g13.listByModuleRef",
+    protected: true,
+    permission: "g13.document.read",
+    handler: (context) => {
+      const moduleCode = context.request.query?.moduleCode;
+      const entityRefId = context.request.query?.entityRefId;
+      if (!moduleCode || !entityRefId) {
+        throw new FoundationError("VALIDATION_FAILED", "moduleCode and entityRefId query parameters are required", { field: "moduleCode" });
+      }
+      return ok({ items: context.services.documentVault.listByModuleRef(context.actor, moduleCode, entityRefId) });
+    },
+  });
 }
 
 function readDsrType(body: Record<string, unknown>): "ACCESS" | "ERASURE" | "RECTIFICATION" | "PORTABILITY" {

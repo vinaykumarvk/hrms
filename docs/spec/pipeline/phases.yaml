@@ -1308,3 +1308,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-43b.sh
     depends_on: [PH-43A]
+
+  # PH-44 — remediation tranche 31 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G13 checkout-lock lifecycle + rescan + access-audit/scan-result/
+  # module-ref reads (real, service-tested backing). Ratchet 436/33% -> 443/33.5% (G13 25.4% -> 31.6%).
+  - id: PH-44A
+    name: PH-44 · G13 checkout/read route exposure (coverage ratchet 436->443 / 33.5%)
+    prompt: docs/spec/pipeline/prompts/PH-44A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-44a.sh
+    gate: auto
+    depends_on: [PH-43B]
+  - id: PH-44B
+    name: PH-44 · Tranche-31 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-44B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-44b.sh
+    depends_on: [PH-44A]
