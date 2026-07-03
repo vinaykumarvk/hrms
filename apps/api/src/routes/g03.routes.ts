@@ -562,6 +562,69 @@ export function registerG03Routes(kernel: ApiKernel): void {
         return ok({ items: adjustments.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
+    // PH-30B — G03 leave-year close, attendance exceptions, and blackout windows (route exposure).
+    {
+      method: "POST",
+      path: "/api/v1/atl/leave-year-close:commit",
+      operationId: "g03.commitLeaveYearClose",
+      protected: true,
+      permission: "g03.yearclose.commit",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          close: context.services.leaveYearClose.commitYearClose(context.actor, {
+            orgUnitId: requiredString(body, "orgUnitId"),
+            leaveYear: optionalNumber(body, "leaveYear") ?? 0,
+            pendingLeaveCount: optionalNumber(body, "pendingLeaveCount") ?? 0,
+            balances: Array.isArray(body.balances) ? (body.balances as Array<{ leaveTypeId: string; closingBalanceDays: number; carryForwardCapDays: number }>) : [],
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/atl/attendance-exceptions",
+      operationId: "g03.fileAttendanceException",
+      protected: true,
+      permission: "g03.exception.file",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          exception: context.services.attendanceException.fileException(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            exceptionType: requiredString(body, "exceptionType") as "WFH" | "ON_DUTY" | "TOUR",
+            fromDate: requiredString(body, "fromDate"),
+            toDate: requiredString(body, "toDate"),
+            orderDocumentId: optionalString(body, "orderDocumentId"),
+            location: optionalString(body, "location"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/atl/blackout-periods",
+      operationId: "g03.declareBlackout",
+      protected: true,
+      permission: "g03.blackout.declare",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          blackout: context.services.leaveBlackoutMass.declareBlackout(context.actor, {
+            orgUnitId: requiredString(body, "orgUnitId"),
+            fromDate: requiredString(body, "fromDate"),
+            toDate: requiredString(body, "toDate"),
+            reason: requiredString(body, "reason"),
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
