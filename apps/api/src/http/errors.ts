@@ -115,6 +115,8 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G09-ICC-PROCEDURE-REQUIRED":
     // BRD G09 FR-024: SLA resume without an open pause is 409 (edge case: "Resume before pause (rejected)").
     case "ERR-G09-SLA-PAUSE-INVALID":
+    // BRD G09 FR-026: a retiree proceeding beyond the Rule-9 four-year bar (no sanction) is 409.
+    case "ERR-G09-RETIREE-PROCEEDING-BARRED":
     // BRD G10 FR-02: overlapping effective rate rows (VAL-G10-RATE-NONOVERLAP) are 409 CONFLICT.
     case "ERR-G10-RATE-OVERLAP":
     // BRD G10 §12: run/payslip lifecycle collisions are 409 CONFLICT — a second in-flight

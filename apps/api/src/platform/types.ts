@@ -145,7 +145,10 @@ export type G09DomainErrorCode =
   // FR-G09-025/DI-29: denial of a requested personal hearing without a recorded reason (422).
   | "ERR-G09-PERSONAL-HEARING-DENIED"
   // FR-G09-024/DI-18: resume without an open pause / malformed pause window (409).
-  | "ERR-G09-SLA-PAUSE-INVALID";
+  | "ERR-G09-SLA-PAUSE-INVALID"
+  // PH-21C FR-026: a proceeding against a retiree beyond the Rule-9 four-year bar, without the
+  // required sanction, is barred (409, fail closed).
+  | "ERR-G09-RETIREE-PROCEEDING-BARRED";
 
 /** BRD G10 §12 named domain error codes (docs/brd/v3/G10-payroll-and-benefits.md FR-01/02/04/07/09/13/14/15/16/22 error catalogue). */
 export type G10DomainErrorCode =
