@@ -1126,3 +1126,30 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-33d.sh
     depends_on: [PH-33C]
+
+  # PH-34 — remediation tranche 21 (hand-built; subagent credits exhausted until 2026-07-08).
+  # The three remaining UI surfaces: G14 embedded BI, G06 sealed-cover review, G01 privacy console.
+  - id: PH-34A
+    name: PH-34 · G14 embedded BI dashboard UI
+    prompt: docs/spec/pipeline/prompts/PH-34A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-34a.sh
+    gate: auto
+    depends_on: [PH-33D]
+  - id: PH-34B
+    name: PH-34 · G06 sealed-cover review UI
+    prompt: docs/spec/pipeline/prompts/PH-34B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-34b.sh
+    gate: auto
+    depends_on: [PH-34A]
+  - id: PH-34C
+    name: PH-34 · G01 privacy / DPDP console UI
+    prompt: docs/spec/pipeline/prompts/PH-34C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-34c.sh
+    gate: auto
+    depends_on: [PH-34B]
+  - id: PH-34D
+    name: PH-34 · Tranche-21 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-34D.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-34d.sh
+    depends_on: [PH-34C]
