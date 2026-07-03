@@ -10,7 +10,10 @@ import {
   CampaignTarget,
   CompetencyMaster,
   CompetencyModel,
+  CredentialVerificationEntry,
+  CredentialVerificationMethod,
   EmployeeSkill,
+  ExternalCredential,
   GapContract,
   InMemoryTrainingDepthRepository,
   SkillCategory,
@@ -18,8 +21,41 @@ import {
   SkillGapItem,
   SkillMaster,
   TrainingCampaign,
+  TrainingCostEntry,
   TrainingDepthRepository,
+  TrainingSponsorship,
 } from "./trainingDepthRepository";
+
+/** Adds whole months to an ISO date (yyyy-mm-dd) — bond_end_date = completion + service_bond_months.
+ * Module-local (the exported copy lives in g06/promotionDepthRepository). */
+function addMonthsIso(isoDate: string, months: number): string {
+  const [year, month, day] = isoDate.split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) {
+    throw new FoundationError("VALIDATION_FAILED", "Date must be yyyy-mm-dd", { field: "date", details: { isoDate } });
+  }
+  const base = new Date(Date.UTC(year, month - 1 + months, day));
+  return base.toISOString().slice(0, 10);
+}
+
+/**
+ * Whole unserved bond months between breach date and bond_end_date (partial month counts as
+ * unserved — the liquidated claim rounds toward the exchequer, FR-G07-020 AC.4).
+ */
+export function unservedBondMonths(breachDateIso: string, bondEndDateIso: string): number {
+  if (bondEndDateIso <= breachDateIso) {
+    return 0;
+  }
+  const [fromYear, fromMonth, fromDay] = breachDateIso.split("-").map((part) => Number.parseInt(part, 10));
+  const [toYear, toMonth, toDay] = bondEndDateIso.split("-").map((part) => Number.parseInt(part, 10));
+  if (!fromYear || !fromMonth || !fromDay || !toYear || !toMonth || !toDay) {
+    throw new FoundationError("VALIDATION_FAILED", "Dates must be yyyy-mm-dd", { field: "date" });
+  }
+  let monthsRemaining = (toYear - fromYear) * 12 + (toMonth - fromMonth);
+  if (toDay > fromDay) {
+    monthsRemaining += 1;
+  }
+  return Math.max(monthsRemaining, 0);
+}
 
 export type TrainingSessionStatus = "DRAFT" | "OPEN" | "FULL" | "COMPLETED" | "CANCELLED";
 export type TrainingNominationStatus = "PENDING_L1" | "APPROVED" | "WAITLISTED" | "REJECTED" | "COMPLETED" | "NO_SHOW";
@@ -649,6 +685,444 @@ export class TrainingService {
   listCampaignTargets(scope: TenantScope, campaignId: string): CampaignTarget[] {
     requireTenantScope(scope);
     return this.depth.listCampaignTargets(scope, campaignId);
+  }
+
+  // -------------------------------------------------------------------------------------
+  // PH-16E (1) FR-G07-018 — external credential capture + append-only credential_verifications
+  // ledger (SUBMITTED -> EVIDENCE_REVIEWED -> VERIFIED/REJECTED; verifier != submitter SoD;
+  // VAL-G07-CREDREF dedup 409)
+  // -------------------------------------------------------------------------------------
+
+  /**
+   * FR-G07-018 AC.1/AC.2: capture a certifications row with credential_source=EXTERNAL_PROFESSIONAL
+   * and append the SUBMITTED step to the credential_verifications ledger in the same unit of work.
+   * A duplicate external_reference_no for the same employee fails closed with VAL-G07-CREDREF (409).
+   */
+  captureExternalCredential(
+    actor: ActorContext,
+    input: {
+      employeeId: string;
+      title: string;
+      issuingBody: string;
+      externalReferenceNo: string;
+      issueDate: string;
+      validUntil?: string;
+      evidenceDocumentId?: string;
+      significantForSr?: boolean;
+    }
+  ): { credential: ExternalCredential; verification: CredentialVerificationEntry } {
+    this.authorization.check(actor, "g07.credential.submit", actor);
+    if (!this.employeeMaster.getById(actor, input.employeeId)) {
+      throw new FoundationError("NOT_FOUND", "Employee not found");
+    }
+    if (!input.externalReferenceNo) {
+      throw new FoundationError("VALIDATION_FAILED", "externalReferenceNo is required", { field: "externalReferenceNo" });
+    }
+    if (input.validUntil && input.validUntil <= input.issueDate) {
+      throw new FoundationError("VALIDATION_FAILED", "Credential valid_until must be after the issue date", { field: "validUntil" });
+    }
+    // VAL-G07-CREDREF: external_reference_no unique per employee (FR-G07-018 edge case, 409).
+    if (this.depth.findCredentialByExternalRef(actor, input.employeeId, input.externalReferenceNo)) {
+      throw new FoundationError("VAL-G07-CREDREF", "Duplicate external credential reference for this employee", {
+        field: "externalReferenceNo",
+        details: { employeeId: input.employeeId, externalReferenceNo: input.externalReferenceNo },
+      });
+    }
+    const credential: ExternalCredential = {
+      id: nextId("external-credential", this.taxonomyCounter()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      employeeId: input.employeeId,
+      title: input.title,
+      issuingBody: input.issuingBody,
+      externalReferenceNo: input.externalReferenceNo,
+      issueDate: input.issueDate,
+      validUntil: input.validUntil,
+      credentialSource: "EXTERNAL_PROFESSIONAL",
+      verificationStatus: "PENDING",
+      submittedBy: actor.userId,
+      evidenceDocumentId: input.evidenceDocumentId,
+      significantForSr: Boolean(input.significantForSr),
+    };
+    this.depth.saveExternalCredential(credential);
+    const verification = this.depth.appendCredentialVerification({
+      tenantId: actor.tenantId,
+      certificationId: credential.id,
+      verificationAction: "SUBMITTED",
+      verificationMethod: "DOCUMENT_REVIEW",
+      actorId: actor.userId,
+      recordedAt: input.issueDate,
+    });
+    this.audit.recordMutation(actor, {
+      action: "G07_EXTERNAL_CREDENTIAL_SUBMITTED",
+      subjectRef: `g07_certifications:${credential.id}`,
+      metadata: { ledger: "credential_verifications", verificationAction: "SUBMITTED" },
+    });
+    return { credential: { ...credential }, verification };
+  }
+
+  /**
+   * FR-G07-018 AC.2 middle step: L&D evidence review APPENDS an EVIDENCE_REVIEWED row.
+   * AC.5 SoD: the self-capture creator can never act as reviewer/verifier — the denial uses the
+   * platform-registered FORBIDDEN code (the BRD registers no G07-specific code for this case).
+   */
+  reviewCredentialEvidence(actor: ActorContext, credentialId: string, input: { reviewedOn: string; comments?: string }): CredentialVerificationEntry {
+    this.authorization.check(actor, "g07.credential.verify", actor);
+    const credential = this.requireExternalCredential(actor, credentialId);
+    this.requireCredentialSoD(credential, actor);
+    if (credential.verificationStatus !== "PENDING") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only a PENDING credential can enter evidence review");
+    }
+    credential.verificationStatus = "EVIDENCE_REVIEWED";
+    this.depth.saveExternalCredential(credential);
+    const verification = this.depth.appendCredentialVerification({
+      tenantId: actor.tenantId,
+      certificationId: credential.id,
+      verificationAction: "EVIDENCE_REVIEWED",
+      verificationMethod: "DOCUMENT_REVIEW",
+      actorId: actor.userId,
+      comments: input.comments,
+      recordedAt: input.reviewedOn,
+    });
+    this.audit.recordMutation(actor, {
+      action: "G07_CREDENTIAL_EVIDENCE_REVIEWED",
+      subjectRef: `g07_certifications:${credential.id}`,
+      metadata: { ledger: "credential_verifications", verificationAction: "EVIDENCE_REVIEWED" },
+    });
+    return verification;
+  }
+
+  /**
+   * FR-G07-018 AC.2 terminal step: VERIFIED (or REJECTED via rejectExternalCredential) is a new
+   * APPENDED ledger row — never an update of a prior one. AC.4: a VERIFIED significant credential
+   * posts to the G12 SR through the same ingest convention as internal certifications.
+   */
+  verifyExternalCredential(
+    actor: ActorContext,
+    credentialId: string,
+    input: { verifiedOn: string; verificationMethod?: CredentialVerificationMethod; comments?: string; idempotencyKey: string }
+  ): { credential: ExternalCredential; verification: CredentialVerificationEntry } {
+    this.authorization.check(actor, "g07.credential.verify", actor);
+    const credential = this.requireExternalCredential(actor, credentialId);
+    this.requireCredentialSoD(credential, actor);
+    if (credential.verificationStatus !== "EVIDENCE_REVIEWED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Credential must be EVIDENCE_REVIEWED before VERIFIED");
+    }
+    credential.verificationStatus = "VERIFIED";
+    credential.verifiedBy = actor.userId;
+    const verification = this.depth.appendCredentialVerification({
+      tenantId: actor.tenantId,
+      certificationId: credential.id,
+      verificationAction: "VERIFIED",
+      verificationMethod: input.verificationMethod ?? "ISSUER_PORTAL",
+      actorId: actor.userId,
+      comments: input.comments,
+      recordedAt: input.verifiedOn,
+    });
+    if (credential.significantForSr) {
+      // FR-G07-018 AC.4: only VERIFIED credentials post to G12 (FR-G07-016 significance path).
+      const sr = this.serviceRegister.ingest(actor, input.idempotencyKey, {
+        sourceModule: "G07",
+        sourceReferenceId: `g07_certifications:${credential.id}:VERIFIED`,
+        sourceEventVersion: 1,
+        employeeId: credential.employeeId,
+        eventTypeCode: "TRAINING_CERTIFICATION_POSTED",
+        eventDate: input.verifiedOn,
+        factKey: `G07:${credential.id}:TRAINING_CERTIFICATION_POSTED`,
+        payload: { issuingBody: credential.issuingBody, externalReferenceNo: credential.externalReferenceNo },
+        documentIds: credential.evidenceDocumentId ? [credential.evidenceDocumentId] : [],
+      });
+      credential.srEventId = sr.event.id;
+    }
+    this.depth.saveExternalCredential(credential);
+    this.audit.recordMutation(actor, {
+      action: "G07_EXTERNAL_CREDENTIAL_VERIFIED",
+      subjectRef: `g07_certifications:${credential.id}`,
+      metadata: { ledger: "credential_verifications", verifiedBy: actor.userId, srEventId: credential.srEventId },
+    });
+    return { credential: { ...credential }, verification };
+  }
+
+  /** FR-G07-018 AC.6: rejection appends REJECTED; the immutable trail is retained, never deleted. */
+  rejectExternalCredential(actor: ActorContext, credentialId: string, input: { rejectedOn: string; comments: string }): { credential: ExternalCredential; verification: CredentialVerificationEntry } {
+    this.authorization.check(actor, "g07.credential.verify", actor);
+    const credential = this.requireExternalCredential(actor, credentialId);
+    this.requireCredentialSoD(credential, actor);
+    if (credential.verificationStatus === "VERIFIED" || credential.verificationStatus === "REJECTED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Credential verification already concluded");
+    }
+    if (!input.comments) {
+      throw new FoundationError("VALIDATION_FAILED", "Rejection comments are required", { field: "comments" });
+    }
+    credential.verificationStatus = "REJECTED";
+    this.depth.saveExternalCredential(credential);
+    const verification = this.depth.appendCredentialVerification({
+      tenantId: actor.tenantId,
+      certificationId: credential.id,
+      verificationAction: "REJECTED",
+      verificationMethod: "DOCUMENT_REVIEW",
+      actorId: actor.userId,
+      comments: input.comments,
+      recordedAt: input.rejectedOn,
+    });
+    this.audit.recordMutation(actor, {
+      action: "G07_EXTERNAL_CREDENTIAL_REJECTED",
+      subjectRef: `g07_certifications:${credential.id}`,
+      metadata: { ledger: "credential_verifications", verificationAction: "REJECTED" },
+    });
+    return { credential: { ...credential }, verification };
+  }
+
+  getExternalCredential(scope: TenantScope, credentialId: string): ExternalCredential {
+    requireTenantScope(scope);
+    return this.requireExternalCredential(scope, credentialId);
+  }
+
+  /** The append-only credential_verifications trail (FR-G07-018 AC.2/AC.6). */
+  listCredentialVerifications(scope: TenantScope, credentialId: string): CredentialVerificationEntry[] {
+    requireTenantScope(scope);
+    return this.depth.listCredentialVerifications(scope, credentialId);
+  }
+
+  // -------------------------------------------------------------------------------------
+  // PH-16E (2) FR-G07-020 — training_sponsorships service bonds: PROPOSED -> SANCTIONED ->
+  // ACTIVE -> FULFILLED/BREACHED -> RECOVERED/WAIVED; breach computes bond_recovery_amount
+  // pro-rata in integer paise; VAL-G07-BOND gates BREACHED -> RECOVERED on the BOND_RECOVERY feed.
+  // -------------------------------------------------------------------------------------
+
+  /** FR-G07-020 AC.1: capture the sponsorship request (PROPOSED). Money is integer paise. */
+  createSponsorship(
+    actor: ActorContext,
+    input: {
+      employeeId: string;
+      sponsorshipType: TrainingSponsorship["sponsorshipType"];
+      sponsoredAmountPaise: number;
+      startDate: string;
+      endDate?: string;
+      serviceBondMonths: number;
+      trainingProgramId?: string;
+      externalCourseName?: string;
+    }
+  ): TrainingSponsorship {
+    this.authorization.check(actor, "g07.sponsorship.request", actor);
+    if (!this.employeeMaster.getById(actor, input.employeeId)) {
+      throw new FoundationError("NOT_FOUND", "Employee not found");
+    }
+    if (!Number.isInteger(input.sponsoredAmountPaise) || input.sponsoredAmountPaise <= 0) {
+      throw new FoundationError("VALIDATION_FAILED", "sponsoredAmountPaise must be a positive integer (paise)", { field: "sponsoredAmountPaise" });
+    }
+    if (!Number.isInteger(input.serviceBondMonths) || input.serviceBondMonths < 0) {
+      throw new FoundationError("VALIDATION_FAILED", "serviceBondMonths must be a non-negative integer", { field: "serviceBondMonths" });
+    }
+    if (!input.trainingProgramId && !input.externalCourseName) {
+      throw new FoundationError("VALIDATION_FAILED", "A sponsorship links a training program or an external course", { field: "trainingProgramId" });
+    }
+    const sponsorship: TrainingSponsorship = {
+      id: nextId("training-sponsorship", this.taxonomyCounter()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      employeeId: input.employeeId,
+      trainingProgramId: input.trainingProgramId,
+      externalCourseName: input.externalCourseName,
+      sponsorshipType: input.sponsorshipType,
+      sponsoredAmountPaise: input.sponsoredAmountPaise,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      serviceBondMonths: input.serviceBondMonths,
+      obligationStatus: "PROPOSED",
+    };
+    this.depth.saveSponsorship(sponsorship);
+    this.audit.recordMutation(actor, { action: "G07_SPONSORSHIP_PROPOSED", subjectRef: `g07_training_sponsorships:${sponsorship.id}` });
+    return sponsorship;
+  }
+
+  /** FR-G07-020 AC.2: recommend -> sanction (P01 pattern); the requesting employee cannot self-sanction. */
+  sanctionSponsorship(actor: ActorContext, sponsorshipId: string): TrainingSponsorship {
+    this.authorization.check(actor, "g07.sponsorship.sanction", actor);
+    const sponsorship = this.requireSponsorship(actor, sponsorshipId);
+    if (sponsorship.obligationStatus !== "PROPOSED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only a PROPOSED sponsorship can be sanctioned");
+    }
+    if (actor.userId === sponsorship.employeeId) {
+      throw new FoundationError("FORBIDDEN", "Sponsored employee cannot sanction their own bond (SoD)");
+    }
+    sponsorship.obligationStatus = "SANCTIONED";
+    sponsorship.sanctionedBy = actor.userId;
+    this.depth.saveSponsorship(sponsorship);
+    this.audit.recordMutation(actor, { action: "G07_SPONSORSHIP_SANCTIONED", subjectRef: `g07_training_sponsorships:${sponsorship.id}` });
+    return { ...sponsorship };
+  }
+
+  /** FR-G07-020 AC.3: on completion the bond turns ACTIVE with bond_end_date = completion + bond months. */
+  activateSponsorshipBond(actor: ActorContext, sponsorshipId: string, input: { completionDate: string }): TrainingSponsorship {
+    this.authorization.check(actor, "g07.sponsorship.administer", actor);
+    const sponsorship = this.requireSponsorship(actor, sponsorshipId);
+    if (sponsorship.obligationStatus !== "SANCTIONED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only a SANCTIONED sponsorship activates its bond");
+    }
+    sponsorship.obligationStatus = "ACTIVE";
+    sponsorship.completionDate = input.completionDate;
+    sponsorship.bondEndDate = addMonthsIso(input.completionDate, sponsorship.serviceBondMonths);
+    this.depth.saveSponsorship(sponsorship);
+    this.audit.recordMutation(actor, {
+      action: "G07_SPONSORSHIP_BOND_ACTIVE",
+      subjectRef: `g07_training_sponsorships:${sponsorship.id}`,
+      metadata: { bondEndDate: sponsorship.bondEndDate, serviceBondMonths: sponsorship.serviceBondMonths },
+    });
+    return { ...sponsorship };
+  }
+
+  /** FR-G07-020 AC.3: serving through bond_end_date fulfils the obligation. */
+  fulfilSponsorshipBond(actor: ActorContext, sponsorshipId: string, input: { asOf: string }): TrainingSponsorship {
+    this.authorization.check(actor, "g07.sponsorship.administer", actor);
+    const sponsorship = this.requireSponsorship(actor, sponsorshipId);
+    if (sponsorship.obligationStatus !== "ACTIVE" || !sponsorship.bondEndDate) {
+      throw new FoundationError("PRECONDITION_FAILED", "Only an ACTIVE bond can be fulfilled");
+    }
+    if (input.asOf < sponsorship.bondEndDate) {
+      throw new FoundationError("PRECONDITION_FAILED", "Bond is not yet served through bond_end_date", {
+        details: { bondEndDate: sponsorship.bondEndDate, asOf: input.asOf },
+      });
+    }
+    sponsorship.obligationStatus = "FULFILLED";
+    this.depth.saveSponsorship(sponsorship);
+    this.audit.recordMutation(actor, { action: "G07_SPONSORSHIP_FULFILLED", subjectRef: `g07_training_sponsorships:${sponsorship.id}` });
+    return { ...sponsorship };
+  }
+
+  /**
+   * FR-G07-020 AC.4: early exit/breach (e.g. the G05 relieving event) sets BREACHED and computes
+   * bond_recovery_amount pro-rata on the UNSERVED bond months — all arithmetic in integer paise:
+   * recovery = floor(sponsored_amount_paise * unserved_months / service_bond_months).
+   */
+  markSponsorshipBreached(actor: ActorContext, sponsorshipId: string, input: { breachDate: string }): TrainingSponsorship {
+    this.authorization.check(actor, "g07.sponsorship.administer", actor);
+    const sponsorship = this.requireSponsorship(actor, sponsorshipId);
+    if (sponsorship.obligationStatus !== "ACTIVE" || !sponsorship.bondEndDate) {
+      throw new FoundationError("PRECONDITION_FAILED", "Only an ACTIVE bond can be marked BREACHED");
+    }
+    const unservedMonths = Math.min(unservedBondMonths(input.breachDate, sponsorship.bondEndDate), sponsorship.serviceBondMonths);
+    sponsorship.obligationStatus = "BREACHED";
+    sponsorship.bondRecoveryAmountPaise =
+      sponsorship.serviceBondMonths === 0
+        ? 0
+        : Math.floor((sponsorship.sponsoredAmountPaise * unservedMonths) / sponsorship.serviceBondMonths);
+    this.depth.saveSponsorship(sponsorship);
+    this.audit.recordMutation(actor, {
+      action: "G07_SPONSORSHIP_BREACHED",
+      subjectRef: `g07_training_sponsorships:${sponsorship.id}`,
+      metadata: { unservedMonths, bondRecoveryAmountPaise: sponsorship.bondRecoveryAmountPaise, validation: "VAL-G07-BOND" },
+    });
+    return { ...sponsorship };
+  }
+
+  /**
+   * FR-G07-020 AC.5: the BREACHED bond emits its BOND_RECOVERY training_costs row
+   * (payable_to_payroll=true) — the payable feed G10 consumes. Idempotent per sponsorship.
+   */
+  emitBondRecoveryCost(actor: ActorContext, sponsorshipId: string): TrainingCostEntry {
+    this.authorization.check(actor, "g07.sponsorship.recovery", actor);
+    const sponsorship = this.requireSponsorship(actor, sponsorshipId);
+    if (sponsorship.obligationStatus !== "BREACHED" || sponsorship.bondRecoveryAmountPaise === undefined) {
+      throw new FoundationError("PRECONDITION_FAILED", "Only a BREACHED bond emits a BOND_RECOVERY cost");
+    }
+    const existing = this.depth.listTrainingCosts(actor, sponsorship.id).find((cost) => cost.costType === "BOND_RECOVERY");
+    if (existing) {
+      return existing; // one BOND_RECOVERY feed row per bond — replays are no-ops
+    }
+    const cost = this.depth.appendTrainingCost({
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      trainingSponsorshipId: sponsorship.id,
+      costType: "BOND_RECOVERY",
+      amountPaise: sponsorship.bondRecoveryAmountPaise,
+      payableToPayroll: true,
+      recordedAt: sponsorship.bondEndDate ?? sponsorship.startDate,
+    });
+    this.audit.recordMutation(actor, {
+      action: "G07_BOND_RECOVERY_COST_EMITTED",
+      subjectRef: `g07_training_costs:${cost.id}`,
+      metadata: { feed: "G10", payableToPayroll: true, amountPaise: cost.amountPaise },
+    });
+    return cost;
+  }
+
+  /**
+   * VAL-G07-BOND (fail closed, BRD integrity rule 17): a BREACHED training_sponsorships row
+   * moves to RECOVERED only after its BOND_RECOVERY cost (the G10 feed) exists — else 409.
+   */
+  markSponsorshipRecovered(actor: ActorContext, sponsorshipId: string): TrainingSponsorship {
+    this.authorization.check(actor, "g07.sponsorship.recovery", actor);
+    const sponsorship = this.requireSponsorship(actor, sponsorshipId);
+    if (sponsorship.obligationStatus !== "BREACHED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only a BREACHED bond can move to RECOVERED");
+    }
+    if (!this.depth.hasBondRecoveryCost(actor, sponsorship.id)) {
+      throw new FoundationError("VAL-G07-BOND", "BREACHED bond must emit a BOND_RECOVERY cost (G10 feed) before RECOVERED", {
+        details: { sponsorshipId: sponsorship.id },
+      });
+    }
+    sponsorship.obligationStatus = "RECOVERED";
+    this.depth.saveSponsorship(sponsorship);
+    this.audit.recordMutation(actor, { action: "G07_SPONSORSHIP_RECOVERED", subjectRef: `g07_training_sponsorships:${sponsorship.id}` });
+    return { ...sponsorship };
+  }
+
+  /** FR-G07-020 AC.6: waivers need authority approval and are audited (WAIVED, P05). */
+  waiveSponsorship(actor: ActorContext, sponsorshipId: string, input: { reason: string }): TrainingSponsorship {
+    this.authorization.check(actor, "g07.sponsorship.waive", actor);
+    const sponsorship = this.requireSponsorship(actor, sponsorshipId);
+    if (sponsorship.obligationStatus !== "ACTIVE" && sponsorship.obligationStatus !== "BREACHED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only an ACTIVE or BREACHED bond can be waived");
+    }
+    if (!input.reason) {
+      throw new FoundationError("VALIDATION_FAILED", "Waiver reason is required", { field: "reason" });
+    }
+    sponsorship.obligationStatus = "WAIVED";
+    sponsorship.waiverReason = input.reason;
+    this.depth.saveSponsorship(sponsorship);
+    this.audit.recordMutation(actor, {
+      action: "G07_SPONSORSHIP_WAIVED",
+      subjectRef: `g07_training_sponsorships:${sponsorship.id}`,
+      metadata: { reason: input.reason },
+    });
+    return { ...sponsorship };
+  }
+
+  getSponsorship(scope: TenantScope, sponsorshipId: string): TrainingSponsorship {
+    requireTenantScope(scope);
+    return { ...this.requireSponsorship(scope, sponsorshipId) };
+  }
+
+  /** The G10-facing cost feed rows for a sponsorship (BOND_RECOVERY carries payable_to_payroll). */
+  listSponsorshipCosts(scope: TenantScope, sponsorshipId: string): TrainingCostEntry[] {
+    requireTenantScope(scope);
+    return this.depth.listTrainingCosts(scope, sponsorshipId);
+  }
+
+  private requireExternalCredential(scope: TenantScope, credentialId: string): ExternalCredential {
+    const credential = this.depth.findExternalCredential(scope, credentialId);
+    if (!credential) {
+      throw new FoundationError("NOT_FOUND", "External credential not found");
+    }
+    return credential;
+  }
+
+  /** FR-G07-018 AC.5 SoD: verifier != submitter, enforced with the platform FORBIDDEN code. */
+  private requireCredentialSoD(credential: ExternalCredential, actor: ActorContext): void {
+    if (credential.submittedBy === actor.userId) {
+      throw new FoundationError("FORBIDDEN", "Self-capture creator cannot verify their own credential (SoD)", {
+        details: { credentialId: credential.id },
+      });
+    }
+  }
+
+  private requireSponsorship(scope: TenantScope, sponsorshipId: string): TrainingSponsorship {
+    const sponsorship = this.depth.findSponsorship(scope, sponsorshipId);
+    if (!sponsorship) {
+      throw new FoundationError("NOT_FOUND", "Training sponsorship not found");
+    }
+    return sponsorship;
   }
 
   summary(scope: TenantScope): { sessions: number; approved: number; completed: number; srPosted: number } {

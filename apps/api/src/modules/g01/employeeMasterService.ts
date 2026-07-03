@@ -34,6 +34,8 @@ export interface EmployeeRecord {
   legacyId?: string;
   /** FR-EPM-015 AC3: a merged loser is soft-deleted, never hard-removed (alias keeps identity). */
   isDeleted?: boolean;
+  /** G08 FR-G08-21 BR2: probation-confirmation date stamped by the G08 CONFIRMED feed (mirrors M09 confirmation_date). */
+  confirmationDate?: string;
   rowVersion: number;
 }
 
@@ -73,7 +75,9 @@ export interface OutboxEvent {
     | "MERGE_UNDONE"
     | "SEPARATION"
     | "DEATH"
-    | "REACTIVATION";
+    | "REACTIVATION"
+    // PH-16E G08 FR-G08-21 BR2: probation CONFIRMED feeds G01 employment status/confirmation.
+    | "PROBATION_CONFIRMED";
   aggregateType: "employees" | "governed_changes" | "employee_contacts" | "employee_addresses" | "employee_dependents" | "employee_id_aliases";
   aggregateId: string;
   employeeId: string;
@@ -699,6 +703,39 @@ export class EmployeeMasterService {
       },
     });
     return { employee: { ...employee }, previousOrgUnitId };
+  }
+
+  /**
+   * G08 FR-G08-21 BR2 (PH-16E): probation CONFIRMED feeds G01 — the employment master records
+   * the confirmation date and the change-feed carries PROBATION_CONFIRMED. Mirrors the
+   * applyTransferPosting write-port pattern: G01 owns the master mutation; G08 only calls
+   * this single authoritative update (never writes the employee row itself).
+   */
+  applyProbationConfirmation(
+    actor: ActorContext,
+    input: { employeeId: string; confirmationEffectiveDate: string; confirmationRef: string }
+  ): { employee: EmployeeRecord } {
+    this.authz.check(actor, "g01.employee.confirmation.update", actor);
+    if (!input.confirmationEffectiveDate) {
+      throw new FoundationError("VALIDATION_FAILED", "confirmationEffectiveDate is required", { field: "confirmationEffectiveDate" });
+    }
+    const employee = this.getMutable(actor, input.employeeId);
+    employee.confirmationDate = input.confirmationEffectiveDate;
+    employee.rowVersion += 1;
+    this.appendOutbox(actor, {
+      eventType: "PROBATION_CONFIRMED",
+      aggregateType: "employees",
+      aggregateId: employee.id,
+      employeeId: employee.id,
+      eventDate: input.confirmationEffectiveDate,
+      payload: { confirmationDate: input.confirmationEffectiveDate, confirmationRef: input.confirmationRef },
+    });
+    this.audit.recordMutation(actor, {
+      action: "G01_PROBATION_CONFIRMATION_APPLIED",
+      subjectRef: `employees:${employee.id}`,
+      metadata: { confirmationEffectiveDate: input.confirmationEffectiveDate, confirmationRef: input.confirmationRef },
+    });
+    return { employee: { ...employee } };
   }
 
   /**

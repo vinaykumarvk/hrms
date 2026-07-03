@@ -13,9 +13,19 @@ import {
   AparRepresentation,
   AppraisalCycle,
   AppraisalTemplate,
+  CalibrationAdjustment,
+  CalibrationMethod,
+  CalibrationRecommendation,
+  CalibrationSession,
   DisclosureLogEntry,
   FormGoalSnapshot,
   InMemoryAparDepthRepository,
+  PerformanceImprovementPlan,
+  PipMilestone,
+  PipMilestoneStatus,
+  PipOutcome,
+  ProbationConfirmation,
+  ProbationOutcome,
   RatingScale,
   validateWeightageSumWSUM,
 } from "./aparDepthRepository";
@@ -710,6 +720,340 @@ export class AparService {
       sealedCover: forms.filter((form) => form.sealedCover).length,
       g06FeedSuppressed: forms.filter((form) => form.g06FeedSuppressed).length,
     };
+  }
+
+  // ── PH-16E FR-G08-09: calibration as a RATIFIED recommendation ─────────────────
+  // The committee only PROPOSES; the certified grade changes solely through a RATIFIED
+  // g08_calibration_recommendations row, applied as a g08_calibration_adjustments row.
+  // VAL-DISTRIB is diagnostic-only (never a quota); ERR-G08-RATIFY guards the apply.
+
+  createCalibrationSession(
+    actor: ActorContext,
+    input: {
+      cycleId: string;
+      orgUnitScope: string;
+      method: CalibrationMethod;
+      committeeMemberIds: string[];
+      targetDistribution?: Record<string, number>;
+      bellCurveEnabled?: boolean;
+    }
+  ): CalibrationSession {
+    this.authorization.check(actor, "g08.calibration.convene", actor);
+    if (input.committeeMemberIds.length < 1) {
+      throw new FoundationError("VALIDATION_FAILED", "A calibration committee needs at least one member", { field: "committeeMemberIds" });
+    }
+    const session: CalibrationSession = {
+      id: nextId("calibration-session", this.depthCounter()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      cycleId: input.cycleId,
+      orgUnitScope: input.orgUnitScope,
+      method: input.method,
+      bellCurveEnabled: Boolean(input.bellCurveEnabled),
+      targetDistribution: input.targetDistribution,
+      committeeMemberIds: input.committeeMemberIds,
+      runsBeforeCertification: true,
+      status: "IN_SESSION",
+    };
+    this.depth.saveCalibrationSession(session);
+    this.audit.recordMutation(actor, {
+      action: "G08_CALIBRATION_SESSION_OPENED",
+      subjectRef: `g08_calibration_sessions:${session.id}`,
+      metadata: { ledger: "calibration_recommendations", method: session.method },
+    });
+    return { ...session };
+  }
+
+  proposeCalibrationRecommendation(
+    actor: ActorContext,
+    sessionId: string,
+    input: { formId: string; currentGrade: number; recommendedGrade: number; rationale: string }
+  ): CalibrationRecommendation {
+    this.authorization.check(actor, "g08.calibration.recommend", actor);
+    const session = this.depth.findCalibrationSession(actor, sessionId);
+    if (!session) {
+      throw new FoundationError("NOT_FOUND", "Calibration session not found");
+    }
+    if (!input.rationale || !input.rationale.trim()) {
+      throw new FoundationError("VALIDATION_FAILED", "A calibration recommendation requires a rationale", { field: "rationale" });
+    }
+    const recommendation: CalibrationRecommendation = {
+      id: nextId("calibration-recommendation", this.depthCounter()),
+      tenantId: actor.tenantId,
+      sessionId: session.id,
+      formId: input.formId,
+      currentGrade: input.currentGrade,
+      recommendedGrade: input.recommendedGrade,
+      rationale: input.rationale,
+      preCertification: true,
+      recommendationStatus: "PROPOSED",
+    };
+    this.depth.saveCalibrationRecommendation(recommendation);
+    this.audit.recordMutation(actor, {
+      action: "G08_CALIBRATION_RECOMMENDED",
+      subjectRef: `g08_calibration_recommendations:${recommendation.id}`,
+      metadata: { ledger: "calibration_recommendations", status: "PROPOSED" },
+    });
+    return { ...recommendation };
+  }
+
+  ratifyCalibrationRecommendation(actor: ActorContext, sessionId: string, recommendationId: string): CalibrationRecommendation {
+    this.authorization.check(actor, "g08.calibration.ratify", actor);
+    const recommendation = this.requireRecommendation(actor, sessionId, recommendationId);
+    const session = this.depth.findCalibrationSession(actor, sessionId);
+    // SoD: the ratifying authority is not a proposing committee member.
+    if (session && session.committeeMemberIds.includes(actor.userId)) {
+      throw new FoundationError("FORBIDDEN", "A committee member cannot ratify their own recommendation", {
+        details: { recommendationId, ratifier: actor.userId },
+      });
+    }
+    recommendation.recommendationStatus = "RATIFIED";
+    recommendation.ratifiedBy = actor.userId;
+    recommendation.ratifiedAt = new Date(0).toISOString().slice(0, 10);
+    this.depth.saveCalibrationRecommendation(recommendation);
+    this.audit.recordMutation(actor, {
+      action: "G08_CALIBRATION_RATIFIED",
+      subjectRef: `g08_calibration_recommendations:${recommendation.id}`,
+      metadata: { ledger: "calibration_recommendations", status: "RATIFIED" },
+    });
+    return { ...recommendation };
+  }
+
+  /** Applies a ratified recommendation. Fail-closed ERR-G08-RATIFY if not yet RATIFIED. */
+  applyCalibrationAdjustment(actor: ActorContext, sessionId: string, recommendationId: string): CalibrationAdjustment {
+    this.authorization.check(actor, "g08.calibration.apply", actor);
+    const recommendation = this.requireRecommendation(actor, sessionId, recommendationId);
+    if (recommendation.recommendationStatus !== "RATIFIED" || !recommendation.ratifiedBy) {
+      throw new FoundationError("ERR-G08-RATIFY", "A certified grade changes only via a RATIFIED calibration recommendation", {
+        details: { recommendationId, status: recommendation.recommendationStatus },
+      });
+    }
+    const adjustment: CalibrationAdjustment = {
+      id: nextId("calibration-adjustment", this.depthCounter()),
+      tenantId: actor.tenantId,
+      recommendationId: recommendation.id,
+      sessionId: recommendation.sessionId,
+      formId: recommendation.formId,
+      oldGrade: recommendation.currentGrade,
+      appliedGrade: recommendation.recommendedGrade,
+      ratifiedBy: recommendation.ratifiedBy,
+      appliedAt: new Date(0).toISOString().slice(0, 10),
+      status: "APPLIED",
+    };
+    this.depth.saveCalibrationAdjustment(adjustment);
+    this.audit.recordMutation(actor, {
+      action: "G08_CALIBRATION_ADJUSTMENT_APPLIED",
+      subjectRef: `g08_calibration_adjustments:${adjustment.id}`,
+      metadata: { ledger: "calibration_recommendations", appliedGrade: adjustment.appliedGrade },
+    });
+    return { ...adjustment };
+  }
+
+  /** VAL-DISTRIB — diagnostic-only distribution report; never blocks or forces a grade. */
+  calibrationDistributionDiagnostic(
+    actor: ActorContext,
+    sessionId: string
+  ): { targetDistribution?: Record<string, number>; actual: Record<string, number>; diagnostic: string } {
+    const session = this.depth.findCalibrationSession(actor, sessionId);
+    if (!session) {
+      throw new FoundationError("NOT_FOUND", "Calibration session not found");
+    }
+    const actual: Record<string, number> = {};
+    for (const rec of this.depth.listCalibrationRecommendations(actor, sessionId)) {
+      const bucket = String(rec.recommendedGrade);
+      actual[bucket] = (actual[bucket] ?? 0) + 1;
+    }
+    return { targetDistribution: session.targetDistribution, actual, diagnostic: "VAL-DISTRIB" };
+  }
+
+  // ── PH-16E FR-G08-13: PIP lifecycle (header + milestones + outcome) ─────────────
+
+  createPip(
+    actor: ActorContext,
+    input: {
+      appraiseeId: string;
+      reason: string;
+      successCriteria: string;
+      startDate: string;
+      targetEndDate: string;
+      milestones: Array<{ title: string; dueDate: string; metric?: string }>;
+    }
+  ): { pip: PerformanceImprovementPlan; milestones: PipMilestone[] } {
+    this.authorization.check(actor, "g08.pip.initiate", actor);
+    if (!this.employeeMaster.getById(actor, input.appraiseeId)) {
+      throw new FoundationError("NOT_FOUND", "Appraisee not found");
+    }
+    if (input.milestones.length < 1) {
+      throw new FoundationError("VALIDATION_FAILED", "A performance_improvement_plans row requires at least one milestone", { field: "milestones" });
+    }
+    if (this.depth.listOpenPipsForEmployee(actor, input.appraiseeId).length > 0) {
+      throw new FoundationError("PRECONDITION_FAILED", "An open PIP already exists for this employee");
+    }
+    const pip: PerformanceImprovementPlan = {
+      id: nextId("pip", this.depthCounter()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      pipNo: `PIP/${this.depthCounter()}`,
+      appraiseeId: input.appraiseeId,
+      initiatedBy: actor.userId,
+      reason: input.reason,
+      successCriteria: input.successCriteria,
+      startDate: input.startDate,
+      targetEndDate: input.targetEndDate,
+      status: "ACTIVE",
+    };
+    this.depth.savePip(pip);
+    const milestones = input.milestones.map((m) => {
+      const milestone: PipMilestone = {
+        id: nextId("pip-milestone", this.depthCounter()),
+        tenantId: actor.tenantId,
+        pipId: pip.id,
+        title: m.title,
+        dueDate: m.dueDate,
+        metric: m.metric,
+        status: "PENDING",
+      };
+      this.depth.savePipMilestone(milestone);
+      return milestone;
+    });
+    this.audit.recordMutation(actor, {
+      action: "G08_PIP_OPENED",
+      subjectRef: `performance_improvement_plans:${pip.id}`,
+      metadata: { ledger: "pip_milestones", milestones: milestones.length },
+    });
+    return { pip: { ...pip }, milestones };
+  }
+
+  updatePipMilestone(
+    actor: ActorContext,
+    pipId: string,
+    milestoneId: string,
+    input: { status: PipMilestoneStatus; progressNote?: string }
+  ): PipMilestone {
+    this.authorization.check(actor, "g08.pip.update", actor);
+    const milestone = this.depth.findPipMilestone(actor, pipId, milestoneId);
+    if (!milestone) {
+      throw new FoundationError("NOT_FOUND", "PIP milestone not found");
+    }
+    milestone.status = input.status;
+    milestone.progressNote = input.progressNote;
+    this.depth.savePipMilestone(milestone);
+    return { ...milestone };
+  }
+
+  closePip(actor: ActorContext, pipId: string, input: { outcome: PipOutcome; outcomeSummary: string }): PerformanceImprovementPlan {
+    this.authorization.check(actor, "g08.pip.close", actor);
+    const pip = this.depth.findPip(actor, pipId);
+    if (!pip) {
+      throw new FoundationError("NOT_FOUND", "PIP not found");
+    }
+    if (pip.status === "CLOSED") {
+      throw new FoundationError("PRECONDITION_FAILED", "PIP is already closed");
+    }
+    pip.status = "CLOSED";
+    pip.outcome = input.outcome;
+    pip.outcomeSummary = input.outcomeSummary;
+    this.depth.savePip(pip);
+    this.audit.recordMutation(actor, {
+      action: "G08_PIP_CLOSED",
+      subjectRef: `performance_improvement_plans:${pip.id}`,
+      metadata: { outcome: pip.outcome },
+    });
+    return { ...pip };
+  }
+
+  // ── PH-16E FR-G08-21: probation confirmation with cumulative extension cap ──────
+
+  openProbationConfirmation(
+    actor: ActorContext,
+    input: {
+      appraiseeId: string;
+      cycleId?: string;
+      probationEndDate: string;
+      probationPeriodMonths: number;
+      probationExtensionMaxMonths?: number;
+    }
+  ): ProbationConfirmation {
+    this.authorization.check(actor, "g08.probation.open", actor);
+    if (!this.employeeMaster.getById(actor, input.appraiseeId)) {
+      throw new FoundationError("NOT_FOUND", "Appraisee not found");
+    }
+    const confirmation: ProbationConfirmation = {
+      id: nextId("probation-confirmation", this.depthCounter()),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      confirmationNo: `PROB/${this.depthCounter()}`,
+      appraiseeId: input.appraiseeId,
+      cycleId: input.cycleId,
+      probationEndDate: input.probationEndDate,
+      probationPeriodMonths: input.probationPeriodMonths,
+      extensionMonthsTotal: 0,
+      status: "IN_PROBATION",
+    };
+    this.depth.saveProbationConfirmation(confirmation);
+    return { ...confirmation };
+  }
+
+  /** CONFIRMED / EXTENDED / DISCHARGE_RECOMMENDED. EXTENDED enforces the cumulative cap. */
+  decideProbation(
+    actor: ActorContext,
+    confirmationId: string,
+    input: { outcome: ProbationOutcome; extensionMonths?: number; effectiveDate?: string }
+  ): ProbationConfirmation {
+    this.authorization.check(actor, "g08.probation.decide", actor);
+    const confirmation = this.depth.findProbationConfirmation(actor, confirmationId);
+    if (!confirmation) {
+      throw new FoundationError("NOT_FOUND", "Probation confirmation not found");
+    }
+    if (confirmation.status !== "IN_PROBATION" && confirmation.status !== "EXTENDED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Probation is already decided");
+    }
+    const cap = this.probationExtensionMaxMonths(actor, confirmation);
+    if (input.outcome === "EXTENDED") {
+      const months = input.extensionMonths ?? 0;
+      if (!Number.isInteger(months) || months <= 0) {
+        throw new FoundationError("VALIDATION_FAILED", "extensionMonths must be a positive integer", { field: "extensionMonths" });
+      }
+      const total = confirmation.extensionMonthsTotal + months;
+      if (total > cap) {
+        throw new FoundationError("VALIDATION_FAILED", "Cumulative probation extension exceeds probation_extension_max_months", {
+          field: "extensionMonths",
+          details: { requestedTotal: total, probationExtensionMaxMonths: cap },
+        });
+      }
+      confirmation.extensionMonthsTotal = total;
+      confirmation.status = "EXTENDED";
+      confirmation.probationOutcome = "EXTENDED";
+    } else {
+      confirmation.status = input.outcome === "CONFIRMED" ? "CONFIRMED" : "DISCHARGE_RECOMMENDED";
+      confirmation.probationOutcome = input.outcome;
+      confirmation.confirmationEffectiveDate = input.effectiveDate;
+    }
+    this.depth.saveProbationConfirmation(confirmation);
+    this.audit.recordMutation(actor, {
+      action: "G08_PROBATION_DECIDED",
+      subjectRef: `probation_confirmations:${confirmation.id}`,
+      metadata: { probationOutcome: confirmation.probationOutcome, extensionMonthsTotal: confirmation.extensionMonthsTotal },
+    });
+    return { ...confirmation };
+  }
+
+  private probationExtensionMaxMonths(scope: TenantScope, confirmation: ProbationConfirmation): number {
+    if (confirmation.cycleId) {
+      const cycle = this.depth.findCycle(scope, confirmation.cycleId);
+      if (cycle && cycle.probationExtensionMaxMonths !== undefined) {
+        return cycle.probationExtensionMaxMonths;
+      }
+    }
+    return 6; // FR-G08-21 default cap on cumulative probation extension months
+  }
+
+  private requireRecommendation(scope: TenantScope, sessionId: string, recommendationId: string): CalibrationRecommendation {
+    const recommendation = this.depth.findCalibrationRecommendation(scope, recommendationId);
+    if (!recommendation || recommendation.sessionId !== sessionId) {
+      throw new FoundationError("NOT_FOUND", "Calibration recommendation not found");
+    }
+    return recommendation;
   }
 
   private requireForm(scope: TenantScope, formId: string): AparForm {

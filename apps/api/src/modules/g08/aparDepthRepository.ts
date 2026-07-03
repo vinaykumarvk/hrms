@@ -41,6 +41,11 @@ export interface AppraisalCycle {
   representationWindowDays: number;
   /** VAL-G08-SUPV: below this a report period is a No-Report Certificate (default 3.0). */
   minSupervisionMonths: number;
+  /** FR-G08-21: PROBATION cycles yield a probation decision, never a numeric annual grade. */
+  cycleType?: "ANNUAL" | "PROBATION";
+  /** E1 probation fields (FR-G08-21 AC.3): cap on cumulative probation extension months. */
+  probationPeriodMonths?: number;
+  probationExtensionMaxMonths?: number;
   status: "DRAFT" | "ACTIVE" | "CLOSED";
 }
 
@@ -145,10 +150,131 @@ export interface AparReportPeriod {
   escalatedAuthorId?: string;
 }
 
+// ---------------------------------------------------------------------------------------
+// PH-16E — FR-G08-09 calibration as ratified recommendation (E14 calibration_sessions,
+// E21 calibration_recommendations, E15 calibration_adjustments; VAL-DISTRIB diagnostic-only;
+// ERR-G08-RATIFY), FR-G08-13 PIP lifecycle (E16 performance_improvement_plans +
+// E17 pip_milestones), FR-G08-21 probation decision (E34 probation_confirmations).
+// ---------------------------------------------------------------------------------------
+
+/** E14 method — FORCED_DISTRIBUTION removed (R2); BELL_CURVE default-off behind its flag. */
+export type CalibrationMethod = "COMMITTEE_REVIEW" | "NORMALISATION" | "BELL_CURVE";
+export type CalibrationSessionStatus = "PLANNED" | "IN_SESSION" | "RECOMMENDED" | "RATIFIED" | "COMPLETED" | "CANCELLED";
+export type CalibrationRecommendationStatus = "PROPOSED" | "ENDORSED" | "REJECTED" | "RATIFIED" | "DECLINED";
+export type PipStatus = "DRAFT" | "ACTIVE" | "UNDER_REVIEW" | "CLOSED";
+export type PipOutcome = "SUCCESSFUL" | "EXTENDED" | "UNSUCCESSFUL" | "ABANDONED";
+export type PipMilestoneStatus = "PENDING" | "ON_TRACK" | "AT_RISK" | "MET" | "MISSED";
+/** E4/E34 probation_outcome — a decision, never a numeric APAR grade (FR-G08-21 BR1). */
+export type ProbationOutcome = "CONFIRMED" | "EXTENDED" | "DISCHARGE_RECOMMENDED";
+export type ProbationConfirmationStatus = "IN_PROBATION" | "CONFIRMED" | "EXTENDED" | "DISCHARGE_RECOMMENDED";
+
+/** E14 calibration_sessions — target_distribution is VAL-DISTRIB diagnostic-only, never a quota. */
+export interface CalibrationSession {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  cycleId: string;
+  orgUnitScope: string;
+  method: CalibrationMethod;
+  bellCurveEnabled: boolean;
+  /** Diagnostic-only buckets (VAL-DISTRIB: sum 100); NO code path enforces them as a quota. */
+  targetDistribution?: Record<string, number>;
+  committeeMemberIds: string[];
+  runsBeforeCertification: boolean;
+  status: CalibrationSessionStatus;
+  outcomeSummary?: string;
+}
+
+/** E21 calibration_recommendations — the committee proposes; it NEVER writes final_grade (R1). */
+export interface CalibrationRecommendation {
+  id: string;
+  tenantId: string;
+  sessionId: string;
+  formId: string;
+  currentGrade: number;
+  recommendedGrade: number;
+  /** Mandatory rationale (ERR-REASON-REQ). */
+  rationale: string;
+  committeeVote?: Record<string, unknown>;
+  preCertification: boolean;
+  ratifiedBy?: string;
+  ratifiedAt?: string;
+  recommendationStatus: CalibrationRecommendationStatus;
+}
+
+/** E15 calibration_adjustments — applied ONLY after ratification (ERR-G08-RATIFY otherwise). */
+export interface CalibrationAdjustment {
+  id: string;
+  tenantId: string;
+  recommendationId: string;
+  sessionId: string;
+  formId: string;
+  oldGrade: number;
+  appliedGrade: number;
+  ratifiedBy: string;
+  appliedAt: string;
+  status: "APPLIED" | "REVERSED";
+}
+
+/** E16 performance_improvement_plans header (FR-G08-13). */
+export interface PerformanceImprovementPlan {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  pipNo: string;
+  appraiseeId: string;
+  formId?: string;
+  /** Initiating RO — the RvO concurrence principal must be distinct (SoD). */
+  initiatedBy: string;
+  reason: string;
+  successCriteria: string;
+  startDate: string;
+  targetEndDate: string;
+  concurredBy?: string;
+  outcome?: PipOutcome;
+  outcomeSummary?: string;
+  status: PipStatus;
+}
+
+/** E17 pip_milestones line — a PIP requires >= 1 (FR-G08-13 AC.1). */
+export interface PipMilestone {
+  id: string;
+  tenantId: string;
+  pipId: string;
+  title: string;
+  dueDate: string;
+  metric?: string;
+  progressNote?: string;
+  status: PipMilestoneStatus;
+}
+
+/** E34 probation_confirmations — decision lifecycle around the terminal probation_outcome. */
+export interface ProbationConfirmation {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  confirmationNo: string;
+  appraiseeId: string;
+  formId?: string;
+  cycleId?: string;
+  dateOfJoining?: string;
+  probationEndDate: string;
+  probationPeriodMonths: number;
+  managerId?: string;
+  /** Cumulative extension months — capped by cycle.probation_extension_max_months (AC.3). */
+  extensionMonthsTotal: number;
+  confirmationEffectiveDate?: string;
+  /** Terminal probation_outcome (E4/E34) — CONFIRMED, EXTENDED or DISCHARGE_RECOMMENDED. */
+  probationOutcome?: ProbationOutcome;
+  status: ProbationConfirmationStatus;
+  srEventId?: string;
+}
+
 /**
  * PH-08D depth repository contract consumed by AparService — cycle/template/scale masters,
  * goals + snapshots, the disclosure ledger, representations and report periods live behind
- * this seam, never in module-local arrays.
+ * this seam, never in module-local arrays. PH-16E adds calibration sessions/recommendations/
+ * adjustments, the PIP header + milestones, and probation confirmations.
  */
 export interface AparDepthRepository {
   saveCycle(row: AppraisalCycle): void;
@@ -171,6 +297,27 @@ export interface AparDepthRepository {
   findReportPeriod(scope: TenantScope, formId: string, sequenceNo: number): AparReportPeriod | undefined;
   listReportPeriods(scope: TenantScope, formId: string): AparReportPeriod[];
   countReportPeriods(): number;
+  // PH-16E FR-G08-09 — calibration as ratified recommendation.
+  saveCalibrationSession(row: CalibrationSession): void;
+  findCalibrationSession(scope: TenantScope, id: string): CalibrationSession | undefined;
+  saveCalibrationRecommendation(row: CalibrationRecommendation): void;
+  findCalibrationRecommendation(scope: TenantScope, id: string): CalibrationRecommendation | undefined;
+  listCalibrationRecommendations(scope: TenantScope, sessionId: string): CalibrationRecommendation[];
+  saveCalibrationAdjustment(row: CalibrationAdjustment): void;
+  listCalibrationAdjustments(scope: TenantScope, formId: string): CalibrationAdjustment[];
+  // PH-16E FR-G08-13 — PIP header + milestones.
+  savePip(row: PerformanceImprovementPlan): void;
+  findPip(scope: TenantScope, id: string): PerformanceImprovementPlan | undefined;
+  /** Single-active guard input: every ACTIVE/UNDER_REVIEW PIP for the employee. */
+  listOpenPipsForEmployee(scope: TenantScope, appraiseeId: string): PerformanceImprovementPlan[];
+  countPips(): number;
+  savePipMilestone(row: PipMilestone): void;
+  findPipMilestone(scope: TenantScope, pipId: string, milestoneId: string): PipMilestone | undefined;
+  listPipMilestones(scope: TenantScope, pipId: string): PipMilestone[];
+  // PH-16E FR-G08-21 — probation confirmation decision lifecycle.
+  saveProbationConfirmation(row: ProbationConfirmation): void;
+  findProbationConfirmation(scope: TenantScope, id: string): ProbationConfirmation | undefined;
+  countProbationConfirmations(): number;
 }
 
 /** In-memory implementation (DI default, mirrors InMemoryPromotionDepthRepository). */
@@ -183,6 +330,12 @@ export class InMemoryAparDepthRepository implements AparDepthRepository {
   protected readonly disclosures: DisclosureLogEntry[] = [];
   protected readonly representations: AparRepresentation[] = [];
   protected readonly reportPeriods: AparReportPeriod[] = [];
+  protected readonly calibrationSessions: CalibrationSession[] = [];
+  protected readonly calibrationRecommendations: CalibrationRecommendation[] = [];
+  protected readonly calibrationAdjustments: CalibrationAdjustment[] = [];
+  protected readonly pips: PerformanceImprovementPlan[] = [];
+  protected readonly pipMilestones: PipMilestone[] = [];
+  protected readonly probationConfirmations: ProbationConfirmation[] = [];
 
   saveCycle(row: AppraisalCycle): void {
     this.upsert(this.cycles, row);
@@ -281,6 +434,94 @@ export class InMemoryAparDepthRepository implements AparDepthRepository {
     return this.reportPeriods.length;
   }
 
+  saveCalibrationSession(row: CalibrationSession): void {
+    this.upsert(this.calibrationSessions, {
+      ...row,
+      committeeMemberIds: [...row.committeeMemberIds],
+      targetDistribution: row.targetDistribution ? { ...row.targetDistribution } : undefined,
+    });
+  }
+
+  findCalibrationSession(scope: TenantScope, id: string): CalibrationSession | undefined {
+    const session = this.calibrationSessions.find((item) => item.id === id && this.inScope(item, scope));
+    return session
+      ? { ...session, committeeMemberIds: [...session.committeeMemberIds], targetDistribution: session.targetDistribution ? { ...session.targetDistribution } : undefined }
+      : undefined;
+  }
+
+  saveCalibrationRecommendation(row: CalibrationRecommendation): void {
+    this.upsert(this.calibrationRecommendations, row);
+  }
+
+  findCalibrationRecommendation(scope: TenantScope, id: string): CalibrationRecommendation | undefined {
+    return this.copyOf(this.calibrationRecommendations.find((item) => item.id === id && item.tenantId === scope.tenantId));
+  }
+
+  listCalibrationRecommendations(scope: TenantScope, sessionId: string): CalibrationRecommendation[] {
+    return this.calibrationRecommendations
+      .filter((item) => item.sessionId === sessionId && item.tenantId === scope.tenantId)
+      .map((item) => ({ ...item }));
+  }
+
+  saveCalibrationAdjustment(row: CalibrationAdjustment): void {
+    this.upsert(this.calibrationAdjustments, row);
+  }
+
+  listCalibrationAdjustments(scope: TenantScope, formId: string): CalibrationAdjustment[] {
+    return this.calibrationAdjustments
+      .filter((item) => item.formId === formId && item.tenantId === scope.tenantId)
+      .map((item) => ({ ...item }));
+  }
+
+  savePip(row: PerformanceImprovementPlan): void {
+    this.upsert(this.pips, row);
+  }
+
+  findPip(scope: TenantScope, id: string): PerformanceImprovementPlan | undefined {
+    return this.copyOf(this.pips.find((item) => item.id === id && this.inScope(item, scope)));
+  }
+
+  listOpenPipsForEmployee(scope: TenantScope, appraiseeId: string): PerformanceImprovementPlan[] {
+    return this.pips
+      .filter(
+        (item) =>
+          item.appraiseeId === appraiseeId &&
+          (item.status === "ACTIVE" || item.status === "UNDER_REVIEW") &&
+          this.inScope(item, scope)
+      )
+      .map((item) => ({ ...item }));
+  }
+
+  countPips(): number {
+    return this.pips.length;
+  }
+
+  savePipMilestone(row: PipMilestone): void {
+    this.upsert(this.pipMilestones, row);
+  }
+
+  findPipMilestone(scope: TenantScope, pipId: string, milestoneId: string): PipMilestone | undefined {
+    return this.copyOf(
+      this.pipMilestones.find((item) => item.id === milestoneId && item.pipId === pipId && item.tenantId === scope.tenantId)
+    );
+  }
+
+  listPipMilestones(scope: TenantScope, pipId: string): PipMilestone[] {
+    return this.pipMilestones.filter((item) => item.pipId === pipId && item.tenantId === scope.tenantId).map((item) => ({ ...item }));
+  }
+
+  saveProbationConfirmation(row: ProbationConfirmation): void {
+    this.upsert(this.probationConfirmations, row);
+  }
+
+  findProbationConfirmation(scope: TenantScope, id: string): ProbationConfirmation | undefined {
+    return this.copyOf(this.probationConfirmations.find((item) => item.id === id && this.inScope(item, scope)));
+  }
+
+  countProbationConfirmations(): number {
+    return this.probationConfirmations.length;
+  }
+
   /** Durability hook — no-op in memory; the file-backed subclass writes through. */
   protected persist(): void {
     // In-memory repository keeps state in process only.
@@ -295,6 +536,12 @@ export class InMemoryAparDepthRepository implements AparDepthRepository {
     this.disclosures.push(...(state.disclosures ?? []));
     this.representations.push(...(state.representations ?? []));
     this.reportPeriods.push(...(state.reportPeriods ?? []));
+    this.calibrationSessions.push(...(state.calibrationSessions ?? []));
+    this.calibrationRecommendations.push(...(state.calibrationRecommendations ?? []));
+    this.calibrationAdjustments.push(...(state.calibrationAdjustments ?? []));
+    this.pips.push(...(state.pips ?? []));
+    this.pipMilestones.push(...(state.pipMilestones ?? []));
+    this.probationConfirmations.push(...(state.probationConfirmations ?? []));
   }
 
   protected snapshotState(): {
@@ -306,6 +553,12 @@ export class InMemoryAparDepthRepository implements AparDepthRepository {
     disclosures: DisclosureLogEntry[];
     representations: AparRepresentation[];
     reportPeriods: AparReportPeriod[];
+    calibrationSessions: CalibrationSession[];
+    calibrationRecommendations: CalibrationRecommendation[];
+    calibrationAdjustments: CalibrationAdjustment[];
+    pips: PerformanceImprovementPlan[];
+    pipMilestones: PipMilestone[];
+    probationConfirmations: ProbationConfirmation[];
   } {
     return {
       cycles: this.cycles,
@@ -316,6 +569,12 @@ export class InMemoryAparDepthRepository implements AparDepthRepository {
       disclosures: this.disclosures,
       representations: this.representations,
       reportPeriods: this.reportPeriods,
+      calibrationSessions: this.calibrationSessions,
+      calibrationRecommendations: this.calibrationRecommendations,
+      calibrationAdjustments: this.calibrationAdjustments,
+      pips: this.pips,
+      pipMilestones: this.pipMilestones,
+      probationConfirmations: this.probationConfirmations,
     };
   }
 
@@ -545,7 +804,188 @@ export class PgAparDepthRepository {
       return { provisionalGrade: Math.round(provisionalGrade * 100) / 100 };
     });
   }
+
+  /**
+   * FR-G08-09 (PH-16E): committee recommendation into g08_calibration_recommendations —
+   * mandatory rationale enforced fail-closed. The committee NEVER writes final_grade (R1).
+   */
+  async insertCalibrationRecommendation(input: {
+    tenantId: string;
+    sessionId: string;
+    formId: string;
+    currentGrade: number;
+    recommendedGrade: number;
+    rationale: string;
+    committeeVote?: Record<string, unknown>;
+    preCertification: boolean;
+    createdBy?: string;
+  }): Promise<{ id: string }> {
+    if (!input.rationale) {
+      throw new FoundationError("VALIDATION_FAILED", "ERR-REASON-REQ: calibration recommendation rationale is mandatory", { field: "rationale" });
+    }
+    const result = await this.pool.query(INSERT_CALIBRATION_RECOMMENDATION, [
+      input.tenantId,
+      input.sessionId,
+      input.formId,
+      input.currentGrade,
+      input.recommendedGrade,
+      input.rationale,
+      input.committeeVote ? JSON.stringify(input.committeeVote) : null,
+      input.preCertification,
+      input.createdBy ?? null,
+    ]);
+    return result.rows[0] as { id: string };
+  }
+
+  /**
+   * FR-G08-09 AC.4 (R1) in ONE transaction: lock the recommendation row; anything other than
+   * recommendation_status='RATIFIED' throws ERR-G08-RATIFY (409, fail closed); then write the
+   * g08_calibration_adjustments ratification record preserving old_grade.
+   */
+  async applyRatifiedCalibrationAdjustment(input: {
+    tenantId: string;
+    recommendationId: string;
+    appliedAt: string;
+    createdBy?: string;
+  }): Promise<{ adjustmentId: string; appliedGrade: number }> {
+    return withTransaction(this.pool, async (client) => {
+      const locked = await client.query(LOCK_CALIBRATION_RECOMMENDATION, [input.tenantId, input.recommendationId]);
+      const row = locked.rows[0] as
+        | { id: string; session_id: string; form_id: string; current_grade: string | number; recommended_grade: string | number; ratified_by: string | null; recommendation_status: string }
+        | undefined;
+      if (!row) {
+        throw new FoundationError("NOT_FOUND", "Calibration recommendation not found");
+      }
+      if (row.recommendation_status !== "RATIFIED" || !row.ratified_by) {
+        throw new FoundationError("ERR-G08-RATIFY", "A certified grade changes only via a RATIFIED calibration recommendation", {
+          details: { recommendationId: input.recommendationId, recommendationStatus: row.recommendation_status },
+        });
+      }
+      const adjustment = await client.query(INSERT_CALIBRATION_ADJUSTMENT, [
+        input.tenantId,
+        row.id,
+        row.session_id,
+        row.form_id,
+        Number(row.current_grade),
+        Number(row.recommended_grade),
+        row.ratified_by,
+        input.appliedAt,
+        input.createdBy ?? null,
+      ]);
+      return { adjustmentId: (adjustment.rows[0] as { id: string }).id, appliedGrade: Number(row.recommended_grade) };
+    });
+  }
+
+  /**
+   * FR-G08-13 AC.1 in ONE transaction: the performance_improvement_plans header commits together
+   * with its >= 1 pip_milestones rows — a milestone-less PIP is rejected before any write.
+   */
+  async insertPipWithMilestones(input: {
+    tenantId: string;
+    entityId?: string;
+    pipNo: string;
+    appraiseeId: string;
+    formId?: string;
+    initiatedBy: string;
+    reason: string;
+    successCriteria: string;
+    startDate: string;
+    targetEndDate: string;
+    milestones: Array<{ title: string; dueDate: string; metric?: string }>;
+    createdBy?: string;
+  }): Promise<{ pipId: string; milestoneIds: string[] }> {
+    if (input.milestones.length === 0) {
+      throw new FoundationError("VALIDATION_FAILED", "A PIP requires at least one pip_milestones row", { field: "milestones" });
+    }
+    return withTransaction(this.pool, async (client) => {
+      const pip = await client.query(INSERT_PIP, [
+        input.tenantId,
+        input.entityId ?? null,
+        input.pipNo,
+        input.appraiseeId,
+        input.formId ?? null,
+        input.initiatedBy,
+        input.reason,
+        input.successCriteria,
+        input.startDate,
+        input.targetEndDate,
+        input.createdBy ?? null,
+      ]);
+      const pipId = (pip.rows[0] as { id: string }).id;
+      const milestoneIds: string[] = [];
+      for (const milestone of input.milestones) {
+        const inserted = await client.query(INSERT_PIP_MILESTONE, [
+          input.tenantId,
+          pipId,
+          milestone.title,
+          milestone.dueDate,
+          milestone.metric ?? null,
+          input.createdBy ?? null,
+        ]);
+        milestoneIds.push((inserted.rows[0] as { id: string }).id);
+      }
+      return { pipId, milestoneIds };
+    });
+  }
+
+  /**
+   * FR-G08-21 (PH-16E): the probation decision writes probation_outcome on
+   * g08_probation_confirmations; the extension cap against probation_extension_max_months is
+   * re-checked in the service against the governing cycle before this write.
+   */
+  async decideProbationConfirmation(input: {
+    tenantId: string;
+    confirmationId: string;
+    probationOutcome: "CONFIRMED" | "EXTENDED" | "DISCHARGE_RECOMMENDED";
+    status: string;
+    confirmationEffectiveDate?: string;
+    extensionMonthsTotal?: number;
+    probationEndDate?: string;
+    updatedBy?: string;
+  }): Promise<void> {
+    await this.pool.query(SET_PROBATION_DECISION, [
+      input.tenantId,
+      input.confirmationId,
+      input.probationOutcome,
+      input.status,
+      input.confirmationEffectiveDate ?? null,
+      input.extensionMonthsTotal ?? null,
+      input.probationEndDate ?? null,
+      input.updatedBy ?? null,
+    ]);
+  }
 }
+
+// PH-16E parameterised SQL over migration 0032 tables (g08_calibration_sessions,
+// g08_calibration_recommendations, g08_calibration_adjustments,
+// g08_performance_improvement_plans, g08_pip_milestones, g08_probation_confirmations).
+
+const INSERT_CALIBRATION_RECOMMENDATION =
+  "INSERT INTO g08_calibration_recommendations (tenant_id, session_id, form_id, current_grade, recommended_grade, rationale, committee_vote, pre_certification, recommendation_status, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, 'PROPOSED', $9) RETURNING id";
+
+const LOCK_CALIBRATION_RECOMMENDATION =
+  "SELECT id, session_id, form_id, current_grade, recommended_grade, ratified_by, recommendation_status " +
+  "FROM g08_calibration_recommendations WHERE tenant_id = $1 AND id = $2 AND is_deleted = false FOR UPDATE";
+
+const INSERT_CALIBRATION_ADJUSTMENT =
+  "INSERT INTO g08_calibration_adjustments (tenant_id, recommendation_id, session_id, form_id, old_grade, applied_grade, ratified_by, applied_at, status, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'APPLIED', $9) RETURNING id";
+
+const INSERT_PIP =
+  "INSERT INTO g08_performance_improvement_plans (tenant_id, entity_id, pip_no, appraisee_id, form_id, initiated_by, reason, success_criteria, start_date, target_end_date, status, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'DRAFT', $11) RETURNING id";
+
+const INSERT_PIP_MILESTONE =
+  "INSERT INTO g08_pip_milestones (tenant_id, pip_id, title, due_date, metric, status, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5, 'PENDING', $6) RETURNING id";
+
+const SET_PROBATION_DECISION =
+  // probation_outcome is the E4/E34 terminal decision; extension bumps the cumulative months and
+  // the successor probation_end_date window (cap: cycle.probation_extension_max_months).
+  "UPDATE g08_probation_confirmations SET probation_outcome = $3, status = $4, confirmation_effective_date = COALESCE($5, confirmation_effective_date), " +
+  "extension_months_total = COALESCE($6, extension_months_total), probation_end_date = COALESCE($7, probation_end_date), updated_by = $8, updated_at = now() " +
+  "WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
 
 /**
  * VAL-WEIGHTAGE/WSUM (BRD G08 §5.6 rule 1, R21): sibling APPROVED performance goals must sum to

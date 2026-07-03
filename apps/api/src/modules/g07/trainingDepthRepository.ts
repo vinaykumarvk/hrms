@@ -182,10 +182,95 @@ export interface CampaignTarget {
   trainingNominationId?: string;
 }
 
+// ---------------------------------------------------------------------------------------
+// PH-16E — FR-G07-018 external credentials + append-only credential_verifications ledger,
+// FR-G07-020 training_sponsorships service bonds + training_costs BOND_RECOVERY feed to G10.
+// ---------------------------------------------------------------------------------------
+
+/** FR-G07-018 AC.2: each verification step is one APPENDED credential_verifications row. */
+export type CredentialVerificationAction = "SUBMITTED" | "EVIDENCE_REVIEWED" | "VERIFIED" | "REJECTED";
+export type CredentialVerificationMethod = "ISSUER_PORTAL" | "DOCUMENT_REVIEW" | "REGISTRY_LOOKUP" | "ATTESTATION";
+export type ExternalCredentialStatus = "PENDING" | "EVIDENCE_REVIEWED" | "VERIFIED" | "REJECTED";
+/** §5.2.35 training_sponsorships.obligation_status frozen value set. */
+export type SponsorshipObligationStatus = "PROPOSED" | "SANCTIONED" | "ACTIVE" | "FULFILLED" | "BREACHED" | "RECOVERED" | "WAIVED";
+export type SponsorshipType = "SPONSORED_PROGRAM" | "STUDY_LEAVE" | "DEPUTATION";
+/** §5.2.24 training_costs.cost_type subset consumed here (BOND_RECOVERY is the G10 payable feed). */
+export type TrainingCostType = "SPONSORSHIP" | "BOND_RECOVERY";
+
+/** FR-G07-018: certifications row captured with credential_source=EXTERNAL_PROFESSIONAL. */
+export interface ExternalCredential {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  employeeId: string;
+  title: string;
+  issuingBody: string;
+  /** VAL-G07-CREDREF: unique per employee (duplicate is 409). */
+  externalReferenceNo: string;
+  issueDate: string;
+  validUntil?: string;
+  credentialSource: "EXTERNAL_PROFESSIONAL";
+  verificationStatus: ExternalCredentialStatus;
+  /** Self-capture creator — can NEVER be the verifier (FR-G07-018 AC.5 SoD). */
+  submittedBy: string;
+  verifiedBy?: string;
+  evidenceDocumentId?: string;
+  significantForSr: boolean;
+  srEventId?: string;
+}
+
+/** §5.2.36 credential_verifications APPEND-ONLY ledger row (BRD rule 9: no UPDATE/DELETE). */
+export interface CredentialVerificationEntry {
+  id: string;
+  tenantId: string;
+  certificationId: string;
+  verificationAction: CredentialVerificationAction;
+  verificationMethod: CredentialVerificationMethod;
+  actorId: string;
+  comments?: string;
+  recordedAt: string;
+}
+
+/** §5.2.35 training_sponsorships — service bond; money in INTEGER PAISE (no floats). */
+export interface TrainingSponsorship {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  employeeId: string;
+  trainingProgramId?: string;
+  externalCourseName?: string;
+  sponsorshipType: SponsorshipType;
+  sponsoredAmountPaise: number;
+  startDate: string;
+  endDate?: string;
+  serviceBondMonths: number;
+  completionDate?: string;
+  /** Derived on activation: completion_date + service_bond_months (FR-G07-020 BR). */
+  bondEndDate?: string;
+  /** bond_recovery_amount — liquidated pro-rata on breach (VAL-G07-BOND), integer paise. */
+  bondRecoveryAmountPaise?: number;
+  obligationStatus: SponsorshipObligationStatus;
+  sanctionedBy?: string;
+  waiverReason?: string;
+}
+
+/** §5.2.24 training_costs row (BOND_RECOVERY with payable_to_payroll=true is the G10 feed). */
+export interface TrainingCostEntry {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  trainingSponsorshipId?: string;
+  costType: TrainingCostType;
+  amountPaise: number;
+  payableToPayroll: boolean;
+  recordedAt: string;
+}
+
 /**
  * PH-08D depth repository contract consumed by TrainingService — taxonomy, models,
  * inventory, gap analyses, gap contracts and campaigns live behind this seam,
- * never in module-local arrays.
+ * never in module-local arrays. PH-16E adds external credentials with the append-only
+ * credential_verifications ledger, training_sponsorships and the training_costs feed.
  */
 export interface TrainingDepthRepository {
   saveSkillCategory(row: SkillCategory): void;
@@ -213,6 +298,23 @@ export interface TrainingDepthRepository {
   findCampaign(scope: TenantScope, id: string): TrainingCampaign | undefined;
   saveCampaignTarget(row: CampaignTarget): void;
   listCampaignTargets(scope: TenantScope, trainingCampaignId: string): CampaignTarget[];
+  // PH-16E FR-G07-018 — external credentials + append-only credential_verifications ledger.
+  saveExternalCredential(row: ExternalCredential): void;
+  findExternalCredential(scope: TenantScope, id: string): ExternalCredential | undefined;
+  /** VAL-G07-CREDREF dedup probe: external_reference_no unique per employee. */
+  findCredentialByExternalRef(scope: TenantScope, employeeId: string, externalReferenceNo: string): ExternalCredential | undefined;
+  listExternalCredentials(scope: TenantScope, employeeId: string): ExternalCredential[];
+  /** APPEND-ONLY (BRD rule 9): the ledger exposes append + list only — no update, no delete. */
+  appendCredentialVerification(row: Omit<CredentialVerificationEntry, "id">): CredentialVerificationEntry;
+  listCredentialVerifications(scope: TenantScope, certificationId: string): CredentialVerificationEntry[];
+  // PH-16E FR-G07-020 — training_sponsorships service bonds + training_costs BOND_RECOVERY feed.
+  saveSponsorship(row: TrainingSponsorship): void;
+  findSponsorship(scope: TenantScope, id: string): TrainingSponsorship | undefined;
+  listSponsorships(scope: TenantScope, employeeId?: string): TrainingSponsorship[];
+  appendTrainingCost(row: Omit<TrainingCostEntry, "id">): TrainingCostEntry;
+  listTrainingCosts(scope: TenantScope, trainingSponsorshipId: string): TrainingCostEntry[];
+  /** VAL-G07-BOND gate probe: does a BOND_RECOVERY cost row exist for this sponsorship? */
+  hasBondRecoveryCost(scope: TenantScope, trainingSponsorshipId: string): boolean;
 }
 
 /** In-memory implementation (DI default, mirrors InMemoryPromotionDepthRepository). */
@@ -227,6 +329,12 @@ export class InMemoryTrainingDepthRepository implements TrainingDepthRepository 
   protected readonly gapContracts: GapContract[] = [];
   protected readonly campaigns: TrainingCampaign[] = [];
   protected readonly campaignTargets: CampaignTarget[] = [];
+  protected readonly externalCredentials: ExternalCredential[] = [];
+  /** Append-only ledger (BRD rule 9): rows are pushed and never mutated or removed. */
+  protected readonly credentialVerifications: CredentialVerificationEntry[] = [];
+  protected readonly sponsorships: TrainingSponsorship[] = [];
+  /** Append-only cost feed rows (BOND_RECOVERY → G10 payable). */
+  protected readonly trainingCosts: TrainingCostEntry[] = [];
 
   saveSkillCategory(row: SkillCategory): void {
     this.upsert(this.skillCategories, row);
@@ -343,6 +451,75 @@ export class InMemoryTrainingDepthRepository implements TrainingDepthRepository 
       .map((item) => ({ ...item }));
   }
 
+  saveExternalCredential(row: ExternalCredential): void {
+    this.upsert(this.externalCredentials, row);
+  }
+
+  findExternalCredential(scope: TenantScope, id: string): ExternalCredential | undefined {
+    return this.copyOf(this.externalCredentials.find((item) => item.id === id && this.inScope(item, scope)));
+  }
+
+  findCredentialByExternalRef(scope: TenantScope, employeeId: string, externalReferenceNo: string): ExternalCredential | undefined {
+    // VAL-G07-CREDREF: uniqueness is per (tenant, employee, external_reference_no).
+    return this.copyOf(
+      this.externalCredentials.find(
+        (item) => item.employeeId === employeeId && item.externalReferenceNo === externalReferenceNo && this.inScope(item, scope)
+      )
+    );
+  }
+
+  listExternalCredentials(scope: TenantScope, employeeId: string): ExternalCredential[] {
+    return this.externalCredentials.filter((item) => item.employeeId === employeeId && this.inScope(item, scope)).map((item) => ({ ...item }));
+  }
+
+  appendCredentialVerification(row: Omit<CredentialVerificationEntry, "id">): CredentialVerificationEntry {
+    // APPEND-ONLY (BRD rule 9): insert only — this repository ships no update/delete for the ledger.
+    const entry: CredentialVerificationEntry = { ...row, id: `credential-verification-${this.credentialVerifications.length + 1}` };
+    this.credentialVerifications.push({ ...entry });
+    this.persist();
+    return { ...entry };
+  }
+
+  listCredentialVerifications(scope: TenantScope, certificationId: string): CredentialVerificationEntry[] {
+    return this.credentialVerifications
+      .filter((item) => item.certificationId === certificationId && item.tenantId === scope.tenantId)
+      .map((item) => ({ ...item }));
+  }
+
+  saveSponsorship(row: TrainingSponsorship): void {
+    this.upsert(this.sponsorships, row);
+  }
+
+  findSponsorship(scope: TenantScope, id: string): TrainingSponsorship | undefined {
+    return this.copyOf(this.sponsorships.find((item) => item.id === id && this.inScope(item, scope)));
+  }
+
+  listSponsorships(scope: TenantScope, employeeId?: string): TrainingSponsorship[] {
+    return this.sponsorships
+      .filter((item) => this.inScope(item, scope) && (!employeeId || item.employeeId === employeeId))
+      .map((item) => ({ ...item }));
+  }
+
+  appendTrainingCost(row: Omit<TrainingCostEntry, "id">): TrainingCostEntry {
+    const entry: TrainingCostEntry = { ...row, id: `training-cost-${this.trainingCosts.length + 1}` };
+    this.trainingCosts.push({ ...entry });
+    this.persist();
+    return { ...entry };
+  }
+
+  listTrainingCosts(scope: TenantScope, trainingSponsorshipId: string): TrainingCostEntry[] {
+    return this.trainingCosts
+      .filter((item) => item.trainingSponsorshipId === trainingSponsorshipId && item.tenantId === scope.tenantId)
+      .map((item) => ({ ...item }));
+  }
+
+  hasBondRecoveryCost(scope: TenantScope, trainingSponsorshipId: string): boolean {
+    // VAL-G07-BOND gate: BREACHED -> RECOVERED requires this feed row to exist first.
+    return this.trainingCosts.some(
+      (item) => item.trainingSponsorshipId === trainingSponsorshipId && item.costType === "BOND_RECOVERY" && item.tenantId === scope.tenantId
+    );
+  }
+
   /** Durability hook — no-op in memory; the file-backed subclass writes through. */
   protected persist(): void {
     // In-memory repository keeps state in process only.
@@ -359,6 +536,10 @@ export class InMemoryTrainingDepthRepository implements TrainingDepthRepository 
     this.gapContracts.push(...(state.gapContracts ?? []));
     this.campaigns.push(...(state.campaigns ?? []));
     this.campaignTargets.push(...(state.campaignTargets ?? []));
+    this.externalCredentials.push(...(state.externalCredentials ?? []));
+    this.credentialVerifications.push(...(state.credentialVerifications ?? []));
+    this.sponsorships.push(...(state.sponsorships ?? []));
+    this.trainingCosts.push(...(state.trainingCosts ?? []));
   }
 
   protected snapshotState(): {
@@ -372,6 +553,10 @@ export class InMemoryTrainingDepthRepository implements TrainingDepthRepository 
     gapContracts: GapContract[];
     campaigns: TrainingCampaign[];
     campaignTargets: CampaignTarget[];
+    externalCredentials: ExternalCredential[];
+    credentialVerifications: CredentialVerificationEntry[];
+    sponsorships: TrainingSponsorship[];
+    trainingCosts: TrainingCostEntry[];
   } {
     return {
       skillCategories: this.skillCategories,
@@ -384,6 +569,10 @@ export class InMemoryTrainingDepthRepository implements TrainingDepthRepository 
       gapContracts: this.gapContracts,
       campaigns: this.campaigns,
       campaignTargets: this.campaignTargets,
+      externalCredentials: this.externalCredentials,
+      credentialVerifications: this.credentialVerifications,
+      sponsorships: this.sponsorships,
+      trainingCosts: this.trainingCosts,
     };
   }
 
@@ -630,4 +819,210 @@ export class PgTrainingDepthRepository {
     const result = await this.pool.query(FLIP_LAPSED_MANDATORY, [input.tenantId, input.updatedBy ?? null, input.asOf]);
     return result.rows as Array<Record<string, unknown>>;
   }
+
+  /**
+   * FR-G07-018 (PH-16E): external credential capture in ONE transaction — the VAL-G07-CREDREF
+   * dedup re-check (unique external_reference_no per employee, row-locked) plus the certification
+   * insert plus the SUBMITTED credential_verifications append commit or roll back together.
+   */
+  async insertExternalCredentialWithSubmission(input: {
+    tenantId: string;
+    entityId?: string;
+    employeeId: string;
+    title: string;
+    issuingBody: string;
+    externalReferenceNo: string;
+    issueDate: string;
+    validUntil?: string;
+    submittedBy: string;
+    evidenceDocumentId?: string;
+    createdBy?: string;
+  }): Promise<{ certificationId: string; verificationId: string }> {
+    return withTransaction(this.pool, async (client) => {
+      const duplicate = await client.query(SELECT_CREDENTIAL_BY_EXTERNAL_REF, [input.tenantId, input.employeeId, input.externalReferenceNo]);
+      if (duplicate.rows[0]) {
+        throw new FoundationError("VAL-G07-CREDREF", "Duplicate external credential reference for this employee", {
+          field: "externalReferenceNo",
+          details: { employeeId: input.employeeId, externalReferenceNo: input.externalReferenceNo },
+        });
+      }
+      const certification = await client.query(INSERT_EXTERNAL_CREDENTIAL, [
+        input.tenantId,
+        input.entityId ?? null,
+        input.employeeId,
+        input.title,
+        input.issuingBody,
+        input.externalReferenceNo,
+        input.issueDate,
+        input.validUntil ?? null,
+        input.submittedBy,
+        input.evidenceDocumentId ?? null,
+        input.createdBy ?? null,
+      ]);
+      const certificationId = (certification.rows[0] as { id: string }).id;
+      const verification = await client.query(APPEND_CREDENTIAL_VERIFICATION, [
+        input.tenantId,
+        certificationId,
+        "SUBMITTED",
+        "DOCUMENT_REVIEW",
+        input.submittedBy,
+        null,
+        input.createdBy ?? null,
+      ]);
+      return { certificationId, verificationId: (verification.rows[0] as { id: string }).id };
+    });
+  }
+
+  /**
+   * FR-G07-018 AC.2/AC.5: one verification step = one APPENDED credential_verifications row plus
+   * the verification_status move on the certification, in ONE transaction. The verifier != submitter
+   * SoD denial uses the platform FORBIDDEN code (the BRD registers no G07-specific code here).
+   */
+  async appendCredentialVerificationStep(input: {
+    tenantId: string;
+    certificationId: string;
+    verificationAction: "EVIDENCE_REVIEWED" | "VERIFIED" | "REJECTED";
+    verificationMethod: string;
+    actorId: string;
+    comments?: string;
+    createdBy?: string;
+  }): Promise<{ verificationId: string }> {
+    return withTransaction(this.pool, async (client) => {
+      const locked = await client.query(LOCK_EXTERNAL_CREDENTIAL, [input.tenantId, input.certificationId]);
+      const row = locked.rows[0] as { id: string; submitted_by: string } | undefined;
+      if (!row) {
+        throw new FoundationError("NOT_FOUND", "External credential not found");
+      }
+      if (row.submitted_by === input.actorId) {
+        throw new FoundationError("FORBIDDEN", "Self-capture creator cannot verify their own credential (SoD)", {
+          details: { certificationId: input.certificationId },
+        });
+      }
+      const verification = await client.query(APPEND_CREDENTIAL_VERIFICATION, [
+        input.tenantId,
+        input.certificationId,
+        input.verificationAction,
+        input.verificationMethod,
+        input.actorId,
+        input.comments ?? null,
+        input.createdBy ?? null,
+      ]);
+      await client.query(SET_CREDENTIAL_VERIFICATION_STATUS, [
+        input.tenantId,
+        input.certificationId,
+        input.verificationAction,
+        input.verificationAction === "VERIFIED" ? input.actorId : null,
+      ]);
+      return { verificationId: (verification.rows[0] as { id: string }).id };
+    });
+  }
+
+  /**
+   * FR-G07-020 AC.4: breach in ONE transaction — row-lock the ACTIVE bond, set BREACHED and
+   * persist the pro-rata bond_recovery_amount (integer paise, computed by the service).
+   */
+  async markSponsorshipBreached(input: {
+    tenantId: string;
+    sponsorshipId: string;
+    bondRecoveryAmountPaise: number;
+    updatedBy?: string;
+  }): Promise<void> {
+    await withTransaction(this.pool, async (client) => {
+      const locked = await client.query(LOCK_SPONSORSHIP, [input.tenantId, input.sponsorshipId]);
+      const row = locked.rows[0] as { id: string; obligation_status: string } | undefined;
+      if (!row) {
+        throw new FoundationError("NOT_FOUND", "Training sponsorship not found");
+      }
+      if (row.obligation_status !== "ACTIVE") {
+        throw new FoundationError("PRECONDITION_FAILED", "Only an ACTIVE bond can be marked BREACHED", {
+          details: { obligationStatus: row.obligation_status },
+        });
+      }
+      await client.query(SET_SPONSORSHIP_BREACHED, [input.tenantId, input.sponsorshipId, input.bondRecoveryAmountPaise, input.updatedBy ?? null]);
+    });
+  }
+
+  /** The BOND_RECOVERY cost row feeding G10 (payable_to_payroll=true), integer paise. */
+  async insertBondRecoveryCost(input: {
+    tenantId: string;
+    entityId?: string;
+    trainingSponsorshipId: string;
+    amountPaise: number;
+    createdBy?: string;
+  }): Promise<{ costId: string }> {
+    const result = await this.pool.query(INSERT_BOND_RECOVERY_COST, [
+      input.tenantId,
+      input.entityId ?? null,
+      input.trainingSponsorshipId,
+      input.amountPaise,
+      input.createdBy ?? null,
+    ]);
+    return { costId: (result.rows[0] as { id: string }).id };
+  }
+
+  /**
+   * VAL-G07-BOND (fail closed, ONE transaction): BREACHED -> RECOVERED is rejected unless a
+   * BOND_RECOVERY training_costs row (the G10 feed) already exists for the bond.
+   */
+  async markSponsorshipRecoveredWithGuard(input: { tenantId: string; sponsorshipId: string; updatedBy?: string }): Promise<void> {
+    await withTransaction(this.pool, async (client) => {
+      const locked = await client.query(LOCK_SPONSORSHIP, [input.tenantId, input.sponsorshipId]);
+      const row = locked.rows[0] as { id: string; obligation_status: string } | undefined;
+      if (!row) {
+        throw new FoundationError("NOT_FOUND", "Training sponsorship not found");
+      }
+      if (row.obligation_status !== "BREACHED") {
+        throw new FoundationError("PRECONDITION_FAILED", "Only a BREACHED bond can move to RECOVERED", {
+          details: { obligationStatus: row.obligation_status },
+        });
+      }
+      const feed = await client.query(SELECT_BOND_RECOVERY_COST_EXISTS, [input.tenantId, input.sponsorshipId]);
+      if (!feed.rows[0]) {
+        throw new FoundationError("VAL-G07-BOND", "BREACHED bond must emit a BOND_RECOVERY cost (G10 feed) before RECOVERED", {
+          details: { sponsorshipId: input.sponsorshipId },
+        });
+      }
+      await client.query(SET_SPONSORSHIP_STATUS, [input.tenantId, input.sponsorshipId, "RECOVERED", input.updatedBy ?? null]);
+    });
+  }
 }
+
+// PH-16E parameterised SQL over migration 0032 tables (g07_certifications extension,
+// g07_credential_verifications append-only ledger, g07_training_sponsorships, g07_training_costs).
+
+const SELECT_CREDENTIAL_BY_EXTERNAL_REF =
+  "SELECT id FROM g07_certifications WHERE tenant_id = $1 AND employee_id = $2 AND external_reference_no = $3 AND is_deleted = false FOR UPDATE";
+
+const INSERT_EXTERNAL_CREDENTIAL =
+  "INSERT INTO g07_certifications (tenant_id, entity_id, employee_id, credential_source, title, issuing_body, external_reference_no, issue_date, valid_until, verification_status, submitted_by, evidence_document_id, created_by) " +
+  "VALUES ($1, $2, $3, 'EXTERNAL_PROFESSIONAL', $4, $5, $6, $7, $8, 'PENDING', $9, $10, $11) RETURNING id";
+
+const LOCK_EXTERNAL_CREDENTIAL =
+  "SELECT id, submitted_by FROM g07_certifications WHERE tenant_id = $1 AND id = $2 AND is_deleted = false FOR UPDATE";
+
+const APPEND_CREDENTIAL_VERIFICATION =
+  // APPEND-ONLY (BRD rule 9): credential_verifications has INSERT + SELECT only — no UPDATE, no DELETE.
+  "INSERT INTO g07_credential_verifications (tenant_id, certification_id, verification_action, verification_method, actor_id, comments, created_by) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id";
+
+const SET_CREDENTIAL_VERIFICATION_STATUS =
+  "UPDATE g07_certifications SET verification_status = $3, verified_by = COALESCE($4, verified_by), updated_at = now() " +
+  "WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
+
+const LOCK_SPONSORSHIP =
+  "SELECT id, obligation_status FROM g07_training_sponsorships WHERE tenant_id = $1 AND id = $2 AND is_deleted = false FOR UPDATE";
+
+const SET_SPONSORSHIP_BREACHED =
+  // bond_recovery_amount_paise carries the pro-rata liquidated amount (VAL-G07-BOND, integer paise).
+  "UPDATE g07_training_sponsorships SET obligation_status = 'BREACHED', bond_recovery_amount_paise = $3, updated_by = $4, updated_at = now() " +
+  "WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
+
+const SET_SPONSORSHIP_STATUS =
+  "UPDATE g07_training_sponsorships SET obligation_status = $3, updated_by = $4, updated_at = now() WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
+
+const INSERT_BOND_RECOVERY_COST =
+  "INSERT INTO g07_training_costs (tenant_id, entity_id, training_sponsorship_id, cost_type, amount_paise, payable_to_payroll, created_by) " +
+  "VALUES ($1, $2, $3, 'BOND_RECOVERY', $4, true, $5) RETURNING id";
+
+const SELECT_BOND_RECOVERY_COST_EXISTS =
+  "SELECT id FROM g07_training_costs WHERE tenant_id = $1 AND training_sponsorship_id = $2 AND cost_type = 'BOND_RECOVERY' AND is_deleted = false LIMIT 1";

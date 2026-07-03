@@ -94,10 +94,20 @@ export type G05DomainErrorCode =
   | "ERR-G05-COUNSEL-TURN"
   | "ERR-G05-MUTUAL-PAIR";
 
+/**
+ * BRD G07 registered validation ids surfaced as error codes (docs/brd/v3/G07-training-skill-development.md §11):
+ * FR-G07-018 — duplicate external_reference_no for the same employee is 409 VAL-G07-CREDREF;
+ * FR-G07-020 / integrity rule 17 — a BREACHED training_sponsorships row must emit a BOND_RECOVERY
+ * cost (G10 feed) before it can move to RECOVERED, else 409 VAL-G07-BOND (fail closed).
+ */
+export type G07DomainErrorCode = "VAL-G07-CREDREF" | "VAL-G07-BOND";
+
 /** BRD G08 §9 named domain error codes (docs/brd/v3/G08-performance-appraisal-management.md error catalogue). */
 export type G08DomainErrorCode =
   | "ERR-G08-WEIGHTAGE"
-  | "ERR-G08-REPWINDOW";
+  | "ERR-G08-REPWINDOW"
+  // FR-G08-09 (R1): applying a calibration recommendation that is not RATIFIED is 409 CONFLICT.
+  | "ERR-G08-RATIFY";
 
 /** BRD G09 §10.3 named domain error codes (docs/brd/v3/G09-disciplinary-cases-punishment.md error catalogue). */
 export type G09DomainErrorCode =
@@ -189,6 +199,7 @@ export type WireErrorCode =
   | G04DomainErrorCode
   | G06DomainErrorCode
   | G05DomainErrorCode
+  | G07DomainErrorCode
   | G08DomainErrorCode
   | G09DomainErrorCode
   | G10DomainErrorCode

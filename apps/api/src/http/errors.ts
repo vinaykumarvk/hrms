@@ -78,8 +78,14 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G05-VACANCY-FULL":
     case "ERR-G05-COUNSEL-TURN":
     case "ERR-G05-MUTUAL-PAIR":
+    // BRD G07 FR-018/020 (PH-16E): duplicate external credential reference per employee and
+    // a BREACHED bond moved to RECOVERED without its BOND_RECOVERY cost are 409 CONFLICT.
+    case "VAL-G07-CREDREF":
+    case "VAL-G07-BOND":
     // BRD G08 §9: representation window elapsed (condonation required) is 409 CONFLICT.
     case "ERR-G08-REPWINDOW":
+    // BRD G08 FR-09 (R1): applying an unratified calibration recommendation is 409 CONFLICT.
+    case "ERR-G08-RATIFY":
     // BRD G09 §10.3: due-process gate violations (Art. 311(1) competence, pending consultation,
     // DI-4 penalty enhancement, abated case, broken timeline chain, actor conflict) are 409 CONFLICT.
     case "ERR-G09-AUTHORITY-NOT-COMPETENT":
