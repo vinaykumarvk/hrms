@@ -26,6 +26,7 @@ import { ChangeRequestTemplateService, InMemoryChangeRequestTemplateRepository }
 import { LmsIntegrationService, InMemoryLmsIntegrationRepository } from "../modules/g07/lmsIntegrationService";
 import { Feedback360Service, InMemoryFeedback360Repository } from "../modules/g08/feedback360Service";
 import { JurisdictionRetireeService, InMemoryJurisdictionRetireeRepository } from "../modules/g09/jurisdictionRetireeService";
+import { DigitalSignatureService, InMemoryDigitalSignatureRepository } from "../modules/g08/digitalSignatureService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -109,6 +110,7 @@ export interface FoundationServices {
   lmsIntegration: LmsIntegrationService;
   feedback360: Feedback360Service;
   jurisdictionRetiree: JurisdictionRetireeService;
+  digitalSignature: DigitalSignatureService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -291,6 +293,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const lmsIntegration = new LmsIntegrationService(authorization, audit, new InMemoryLmsIntegrationRepository());
   const feedback360 = new Feedback360Service(authorization, audit, new InMemoryFeedback360Repository());
   const jurisdictionRetiree = new JurisdictionRetireeService(authorization, audit, new InMemoryJurisdictionRetireeRepository());
+  const digitalSignature = new DigitalSignatureService(authorization, audit, new InMemoryDigitalSignatureRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -457,6 +460,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     lmsIntegration,
     feedback360,
     jurisdictionRetiree,
+    digitalSignature,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
