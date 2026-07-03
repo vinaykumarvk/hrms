@@ -962,3 +962,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-27d.sh
     gate: human
     depends_on: [PH-27C]
+
+  # PH-28 — remediation tranche 15 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Route-exposure pass: wire the PH-27 UI surfaces onto real /api/v1 routes end-to-end.
+  - id: PH-28A
+    name: PH-28 · G13 DSR list route
+    prompt: docs/spec/pipeline/prompts/PH-28A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-28a.sh
+    gate: auto
+    depends_on: [PH-27D]
+  - id: PH-28B
+    name: PH-28 · G09 case-evidence list route
+    prompt: docs/spec/pipeline/prompts/PH-28B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-28b.sh
+    gate: auto
+    depends_on: [PH-28A]
+  - id: PH-28C
+    name: PH-28 · G05 counselling session route
+    prompt: docs/spec/pipeline/prompts/PH-28C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-28c.sh
+    gate: auto
+    depends_on: [PH-28B]
+  - id: PH-28D
+    name: PH-28 · Tranche-15 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-28D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-28d.sh
+    gate: human
+    depends_on: [PH-28C]
