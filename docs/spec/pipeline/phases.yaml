@@ -1516,3 +1516,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-56b.sh
     depends_on: [PH-56A]
+
+  # PH-57 — remediation tranche 44 (hand-built; subagent credits exhausted until 2026-07-08). Second-pass
+  # deepening: expose G10 FR-20 full-and-final settlement (settle -> approve SoD) + recovery/loan/hold reads
+  # (real, service-tested backing). Ratchet 526/39.8% -> 532/40.2% (G10 42.5% -> 49.4%; total crosses 40%).
+  - id: PH-57A
+    name: PH-57 · G10 FnF/recovery route exposure (coverage ratchet 526->532 / 40.2%)
+    prompt: docs/spec/pipeline/prompts/PH-57A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-57a.sh
+    gate: auto
+    depends_on: [PH-56B]
+  - id: PH-57B
+    name: PH-57 · Tranche-44 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-57B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-57b.sh
+    depends_on: [PH-57A]

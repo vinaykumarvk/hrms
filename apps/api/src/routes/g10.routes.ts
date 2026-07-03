@@ -622,6 +622,73 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.read",
       handler: (context) => ok({ items: context.services.payrollEngine.listRunPayslips(context.scope, requiredParam(context.params, "id")) }),
     },
+    // PH-57A — FR-20 full-and-final settlement (settle -> approve with SoD) + recovery/loan/hold reads.
+    // Route exposure for already-tested compensationIntegration backing.
+    {
+      method: "POST",
+      path: "/api/v1/payroll/fnf-settlements",
+      operationId: "g10.settleFnf",
+      protected: true,
+      permission: "g10.fnf.settle",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          settlement: context.services.compensationIntegration.settleFnf(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            separationDate: requiredString(body, "separationDate"),
+            finalMonthPayPaise: requiredNumber(body, "finalMonthPayPaise"),
+            leaveEncashmentPaise: optionalNumber(body, "leaveEncashmentPaise"),
+            gratuityPaise: optionalNumber(body, "gratuityPaise"),
+            noticePayRecoveryPaise: optionalNumber(body, "noticePayRecoveryPaise"),
+            finalTdsPaise: optionalNumber(body, "finalTdsPaise"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/fnf-settlements/{id}:approve",
+      operationId: "g10.approveFnfSettlement",
+      protected: true,
+      permission: "g10.fnf.approve",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ settlement: context.services.compensationIntegration.approveFnfSettlement(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/payroll/fnf-settlements",
+      operationId: "g10.listFnfSettlements",
+      protected: true,
+      permission: "g10.payroll.read",
+      handler: (context) => ok({ items: context.services.compensationIntegration.listFnfSettlements(context.scope, context.request.query?.employeeId) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/payroll/employees/{employeeId}/recovery-schedules",
+      operationId: "g10.listRecoverySchedules",
+      protected: true,
+      permission: "g10.payroll.read",
+      handler: (context) => ok({ items: context.services.compensationIntegration.listRecoverySchedules(context.scope, requiredParam(context.params, "employeeId")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/payroll/employees/{employeeId}/loans",
+      operationId: "g10.listLoans",
+      protected: true,
+      permission: "g10.payroll.read",
+      handler: (context) => ok({ items: context.services.compensationIntegration.listLoans(context.scope, requiredParam(context.params, "employeeId")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/payroll/runs/{runId}/holds",
+      operationId: "g10.listHolds",
+      protected: true,
+      permission: "g10.payroll.read",
+      handler: (context) => ok({ items: context.services.compensationIntegration.listHolds(context.scope, requiredParam(context.params, "runId")) }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
