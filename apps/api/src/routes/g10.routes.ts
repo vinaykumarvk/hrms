@@ -436,6 +436,48 @@ export function registerG10Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-29A — G10 loans/advances instalment recovery + GL->ERP export (route exposure).
+    {
+      method: "POST",
+      path: "/api/v1/payroll/loans:sanction",
+      operationId: "g10.sanctionLoan",
+      protected: true,
+      permission: "g10.loan.sanction",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          loan: context.services.loanPerquisiteGl.sanctionLoan(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            loanType: requiredString(body, "loanType"),
+            principalPaise: optionalNumber(body, "principalPaise") ?? 0,
+            instalmentPaise: optionalNumber(body, "instalmentPaise") ?? 0,
+            isConcessional: optionalBoolean(body, "isConcessional"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/gl-export",
+      operationId: "g10.postGlExport",
+      protected: true,
+      permission: "g10.glexport.post",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created(
+          context.services.glErpPosting.postToErp(context.actor, {
+            exportKey: requiredString(body, "exportKey"),
+            totalDebitPaise: optionalNumber(body, "totalDebitPaise") ?? 0,
+            totalCreditPaise: optionalNumber(body, "totalCreditPaise") ?? 0,
+            erpReference: requiredString(body, "erpReference"),
+          })
+        );
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
