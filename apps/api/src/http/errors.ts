@@ -33,6 +33,8 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G14-SCOPE-CHECKER":
     // BRD G02 FR-018 AC1: self-service on any non-ACTIVE employment_status_at_submit is 403.
     case "ERR-G02-STATUSGATE":
+    // BRD G02 FR-023: a HIGH/STATUTORY self-service submit without a completed step-up is 403.
+    case "ERR-G02-STEPUP":
       return 403;
     case "NOT_FOUND":
     // BRD G14 FR-23: no snapshot known at the requested knowledge_time is 404.
@@ -63,6 +65,8 @@ export function statusForError(code: WireErrorCode): number {
     case "PENDING_LEAVE_BLOCKS_CLOSE":
     case "ENCASHMENT_CAP_EXCEEDED":
     case "NOT_ENCASHABLE":
+    // BRD G02 FR-015: applying/committing a change without a valid strong e-signature is 409.
+    case "ERR-G02-ESIGN":
     case "STRENGTH_INCONSISTENT":
     case "QUOTA_SPLIT_INVALID":
     case "VACANCY_NOT_RECONCILED":
@@ -170,6 +174,8 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G10-TAXSLAB-NOTFOUND":
     // BRD G10 FR-21: a concessional perquisite with no effective reference-rate row is 422.
     case "ERR-G10-PERQ-REFRATE":
+    // BRD G02 FR-015: an e-signature whose method is not permitted by policy is 422.
+    case "ERR-G02-ESIGN-METHOD":
     // BRD G11 §12: rule-row/commutation-factor resolution misses are 422 (fail closed);
     // FR-06 AC1: an over-limit commuted fraction is 422, rejected — never clamped.
     case "ERR-G11-RULE-NOT-EFFECTIVE":

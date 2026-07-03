@@ -12,6 +12,7 @@ import { LeaveService } from "../modules/g03/leaveService";
 import { InMemoryLeaveRepository } from "../modules/g03/leaveRepository";
 import { AttendanceOpsService } from "../modules/g03/attendanceOpsService";
 import { LeaveYearCloseService, InMemoryLeaveYearCloseRepository } from "../modules/g03/leaveYearCloseService";
+import { ChangeEsignStepUpService, InMemoryChangeEsignStepUpRepository } from "../modules/g02/changeEsignStepUpService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -81,6 +82,7 @@ export interface FoundationServices {
   leave: LeaveService;
   attendanceOps: AttendanceOpsService;
   leaveYearClose: LeaveYearCloseService;
+  changeEsignStepUp: ChangeEsignStepUpService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -249,6 +251,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   // attendance derivation stays with the PH-07D LeaveService (deriveAttendanceFromPunches wires in).
   const attendanceOps = new AttendanceOpsService(employeeMaster, authorization, audit, jobs, leave, new InMemoryAttendanceOpsRepository());
   const leaveYearClose = new LeaveYearCloseService(authorization, audit, new InMemoryLeaveYearCloseRepository());
+  const changeEsignStepUp = new ChangeEsignStepUpService(authorization, audit, new InMemoryChangeEsignStepUpRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -401,6 +404,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     leave,
     attendanceOps,
     leaveYearClose,
+    changeEsignStepUp,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,

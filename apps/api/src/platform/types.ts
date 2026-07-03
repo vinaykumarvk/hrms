@@ -75,7 +75,15 @@ export type G06DomainErrorCode =
  * (412 ERR-G02-RISKBLOCK); FR-G02-018 AC1 — self-service on any non-ACTIVE target is
  * rejected fail-closed (403 ERR-G02-STATUSGATE).
  */
-export type G02DomainErrorCode = "ERR-G02-RISKBLOCK" | "ERR-G02-STATUSGATE";
+export type G02DomainErrorCode =
+  | "ERR-G02-RISKBLOCK"
+  | "ERR-G02-STATUSGATE"
+  // PH-17B FR-015/023: apply/commit without a valid strong e-signature (409); an e-sign whose
+  // method is not permitted by policy (422); a HIGH/STATUTORY self-service submit without a
+  // completed step-up challenge (403).
+  | "ERR-G02-ESIGN"
+  | "ERR-G02-ESIGN-METHOD"
+  | "ERR-G02-STEPUP";
 
 /**
  * BRD G04 registered codes (docs/brd/v3/G04-leave-sr-integration.md):
