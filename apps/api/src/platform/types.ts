@@ -145,7 +145,10 @@ export type G10DomainErrorCode =
   // FR-22/§12: mutation attempted after a snapshot/cutoff freeze (409) — also thrown for
   // tax-declaration mutation after the FY proof cutoff (FR-07 AC3; no declaration-specific
   // code is registered, so the registered freeze code is reused, never a new identifier).
-  | "ERR-G10-SNAPSHOT-FROZEN";
+  | "ERR-G10-SNAPSHOT-FROZEN"
+  // FR-21: a concessional (is_concessional) perquisite valuation with no effective SBI
+  // reference-rate row fails closed (422) rather than valuing the perquisite at zero.
+  | "ERR-G10-PERQ-REFRATE";
 
 /** BRD G11 §12 named domain error codes (docs/brd/v3/G11-retirement-and-pension.md FR-05/06/14/19/22 error catalogue). */
 export type G11DomainErrorCode =

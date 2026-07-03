@@ -38,6 +38,8 @@ import { CompensationIntegrationService } from "../modules/g10/compensationInteg
 import { InMemoryCompensationIntegrationRepository } from "../modules/g10/compensationIntegrationRepository";
 import { TaxEngineService } from "../modules/g10/taxEngineService";
 import { InMemoryTaxEngineRepository } from "../modules/g10/taxEngineRepository";
+import { LoanPerquisiteGlService, InMemoryLoanPerquisiteGlRepository } from "../modules/g10/loanPerquisiteGlService";
+import { PensionTreasuryService, InMemoryPensionTreasuryRepository } from "../modules/g11/pensionTreasuryService";
 import { PensionService } from "../modules/g11/pensionService";
 import { PensionDisbursementService } from "../modules/g11/pensionDisbursementService";
 import { InMemoryPensionDisbursementRepository } from "../modules/g11/pensionDisbursementRepository";
@@ -90,6 +92,8 @@ export interface FoundationServices {
   payRules: PayRuleService;
   compensationIntegration: CompensationIntegrationService;
   taxEngine: TaxEngineService;
+  loanPerquisiteGl: LoanPerquisiteGlService;
+  pensionTreasury: PensionTreasuryService;
   pension: PensionService;
   pensionDisbursement: PensionDisbursementService;
   pensionRules: PensionRuleService;
@@ -333,6 +337,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   // totals to the monthly TDS ledger (migration 0022). Slab/surcharge/cess/87A/std-deduction
   // values are effective-dated TAX_SLAB rate rows on the PH-09A substrate, never constants.
   const taxEngine = new TaxEngineService(employeeMaster, authorization, audit, payRuleRepository, payrollEngineRepository, new InMemoryTaxEngineRepository());
+  const loanPerquisiteGl = new LoanPerquisiteGlService(employeeMaster, authorization, audit, new InMemoryLoanPerquisiteGlRepository());
   const pensionRules = new PensionRuleService(authorization, audit, new InMemoryPensionRuleRepository());
   // PH-09C: G11 benefit records E07-E10/E41 behind the repository pattern (migration 0016);
   // the scheme-branched pension engine consumes the PH-09A rule substrate above and the
@@ -363,6 +368,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   // closed without an ACTIVE PASSED verification (ERR-G11-ACCOUNT-VERIFY, IR16); PH-15B
   // adds the FR-12 life-certificate suspension gate ahead of it.
   const pensionDisbursement = new PensionDisbursementService(authorization, audit, pension, new InMemoryPensionDisbursementRepository(), pensionerLifecycle);
+  const pensionTreasury = new PensionTreasuryService(authorization, audit, new InMemoryPensionTreasuryRepository());
   // PH-10B: G12 integrity pillars — verify + JOB-G12-INTEGRITY, Merkle anchors behind the
   // injectable RFC 3161 TSA seam (JOB-G12-ANCHOR), gap register (JOB-G12-GAPSCAN),
   // attestations, and P02-redacted certified extracts — behind the repository pattern.
@@ -404,6 +410,8 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     payRules,
     compensationIntegration,
     taxEngine,
+    loanPerquisiteGl,
+    pensionTreasury,
     pension,
     pensionDisbursement,
     pensionRules,

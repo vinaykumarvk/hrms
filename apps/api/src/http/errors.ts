@@ -162,6 +162,8 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G10-PT-STATE":
     // BRD G10 FR-07: no TAX_SLAB rows for the regime/FY resolves 422 (fail closed).
     case "ERR-G10-TAXSLAB-NOTFOUND":
+    // BRD G10 FR-21: a concessional perquisite with no effective reference-rate row is 422.
+    case "ERR-G10-PERQ-REFRATE":
     // BRD G11 §12: rule-row/commutation-factor resolution misses are 422 (fail closed);
     // FR-06 AC1: an over-limit commuted fraction is 422, rejected — never clamped.
     case "ERR-G11-RULE-NOT-EFFECTIVE":
