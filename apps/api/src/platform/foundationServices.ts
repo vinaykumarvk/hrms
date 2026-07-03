@@ -4,6 +4,7 @@ import { EmployeeMasterService } from "../modules/g01/employeeMasterService";
 import { NomineeService } from "../modules/g01/nomineeService";
 import { EmergencyContactService } from "../modules/g01/emergencyContactService";
 import { EducationService } from "../modules/g01/educationService";
+import { BankAccountService } from "../modules/g01/bankAccountService";
 import { InMemoryEmployeeProfileRepository } from "../modules/g01/employeeProfileRepository";
 import { EmployeeIdentityOpsService } from "../modules/g01/identityOpsService";
 import { InMemoryEmployeeIdentityOpsRepository } from "../modules/g01/identityOpsRepository";
@@ -110,6 +111,7 @@ export interface FoundationServices {
   nominee: NomineeService;
   emergencyContact: EmergencyContactService;
   education: EducationService;
+  bankAccount: BankAccountService;
   employeeIdentityOps: EmployeeIdentityOpsService;
   personalDetails: PersonalDetailsService;
   changeGovernance: ChangeGovernanceService;
@@ -244,6 +246,8 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const emergencyContact = new EmergencyContactService(employeeMaster, authorization, audit);
   // PH-64A: G01 FR-EPM-006 education register (net-new; single-highest invariant, soft-delete, row_version).
   const education = new EducationService(employeeMaster, authorization, audit);
+  // PH-65A: G01 FR-EPM-008 bank-account register (net-new; VAL-IFSC + single-salary + PENDING lifecycle + penny-drop).
+  const bankAccount = new BankAccountService(employeeMaster, authorization, audit);
   // PH-16A: G01 dedup/alias-merge (E19/E21), bulk import (E20a/E20b), and lifecycle
   // :separate/:reactivate/:archive behind the repository pattern (migration 0028). The alias
   // resolver makes every master read alias-transparent (FR-EPM-015 AC4 / FR-EPM-019 AC4).
@@ -504,6 +508,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     nominee,
     emergencyContact,
     education,
+    bankAccount,
     employeeIdentityOps,
     personalDetails,
     changeGovernance,
