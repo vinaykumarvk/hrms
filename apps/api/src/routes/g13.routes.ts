@@ -347,6 +347,15 @@ export function registerG13Routes(kernel: ApiKernel): void {
       });
     },
   });
+  // PH-28A — DPDP DSR list surface (consumed by the G13 DSR console UI, PH-27A).
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/dsr",
+    operationId: "g13.listDataSubjectRequests",
+    protected: true,
+    permission: "g13.dsr.read",
+    handler: (context) => ok(pageItems(context.services.documentVault.listDataSubjectRequests(context.scope), context.pagination ?? { limit: 25 })),
+  });
   kernel.register({
     method: "GET",
     path: "/api/v1/dsr/{id}",
