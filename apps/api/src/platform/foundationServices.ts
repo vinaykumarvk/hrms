@@ -19,6 +19,7 @@ import { AttendanceExceptionService, InMemoryAttendanceExceptionRepository } fro
 import { JoiningSequenceService, InMemoryJoiningSequenceRepository } from "../modules/g05/joiningSequenceService";
 import { LeaveBlackoutMassService, InMemoryLeaveBlackoutMassRepository } from "../modules/g03/leaveBlackoutMassService";
 import { ContinuousFeedbackService, InMemoryContinuousFeedbackRepository } from "../modules/g08/continuousFeedbackService";
+import { CareerSuccessionService, InMemoryCareerSuccessionRepository } from "../modules/g06/careerSuccessionService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -95,6 +96,7 @@ export interface FoundationServices {
   joiningSequence: JoiningSequenceService;
   leaveBlackoutMass: LeaveBlackoutMassService;
   continuousFeedback: ContinuousFeedbackService;
+  careerSuccession: CareerSuccessionService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -270,6 +272,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const joiningSequence = new JoiningSequenceService(authorization, audit, new InMemoryJoiningSequenceRepository());
   const leaveBlackoutMass = new LeaveBlackoutMassService(authorization, audit, new InMemoryLeaveBlackoutMassRepository());
   const continuousFeedback = new ContinuousFeedbackService(authorization, audit, new InMemoryContinuousFeedbackRepository());
+  const careerSuccession = new CareerSuccessionService(authorization, audit, new InMemoryCareerSuccessionRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -429,6 +432,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     joiningSequence,
     leaveBlackoutMass,
     continuousFeedback,
+    careerSuccession,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
