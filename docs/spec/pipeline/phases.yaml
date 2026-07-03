@@ -1484,3 +1484,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-54b.sh
     depends_on: [PH-54A]
+
+  # PH-55 — remediation tranche 42 (hand-built; subagent credits exhausted until 2026-07-08). Second-pass
+  # deepening: expose G01 governed write-ports (identity change / transfer posting / probation confirmation)
+  # + live-record/count reads (real, service-tested backing). Ratchet 513/38.8% -> 519/39.2% (G01 26.7% -> 30.3%).
+  - id: PH-55A
+    name: PH-55 · G01 governed write-port route exposure (coverage ratchet 513->519 / 39.2%)
+    prompt: docs/spec/pipeline/prompts/PH-55A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-55a.sh
+    gate: auto
+    depends_on: [PH-54B]
+  - id: PH-55B
+    name: PH-55 · Tranche-42 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-55B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-55b.sh
+    depends_on: [PH-55A]
