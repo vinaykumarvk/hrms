@@ -934,3 +934,31 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-26d.sh
     gate: human
     depends_on: [PH-26C]
+
+  # PH-27 — remediation tranche 14 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Pivot to web UI surfaces wiring already-built engines: G13 DSR console, G05 counselling,
+  # G09 evidence-vault listing.
+  - id: PH-27A
+    name: PH-27 · G13 DPDP DSR console UI
+    prompt: docs/spec/pipeline/prompts/PH-27A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-27a.sh
+    gate: auto
+    depends_on: [PH-26D]
+  - id: PH-27B
+    name: PH-27 · G05 interactive counselling UI
+    prompt: docs/spec/pipeline/prompts/PH-27B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-27b.sh
+    gate: auto
+    depends_on: [PH-27A]
+  - id: PH-27C
+    name: PH-27 · G09 evidence-vault listing UI
+    prompt: docs/spec/pipeline/prompts/PH-27C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-27c.sh
+    gate: auto
+    depends_on: [PH-27B]
+  - id: PH-27D
+    name: PH-27 · Tranche-14 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-27D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-27d.sh
+    gate: human
+    depends_on: [PH-27C]
