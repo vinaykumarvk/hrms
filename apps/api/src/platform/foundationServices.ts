@@ -37,6 +37,7 @@ import { CorrectionCascadeService, InMemoryCorrectionCascadeRepository } from ".
 import { OfflineVerificationService, InMemoryOfflineVerificationRepository } from "../modules/g12/offlineVerificationService";
 import { GlErpPostingService, InMemoryGlErpPostingRepository } from "../modules/g10/glErpPostingService";
 import { RetroImpactService, InMemoryRetroImpactRepository } from "../modules/g02/retroImpactService";
+import { PunchAnomalyService, InMemoryPunchAnomalyRepository } from "../modules/g03/punchAnomalyService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -131,6 +132,7 @@ export interface FoundationServices {
   offlineVerification: OfflineVerificationService;
   glErpPosting: GlErpPostingService;
   retroImpact: RetroImpactService;
+  punchAnomaly: PunchAnomalyService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -330,6 +332,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const offlineVerification = new OfflineVerificationService(authorization, audit, new InMemoryOfflineVerificationRepository());
   const glErpPosting = new GlErpPostingService(authorization, audit, new InMemoryGlErpPostingRepository());
   const retroImpact = new RetroImpactService(authorization, audit, new InMemoryRetroImpactRepository());
+  const punchAnomaly = new PunchAnomalyService(authorization, audit, new InMemoryPunchAnomalyRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -507,6 +510,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     offlineVerification,
     glErpPosting,
     retroImpact,
+    punchAnomaly,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
