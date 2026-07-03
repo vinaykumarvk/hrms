@@ -396,6 +396,53 @@ export function registerG06Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-35C FR-008 — sealed-cover register (backs the PH-34B sealed-cover review UI).
+    {
+      method: "GET",
+      path: "/api/v1/promotions/sealed-covers",
+      operationId: "g06.listSealedCovers",
+      protected: true,
+      permission: "g06.sealedcover.read",
+      handler: (context) =>
+        ok({ items: context.services.sealedCover.listSealedCovers(context.scope) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/promotions/sealed-covers",
+      operationId: "g06.placeSealedCover",
+      protected: true,
+      permission: "g06.sealedcover.place",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          sealedCover: context.services.sealedCover.placeSealedCover(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            reason: requiredString(body, "reason"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/promotions/sealed-covers/{id}:release",
+      operationId: "g06.releaseSealedCover",
+      protected: true,
+      permission: "g06.sealedcover.release",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return ok({
+          sealedCover: context.services.sealedCover.releaseSealedCover(
+            context.actor,
+            requiredParam(context.params, "id"),
+            { reason: requiredString(body, "reason") }
+          ),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
