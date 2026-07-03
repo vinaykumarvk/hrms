@@ -37,6 +37,7 @@ import { CorrectionCascadeService, InMemoryCorrectionCascadeRepository } from ".
 import { OfflineVerificationService, InMemoryOfflineVerificationRepository } from "../modules/g12/offlineVerificationService";
 import { GlErpPostingService, InMemoryGlErpPostingRepository } from "../modules/g10/glErpPostingService";
 import { TimestampAuthorityService, LocalTimestampAuthority } from "../modules/g12/timestampAuthorityService";
+import { PredictiveAnalyticsService, InMemoryPredictiveAnalyticsRepository } from "../modules/g14/predictiveAnalyticsService";
 import { RetroImpactService, InMemoryRetroImpactRepository } from "../modules/g02/retroImpactService";
 import { PunchAnomalyService, InMemoryPunchAnomalyRepository } from "../modules/g03/punchAnomalyService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
@@ -133,6 +134,7 @@ export interface FoundationServices {
   offlineVerification: OfflineVerificationService;
   glErpPosting: GlErpPostingService;
   timestampAuthority: TimestampAuthorityService;
+  predictiveAnalytics: PredictiveAnalyticsService;
   retroImpact: RetroImpactService;
   punchAnomaly: PunchAnomalyService;
   leaveSrRelay: LeaveSrRelayService;
@@ -334,6 +336,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const offlineVerification = new OfflineVerificationService(authorization, audit, new InMemoryOfflineVerificationRepository());
   const glErpPosting = new GlErpPostingService(authorization, audit, new InMemoryGlErpPostingRepository());
   const timestampAuthority = new TimestampAuthorityService(authorization, audit, new LocalTimestampAuthority());
+  const predictiveAnalytics = new PredictiveAnalyticsService(authorization, audit, new InMemoryPredictiveAnalyticsRepository());
   const retroImpact = new RetroImpactService(authorization, audit, new InMemoryRetroImpactRepository());
   const punchAnomaly = new PunchAnomalyService(authorization, audit, new InMemoryPunchAnomalyRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
@@ -513,6 +516,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     offlineVerification,
     glErpPosting,
     timestampAuthority,
+    predictiveAnalytics,
     retroImpact,
     punchAnomaly,
     leaveSrRelay,
