@@ -2,6 +2,7 @@ import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
+import { SponsorshipType } from "../modules/g07/trainingDepthRepository";
 
 export const g07RouteEvidence = {
   sessions: "/api/v1/training/sessions",
@@ -354,8 +355,143 @@ export function registerG07Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-41A — FR-G07-020 training-sponsorship + service-bond lifecycle route exposure. Backing already
+    // service-tested (propose -> sanction -> activate bond -> fulfil / breach -> emit recovery -> recover;
+    // waive; reads). Money is integer paise; bond recovery is pro-rata on unserved months.
+    {
+      method: "POST",
+      path: "/api/v1/training/sponsorships",
+      operationId: "g07.createSponsorship",
+      protected: true,
+      permission: "g07.sponsorship.request",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          sponsorship: context.services.training.createSponsorship(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            sponsorshipType: requiredString(body, "sponsorshipType") as SponsorshipType,
+            sponsoredAmountPaise: requiredNumber(body, "sponsoredAmountPaise"),
+            startDate: requiredString(body, "startDate"),
+            endDate: optionalString(body, "endDate"),
+            serviceBondMonths: requiredNumber(body, "serviceBondMonths"),
+            trainingProgramId: optionalString(body, "trainingProgramId"),
+            externalCourseName: optionalString(body, "externalCourseName"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/sponsorships/{id}:sanction",
+      operationId: "g07.sanctionSponsorship",
+      protected: true,
+      permission: "g07.sponsorship.sanction",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ sponsorship: context.services.training.sanctionSponsorship(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/sponsorships/{id}:activate-bond",
+      operationId: "g07.activateSponsorshipBond",
+      protected: true,
+      permission: "g07.sponsorship.administer",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({ sponsorship: context.services.training.activateSponsorshipBond(context.actor, requiredParam(context.params, "id"), { completionDate: requiredString(body, "completionDate") }) });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/sponsorships/{id}:fulfil",
+      operationId: "g07.fulfilSponsorshipBond",
+      protected: true,
+      permission: "g07.sponsorship.administer",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({ sponsorship: context.services.training.fulfilSponsorshipBond(context.actor, requiredParam(context.params, "id"), { asOf: requiredString(body, "asOf") }) });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/sponsorships/{id}:breach",
+      operationId: "g07.markSponsorshipBreached",
+      protected: true,
+      permission: "g07.sponsorship.administer",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({ sponsorship: context.services.training.markSponsorshipBreached(context.actor, requiredParam(context.params, "id"), { breachDate: requiredString(body, "breachDate") }) });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/sponsorships/{id}:emit-recovery",
+      operationId: "g07.emitBondRecoveryCost",
+      protected: true,
+      permission: "g07.sponsorship.recovery",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => created({ cost: context.services.training.emitBondRecoveryCost(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/sponsorships/{id}:recover",
+      operationId: "g07.markSponsorshipRecovered",
+      protected: true,
+      permission: "g07.sponsorship.recovery",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ sponsorship: context.services.training.markSponsorshipRecovered(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/sponsorships/{id}:waive",
+      operationId: "g07.waiveSponsorship",
+      protected: true,
+      permission: "g07.sponsorship.waive",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({ sponsorship: context.services.training.waiveSponsorship(context.actor, requiredParam(context.params, "id"), { reason: requiredString(body, "reason") }) });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/training/sponsorships/{id}",
+      operationId: "g07.getSponsorship",
+      protected: true,
+      permission: "g07.sponsorship.read",
+      handler: (context) => ok({ sponsorship: context.services.training.getSponsorship(context.scope, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/training/sponsorships/{id}/costs",
+      operationId: "g07.listSponsorshipCosts",
+      protected: true,
+      permission: "g07.sponsorship.read",
+      handler: (context) => ok({ items: context.services.training.listSponsorshipCosts(context.scope, requiredParam(context.params, "id")) }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
+}
+
+/** A required numeric body field accepting a JSON number or a numeric string. */
+function requiredNumber(body: Record<string, unknown>, key: string): number {
+  const value = body[key];
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) {
+    throw new Error(`${key} must be a number`);
+  }
+  return n;
 }
 
 function requiredParam(params: Record<string, string>, key: string): string {

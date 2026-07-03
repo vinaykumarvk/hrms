@@ -1260,3 +1260,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-40b.sh
     depends_on: [PH-40A]
+
+  # PH-41 — remediation tranche 28 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose the FR-G07-020 training-sponsorship + service-bond lifecycle
+  # (real, service-tested backing). Ratchet 411/31.1% -> 421/31.8% (G07 16.2% -> 25.2%).
+  - id: PH-41A
+    name: PH-41 · G07 sponsorship/bond route exposure (coverage ratchet 411->421 / 31.8%)
+    prompt: docs/spec/pipeline/prompts/PH-41A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-41a.sh
+    gate: auto
+    depends_on: [PH-40B]
+  - id: PH-41B
+    name: PH-41 · Tranche-28 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-41B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-41b.sh
+    depends_on: [PH-41A]
