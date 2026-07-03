@@ -281,6 +281,26 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.change.read",
       handler: (context) => ok({ batch: context.services.changeGovernance.getBatchReport(context.scope, requiredParam(context.params, "id")) }),
     },
+    // PH-31A — G02 retro-impact downstream fan-out (route exposure for the PH-25B engine).
+    {
+      method: "POST",
+      path: "/api/v1/change-requests/{id}/retro-impact:fan-out",
+      operationId: "g02.retroImpactFanOut",
+      protected: true,
+      permission: "g02.retro.fanout",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          events: context.services.retroImpact.fanOut(context.actor, {
+            changeRequestId: requiredParam(context.params, "id"),
+            effectiveDate: requiredString(body, "effectiveDate"),
+            targets: Array.isArray(body.targets) ? (body.targets as Array<"G10" | "G11" | "G06">) : [],
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
