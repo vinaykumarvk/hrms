@@ -341,6 +341,83 @@ export function registerG02Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-49A — G02 step-up MFA lifecycle (challenge -> verify with expiry guard; reads) + change-request
+    // template management. Route exposure for already-tested changeEsignStepUp / changeRequestTemplate.
+    {
+      method: "POST",
+      path: "/api/v1/change-requests/{id}:challenge-stepup",
+      operationId: "g02.challengeStepUp",
+      protected: true,
+      permission: "g02.stepup.challenge",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          stepUp: context.services.changeEsignStepUp.challengeStepUp(context.actor, {
+            changeRequestId: requiredParam(context.params, "id"),
+            issuedAt: requiredString(body, "issuedAt"),
+            expiresAt: requiredString(body, "expiresAt"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/change-requests/stepups/{stepUpId}:verify",
+      operationId: "g02.verifyStepUp",
+      protected: true,
+      permission: "g02.stepup.verify",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({ stepUp: context.services.changeEsignStepUp.verifyStepUp(context.actor, requiredParam(context.params, "stepUpId"), { verifiedAt: requiredString(body, "verifiedAt") }) });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/change-requests/{id}/esignatures",
+      operationId: "g02.listEsignatures",
+      protected: true,
+      permission: "g02.change.read",
+      handler: (context) => ok({ items: context.services.changeEsignStepUp.listEsignatures(context.scope, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/change-request-templates",
+      operationId: "g02.listChangeRequestTemplates",
+      protected: true,
+      permission: "g02.change.read",
+      handler: (context) => ok({ items: context.services.changeRequestTemplate.listTemplates(context.scope) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/change-request-templates/{id}:deactivate",
+      operationId: "g02.deactivateChangeRequestTemplate",
+      protected: true,
+      permission: "g02.template.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ template: context.services.changeRequestTemplate.deactivateTemplate(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/change-request-templates/{id}:start",
+      operationId: "g02.startFromTemplate",
+      protected: true,
+      permission: "g02.change.submit",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          prefill: context.services.changeRequestTemplate.startFromTemplate(context.actor, requiredParam(context.params, "id"), {
+            allowedFields: Array.isArray(body.allowedFields) ? body.allowedFields.map((f) => String(f)) : [],
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }

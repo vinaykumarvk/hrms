@@ -14,7 +14,7 @@ attributed to a module by `operationId` prefix.
 | Module | Contract ops | Implemented routes | Coverage |
 |---|---:|---:|---:|
 | G01 | 165 | 44 | 26.7% |
-| G02 | 65 | 25 | 38.5% |
+| G02 | 65 | 31 | 47.7% |
 | G03 | 92 | 37 | 40.2% |
 | G04 | 45 | 14 | 31.1% |
 | G05 | 75 | 48 | 64% |
@@ -28,11 +28,11 @@ attributed to a module by `operationId` prefix.
 | G13 | 114 | 36 | 31.6% |
 | G14 | 90 | 26 | 28.9% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **469** | **35.4%** |
+| **Total** | **1323** | **475** | **35.9%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 35.4%** and **implemented routes ≥ 469**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 35.9%** and **implemented routes ≥ 475**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
 
@@ -46,8 +46,9 @@ scan-result/module-ref reads) → **451 / 34.1%** (PH-45A: G01 Aadhaar reveal 4-
 legal-hold/blocking-obligation + service-no lookup) → **456 / 34.5%** (PH-46A: FR-G10-08 loan lifecycle
 (instalment recovery + foreclosure) + Rule-3 concessional perquisite valuation + reads) → **462 / 34.9%**
 (PH-47A: G11 PDA go-live lifecycle + grievance close + pensioner bank-account verification) → **469 / 35.4%**
-(PH-48A: G12 SR-ledger chain reads + RFC-3161 timestamp/offline-bundle verification — 7 real, service-tested
-operations wired to the kernel).
+(PH-48A: G12 SR-ledger chain reads + RFC-3161 timestamp/offline-bundle verification) → **475 / 35.9%**
+(PH-49A: G02 step-up MFA lifecycle + change-request template management — 6 real, service-tested operations
+wired to the kernel).
 
 ## Honest limitation (what this metric is NOT)
 
