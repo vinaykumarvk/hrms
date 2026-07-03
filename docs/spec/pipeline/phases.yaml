@@ -1468,3 +1468,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-53b.sh
     depends_on: [PH-53A]
+
+  # PH-54 — remediation tranche 41 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G05 transfer/counselling reads (vacancy positions, reservations,
+  # preferences, mutual orders, charge-handovers, relieving/joining reports). Ratchet 504/38.1% -> 513/38.8% (G05 64% -> 76%).
+  - id: PH-54A
+    name: PH-54 · G05 transfer/counselling read route exposure (coverage ratchet 504->513 / 38.8%)
+    prompt: docs/spec/pipeline/prompts/PH-54A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-54a.sh
+    gate: auto
+    depends_on: [PH-53B]
+  - id: PH-54B
+    name: PH-54 · Tranche-41 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-54B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-54b.sh
+    depends_on: [PH-54A]
