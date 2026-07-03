@@ -148,7 +148,9 @@ export type G09DomainErrorCode =
   | "ERR-G09-SLA-PAUSE-INVALID"
   // PH-21C FR-026: a proceeding against a retiree beyond the Rule-9 four-year bar, without the
   // required sanction, is barred (409, fail closed).
-  | "ERR-G09-RETIREE-PROCEEDING-BARRED";
+  | "ERR-G09-RETIREE-PROCEEDING-BARRED"
+  // PH-36A FR-023 BR-2: POSH conciliation may not rest on a monetary settlement (422).
+  | "ERR-G09-CONCILIATION-MONETARY";
 
 /** BRD G10 §12 named domain error codes (docs/brd/v3/G10-payroll-and-benefits.md FR-01/02/04/07/09/13/14/15/16/22 error catalogue). */
 export type G10DomainErrorCode =

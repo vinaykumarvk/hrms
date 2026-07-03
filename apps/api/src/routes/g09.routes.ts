@@ -438,6 +438,36 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.case.read",
       handler: (context) => ok({ slaPauses: context.services.disciplinary.listSlaPauses(context.scope, requiredParam(context.params, "id")) }),
     },
+    // PH-36A FR-G09-023 BR-2: POSH conciliation (opted by complainant, before inquiry, never monetary).
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/cases/{id}:conciliation",
+      operationId: "g09.recordConciliation",
+      protected: true,
+      permission: "g09.conciliation.record",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created(
+          context.services.disciplinary.recordConciliation(context.actor, requiredParam(context.params, "id"), {
+            opted: optionalBoolean(body, "opted") ?? true,
+            outcome: (requiredString(body, "outcome") as "SETTLED" | "FAILED"),
+            settlementBasis: requiredString(body, "settlementBasis"),
+            recordedOn: requiredString(body, "recordedOn"),
+            summary: optionalString(body, "summary") ?? "",
+          })
+        );
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/disciplinary/cases/{id}/conciliations",
+      operationId: "g09.listConciliations",
+      protected: true,
+      permission: "g09.case.read",
+      handler: (context) => ok({ items: context.services.disciplinary.listConciliations(context.scope, requiredParam(context.params, "id")) }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }

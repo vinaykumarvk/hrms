@@ -1180,3 +1180,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-35d.sh
     depends_on: [PH-35C]
+
+  # PH-36 — remediation tranche 23 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Deep-engine depth: G09 POSH conciliation (FR-G09-023 BR-2, POSH Act 2013 s.10) — the aggrieved
+  # may opt for conciliation before inquiry; a SETTLED conciliation blocks the inquiry; never monetary.
+  - id: PH-36A
+    name: PH-36 · G09 POSH conciliation engine and route
+    prompt: docs/spec/pipeline/prompts/PH-36A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-36a.sh
+    gate: auto
+    depends_on: [PH-35D]
+  - id: PH-36B
+    name: PH-36 · Tranche-23 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-36B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-36b.sh
+    depends_on: [PH-36A]

@@ -170,6 +170,8 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G09-NON-EMPLOYMENT-CERT-REQUIRED":
     // BRD G09 FR-025 (DI-29): "Deny without reason ⇒ 422 ERR-G09-PERSONAL-HEARING-DENIED".
     case "ERR-G09-PERSONAL-HEARING-DENIED":
+    // BRD G09 FR-023 (BR-2): POSH conciliation resting on a monetary settlement ⇒ 422.
+    case "ERR-G09-CONCILIATION-MONETARY":
     // BRD G06 FR-PPP-020: rota-quota input guards fail closed as 422.
     case "STREAM_TAG_MISSING":
     case "QUOTA_RULE_INVALID":
