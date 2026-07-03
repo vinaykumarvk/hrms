@@ -1098,3 +1098,31 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-32d.sh
     depends_on: [PH-32C]
+
+  # PH-33 — remediation tranche 20 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Route-exposure pass 6 (final backlog): G02 esign/templates + G03 punch-anomaly, G07 lms + G08 360,
+  # G11 grievances + G14 fairness.
+  - id: PH-33A
+    name: PH-33 · G02 esign/template + G03 punch-anomaly routes
+    prompt: docs/spec/pipeline/prompts/PH-33A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-33a.sh
+    gate: auto
+    depends_on: [PH-32D]
+  - id: PH-33B
+    name: PH-33 · G07 LMS + G08 360-feedback routes
+    prompt: docs/spec/pipeline/prompts/PH-33B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-33b.sh
+    gate: auto
+    depends_on: [PH-33A]
+  - id: PH-33C
+    name: PH-33 · G11 grievances + G14 fairness routes
+    prompt: docs/spec/pipeline/prompts/PH-33C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-33c.sh
+    gate: auto
+    depends_on: [PH-33B]
+  - id: PH-33D
+    name: PH-33 · Tranche-20 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-33D.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-33d.sh
+    depends_on: [PH-33C]
