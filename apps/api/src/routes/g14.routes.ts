@@ -245,6 +245,43 @@ export function registerG14Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => accepted({ policy: context.services.analyticsEngine.activateScopePolicy(context.actor, requiredParam(context.params, "id")) }),
     },
+    // PH-29C — G14 natural-language query + probabilistic attrition (route exposure).
+    {
+      method: "POST",
+      path: "/api/v1/analytics/nl-query",
+      operationId: "g14.nlQuery",
+      protected: true,
+      permission: "g14.nlquery.ask",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return ok(context.services.nlQuery.ask(context.actor, { question: requiredString(body, "question") }));
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/analytics/attrition-score",
+      operationId: "g14.scoreAttrition",
+      protected: true,
+      permission: "g14.predict.attrition",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created(
+          context.services.predictiveAnalytics.scoreAttrition(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            features: {
+              tenureMonths: optionalNumber(body, "tenureMonths") ?? 0,
+              recentTransfers: optionalNumber(body, "recentTransfers") ?? 0,
+              leaveUtilisationPct: optionalNumber(body, "leaveUtilisationPct") ?? 0,
+              promotionGapMonths: optionalNumber(body, "promotionGapMonths") ?? 0,
+            },
+          })
+        );
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
