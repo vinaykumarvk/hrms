@@ -22,17 +22,17 @@ attributed to a module by `operationId` prefix.
 | G07 | 111 | 37 | 33.3% |
 | G08 | 133 | 40 | 30.1% |
 | G09 | 89 | 34 | 38.2% |
-| G10 | 87 | 30 | 34.5% |
+| G10 | 87 | 37 | 42.5% |
 | G11 | 90 | 33 | 36.7% |
 | G12 | 65 | 35 | 53.8% |
 | G13 | 114 | 36 | 31.6% |
 | G14 | 90 | 26 | 28.9% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **519** | **39.2%** |
+| **Total** | **1323** | **526** | **39.8%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 39.2%** and **implemented routes ≥ 519**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 39.8%** and **implemented routes ≥ 526**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
 
@@ -55,7 +55,8 @@ G04 X.3 outbound-integration connector lifecycle + leave→SR relay enqueue/dead
 minutes + case reads) → **513 / 38.8%** (PH-54A: G05 transfer/counselling reads — vacancy positions,
 reservations, preferences, mutual orders, charge-handovers, relieving/joining reports) → **519 / 39.2%**
 (PH-55A: G01 governed write-ports (identity change / transfer posting / probation confirmation) + live-record
-/count reads — 6 real, service-tested operations wired to the kernel).
+/count reads) → **526 / 39.8%** (PH-56A: G10 FR-16 payroll engine-run lifecycle (create → snapshot → compute
+→ approve (SoD) → lock) + reads — 7 real, service-tested operations wired to the kernel).
 
 ## Honest limitation (what this metric is NOT)
 

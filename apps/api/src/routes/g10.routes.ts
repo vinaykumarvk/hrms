@@ -4,6 +4,7 @@ import { ApiQuery, RouteDefinition } from "../http/apiTypes";
 import { PayrollAdjustmentCode, PayrollAdjustmentSource } from "../modules/g10/payrollService";
 import { PayCalcMethod, PayComponentCategory, RateTableType, TaxRegime } from "../modules/g10/payRuleRepository";
 import { PerquisiteType } from "../modules/g10/loanPerquisiteGlService";
+import { EngineRunMode } from "../modules/g10/payrollEngineRepository";
 import { PreviousEmployerIncome, Relief891, RemittanceScheme } from "../modules/g10/taxEngineRepository";
 import { FoundationError } from "../platform/types";
 import { ph03Ids } from "../seed/ph03Seed";
@@ -549,6 +550,77 @@ export function registerG10Routes(kernel: ApiKernel): void {
           }),
         });
       },
+    },
+    // PH-56A — FR-16 payroll engine-run lifecycle (create -> snapshot -> compute -> approve (SoD) -> lock)
+    // + reads. Route exposure for already-tested payrollEngine backing.
+    {
+      method: "POST",
+      path: "/api/v1/payroll/engine-runs",
+      operationId: "g10.createEngineRun",
+      protected: true,
+      permission: "g10.payroll.compute",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({ run: context.services.payrollEngine.createEngineRun(context.actor, { period: requiredString(body, "period"), runMode: optionalString(body, "runMode") as EngineRunMode | undefined }) });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/engine-runs/{id}:snapshot",
+      operationId: "g10.snapshotEngineRun",
+      protected: true,
+      permission: "g10.payroll.input.lock",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ run: context.services.payrollEngine.snapshotRunInputs(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/engine-runs/{id}:compute",
+      operationId: "g10.computeEngineRun",
+      protected: true,
+      permission: "g10.payroll.compute",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted(context.services.payrollEngine.computeEngineRun(context.actor, requiredParam(context.params, "id"))),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/engine-runs/{id}:approve",
+      operationId: "g10.approveEngineRun",
+      protected: true,
+      permission: "g10.payroll.approve",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ run: context.services.payrollEngine.approveEngineRun(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/engine-runs/{id}:lock",
+      operationId: "g10.lockEngineRun",
+      protected: true,
+      permission: "g10.payroll.lock",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ run: context.services.payrollEngine.lockEngineRun(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/payroll/engine-runs/{id}",
+      operationId: "g10.getEngineRun",
+      protected: true,
+      permission: "g10.payroll.read",
+      handler: (context) => ok({ run: context.services.payrollEngine.getEngineRun(context.scope, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/payroll/engine-runs/{id}/payslips",
+      operationId: "g10.listRunPayslips",
+      protected: true,
+      permission: "g10.payroll.read",
+      handler: (context) => ok({ items: context.services.payrollEngine.listRunPayslips(context.scope, requiredParam(context.params, "id")) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));
