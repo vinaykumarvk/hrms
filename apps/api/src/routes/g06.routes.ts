@@ -2,7 +2,7 @@ import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalNumber, optionalString, optionalStringArray, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
-import { DpcPanelMember, SenioritySeed } from "../modules/g06/promotionService";
+import { DpcPanelMember, SanctionedPostInput, SenioritySeed } from "../modules/g06/promotionService";
 import { LegalForum, LegalLinkedEntityType, MacpClockEffect, ReservationCategory, RotationMethod, RotationStartSlot } from "../modules/g06/promotionDepthRepository";
 
 export const g06RouteEvidence = {
@@ -443,6 +443,82 @@ export function registerG06Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-52A — FR-015 sanctioned-posts establishment lifecycle (register/revise with maker!=checker;
+    // reconcile with STRENGTH_INCONSISTENT guard; reads + vacancy computation). Tested promotion backing.
+    {
+      method: "POST",
+      path: "/api/v1/promotions/sanctioned-posts",
+      operationId: "g06.registerSanctionedPost",
+      protected: true,
+      permission: "g06.establishment.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({ sanctionedPost: context.services.promotion.registerSanctionedPost(context.actor, readSanctionedPostInput(body)) });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/promotions/sanctioned-posts/{id}:revise",
+      operationId: "g06.reviseSanctionedPost",
+      protected: true,
+      permission: "g06.establishment.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          sanctionedPost: context.services.promotion.reviseSanctionedPost(context.actor, requiredParam(context.params, "id"), {
+            approverActorId: requiredString(body, "approverActorId"),
+            sanctionedStrength: optionalNumber(body, "sanctionedStrength"),
+            filledCount: optionalNumber(body, "filledCount"),
+            drQuotaPct: optionalNumber(body, "drQuotaPct"),
+            promotionQuotaPct: optionalNumber(body, "promotionQuotaPct"),
+            ldceQuotaPct: optionalNumber(body, "ldceQuotaPct"),
+            anticipatedVacancies: optionalNumber(body, "anticipatedVacancies"),
+            carriedForwardVacancies: optionalNumber(body, "carriedForwardVacancies"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/promotions/sanctioned-posts/{id}:reconcile",
+      operationId: "g06.reconcileSanctionedPost",
+      protected: true,
+      permission: "g06.establishment.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({ sanctionedPost: context.services.promotion.reconcileSanctionedPost(context.actor, requiredParam(context.params, "id"), { filledCount: readRequiredNumber(body, "filledCount") }) });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/sanctioned-posts/{id}",
+      operationId: "g06.getSanctionedPost",
+      protected: true,
+      permission: "g06.establishment.read",
+      handler: (context) => ok({ sanctionedPost: context.services.promotion.getSanctionedPost(context.scope, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/sanctioned-posts",
+      operationId: "g06.listSanctionedPosts",
+      protected: true,
+      permission: "g06.establishment.read",
+      handler: (context) => ok({ items: context.services.promotion.listSanctionedPosts(context.scope) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/sanctioned-posts/{id}/vacancy",
+      operationId: "g06.getVacancyComputation",
+      protected: true,
+      permission: "g06.establishment.read",
+      handler: (context) => ok(context.services.promotion.getVacancyComputation(context.scope, requiredParam(context.params, "id"))),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
@@ -515,6 +591,35 @@ function readQuotaPopulation(body: Record<string, unknown>): Array<{ employeeId:
       streamSeniorityNo: optionalNumber(record, "streamSeniorityNo"),
     };
   });
+}
+
+/** A required numeric body field accepting a JSON number or a numeric string. */
+function readRequiredNumber(body: Record<string, unknown>, key: string): number {
+  const value = body[key];
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) {
+    throw new Error(`${key} must be a number`);
+  }
+  return n;
+}
+
+/** FR-015 sanctioned-post registration input (P01 checker must differ from the maker). */
+function readSanctionedPostInput(body: Record<string, unknown>): SanctionedPostInput {
+  return {
+    cadreId: requiredString(body, "cadreId"),
+    gradeDesignationId: requiredString(body, "gradeDesignationId"),
+    orgUnitId: requiredString(body, "orgUnitId"),
+    sanctionOrderRef: requiredString(body, "sanctionOrderRef"),
+    sanctionedStrength: readRequiredNumber(body, "sanctionedStrength"),
+    filledCount: readRequiredNumber(body, "filledCount"),
+    drQuotaPct: readRequiredNumber(body, "drQuotaPct"),
+    promotionQuotaPct: readRequiredNumber(body, "promotionQuotaPct"),
+    ldceQuotaPct: readRequiredNumber(body, "ldceQuotaPct"),
+    anticipatedVacancies: optionalNumber(body, "anticipatedVacancies"),
+    carriedForwardVacancies: optionalNumber(body, "carriedForwardVacancies"),
+    asOnDate: requiredString(body, "asOnDate"),
+    approverActorId: requiredString(body, "approverActorId"),
+  };
 }
 
 function requiredParam(params: Record<string, string>, key: string): string {
