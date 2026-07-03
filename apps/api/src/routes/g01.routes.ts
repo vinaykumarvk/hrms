@@ -576,6 +576,111 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.phonetic.search",
     handler: (context) => ok(context.services.phoneticSearch.searchPhonetic(context.actor, { query: String(context.request.query?.q ?? "") })),
   });
+
+  // PH-45A — G01 Aadhaar reveal (4-eyes break-glass) + employee legal-hold/blocking-obligation lifecycle +
+  // service-no lookup. Route exposure for already-tested aadhaarVault / employeeIdentityOps / employeeMaster.
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/aadhaar-vault/{vaultId}:request-reveal",
+    operationId: "g01.requestAadhaarReveal",
+    protected: true,
+    permission: "g01.aadhaar.reveal.request",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({ reveal: context.services.aadhaarVault.requestReveal(context.actor, requiredParam(context.params, "vaultId"), { purpose: requiredString(body, "purpose") }) });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/aadhaar-reveals/{revealId}:approve",
+    operationId: "g01.approveAadhaarReveal",
+    protected: true,
+    permission: "g01.aadhaar.reveal.approve",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => accepted(context.services.aadhaarVault.approveReveal(context.actor, requiredParam(context.params, "revealId"))),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees/{id}/aadhaar-vault",
+    operationId: "g01.getAadhaarVault",
+    protected: true,
+    permission: "g01.aadhaar.reveal.request",
+    handler: (context) => ok({ vault: context.services.aadhaarVault.getVaultByEmployee(context.scope, requiredParam(context.params, "id")) ?? null }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}:place-legal-hold",
+    operationId: "g01.placeLegalHold",
+    protected: true,
+    permission: "g01.legal_hold.place",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created(
+        context.services.employeeIdentityOps.placeLegalHold(context.actor, {
+          employeeId: requiredParam(context.params, "id"),
+          holdType: requiredString(body, "holdType") as "DISCIPLINARY" | "LITIGATION" | "PENSION" | "AUDIT" | "RTI",
+          reason: requiredString(body, "reason"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/legal-holds/{holdId}:release",
+    operationId: "g01.releaseLegalHold",
+    protected: true,
+    permission: "g01.legal_hold.release",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => accepted(context.services.employeeIdentityOps.releaseLegalHold(context.actor, { holdId: requiredParam(context.params, "holdId") })),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}:register-obligation",
+    operationId: "g01.registerBlockingObligation",
+    protected: true,
+    permission: "g01.employee.lifecycle",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created(
+        context.services.employeeIdentityOps.registerBlockingObligation(context.actor, {
+          employeeId: requiredParam(context.params, "id"),
+          description: requiredString(body, "description"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/obligations/{obligationId}:clear",
+    operationId: "g01.clearBlockingObligation",
+    protected: true,
+    permission: "g01.employee.lifecycle",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => accepted(context.services.employeeIdentityOps.clearBlockingObligation(context.actor, { obligationId: requiredParam(context.params, "obligationId") })),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees:by-service-no",
+    operationId: "g01.getByServiceNo",
+    protected: true,
+    permission: "g01.employee.read",
+    handler: (context) => {
+      const serviceNo = context.request.query?.serviceNo;
+      if (!serviceNo) {
+        throw new FoundationError("VALIDATION_FAILED", "serviceNo query parameter is required", { field: "serviceNo" });
+      }
+      return ok({ employee: context.services.employeeMaster.getByServiceNo(context.scope, serviceNo) });
+    },
+  });
 }
 
 function requiredParam(params: Record<string, string>, key: string): string {
