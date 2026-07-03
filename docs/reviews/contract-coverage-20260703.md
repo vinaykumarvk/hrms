@@ -13,7 +13,7 @@ attributed to a module by `operationId` prefix.
 
 | Module | Contract ops | Implemented routes | Coverage |
 |---|---:|---:|---:|
-| G01 | 165 | 44 | 26.7% |
+| G01 | 165 | 50 | 30.3% |
 | G02 | 65 | 31 | 47.7% |
 | G03 | 92 | 44 | 47.8% |
 | G04 | 45 | 21 | 46.7% |
@@ -28,11 +28,11 @@ attributed to a module by `operationId` prefix.
 | G13 | 114 | 36 | 31.6% |
 | G14 | 90 | 26 | 28.9% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **513** | **38.8%** |
+| **Total** | **1323** | **519** | **39.2%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 38.8%** and **implemented routes ≥ 513**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 39.2%** and **implemented routes ≥ 519**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
 
@@ -53,8 +53,9 @@ G04 X.3 outbound-integration connector lifecycle + leave→SR relay enqueue/dead
 (PH-52A: G06 FR-015 sanctioned-posts establishment lifecycle (register/revise/reconcile + reads + vacancy)) →
 **504 / 38.1%** (PH-53A: G09 suspension review + show-cause response + consultation close/waive + hearing
 minutes + case reads) → **513 / 38.8%** (PH-54A: G05 transfer/counselling reads — vacancy positions,
-reservations, preferences, mutual orders, charge-handovers, relieving/joining reports — 9 real,
-service-tested operations wired to the kernel).
+reservations, preferences, mutual orders, charge-handovers, relieving/joining reports) → **519 / 39.2%**
+(PH-55A: G01 governed write-ports (identity change / transfer posting / probation confirmation) + live-record
+/count reads — 6 real, service-tested operations wired to the kernel).
 
 ## Honest limitation (what this metric is NOT)
 

@@ -681,6 +681,94 @@ export function registerG01Routes(kernel: ApiKernel): void {
       return ok({ employee: context.services.employeeMaster.getByServiceNo(context.scope, serviceNo) });
     },
   });
+
+  // PH-55A — G01 governed write-ports (identity change, transfer posting, probation confirmation) + live-
+  // record/count reads. Route exposure for already-tested employeeMaster backing.
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}:governed-identity-change",
+    operationId: "g01.governedIdentityChange",
+    protected: true,
+    permission: "g01.employee.governed_change",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted(
+        context.services.employeeMaster.governedIdentityChange(context.actor, {
+          employeeId: requiredParam(context.params, "id"),
+          newDisplayName: requiredString(body, "newDisplayName"),
+          reason: requiredString(body, "reason"),
+          effectiveDate: requiredString(body, "effectiveDate"),
+          idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}:apply-transfer-posting",
+    operationId: "g01.applyTransferPosting",
+    protected: true,
+    permission: "g01.employee.posting.update",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted(
+        context.services.employeeMaster.applyTransferPosting(context.actor, {
+          employeeId: requiredParam(context.params, "id"),
+          toOrgUnitId: requiredString(body, "toOrgUnitId"),
+          transferOrderId: requiredString(body, "transferOrderId"),
+          orderNo: requiredString(body, "orderNo"),
+          effectiveDate: requiredString(body, "effectiveDate"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}:apply-probation-confirmation",
+    operationId: "g01.applyProbationConfirmation",
+    protected: true,
+    permission: "g01.employee.confirmation.update",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return accepted(
+        context.services.employeeMaster.applyProbationConfirmation(context.actor, {
+          employeeId: requiredParam(context.params, "id"),
+          confirmationEffectiveDate: requiredString(body, "confirmationEffectiveDate"),
+          confirmationRef: requiredString(body, "confirmationRef"),
+        })
+      );
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees/{id}/live-record",
+    operationId: "g01.getLiveRecordForIdentityOps",
+    protected: true,
+    permission: "g01.employee.read",
+    handler: (context) => ok({ employee: context.services.employeeMaster.getLiveRecordForIdentityOps(context.scope, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees:list-live-records",
+    operationId: "g01.listLiveRecordsForIdentityOps",
+    protected: true,
+    permission: "g01.employee.read",
+    handler: (context) => ok({ items: context.services.employeeMaster.listLiveRecordsForIdentityOps(context.scope) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees:count",
+    operationId: "g01.countEmployees",
+    protected: true,
+    permission: "g01.employee.read",
+    handler: (context) => ok({ count: context.services.employeeMaster.count(context.scope) }),
+  });
 }
 
 function requiredParam(params: Record<string, string>, key: string): string {
