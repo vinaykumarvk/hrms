@@ -1196,3 +1196,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-36b.sh
     depends_on: [PH-36A]
+
+  # PH-37 — remediation tranche 24 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Contract-conformance / coverage gate: turn the standing "1,306 OpenAPI ops" caveat into a tracked,
+  # executable per-module coverage metric with a ratchet floor (the named G04 CI-conformance item).
+  - id: PH-37A
+    name: PH-37 · Contract-coverage gate (tools/contract-coverage.mjs + ratchet)
+    prompt: docs/spec/pipeline/prompts/PH-37A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-37a.sh
+    gate: auto
+    depends_on: [PH-36B]
+  - id: PH-37B
+    name: PH-37 · Tranche-24 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-37B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-37b.sh
+    depends_on: [PH-37A]
