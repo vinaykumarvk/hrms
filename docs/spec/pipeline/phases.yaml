@@ -772,3 +772,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-20d.sh
     gate: human
     depends_on: [PH-20C]
+
+  # PH-21 — remediation tranche 8 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Targets: G07 LMS/xAPI, G08 multi-source 360, G09 jurisdiction transfer + retiree Rule-9 bar.
+  - id: PH-21A
+    name: PH-21 · G07 LMS / xAPI integration
+    prompt: docs/spec/pipeline/prompts/PH-21A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-21a.sh
+    gate: auto
+    depends_on: [PH-20D]
+  - id: PH-21B
+    name: PH-21 · G08 multi-source 360 feedback
+    prompt: docs/spec/pipeline/prompts/PH-21B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-21b.sh
+    gate: auto
+    depends_on: [PH-21A]
+  - id: PH-21C
+    name: PH-21 · G09 jurisdiction transfer and retiree Rule-9 bar
+    prompt: docs/spec/pipeline/prompts/PH-21C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-21c.sh
+    gate: auto
+    depends_on: [PH-21B]
+  - id: PH-21D
+    name: PH-21 · Tranche-8 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-21D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-21d.sh
+    gate: human
+    depends_on: [PH-21C]
