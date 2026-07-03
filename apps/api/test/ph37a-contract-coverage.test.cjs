@@ -30,7 +30,7 @@ test("PH-37A coverage tool: contract total sums per-module and coverage is the r
 
 test("PH-37A ratchet floor: coverage does not regress below the recorded baseline", () => {
   const record = coverage();
-  // Ratchet floor recorded in docs/reviews/contract-coverage-20260703.md (PH-44A raised it to 443 / 33.5%).
-  assert.ok(record.implementedTotal >= 443, `implemented routes ${record.implementedTotal} < floor 443`);
-  assert.ok(record.totalPct >= 33.5, `coverage ${record.totalPct}% < floor 33.5%`);
+  // Ratchet floor recorded in docs/reviews/contract-coverage-20260703.md (PH-45A raised it to 451 / 34.1%).
+  assert.ok(record.implementedTotal >= 451, `implemented routes ${record.implementedTotal} < floor 451`);
+  assert.ok(record.totalPct >= 34.1, `coverage ${record.totalPct}% < floor 34.1%`);
 });

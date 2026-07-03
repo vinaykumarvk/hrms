@@ -1324,3 +1324,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-44b.sh
     depends_on: [PH-44A]
+
+  # PH-45 — remediation tranche 32 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G01 Aadhaar reveal (4-eyes) + employee legal-hold/blocking-
+  # obligation lifecycle + service-no lookup (real, service-tested backing). Ratchet 443/33.5% -> 451/34.1%.
+  - id: PH-45A
+    name: PH-45 · G01 aadhaar/legal-hold route exposure (coverage ratchet 443->451 / 34.1%)
+    prompt: docs/spec/pipeline/prompts/PH-45A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-45a.sh
+    gate: auto
+    depends_on: [PH-44B]
+  - id: PH-45B
+    name: PH-45 · Tranche-32 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-45B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-45b.sh
+    depends_on: [PH-45A]

@@ -13,7 +13,7 @@ attributed to a module by `operationId` prefix.
 
 | Module | Contract ops | Implemented routes | Coverage |
 |---|---:|---:|---:|
-| G01 | 165 | 36 | 21.8% |
+| G01 | 165 | 44 | 26.7% |
 | G02 | 65 | 25 | 38.5% |
 | G03 | 92 | 37 | 40.2% |
 | G04 | 45 | 14 | 31.1% |
@@ -28,11 +28,11 @@ attributed to a module by `operationId` prefix.
 | G13 | 114 | 36 | 31.6% |
 | G14 | 90 | 26 | 28.9% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **443** | **33.5%** |
+| **Total** | **1323** | **451** | **34.1%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 33.5%** and **implemented routes ≥ 443**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 34.1%** and **implemented routes ≥ 451**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
 
@@ -42,7 +42,8 @@ continuous-feedback + 360-feedback + signature reads) → 421 / 31.8% (PH-41A: F
 sponsorship + service-bond lifecycle) → 430 / 32.5% (PH-42A: FR-G07-018 external-credential lifecycle +
 vendor-empanelment decisions) → **436 / 33%** (PH-43A: G14 analytics-engine reads + KPI target-setting +
 predictive-score reads) → **443 / 33.5%** (PH-44A: G13 checkout-lock lifecycle + rescan + access-audit/
-scan-result/module-ref reads — 7 real, service-tested operations wired to the kernel).
+scan-result/module-ref reads) → **451 / 34.1%** (PH-45A: G01 Aadhaar reveal 4-eyes lifecycle + employee
+legal-hold/blocking-obligation + service-no lookup — 8 real, service-tested operations wired to the kernel).
 
 ## Honest limitation (what this metric is NOT)
 
