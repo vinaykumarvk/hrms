@@ -29,6 +29,7 @@ import { JurisdictionRetireeService, InMemoryJurisdictionRetireeRepository } fro
 import { DigitalSignatureService, InMemoryDigitalSignatureRepository } from "../modules/g08/digitalSignatureService";
 import { OcrSearchService, InMemoryOcrSearchRepository } from "../modules/g13/ocrSearchService";
 import { NlQueryService, InMemoryNlQueryRepository } from "../modules/g14/nlQueryService";
+import { OutboundIntegrationService, InMemoryOutboundIntegrationRepository, OutboundTransport } from "../modules/g04/outboundIntegrationService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -115,6 +116,7 @@ export interface FoundationServices {
   digitalSignature: DigitalSignatureService;
   ocrSearch: OcrSearchService;
   nlQuery: NlQueryService;
+  outboundIntegration: OutboundIntegrationService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -179,6 +181,11 @@ export interface FoundationServicesOptions {
    * (AUTO_PASS_TIMEOUT after turn_timeout_seconds) is testable without busy-waiting.
    */
   g05CounsellingClock?: () => Date;
+  /**
+   * PH-23A: injectable X.3 outbound transport for the G04 outbound integration framework so the
+   * circuit-breaker / retry / dead-letter paths are testable without a live external endpoint.
+   */
+  g04OutboundTransport?: import("../modules/g04/outboundIntegrationService").OutboundTransport;
 }
 
 /**
@@ -300,6 +307,8 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const digitalSignature = new DigitalSignatureService(authorization, audit, new InMemoryDigitalSignatureRepository());
   const ocrSearch = new OcrSearchService(authorization, audit, new InMemoryOcrSearchRepository());
   const nlQuery = new NlQueryService(authorization, audit, new InMemoryNlQueryRepository());
+  const g04Transport: OutboundTransport = options.g04OutboundTransport ?? { send: () => ({ ok: true }) };
+  const outboundIntegration = new OutboundIntegrationService(authorization, audit, g04Transport, new InMemoryOutboundIntegrationRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -469,6 +478,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     digitalSignature,
     ocrSearch,
     nlQuery,
+    outboundIntegration,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
