@@ -468,6 +468,131 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.case.read",
       handler: (context) => ok({ items: context.services.disciplinary.listConciliations(context.scope, requiredParam(context.params, "id")) }),
     },
+    // PH-53A — G09 suspension review + show-cause response + consultation close/waive + hearing minutes +
+    // case reads (timeline / ICC appointments / personal hearings / penalty order). Tested disciplinary backing.
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/suspensions/{id}:review",
+      operationId: "g09.reviewSuspension",
+      protected: true,
+      permission: "g09.suspension.order",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          suspension: context.services.disciplinary.reviewSuspension(context.actor, requiredParam(context.params, "id"), {
+            outcome: requiredString(body, "outcome") as "CONTINUE" | "REVOKE",
+            reviewDate: requiredString(body, "reviewDate"),
+            reason: optionalString(body, "reason"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/show-cause-notices/{id}:respond",
+      operationId: "g09.respondToShowCause",
+      protected: true,
+      permission: "g09.showcause.issue",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          notice: context.services.disciplinary.respondToShowCause(context.actor, requiredParam(context.params, "id"), {
+            representationText: requiredString(body, "representationText"),
+            respondedAt: requiredString(body, "respondedAt"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/consultations/{id}:close",
+      operationId: "g09.closeConsultation",
+      protected: true,
+      permission: "g09.consultation.require",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          consultation: context.services.disciplinary.closeConsultation(context.actor, requiredParam(context.params, "id"), {
+            receivedDate: requiredString(body, "receivedDate"),
+            adviceSummary: optionalString(body, "adviceSummary"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/consultations/{id}:waive",
+      operationId: "g09.waiveConsultation",
+      protected: true,
+      permission: "g09.consultation.require",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          consultation: context.services.disciplinary.waiveConsultation(context.actor, requiredParam(context.params, "id"), {
+            waiverReason: requiredString(body, "waiverReason"),
+            waivedOn: requiredString(body, "waivedOn"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/disciplinary/personal-hearings/{id}:minutes",
+      operationId: "g09.recordPersonalHearingMinutes",
+      protected: true,
+      permission: "g09.personal-hearing.request",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          personalHearing: context.services.disciplinary.recordPersonalHearingMinutes(context.actor, requiredParam(context.params, "id"), {
+            heldDate: requiredString(body, "heldDate"),
+            minutesText: requiredString(body, "minutesText"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/disciplinary/cases/{id}/case-timeline",
+      operationId: "g09.listCaseTimeline",
+      protected: true,
+      permission: "g09.case.read",
+      handler: (context) => ok({ items: context.services.disciplinary.listCaseTimeline(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/disciplinary/cases/{id}/icc-appointments",
+      operationId: "g09.listIccAppointments",
+      protected: true,
+      permission: "g09.case.read",
+      handler: (context) => ok({ items: context.services.disciplinary.listIccAppointments(context.scope, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/disciplinary/cases/{id}/personal-hearings",
+      operationId: "g09.listPersonalHearings",
+      protected: true,
+      permission: "g09.case.read",
+      handler: (context) => ok({ items: context.services.disciplinary.listPersonalHearings(context.scope, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/disciplinary/penalty-orders/{id}",
+      operationId: "g09.getPenaltyOrder",
+      protected: true,
+      permission: "g09.case.read",
+      handler: (context) => ok({ penaltyOrder: context.services.disciplinary.getPenaltyOrder(context.scope, requiredParam(context.params, "id")) }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
