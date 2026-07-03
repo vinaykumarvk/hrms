@@ -33,6 +33,7 @@ import { OutboundIntegrationService, InMemoryOutboundIntegrationRepository, Outb
 import { DigitalDeliveryService, InMemoryDigitalDeliveryRepository } from "../modules/g11/digitalDeliveryService";
 import { PhoneticSearchService, InMemoryPhoneticSearchRepository } from "../modules/g01/phoneticSearchService";
 import { DeathRecoveryService, InMemoryDeathRecoveryRepository } from "../modules/g11/deathRecoveryService";
+import { CorrectionCascadeService, InMemoryCorrectionCascadeRepository } from "../modules/g06/correctionCascadeService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -123,6 +124,7 @@ export interface FoundationServices {
   digitalDelivery: DigitalDeliveryService;
   phoneticSearch: PhoneticSearchService;
   deathRecovery: DeathRecoveryService;
+  correctionCascade: CorrectionCascadeService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -318,6 +320,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const digitalDelivery = new DigitalDeliveryService(authorization, audit, new InMemoryDigitalDeliveryRepository());
   const phoneticSearch = new PhoneticSearchService(authorization, audit, new InMemoryPhoneticSearchRepository());
   const deathRecovery = new DeathRecoveryService(authorization, audit, new InMemoryDeathRecoveryRepository());
+  const correctionCascade = new CorrectionCascadeService(authorization, audit, new InMemoryCorrectionCascadeRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -491,6 +494,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     digitalDelivery,
     phoneticSearch,
     deathRecovery,
+    correctionCascade,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
