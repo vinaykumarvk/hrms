@@ -2,7 +2,7 @@ import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
-import { CalibrationMethod } from "../modules/g08/aparDepthRepository";
+import { CalibrationMethod, PipMilestoneStatus, PipOutcome, ProbationOutcome } from "../modules/g08/aparDepthRepository";
 
 export const g08RouteEvidence = {
   forms: "/api/v1/apar/forms",
@@ -446,8 +446,8 @@ export function registerG08Routes(kernel: ApiKernel): void {
         return created({
           calibrationRecommendation: context.services.apar.proposeCalibrationRecommendation(context.actor, requiredParam(context.params, "id"), {
             formId: requiredString(body, "formId"),
-            currentGrade: Number(requiredString(body, "currentGrade")),
-            recommendedGrade: Number(requiredString(body, "recommendedGrade")),
+            currentGrade: requiredNumber(body, "currentGrade"),
+            recommendedGrade: requiredNumber(body, "recommendedGrade"),
             rationale: requiredString(body, "rationale"),
           }),
         });
@@ -495,8 +495,150 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.calibration.convene",
       handler: (context) => ok(context.services.apar.calibrationDistributionDiagnostic(context.actor, requiredParam(context.params, "id"))),
     },
+    // PH-39A — APAR PIP lifecycle + probation-confirmation + report-period/goal-snapshot reads.
+    // All backed by already-tested aparService methods (ph16e-g07-g08-depth).
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/pips",
+      operationId: "g08.createPip",
+      protected: true,
+      permission: "g08.pip.initiate",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created(
+          context.services.apar.createPip(context.actor, {
+            appraiseeId: requiredString(body, "appraiseeId"),
+            reason: requiredString(body, "reason"),
+            successCriteria: requiredString(body, "successCriteria"),
+            startDate: requiredString(body, "startDate"),
+            targetEndDate: requiredString(body, "targetEndDate"),
+            milestones: readPipMilestones(body),
+          })
+        );
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/pips/{id}/milestones/{milestoneId}:update",
+      operationId: "g08.updatePipMilestone",
+      protected: true,
+      permission: "g08.pip.update",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          milestone: context.services.apar.updatePipMilestone(context.actor, requiredParam(context.params, "id"), requiredParam(context.params, "milestoneId"), {
+            status: requiredString(body, "status") as PipMilestoneStatus,
+            progressNote: optionalString(body, "progressNote"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/pips/{id}:close",
+      operationId: "g08.closePip",
+      protected: true,
+      permission: "g08.pip.close",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          pip: context.services.apar.closePip(context.actor, requiredParam(context.params, "id"), {
+            outcome: requiredString(body, "outcome") as PipOutcome,
+            outcomeSummary: requiredString(body, "outcomeSummary"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/probation-confirmations",
+      operationId: "g08.openProbationConfirmation",
+      protected: true,
+      permission: "g08.probation.open",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          probationConfirmation: context.services.apar.openProbationConfirmation(context.actor, {
+            appraiseeId: requiredString(body, "appraiseeId"),
+            cycleId: optionalString(body, "cycleId"),
+            probationEndDate: requiredString(body, "probationEndDate"),
+            probationPeriodMonths: requiredNumber(body, "probationPeriodMonths"),
+            probationExtensionMaxMonths: optionalNumber(body, "probationExtensionMaxMonths"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/probation-confirmations/{id}:decide",
+      operationId: "g08.decideProbation",
+      protected: true,
+      permission: "g08.probation.decide",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          probationConfirmation: context.services.apar.decideProbation(context.actor, requiredParam(context.params, "id"), {
+            outcome: requiredString(body, "outcome") as ProbationOutcome,
+            extensionMonths: optionalNumber(body, "extensionMonths"),
+            effectiveDate: optionalString(body, "effectiveDate"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/apar/forms/{id}/report-periods",
+      operationId: "g08.listReportPeriods",
+      protected: true,
+      permission: "g08.apar.read",
+      handler: (context) => ok({ items: context.services.apar.listReportPeriods(context.scope, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/apar/forms/{id}/goal-snapshots",
+      operationId: "g08.listGoalSnapshots",
+      protected: true,
+      permission: "g08.apar.read",
+      handler: (context) => ok({ items: context.services.apar.listGoalSnapshots(context.scope, requiredParam(context.params, "id")) }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
+}
+
+/** A required numeric body field accepting a JSON number or a numeric string. */
+function requiredNumber(body: Record<string, unknown>, key: string): number {
+  const value = body[key];
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) {
+    throw new Error(`${key} must be a number`);
+  }
+  return n;
+}
+
+/** PIP milestones from the request body. */
+function readPipMilestones(body: Record<string, unknown>): Array<{ title: string; dueDate: string; metric?: string }> {
+  const value = body.milestones;
+  if (!Array.isArray(value)) {
+    throw new Error("milestones must be an array");
+  }
+  return value.map((item) => {
+    const record = readBodyRecord(item);
+    return {
+      title: requiredString(record, "title"),
+      dueDate: requiredString(record, "dueDate"),
+      metric: optionalString(record, "metric"),
+    };
+  });
 }
 
 /** Read a string[] body field (calibration committee member ids). */

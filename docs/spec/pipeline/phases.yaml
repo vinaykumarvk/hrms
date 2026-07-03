@@ -1228,3 +1228,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-38b.sh
     depends_on: [PH-38A]
+
+  # PH-39 — remediation tranche 26 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose APAR PIP lifecycle + probation-confirmation + report-period/
+  # goal-snapshot reads (real, service-tested backing). Ratchet 397/30% -> 404/30.5% (G08 19.5% -> 24.8%).
+  - id: PH-39A
+    name: PH-39 · APAR PIP/probation route exposure (coverage ratchet 397->404 / 30.5%)
+    prompt: docs/spec/pipeline/prompts/PH-39A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-39a.sh
+    gate: auto
+    depends_on: [PH-38B]
+  - id: PH-39B
+    name: PH-39 · Tranche-26 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-39B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-39b.sh
+    depends_on: [PH-39A]
