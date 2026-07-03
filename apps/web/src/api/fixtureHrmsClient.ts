@@ -1,4 +1,5 @@
 import {
+  DsrRecord,
   AparFormActionResult,
   AparFormView,
   AparReportingInput,
@@ -423,6 +424,10 @@ const fixtureLeaveTypes: LeaveTypeOption[] = [
 export function createFixtureHrmsClient(): HrmsClient {
   // Interactive PH-06D fixtures are stateful per client so submitted applications
   // and initiated orders show up in subsequent list calls, like the real API.
+  const dsrRows: DsrRecord[] = [
+    { id: "dsr-1", subjectEmployeeId: "emp-1", requestType: "ERASE", status: "RECEIVED", legalBasis: undefined },
+    { id: "dsr-2", subjectEmployeeId: "emp-2", requestType: "ACCESS", status: "UNDER_REVIEW", legalBasis: undefined },
+  ];
   const leaveApplications: LeaveApplicationRecord[] = [
     {
       id: "leave-fixture-000001",
@@ -733,6 +738,14 @@ export function createFixtureHrmsClient(): HrmsClient {
       return Promise.resolve(diff);
     },
     getLeaveBalance: () => Promise.resolve({ ...leaveBalance }),
+    listDataSubjectRequests: () => Promise.resolve(page(dsrRows.map((r) => ({ ...r })))),
+    adjudicateDsr: (id, input) => {
+      const row = dsrRows.find((r) => r.id === id);
+      if (!row) return Promise.reject(new Error("NOT_FOUND"));
+      row.status = input.decision;
+      row.legalBasis = input.decision === "EXEMPTED" ? "STATUTORY_RETENTION" : row.legalBasis;
+      return Promise.resolve({ ...row });
+    },
     listLeaveApplications: () => Promise.resolve(page(leaveApplications.map((application) => ({ ...application })))),
     submitLeaveApplication: (input: LeaveApplicationSubmitInput) => {
       const application: LeaveApplicationRecord = {

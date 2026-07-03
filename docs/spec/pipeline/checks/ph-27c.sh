@@ -15,7 +15,7 @@ have "$COMP" 'listCaseEvidence' "component calls client.listCaseEvidence"
 have "$COMP" 'OperationalState|"loading"|"error"|"empty"' "component renders canonical states"
 have "$CLIENT" 'listCaseEvidence' "client interface/impl exposes listCaseEvidence"
 have "$FIX" 'listCaseEvidence' "fixture client implements listCaseEvidence"
-have "$APP" 'g09/EvidenceVaultList.tsx' "surface mounted in App"
+have "$APP" 'EvidenceVaultList' "surface mounted in App"
 if [ -d node_modules ]; then
   npm run -s typecheck >/dev/null 2>&1 && grn "api typecheck green" || red "api typecheck failed"
   npm run -s web:typecheck >/dev/null 2>&1 && grn "web typecheck green" || red "web typecheck failed"

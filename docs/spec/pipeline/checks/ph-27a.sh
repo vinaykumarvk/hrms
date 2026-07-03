@@ -15,7 +15,7 @@ have "$COMP" 'adjudicateDsr' "component calls client.adjudicateDsr"
 have "$COMP" 'OperationalState|"loading"|"error"|"empty"' "component renders canonical states"
 have "$CLIENT" 'adjudicateDsr' "client interface/impl exposes adjudicateDsr"
 have "$FIX" 'adjudicateDsr' "fixture client implements adjudicateDsr"
-have "$APP" 'g13/DataSubjectRequestConsole.tsx' "surface mounted in App"
+have "$APP" 'DataSubjectRequestConsole' "surface mounted in App"
 if [ -d node_modules ]; then
   npm run -s typecheck >/dev/null 2>&1 && grn "api typecheck green" || red "api typecheck failed"
   npm run -s web:typecheck >/dev/null 2>&1 && grn "web typecheck green" || red "web typecheck failed"

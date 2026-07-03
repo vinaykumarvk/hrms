@@ -1,4 +1,5 @@
 export const HRMS_API_ROUTES = {
+  dataSubjectRequests: "/api/v1/dsr",
   workflowTasks: "/api/v1/workflow/tasks",
   workflowInstances: "/api/v1/workflow/instances",
   employees: "/api/v1/employees",
@@ -53,6 +54,20 @@ export interface PageResult<TItem> {
 export interface PageQuery {
   limit?: number;
   cursor?: string;
+}
+
+/** G13 DPDP data-subject request row (PH-15E engine; PH-27A console). */
+export interface DsrRecord {
+  id: string;
+  subjectEmployeeId: string;
+  requestType: "ACCESS" | "RECTIFY" | "ERASE";
+  status: "RECEIVED" | "UNDER_REVIEW" | "EXEMPTED" | "FULFILLED" | "REJECTED";
+  legalBasis?: string;
+}
+
+export interface DsrAdjudicateInput {
+  decision: "EXEMPTED" | "FULFILLED" | "REJECTED";
+  reason: string;
 }
 
 export interface WorkflowTaskSummary {
@@ -863,6 +878,8 @@ export interface HrmsClient {
   getLeaveBalance(employeeId?: string, leaveTypeId?: string): Promise<LeaveBalanceView>;
   getServiceRegisterTimeline(employeeId: string, page?: PageQuery): Promise<PageResult<SrTimelineEntry>>;
   listDocuments(): Promise<PageResult<DocumentSummary>>;
+  listDataSubjectRequests(): Promise<PageResult<DsrRecord>>;
+  adjudicateDsr(id: string, input: DsrAdjudicateInput, idempotencyKey: string): Promise<DsrRecord>;
   listLeaveApplications(): Promise<PageResult<LeaveApplicationRecord>>;
   submitLeaveApplication(input: LeaveApplicationSubmitInput, idempotencyKey: string): Promise<LeaveApplicationSubmitResult>;
   decideLeaveApplication(applicationId: string, decision: LeaveDecisionVerb, idempotencyKey: string): Promise<LeaveDecisionResult>;
@@ -1034,6 +1051,9 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
         `${HRMS_API_ROUTES.srEmployees}/${encodeURIComponent(employeeId)}/timeline${toPageQueryString(page)}`
       ),
     listDocuments: () => request<PageResult<DocumentSummary>>(HRMS_API_ROUTES.documents),
+    listDataSubjectRequests: () => request<PageResult<DsrRecord>>(HRMS_API_ROUTES.dataSubjectRequests),
+    adjudicateDsr: (id, input, idempotencyKey) =>
+      postWithIdempotency<DsrRecord>(`${HRMS_API_ROUTES.dataSubjectRequests}/${encodeURIComponent(id)}:adjudicate`, input, idempotencyKey),
     listLeaveApplications: () => request<PageResult<LeaveApplicationRecord>>(HRMS_API_ROUTES.leaveApplications),
     submitLeaveApplication: (input, idempotencyKey) =>
       request<LeaveApplicationSubmitResult>(HRMS_API_ROUTES.leaveApplications, {

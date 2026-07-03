@@ -31,6 +31,7 @@ import { PensionCaseConsole } from "./modules/g11/PensionCaseConsole";
 import { AnalyticsWorkspace } from "./modules/g14/AnalyticsWorkspace";
 import { ServiceRegisterTimeline } from "./modules/g12/ServiceRegisterTimeline";
 import { DocumentVaultView } from "./modules/g13/DocumentVaultView";
+import { DataSubjectRequestConsole } from "./modules/g13/DataSubjectRequestConsole";
 
 // Composition root: the real fetch client. Base URL comes from Vite env
 // configuration (empty string = same-origin). The token provider reads the
@@ -148,6 +149,7 @@ export function App() {
         </RouteGuard>
         <RouteGuard permissions={permissions} requiredPermission="g13.document.read" routeLabel="Documents workspace (G13)">
           <DocumentVaultView client={client} />
+          <DataSubjectRequestConsole client={client} />
         </RouteGuard>
       </section>
     </AppShell>
