@@ -1452,3 +1452,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-52b.sh
     depends_on: [PH-52A]
+
+  # PH-53 — remediation tranche 40 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G09 suspension review + show-cause response + consultation
+  # close/waive + hearing minutes + case reads. Ratchet 495/37.4% -> 504/38.1% (G09 28.1% -> 38.2%).
+  - id: PH-53A
+    name: PH-53 · G09 disciplinary route exposure (coverage ratchet 495->504 / 38.1%)
+    prompt: docs/spec/pipeline/prompts/PH-53A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-53a.sh
+    gate: auto
+    depends_on: [PH-52B]
+  - id: PH-53B
+    name: PH-53 · Tranche-40 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-53B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-53b.sh
+    depends_on: [PH-53A]

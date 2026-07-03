@@ -21,18 +21,18 @@ attributed to a module by `operationId` prefix.
 | G06 | 86 | 31 | 36% |
 | G07 | 111 | 37 | 33.3% |
 | G08 | 133 | 40 | 30.1% |
-| G09 | 89 | 25 | 28.1% |
+| G09 | 89 | 34 | 38.2% |
 | G10 | 87 | 30 | 34.5% |
 | G11 | 90 | 33 | 36.7% |
 | G12 | 65 | 35 | 53.8% |
 | G13 | 114 | 36 | 31.6% |
 | G14 | 90 | 26 | 28.9% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **495** | **37.4%** |
+| **Total** | **1323** | **504** | **38.1%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 37.4%** and **implemented routes ≥ 495**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 38.1%** and **implemented routes ≥ 504**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
 
@@ -50,8 +50,9 @@ legal-hold/blocking-obligation + service-no lookup) → **456 / 34.5%** (PH-46A:
 (PH-49A: G02 step-up MFA lifecycle + change-request template management) → **482 / 36.4%** (PH-50A: G03
 leave year-close simulate + encashment + mass-leave + punch-review/exception reads) → **489 / 37%** (PH-51A:
 G04 X.3 outbound-integration connector lifecycle + leave→SR relay enqueue/dead-letter reads) → **495 / 37.4%**
-(PH-52A: G06 FR-015 sanctioned-posts establishment lifecycle (register/revise/reconcile + reads + vacancy) —
-6 real, service-tested operations wired to the kernel).
+(PH-52A: G06 FR-015 sanctioned-posts establishment lifecycle (register/revise/reconcile + reads + vacancy)) →
+**504 / 38.1%** (PH-53A: G09 suspension review + show-cause response + consultation close/waive + hearing
+minutes + case reads — 9 real, service-tested operations wired to the kernel).
 
 ## Honest limitation (what this metric is NOT)
 
