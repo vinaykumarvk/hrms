@@ -826,3 +826,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-22d.sh
     gate: human
     depends_on: [PH-22C]
+
+  # PH-23 — remediation tranche 10 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Targets: G04 X.3 outbound framework, G11 DigiLocker/DBT delivery, G01 phonetic search.
+  - id: PH-23A
+    name: PH-23 · G04 X.3 outbound integration framework
+    prompt: docs/spec/pipeline/prompts/PH-23A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-23a.sh
+    gate: auto
+    depends_on: [PH-22D]
+  - id: PH-23B
+    name: PH-23 · G11 DigiLocker / DBT delivery
+    prompt: docs/spec/pipeline/prompts/PH-23B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-23b.sh
+    gate: auto
+    depends_on: [PH-23A]
+  - id: PH-23C
+    name: PH-23 · G01 phonetic / transliteration search
+    prompt: docs/spec/pipeline/prompts/PH-23C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-23c.sh
+    gate: auto
+    depends_on: [PH-23B]
+  - id: PH-23D
+    name: PH-23 · Tranche-10 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-23D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-23d.sh
+    gate: human
+    depends_on: [PH-23C]
