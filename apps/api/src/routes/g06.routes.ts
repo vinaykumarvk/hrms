@@ -358,6 +358,44 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.promotion.read",
       handler: (context) => ok(context.services.promotion.getRotationTrace(context.scope, requiredParam(context.params, "id"))),
     },
+    // PH-32A — G06 career-path/succession + correction cascade (route exposure).
+    {
+      method: "POST",
+      path: "/api/v1/promotions/career-paths",
+      operationId: "g06.defineCareerPath",
+      protected: true,
+      permission: "g06.careerpath.define",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          careerPath: context.services.careerSuccession.defineCareerPath(context.actor, {
+            pathCode: requiredString(body, "pathCode"),
+            name: requiredString(body, "name"),
+            stages: Array.isArray(body.stages) ? (body.stages as Array<{ stageNo: number; gradeDesignationId: string; typicalYears: number }>) : [],
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/promotions/seniority-lists:finalise",
+      operationId: "g06.finaliseSeniorityList",
+      protected: true,
+      permission: "g06.seniority.finalise",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          list: context.services.correctionCascade.finaliseList(context.actor, {
+            listCode: requiredString(body, "listCode"),
+            entries: Array.isArray(body.entries) ? (body.entries as Array<{ employeeId: string; appointmentDate: string; serviceNo: string }>) : [],
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
