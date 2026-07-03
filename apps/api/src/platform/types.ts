@@ -25,7 +25,9 @@ export type G01DomainErrorCode =
   | "UNDO_EXPIRED"
   | "INVALID_STATE"
   | "LEGAL_HOLD_ACTIVE"
-  | "BLOCKING_OBLIGATIONS";
+  | "BLOCKING_OBLIGATIONS"
+  // FR-EPM-004: nominee benefit shares must sum to <= 100 per benefit type (422).
+  | "VAL-NOMINEE";
 
 /** BRD G03 §8 named domain error codes (docs/brd/v3/G03-attendance-and-leave-management.md). */
 export type G03DomainErrorCode =

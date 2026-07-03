@@ -1596,3 +1596,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-61b.sh
     depends_on: [PH-61A]
+
+  # PH-62 — remediation tranche 49 (hand-built; subagent credits exhausted until 2026-07-08). FIRST NET-NEW
+  # tranche (user-directed): implement the FR-EPM-004 nominee register end-to-end — new NomineeService +
+  # VAL-NOMINEE share invariant + row_version optimistic lock + soft-delete. Ratchet 552/41.7% -> 556/42%.
+  - id: PH-62A
+    name: PH-62 · G01 nominee register (net-new; coverage ratchet 552->556 / 42%)
+    prompt: docs/spec/pipeline/prompts/PH-62A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-62a.sh
+    gate: auto
+    depends_on: [PH-61B]
+  - id: PH-62B
+    name: PH-62 · Tranche-49 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-62B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-62b.sh
+    depends_on: [PH-62A]

@@ -769,6 +769,81 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.read",
     handler: (context) => ok({ count: context.services.employeeMaster.count(context.scope) }),
   });
+
+  // PH-62A — FR-EPM-004 nominee register (NET-NEW backing): list / add / update / soft-delete with the
+  // VAL-NOMINEE share invariant and row_version optimistic locking.
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees/{id}/nominees",
+    operationId: "g01.listNominees",
+    protected: true,
+    permission: "g01.employee.read",
+    handler: (context) => ok({ items: context.services.nominee.listNominees(context.scope, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/nominees",
+    operationId: "g01.addNominee",
+    protected: true,
+    permission: "g01.nominee.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        nominee: context.services.nominee.addNominee(context.actor, requiredParam(context.params, "id"), {
+          name: requiredString(body, "name"),
+          benefitType: requiredString(body, "benefitType"),
+          sharePct: readNomineeNumber(body, "sharePct"),
+          guardian: optionalString(body, "guardian"),
+          isFamilyPensionRecipient: optionalBoolean(body, "isFamilyPensionRecipient"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "PATCH",
+    path: "/api/v1/employees/{id}/nominees/{nomineeId}",
+    operationId: "g01.updateNominee",
+    protected: true,
+    permission: "g01.nominee.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return ok({
+        nominee: context.services.nominee.updateNominee(context.actor, requiredParam(context.params, "nomineeId"), {
+          rowVersion: readNomineeNumber(body, "rowVersion"),
+          sharePct: optionalNumber(body, "sharePct"),
+          guardian: optionalString(body, "guardian"),
+          isFamilyPensionRecipient: optionalBoolean(body, "isFamilyPensionRecipient"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/nominees/{nomineeId}:remove",
+    operationId: "g01.removeNominee",
+    protected: true,
+    permission: "g01.nominee.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      context.services.nominee.removeNominee(context.actor, requiredParam(context.params, "nomineeId"));
+      return ok({ removed: true });
+    },
+  });
+}
+
+/** A required numeric body field accepting a JSON number or a numeric string. */
+function readNomineeNumber(body: Record<string, unknown>, key: string): number {
+  const value = body[key];
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) {
+    throw new FoundationError("VALIDATION_FAILED", `${key} must be a number`, { field: key });
+  }
+  return n;
 }
 
 function requiredParam(params: Record<string, string>, key: string): string {

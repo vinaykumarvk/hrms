@@ -168,6 +168,8 @@ export function statusForError(code: WireErrorCode): number {
     // BRD G09 §10.3: subsistence rate outside template bounds (DI-8) and payment without NEC (DI-16) are 422.
     case "ERR-G09-SUBSISTENCE-OUT-OF-BOUNDS":
     case "ERR-G09-NON-EMPLOYMENT-CERT-REQUIRED":
+    // BRD G01 FR-EPM-004: nominee benefit shares exceeding 100% per benefit type is 422 (VAL-NOMINEE).
+    case "VAL-NOMINEE":
     // BRD G09 FR-025 (DI-29): "Deny without reason ⇒ 422 ERR-G09-PERSONAL-HEARING-DENIED".
     case "ERR-G09-PERSONAL-HEARING-DENIED":
     // BRD G09 FR-023 (BR-2): POSH conciliation resting on a monetary settlement ⇒ 422.
