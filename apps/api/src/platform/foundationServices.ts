@@ -32,6 +32,7 @@ import { NlQueryService, InMemoryNlQueryRepository } from "../modules/g14/nlQuer
 import { OutboundIntegrationService, InMemoryOutboundIntegrationRepository, OutboundTransport } from "../modules/g04/outboundIntegrationService";
 import { DigitalDeliveryService, InMemoryDigitalDeliveryRepository } from "../modules/g11/digitalDeliveryService";
 import { PhoneticSearchService, InMemoryPhoneticSearchRepository } from "../modules/g01/phoneticSearchService";
+import { DeathRecoveryService, InMemoryDeathRecoveryRepository } from "../modules/g11/deathRecoveryService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -121,6 +122,7 @@ export interface FoundationServices {
   outboundIntegration: OutboundIntegrationService;
   digitalDelivery: DigitalDeliveryService;
   phoneticSearch: PhoneticSearchService;
+  deathRecovery: DeathRecoveryService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -315,6 +317,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const outboundIntegration = new OutboundIntegrationService(authorization, audit, g04Transport, new InMemoryOutboundIntegrationRepository());
   const digitalDelivery = new DigitalDeliveryService(authorization, audit, new InMemoryDigitalDeliveryRepository());
   const phoneticSearch = new PhoneticSearchService(authorization, audit, new InMemoryPhoneticSearchRepository());
+  const deathRecovery = new DeathRecoveryService(authorization, audit, new InMemoryDeathRecoveryRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -487,6 +490,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     outboundIntegration,
     digitalDelivery,
     phoneticSearch,
+    deathRecovery,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
