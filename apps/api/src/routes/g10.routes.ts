@@ -3,6 +3,7 @@ import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requir
 import { ApiQuery, RouteDefinition } from "../http/apiTypes";
 import { PayrollAdjustmentCode, PayrollAdjustmentSource } from "../modules/g10/payrollService";
 import { PayCalcMethod, PayComponentCategory, RateTableType, TaxRegime } from "../modules/g10/payRuleRepository";
+import { PerquisiteType } from "../modules/g10/loanPerquisiteGlService";
 import { PreviousEmployerIncome, Relief891, RemittanceScheme } from "../modules/g10/taxEngineRepository";
 import { FoundationError } from "../platform/types";
 import { ph03Ids } from "../seed/ph03Seed";
@@ -478,8 +479,89 @@ export function registerG10Routes(kernel: ApiKernel): void {
         );
       },
     },
+    // PH-46A — FR-G10-08 loan lifecycle (instalment recovery with net-floor carryforward + foreclosure)
+    // + Rule-3 concessional perquisite valuation + reads. Route exposure for tested loanPerquisiteGl backing.
+    {
+      method: "POST",
+      path: "/api/v1/payroll/loans/{id}:instalment",
+      operationId: "g10.recordLoanInstalment",
+      protected: true,
+      permission: "g10.loan.recover",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          repayment: context.services.loanPerquisiteGl.recordLoanInstalment(context.actor, requiredParam(context.params, "id"), {
+            netAvailablePaise: requiredNumber(body, "netAvailablePaise"),
+            recordedAt: requiredString(body, "recordedAt"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/loans/{id}:foreclose",
+      operationId: "g10.forecloseLoan",
+      protected: true,
+      permission: "g10.loan.foreclose",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({ repayment: context.services.loanPerquisiteGl.forecloseLoan(context.actor, requiredParam(context.params, "id"), { recordedAt: requiredString(body, "recordedAt") }) });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/payroll/loans/{id}/repayments",
+      operationId: "g10.listLoanRepayments",
+      protected: true,
+      permission: "g10.loan.read",
+      handler: (context) => ok({ items: context.services.loanPerquisiteGl.listLoanRepayments(context.scope, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/payroll/employees/{employeeId}/carryforwards",
+      operationId: "g10.listCarryforwards",
+      protected: true,
+      permission: "g10.loan.read",
+      handler: (context) => ok({ items: context.services.loanPerquisiteGl.listCarryforwards(context.scope, requiredParam(context.params, "employeeId")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/perquisites:value",
+      operationId: "g10.valuePerquisite",
+      protected: true,
+      permission: "g10.perquisite.value",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          perquisite: context.services.loanPerquisiteGl.valuePerquisite(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            perquisiteType: requiredString(body, "perquisiteType") as PerquisiteType,
+            isConcessional: optionalBoolean(body, "isConcessional") ?? false,
+            baseAmountPaise: requiredNumber(body, "baseAmountPaise"),
+            referenceRateBps: optionalNumber(body, "referenceRateBps"),
+            employeeRateBps: requiredNumber(body, "employeeRateBps"),
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
+}
+
+/** A required numeric body field accepting a JSON number or a numeric string. */
+function requiredNumber(body: Record<string, unknown>, key: string): number {
+  const value = body[key];
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) {
+    throw new Error(`${key} must be a number`);
+  }
+  return n;
 }
 
 function readAdjustmentSource(body: Record<string, unknown>): PayrollAdjustmentSource {
