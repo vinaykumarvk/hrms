@@ -1212,3 +1212,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-37b.sh
     depends_on: [PH-37A]
+
+  # PH-38 — remediation tranche 25 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage (user-directed): expose real, service-tested backing as kernel
+  # routes and ratchet the PH-37 coverage floor. PH-38A: APAR calibration lifecycle (G08 15.8% -> 19.5%).
+  - id: PH-38A
+    name: PH-38 · APAR calibration route exposure (coverage ratchet 392->397 / 30%)
+    prompt: docs/spec/pipeline/prompts/PH-38A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-38a.sh
+    gate: auto
+    depends_on: [PH-37B]
+  - id: PH-38B
+    name: PH-38 · Tranche-25 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-38B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-38b.sh
+    depends_on: [PH-38A]

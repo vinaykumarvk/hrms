@@ -20,7 +20,7 @@ attributed to a module by `operationId` prefix.
 | G05 | 75 | 48 | 64% |
 | G06 | 86 | 25 | 29.1% |
 | G07 | 111 | 18 | 16.2% |
-| G08 | 133 | 21 | 15.8% |
+| G08 | 133 | 26 | 19.5% |
 | G09 | 89 | 25 | 28.1% |
 | G10 | 87 | 25 | 28.7% |
 | G11 | 90 | 27 | 30% |
@@ -28,13 +28,16 @@ attributed to a module by `operationId` prefix.
 | G13 | 114 | 29 | 25.4% |
 | G14 | 90 | 20 | 22.2% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **392** | **29.6%** |
+| **Total** | **1323** | **397** | **30%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 29.6%** and **implemented routes ≥ 392**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 30%** and **implemented routes ≥ 397**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
+
+**Ratchet history:** 392 / 29.6% (PH-37A baseline) → **397 / 30%** (PH-38A: APAR calibration lifecycle
+route exposure — 5 real, service-tested operations wired to the kernel).
 
 ## Honest limitation (what this metric is NOT)
 

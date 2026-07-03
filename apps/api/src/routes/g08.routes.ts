@@ -2,6 +2,7 @@ import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
+import { CalibrationMethod } from "../modules/g08/aparDepthRepository";
 
 export const g08RouteEvidence = {
   forms: "/api/v1/apar/forms",
@@ -408,8 +409,117 @@ export function registerG08Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-38A — APAR calibration lifecycle route exposure (backing service already tested at
+    // ph16e-g07-g08-depth). Convene -> recommend -> ratify (SoD) -> apply; diagnostic is read-only.
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/calibration-sessions",
+      operationId: "g08.createCalibrationSession",
+      protected: true,
+      permission: "g08.calibration.convene",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          calibrationSession: context.services.apar.createCalibrationSession(context.actor, {
+            cycleId: requiredString(body, "cycleId"),
+            orgUnitScope: requiredString(body, "orgUnitScope"),
+            method: requiredString(body, "method") as CalibrationMethod,
+            committeeMemberIds: readStringArray(body, "committeeMemberIds"),
+            targetDistribution: readGradeDistribution(body),
+            bellCurveEnabled: optionalBoolean(body, "bellCurveEnabled"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/calibration-sessions/{id}:recommend",
+      operationId: "g08.proposeCalibrationRecommendation",
+      protected: true,
+      permission: "g08.calibration.recommend",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          calibrationRecommendation: context.services.apar.proposeCalibrationRecommendation(context.actor, requiredParam(context.params, "id"), {
+            formId: requiredString(body, "formId"),
+            currentGrade: Number(requiredString(body, "currentGrade")),
+            recommendedGrade: Number(requiredString(body, "recommendedGrade")),
+            rationale: requiredString(body, "rationale"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/calibration-sessions/{id}/recommendations/{recommendationId}:ratify",
+      operationId: "g08.ratifyCalibrationRecommendation",
+      protected: true,
+      permission: "g08.calibration.ratify",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) =>
+        accepted({
+          calibrationRecommendation: context.services.apar.ratifyCalibrationRecommendation(
+            context.actor,
+            requiredParam(context.params, "id"),
+            requiredParam(context.params, "recommendationId")
+          ),
+        }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/calibration-sessions/{id}/recommendations/{recommendationId}:apply",
+      operationId: "g08.applyCalibrationAdjustment",
+      protected: true,
+      permission: "g08.calibration.apply",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) =>
+        accepted({
+          calibrationAdjustment: context.services.apar.applyCalibrationAdjustment(
+            context.actor,
+            requiredParam(context.params, "id"),
+            requiredParam(context.params, "recommendationId")
+          ),
+        }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/appraisals/calibration-sessions/{id}/distribution",
+      operationId: "g08.calibrationDistributionDiagnostic",
+      protected: true,
+      permission: "g08.calibration.convene",
+      handler: (context) => ok(context.services.apar.calibrationDistributionDiagnostic(context.actor, requiredParam(context.params, "id"))),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
+}
+
+/** Read a string[] body field (calibration committee member ids). */
+function readStringArray(body: Record<string, unknown>, key: string): string[] {
+  const value = body[key];
+  if (!Array.isArray(value)) {
+    throw new Error(`${key} must be an array of strings`);
+  }
+  return value.map((item) => String(item));
+}
+
+/** Optional target grade distribution (grade -> weight); undefined when absent. */
+function readGradeDistribution(body: Record<string, unknown>): Record<string, number> | undefined {
+  const value = body.targetDistribution;
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const record = readBodyRecord(value);
+  const out: Record<string, number> = {};
+  for (const [grade, weight] of Object.entries(record)) {
+    out[grade] = Number(weight);
+  }
+  return out;
 }
 
 function requiredParam(params: Record<string, string>, key: string): string {
