@@ -3,6 +3,7 @@ import { optionalNumber, optionalString, readBodyRecord, requiredString } from "
 import { ApiContext, ApiQuery, ApiResponse, RouteDefinition } from "../http/apiTypes";
 import { PensionScheme } from "../modules/g11/pensionService";
 import { G11MoneyRounding, G11RuleAppliesTo } from "../modules/g11/pensionRuleRepository";
+import { AccountVerifyMethod, AccountVerifyResult } from "../modules/g11/pensionDisbursementRepository";
 import {
   G11EnhancedBasis,
   G11GratuityType,
@@ -506,6 +507,81 @@ export function registerG11Routes(kernel: ApiKernel): void {
           }),
         });
       },
+    },
+    // PH-47A — G11 PDA go-live lifecycle (certify sandbox -> activate; read), grievance close, and
+    // pensioner bank-account verification. Route exposure for tested pensionTreasury / pensionDisbursement.
+    {
+      method: "POST",
+      path: "/api/v1/pension/pdas/{id}:certify-sandbox",
+      operationId: "g11.certifyPdaSandbox",
+      protected: true,
+      permission: "g11.pda.certify",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ pda: context.services.pensionTreasury.certifyPdaSandbox(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/pension/pdas/{id}:activate",
+      operationId: "g11.activatePda",
+      protected: true,
+      permission: "g11.pda.activate",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ pda: context.services.pensionTreasury.activatePda(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/pension/pdas/{id}",
+      operationId: "g11.getPda",
+      protected: true,
+      permission: "g11.pension.read",
+      handler: (context) => ok({ pda: context.services.pensionTreasury.getPda(context.scope, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/pension/grievances/{id}:close",
+      operationId: "g11.closeGrievance",
+      protected: true,
+      permission: "g11.grievance.raise",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({ grievance: context.services.pensionTreasury.closeGrievance(context.actor, requiredParam(context.params, "id"), { resolutionComment: requiredString(body, "resolutionComment") }) });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/pension/account-verifications",
+      operationId: "g11.recordAccountVerification",
+      protected: true,
+      permission: "g11.pensioner.maintain",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          verification: context.services.pensionDisbursement.recordAccountVerification(context.actor, {
+            caseId: requiredString(body, "caseId"),
+            accountNoMasked: requiredString(body, "accountNoMasked"),
+            ifsc: requiredString(body, "ifsc"),
+            accountName: requiredString(body, "accountName"),
+            method: requiredString(body, "method") as AccountVerifyMethod,
+            nameMatchScoreBps: optionalNumber(body, "nameMatchScoreBps"),
+            verifiedName: optionalString(body, "verifiedName"),
+            result: requiredString(body, "result") as AccountVerifyResult,
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/pension/cases/{caseId}/account-verifications",
+      operationId: "g11.listVerifications",
+      protected: true,
+      permission: "g11.pension.read",
+      handler: (context) => ok({ items: context.services.pensionDisbursement.listVerifications(context.scope, requiredParam(context.params, "caseId")) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

@@ -1356,3 +1356,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-46b.sh
     depends_on: [PH-46A]
+
+  # PH-47 — remediation tranche 34 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G11 PDA go-live lifecycle + grievance close + pensioner bank-
+  # account verification (real, service-tested backing). Ratchet 456/34.5% -> 462/34.9% (G11 30% -> 36.7%).
+  - id: PH-47A
+    name: PH-47 · G11 PDA/verification route exposure (coverage ratchet 456->462 / 34.9%)
+    prompt: docs/spec/pipeline/prompts/PH-47A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-47a.sh
+    gate: auto
+    depends_on: [PH-46B]
+  - id: PH-47B
+    name: PH-47 · Tranche-34 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-47B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-47b.sh
+    depends_on: [PH-47A]
