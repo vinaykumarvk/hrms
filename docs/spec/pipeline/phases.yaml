@@ -1372,3 +1372,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-47b.sh
     depends_on: [PH-47A]
+
+  # PH-48 — remediation tranche 35 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G12 SR-ledger chain reads + RFC-3161 timestamp/offline-bundle
+  # verification (real, service-tested backing). Ratchet 462/34.9% -> 469/35.4% (G12 43.1% -> 53.8%).
+  - id: PH-48A
+    name: PH-48 · G12 chain/verify route exposure (coverage ratchet 462->469 / 35.4%)
+    prompt: docs/spec/pipeline/prompts/PH-48A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-48a.sh
+    gate: auto
+    depends_on: [PH-47B]
+  - id: PH-48B
+    name: PH-48 · Tranche-35 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-48B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-48b.sh
+    depends_on: [PH-48A]
