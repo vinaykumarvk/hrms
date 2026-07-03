@@ -449,6 +449,44 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.read",
       handler: (context) => resolveRuleRow(context),
     },
+    // PH-29B — G11 disbursing-authority registry + proactive death detection (route exposure).
+    {
+      method: "POST",
+      path: "/api/v1/pension/pdas",
+      operationId: "g11.registerPda",
+      protected: true,
+      permission: "g11.pda.register",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          pda: context.services.pensionTreasury.registerPda(context.actor, {
+            pdaCode: requiredString(body, "pdaCode"),
+            name: requiredString(body, "name"),
+            pdaDisbursementModel: requiredString(body, "pdaDisbursementModel") as "M11_COMPUTES_FULL" | "PDA_APPLIES_RELIEF",
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/pension/death-reconcile",
+      operationId: "g11.reconcileDeath",
+      protected: true,
+      permission: "g11.death.reconcile",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          vital: context.services.deathRecovery.reconcileDeath(context.actor, {
+            pensionerId: requiredString(body, "pensionerId"),
+            dateOfDeath: requiredString(body, "dateOfDeath"),
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
