@@ -853,3 +853,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-23d.sh
     gate: human
     depends_on: [PH-23C]
+
+  # PH-24 — remediation tranche 11 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Targets: G11 death-detection/overpayment recovery, G06 correction cascade, G12 offline-QR verify.
+  - id: PH-24A
+    name: PH-24 · G11 death-detection and overpayment recovery
+    prompt: docs/spec/pipeline/prompts/PH-24A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-24a.sh
+    gate: auto
+    depends_on: [PH-23D]
+  - id: PH-24B
+    name: PH-24 · G06 correction lineage and recompute cascade
+    prompt: docs/spec/pipeline/prompts/PH-24B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-24b.sh
+    gate: auto
+    depends_on: [PH-24A]
+  - id: PH-24C
+    name: PH-24 · G12 offline-QR independent verification
+    prompt: docs/spec/pipeline/prompts/PH-24C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-24c.sh
+    gate: auto
+    depends_on: [PH-24B]
+  - id: PH-24D
+    name: PH-24 · Tranche-11 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-24D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-24d.sh
+    gate: human
+    depends_on: [PH-24C]
