@@ -301,6 +301,46 @@ export function registerG02Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-33A — G02 strong e-signature + change-request templates (route exposure).
+    {
+      method: "POST",
+      path: "/api/v1/change-requests/{id}/e-signatures",
+      operationId: "g02.signChange",
+      protected: true,
+      permission: "g02.esign.sign",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          signature: context.services.changeEsignStepUp.signChange(context.actor, {
+            changeRequestId: requiredParam(context.params, "id"),
+            method: requiredString(body, "method") as "AADHAAR_OTP" | "DSC" | "HSM",
+            payload: body.payload ?? {},
+            signedAt: requiredString(body, "signedAt"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/change-request-templates",
+      operationId: "g02.createChangeRequestTemplate",
+      protected: true,
+      permission: "g02.template.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          template: context.services.changeRequestTemplate.createTemplate(context.actor, {
+            templateCode: requiredString(body, "templateCode"),
+            name: requiredString(body, "name"),
+            fields: Array.isArray(body.fields) ? (body.fields as Array<{ fieldCode: string; defaultValue?: string }>) : [],
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }

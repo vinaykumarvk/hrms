@@ -625,6 +625,28 @@ export function registerG03Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-33A — G03 punch anomaly screening (impossible-travel) route exposure (PH-25C engine).
+    {
+      method: "POST",
+      path: "/api/v1/atl/punch-anomaly:screen",
+      operationId: "g03.screenPunchPair",
+      protected: true,
+      permission: "g03.punch.screen",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        const punchA = (body.punchA ?? {}) as { lat: number; lon: number; atEpochMs: number };
+        const punchB = (body.punchB ?? {}) as { lat: number; lon: number; atEpochMs: number };
+        return created({
+          anomaly: context.services.punchAnomaly.screenPunchPair(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            punchA,
+            punchB,
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
