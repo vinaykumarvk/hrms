@@ -1,5 +1,6 @@
 import {
   BiKpiTile,
+  SealedCoverCase,
   CaseEvidenceItem,
   CounsellingChoiceResult,
   CounsellingSessionView,
@@ -436,6 +437,10 @@ export function createFixtureHrmsClient(): HrmsClient {
       { vacancyId: "vac-b", postLabel: "Revenue Inspector — Circle B", open: true },
     ],
   };
+  const sealedCovers: SealedCoverCase[] = [
+    { id: "sc-1", employeeId: "emp-1", reason: "Disciplinary case pending", status: "SEALED" },
+    { id: "sc-2", employeeId: "emp-2", reason: "Vigilance case pending", status: "SEALED" },
+  ];
   const dsrRows: DsrRecord[] = [
     { id: "dsr-1", subjectEmployeeId: "emp-1", requestType: "ERASE", status: "RECEIVED", legalBasis: undefined },
     { id: "dsr-2", subjectEmployeeId: "emp-2", requestType: "ACCESS", status: "UNDER_REVIEW", legalBasis: undefined },
@@ -750,6 +755,14 @@ export function createFixtureHrmsClient(): HrmsClient {
       return Promise.resolve(diff);
     },
     getLeaveBalance: () => Promise.resolve({ ...leaveBalance }),
+    listSealedCovers: () => Promise.resolve(page(sealedCovers.map((r) => ({ ...r })))),
+    releaseSealedCover: (id, input) => {
+      const row = sealedCovers.find((r) => r.id === id);
+      if (!row) return Promise.reject(new Error("NOT_FOUND"));
+      if (!input.reason) return Promise.reject(new Error("VALIDATION_FAILED"));
+      row.status = "RELEASED";
+      return Promise.resolve({ ...row });
+    },
     listBiKpis: () =>
       Promise.resolve(
         page([

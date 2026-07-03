@@ -1,4 +1,5 @@
 export const HRMS_API_ROUTES = {
+  sealedCovers: "/api/v1/promotions/sealed-covers",
   biKpis: "/api/v1/analytics/bi-kpis",
   dataSubjectRequests: "/api/v1/dsr",
   counsellingSessions: "/api/v1/transfers/counselling",
@@ -60,6 +61,18 @@ export interface PageQuery {
 }
 
 /** G13 DPDP data-subject request row (PH-15E engine; PH-27A console). */
+/** G06 sealed-cover case row (PH-08C engine; PH-34B review UI). */
+export interface SealedCoverCase {
+  id: string;
+  employeeId: string;
+  reason: string;
+  status: "SEALED" | "RELEASED";
+}
+
+export interface SealedCoverReleaseInput {
+  reason: string;
+}
+
 /** G14 embedded-BI KPI tile (PH-10D analytics engine; PH-34A dashboard). */
 export interface BiKpiTile {
   kpiCode: string;
@@ -916,6 +929,8 @@ export interface HrmsClient {
   getLeaveBalance(employeeId?: string, leaveTypeId?: string): Promise<LeaveBalanceView>;
   getServiceRegisterTimeline(employeeId: string, page?: PageQuery): Promise<PageResult<SrTimelineEntry>>;
   listDocuments(): Promise<PageResult<DocumentSummary>>;
+  listSealedCovers(): Promise<PageResult<SealedCoverCase>>;
+  releaseSealedCover(id: string, input: SealedCoverReleaseInput, idempotencyKey: string): Promise<SealedCoverCase>;
   listBiKpis(): Promise<PageResult<BiKpiTile>>;
   listCaseEvidence(caseId: string): Promise<PageResult<CaseEvidenceItem>>;
   getCounsellingSession(): Promise<CounsellingSessionView>;
@@ -1093,6 +1108,9 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
         `${HRMS_API_ROUTES.srEmployees}/${encodeURIComponent(employeeId)}/timeline${toPageQueryString(page)}`
       ),
     listDocuments: () => request<PageResult<DocumentSummary>>(HRMS_API_ROUTES.documents),
+    listSealedCovers: () => request<PageResult<SealedCoverCase>>(HRMS_API_ROUTES.sealedCovers),
+    releaseSealedCover: (id, input, idempotencyKey) =>
+      postWithIdempotency<SealedCoverCase>(`${HRMS_API_ROUTES.sealedCovers}/${encodeURIComponent(id)}:release`, input, idempotencyKey),
     listBiKpis: () => request<PageResult<BiKpiTile>>(HRMS_API_ROUTES.biKpis),
     listCaseEvidence: (caseId) =>
       request<PageResult<CaseEvidenceItem>>(`${HRMS_API_ROUTES.disciplinaryEvidence}/${encodeURIComponent(caseId)}/evidence`),

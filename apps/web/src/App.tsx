@@ -19,6 +19,7 @@ import { TransferWorkspace } from "./modules/g05/TransferWorkspace";
 import { CounsellingConsole } from "./modules/g05/CounsellingConsole";
 import { PromotionWorkspace } from "./modules/g06/PromotionWorkspace";
 import { DpcConvenePanel } from "./modules/g06/DpcConvenePanel";
+import { SealedCoverReview } from "./modules/g06/SealedCoverReview";
 import { TrainingWorkspace } from "./modules/g07/TrainingWorkspace";
 import { TrainingNominationForm } from "./modules/g07/TrainingNominationForm";
 import { AparWorkspace } from "./modules/g08/AparWorkspace";
@@ -113,6 +114,7 @@ export function App() {
         <RouteGuard permissions={permissions} requiredPermission="g06.promotion.read" routeLabel="Promotions workspace (G06)">
           <PromotionWorkspace client={client} />
           <DpcConvenePanel client={client} />
+          <SealedCoverReview client={client} />
         </RouteGuard>
         <RouteGuard permissions={permissions} requiredPermission="g07.training.read" routeLabel="Training workspace (G07)">
           <TrainingWorkspace client={client} />
