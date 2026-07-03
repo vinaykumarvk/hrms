@@ -1436,3 +1436,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-51b.sh
     depends_on: [PH-51A]
+
+  # PH-52 — remediation tranche 39 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G06 FR-015 sanctioned-posts establishment lifecycle
+  # (register/revise/reconcile + reads + vacancy). Ratchet 489/37% -> 495/37.4% (G06 29.1% -> 36%).
+  - id: PH-52A
+    name: PH-52 · G06 sanctioned-post route exposure (coverage ratchet 489->495 / 37.4%)
+    prompt: docs/spec/pipeline/prompts/PH-52A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-52a.sh
+    gate: auto
+    depends_on: [PH-51B]
+  - id: PH-52B
+    name: PH-52 · Tranche-39 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-52B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-52b.sh
+    depends_on: [PH-52A]
