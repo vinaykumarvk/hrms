@@ -315,6 +315,26 @@ export function registerG07Routes(kernel: ApiKernel): void {
         });
       },
     },
+    // PH-31C — G07 vendor/external-trainer empanelment (route exposure for the PH-20A engine).
+    {
+      method: "POST",
+      path: "/api/v1/training/vendor-empanelments",
+      operationId: "g07.applyForEmpanelment",
+      protected: true,
+      permission: "g07.empanelment.apply",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          empanelment: context.services.vendorEmpanelment.applyForEmpanelment(context.actor, {
+            vendorName: requiredString(body, "vendorName"),
+            category: requiredString(body, "category"),
+            procurementRef: optionalString(body, "procurementRef"),
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
