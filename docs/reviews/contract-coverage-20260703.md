@@ -13,7 +13,7 @@ attributed to a module by `operationId` prefix.
 
 | Module | Contract ops | Implemented routes | Coverage |
 |---|---:|---:|---:|
-| G01 | 165 | 50 | 30.3% |
+| G01 | 165 | 54 | 32.7% |
 | G02 | 65 | 31 | 47.7% |
 | G03 | 92 | 48 | 52.2% |
 | G04 | 45 | 21 | 46.7% |
@@ -28,13 +28,17 @@ attributed to a module by `operationId` prefix.
 | G13 | 114 | 38 | 33.3% |
 | G14 | 90 | 26 | 28.9% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **552** | **41.7%** |
+| **Total** | **1323** | **556** | **42%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 41.7%** and **implemented routes ≥ 552**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 42%** and **implemented routes ≥ 556**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
+
+**Net-new phase (from PH-62A):** the route-exposure vein is exhausted; further ratchets now come from
+**net-new implementations** (new service logic + backing + tests per contracted operation), not from wiring
+existing engines. PH-62A added the FR-EPM-004 nominee register (new `NomineeService` + VAL-NOMINEE invariant).
 
 **Ratchet history:** 392 / 29.6% (PH-37A baseline) → 397 / 30% (PH-38A: APAR calibration lifecycle) →
 404 / 30.5% (PH-39A: APAR PIP lifecycle + probation-confirmation + reads) → 411 / 31.1% (PH-40A:
@@ -61,7 +65,9 @@ reservations, preferences, mutual orders, charge-handovers, relieving/joining re
 (transmit + list) + pensioner lifecycle reads) → **543 / 41%** (PH-59A: G06 succession-planning + qualifying-
 service route exposure) → **547 / 41.3%** (PH-60A: G03 attendance-policy config + leave-ledger/attendance/
 comp-off-balance reads) → **552 / 41.7%** (PH-61A: G12 SR admissibility/integrity reads + G13 OCR index
-management — 5 real, service-tested operations wired to the kernel).
+management — 5 real, service-tested operations wired to the kernel) → **556 / 42%** (PH-62A: G01 FR-EPM-004
+nominee register — NET-NEW `NomineeService` (list/add/update/soft-delete; VAL-NOMINEE share invariant;
+row_version optimistic lock), 4 contracted operations implemented end-to-end).
 
 ## Honest limitation (what this metric is NOT)
 
