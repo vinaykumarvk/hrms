@@ -3,6 +3,7 @@ import { optionalBoolean, optionalNumber, optionalRecord, optionalString, option
 import { pageItems } from "../http/pagination";
 import { ApiContext, ApiResponse } from "../http/apiTypes";
 import { SrEvent, SrSourceModule } from "../modules/g12/serviceRegisterService";
+import { VerificationBundle } from "../modules/g12/offlineVerificationService";
 import { JOB_G12_ANCHOR, JOB_G12_GAPSCAN, JOB_G12_INTEGRITY } from "../modules/g12/srIntegrityService";
 import type { SrAttestationKind, SrExtractScope, SrGapStatus, SrRedactionPolicy, SrRuleStatus, SrSeverity, SrSignatureMethod } from "../modules/g12/srIntegrityRepository";
 import type { SrLtvRenewalKind, SrLtvSubject, SrLtvTrigger, SrSubscriptionMode } from "../modules/g12/srAdmissibilityRepository";
@@ -493,6 +494,71 @@ export function registerG12Routes(kernel: ApiKernel): void {
         }),
       });
     },
+  });
+
+  // PH-48A — G12 SR-ledger chain reads + timestamp/bundle verification (route exposure for tested backing).
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/employees/{id}/entry-chain",
+    operationId: "g12.getEntryChain",
+    protected: true,
+    permission: "g12.sr.read",
+    handler: (context) => ok({ items: context.services.serviceRegister.getEntryChain(context.scope, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/employees/{id}/status-chain",
+    operationId: "g12.getStatusChain",
+    protected: true,
+    permission: "g12.sr.read",
+    handler: (context) => ok({ items: context.services.serviceRegister.getStatusChain(context.scope, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/employees/{id}/status-events",
+    operationId: "g12.getStatusEvents",
+    protected: true,
+    permission: "g12.sr.read",
+    handler: (context) => ok({ items: context.services.serviceRegister.getStatusEvents(context.scope, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/chain-employees",
+    operationId: "g12.listChainEmployees",
+    protected: true,
+    permission: "g12.sr.read",
+    handler: (context) => ok({ items: context.services.serviceRegister.listChainEmployees(context.scope) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/feed-events",
+    operationId: "g12.listFeedEvents",
+    protected: true,
+    permission: "g12.sr.read",
+    handler: (context) => ok({ items: context.services.serviceRegister.listFeedEvents(context.scope) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/timestamp:verify",
+    operationId: "g12.verifyTimestamp",
+    protected: true,
+    permission: "g12.tsa.issue",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return ok(context.services.timestampAuthority.verifyTimestamp(context.actor, { payload: body.payload ?? {}, token: requiredString(body, "token") }));
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/verification-bundle:verify",
+    operationId: "g12.verifyBundle",
+    protected: true,
+    permission: "g12.qr.issue",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => ok(context.services.offlineVerification.verifyBundle(readBodyRecord(context.request.body) as unknown as VerificationBundle)),
   });
 }
 
