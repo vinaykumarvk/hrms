@@ -65,6 +65,9 @@ export function statusForError(code: WireErrorCode): number {
     case "PENDING_LEAVE_BLOCKS_CLOSE":
     case "ENCASHMENT_CAP_EXCEEDED":
     case "NOT_ENCASHABLE":
+    // BRD G03 FR-07/FR-08: an overlapping attendance exception and a WFH over-cap are 409 CONFLICT.
+    case "EXCEPTION_OVERLAP":
+    case "WFH_CAP_EXCEEDED":
     // BRD G02 FR-015: applying/committing a change without a valid strong e-signature is 409.
     case "ERR-G02-ESIGN":
     case "STRENGTH_INCONSISTENT":
@@ -176,6 +179,8 @@ export function statusForError(code: WireErrorCode): number {
     case "ERR-G10-PERQ-REFRATE":
     // BRD G02 FR-015: an e-signature whose method is not permitted by policy is 422.
     case "ERR-G02-ESIGN-METHOD":
+    // BRD G03 FR-08: an on-duty/tour exception without its mandatory order document is 422.
+    case "DOCUMENT_REQUIRED":
     // BRD G11 §12: rule-row/commutation-factor resolution misses are 422 (fail closed);
     // FR-06 AC1: an over-limit commuted fraction is 422, rejected — never clamped.
     case "ERR-G11-RULE-NOT-EFFECTIVE":
