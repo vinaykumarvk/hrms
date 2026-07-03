@@ -93,6 +93,23 @@ export interface DisciplinaryCase {
   baseExpectedClosureDate: string;
   /** FR-G09-025 AC-4 (APPEAL stage): the appeal references its granted personal hearing. */
   appealPersonalHearingId?: string;
+  /** FR-G09-023 BR-2: outcome of a POSH conciliation recorded before inquiry (SETTLED blocks inquiry). */
+  conciliationOutcome?: PoshConciliationOutcome;
+}
+
+/** FR-G09-023 BR-2 (POSH Act 2013 s.10): the aggrieved may opt for conciliation before inquiry. */
+export type PoshConciliationOutcome = "SETTLED" | "FAILED";
+
+/** g09_posh_conciliations — a recorded POSH conciliation attempt (never monetary; before inquiry). */
+export interface PoshConciliation {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  caseId: string;
+  outcome: PoshConciliationOutcome;
+  settlementBasis: string;
+  recordedOn: string;
+  summary: string;
 }
 
 export interface PenaltyOrder {
@@ -124,6 +141,8 @@ export class DisciplinaryService {
   private readonly cases: DisciplinaryCase[] = [];
   private readonly penaltyOrders: PenaltyOrder[] = [];
   private readonly impactSignals: DisciplinaryImpactSignal[] = [];
+  private readonly conciliations: PoshConciliation[] = [];
+  private conciliationSerial = 0;
   private preliminaryInquirySerial = 0;
   private showCauseSerial = 0;
   private disagreementSerial = 0;
@@ -260,6 +279,12 @@ export class DisciplinaryService {
     this.authorization.check(actor, "g09.inquiry.report", actor);
     const disciplinaryCase = this.requireCase(actor, caseId);
     this.requireStage(disciplinaryCase, "CHARGE");
+    // FR-G09-023 BR-2: a POSH case settled at conciliation does not proceed to inquiry.
+    if (disciplinaryCase.conciliationOutcome === "SETTLED") {
+      throw new FoundationError("PRECONDITION_FAILED", "This POSH case was settled at conciliation; no inquiry report is recorded (FR-G09-023 BR-2)", {
+        details: { caseNo: disciplinaryCase.caseNo },
+      });
+    }
     // FR-G09-023 fail closed: a POSH case cannot proceed to inquiry without a valid ICC.
     this.assertIccConstitutedForPosh(actor, disciplinaryCase);
     const document = this.documentVault.createDocument(actor, {
@@ -762,6 +787,68 @@ export class DisciplinaryService {
   listIccAppointments(scope: TenantScope, caseId: string): IccAppointment[] {
     requireTenantScope(scope);
     return this.dueProcess.listIccAppointments(scope, caseId);
+  }
+
+  /**
+   * FR-G09-023 BR-2 (POSH Act 2013 s.10): record a conciliation the aggrieved woman has opted for,
+   * BEFORE the inquiry. Guards:
+   *   - conciliation applies only to a POSH (HARASSMENT) case;
+   *   - it must be recorded before the inquiry report stage;
+   *   - it may not rest on a monetary settlement (ERR-G09-CONCILIATION-MONETARY).
+   * A SETTLED outcome blocks the inquiry (recordInquiryReport refuses). Re-recording with FAILED
+   * models the edge case "complainant opts for conciliation then withdraws ⇒ resume inquiry".
+   */
+  recordConciliation(
+    actor: ActorContext,
+    caseId: string,
+    input: { opted: boolean; outcome: PoshConciliationOutcome; settlementBasis: string; recordedOn: string; summary: string }
+  ): { disciplinaryCase: DisciplinaryCase; conciliation: PoshConciliation } {
+    this.authorization.check(actor, "g09.conciliation.record", actor);
+    const disciplinaryCase = this.requireCase(actor, caseId);
+    this.assertNotAbated(disciplinaryCase);
+    if (!disciplinaryCase.isPoshCase) {
+      throw new FoundationError("PRECONDITION_FAILED", "Conciliation applies only to POSH (HARASSMENT) cases (FR-G09-023 BR-2)");
+    }
+    if (!input.opted) {
+      throw new FoundationError("PRECONDITION_FAILED", "Conciliation is recorded only when opted for by the aggrieved complainant (FR-G09-023 BR-2)");
+    }
+    if (disciplinaryCase.stage === "INQUIRY_REPORT" || disciplinaryCase.caseStatus === "PENALTY_IMPOSED" || disciplinaryCase.caseStatus === "CLOSED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Conciliation must be recorded before the inquiry (FR-G09-023 BR-2)", {
+        details: { stage: disciplinaryCase.stage, caseStatus: disciplinaryCase.caseStatus },
+      });
+    }
+    // BR-2: no monetary settlement as the basis of conciliation.
+    if (/monetary|payment|cash|money/i.test(input.settlementBasis)) {
+      throw new FoundationError("ERR-G09-CONCILIATION-MONETARY", "A POSH conciliation may not rest on a monetary settlement (FR-G09-023 BR-2)", {
+        field: "settlementBasis",
+      });
+    }
+    const conciliation: PoshConciliation = {
+      id: nextId("g09-posh-conciliation", this.conciliationSerial++),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      caseId,
+      outcome: input.outcome,
+      settlementBasis: input.settlementBasis,
+      recordedOn: input.recordedOn,
+      summary: input.summary,
+    };
+    this.conciliations.push(conciliation);
+    disciplinaryCase.conciliationOutcome = input.outcome;
+    this.appendTimeline(actor, caseId, disciplinaryCase.stage, "NOTE", `POSH conciliation ${input.outcome.toLowerCase()}`, input.recordedOn);
+    this.audit.recordMutation(actor, {
+      action: "G09_POSH_CONCILIATION_RECORDED",
+      subjectRef: `g09_disciplinary_cases:${caseId}`,
+      metadata: { outcome: input.outcome, settlementBasis: input.settlementBasis },
+    });
+    return { disciplinaryCase: { ...disciplinaryCase }, conciliation: { ...conciliation } };
+  }
+
+  listConciliations(scope: TenantScope, caseId: string): PoshConciliation[] {
+    requireTenantScope(scope);
+    return this.conciliations
+      .filter((row) => row.caseId === caseId && row.tenantId === scope.tenantId && (!scope.entityId || row.entityId === scope.entityId))
+      .map((row) => ({ ...row }));
   }
 
   /**
