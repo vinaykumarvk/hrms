@@ -31,6 +31,7 @@ import { PayrollRunConsole } from "./modules/g10/PayrollRunConsole";
 import { PensionWorkspace } from "./modules/g11/PensionWorkspace";
 import { PensionCaseConsole } from "./modules/g11/PensionCaseConsole";
 import { AnalyticsWorkspace } from "./modules/g14/AnalyticsWorkspace";
+import { EmbeddedBiDashboard } from "./modules/g14/EmbeddedBiDashboard";
 import { ServiceRegisterTimeline } from "./modules/g12/ServiceRegisterTimeline";
 import { DocumentVaultView } from "./modules/g13/DocumentVaultView";
 import { DataSubjectRequestConsole } from "./modules/g13/DataSubjectRequestConsole";
@@ -140,6 +141,7 @@ export function App() {
       <section className="workspace-grid" aria-label="Phase 10 analytics and release readiness">
         <RouteGuard permissions={permissions} requiredPermission="g14.analytics.read" routeLabel="Analytics workspace (G14)">
           <AnalyticsWorkspace client={client} />
+          <EmbeddedBiDashboard client={client} />
         </RouteGuard>
       </section>
       <section className="workspace-grid" aria-label="Phase 05D foundation record views">

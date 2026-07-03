@@ -1,4 +1,5 @@
 import {
+  BiKpiTile,
   CaseEvidenceItem,
   CounsellingChoiceResult,
   CounsellingSessionView,
@@ -749,6 +750,14 @@ export function createFixtureHrmsClient(): HrmsClient {
       return Promise.resolve(diff);
     },
     getLeaveBalance: () => Promise.resolve({ ...leaveBalance }),
+    listBiKpis: () =>
+      Promise.resolve(
+        page([
+          { kpiCode: "HEADCOUNT", label: "Employee headcount", value: 12480, trend: "UP" },
+          { kpiCode: "ATTRITION", label: "Attrition rate (%)", value: 4, trend: "DOWN" },
+          { kpiCode: "PENDING_PROMOTIONS", label: "Pending promotions", value: 37, trend: "FLAT" },
+        ])
+      ),
     listCaseEvidence: (caseId) =>
       Promise.resolve(
         page(
