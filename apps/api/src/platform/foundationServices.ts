@@ -35,6 +35,7 @@ import { PhoneticSearchService, InMemoryPhoneticSearchRepository } from "../modu
 import { DeathRecoveryService, InMemoryDeathRecoveryRepository } from "../modules/g11/deathRecoveryService";
 import { CorrectionCascadeService, InMemoryCorrectionCascadeRepository } from "../modules/g06/correctionCascadeService";
 import { OfflineVerificationService, InMemoryOfflineVerificationRepository } from "../modules/g12/offlineVerificationService";
+import { GlErpPostingService, InMemoryGlErpPostingRepository } from "../modules/g10/glErpPostingService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -127,6 +128,7 @@ export interface FoundationServices {
   deathRecovery: DeathRecoveryService;
   correctionCascade: CorrectionCascadeService;
   offlineVerification: OfflineVerificationService;
+  glErpPosting: GlErpPostingService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -324,6 +326,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const deathRecovery = new DeathRecoveryService(authorization, audit, new InMemoryDeathRecoveryRepository());
   const correctionCascade = new CorrectionCascadeService(authorization, audit, new InMemoryCorrectionCascadeRepository());
   const offlineVerification = new OfflineVerificationService(authorization, audit, new InMemoryOfflineVerificationRepository());
+  const glErpPosting = new GlErpPostingService(authorization, audit, new InMemoryGlErpPostingRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -499,6 +502,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     deathRecovery,
     correctionCascade,
     offlineVerification,
+    glErpPosting,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
