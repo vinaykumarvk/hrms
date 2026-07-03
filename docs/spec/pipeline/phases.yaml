@@ -656,3 +656,34 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-16g.sh
     gate: human   # tranche-3 wave end — human reviews the honest verdict; only a human creates approvals/PH-16G.approved
     depends_on: [PH-16F]
+
+  # PH-17 — remediation tranche 4 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Targets the next band of gaps named in docs/spec/ph-16-verdict.md: G03 leave year-close +
+  # encashment, G02 strong e-signature + step-up auth, G09 vigilance/sealed-cover register.
+  - id: PH-17A
+    name: PH-17 · G03 leave year-close and encashment
+    prompt: docs/spec/pipeline/prompts/PH-17A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-17a.sh
+    gate: auto
+    depends_on: [PH-16G]
+
+  - id: PH-17B
+    name: PH-17 · G02 strong e-signature and requester step-up
+    prompt: docs/spec/pipeline/prompts/PH-17B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-17b.sh
+    gate: auto
+    depends_on: [PH-17A]
+
+  - id: PH-17C
+    name: PH-17 · G09 vigilance and sealed-cover register
+    prompt: docs/spec/pipeline/prompts/PH-17C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-17c.sh
+    gate: auto
+    depends_on: [PH-17B]
+
+  - id: PH-17D
+    name: PH-17 · Tranche-4 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-17D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-17d.sh
+    gate: human
+    depends_on: [PH-17C]
