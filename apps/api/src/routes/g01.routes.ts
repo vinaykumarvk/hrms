@@ -546,6 +546,36 @@ export function registerG01Routes(kernel: ApiKernel): void {
     handler: (context) =>
       accepted(context.services.employeeIdentityOps.archive(context.actor, { employeeId: requiredParam(context.params, "id") })),
   });
+
+  // PH-30A — G01 Aadhaar vault capture (Verhoeff + tokenise) and phonetic search (route exposure).
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/aadhaar-vault",
+    operationId: "g01.captureAadhaar",
+    protected: true,
+    permission: "g01.aadhaar.capture",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        vaultEntry: context.services.aadhaarVault.captureAadhaar(context.actor, {
+          employeeId: requiredParam(context.params, "id"),
+          rawAadhaar: requiredString(body, "rawAadhaar"),
+          verifiedAt: optionalString(body, "verifiedAt"),
+          expiresAt: optionalString(body, "expiresAt"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees:phonetic-search",
+    operationId: "g01.phoneticSearch",
+    protected: true,
+    permission: "g01.phonetic.search",
+    handler: (context) => ok(context.services.phoneticSearch.searchPhonetic(context.actor, { query: String(context.request.query?.q ?? "") })),
+  });
 }
 
 function requiredParam(params: Record<string, string>, key: string): string {
