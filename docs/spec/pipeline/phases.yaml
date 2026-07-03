@@ -1017,3 +1017,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-29d.sh
     gate: human
     depends_on: [PH-29C]
+
+  # PH-30 — remediation tranche 17 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Route-exposure pass 3: G01 (aadhaar/phonetic), G03 (year-close/exceptions/blackout), G08 (esign/feedback).
+  - id: PH-30A
+    name: PH-30 · G01 aadhaar-vault and phonetic-search routes
+    prompt: docs/spec/pipeline/prompts/PH-30A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-30a.sh
+    gate: auto
+    depends_on: [PH-29D]
+  - id: PH-30B
+    name: PH-30 · G03 year-close, exception and blackout routes
+    prompt: docs/spec/pipeline/prompts/PH-30B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-30b.sh
+    gate: auto
+    depends_on: [PH-30A]
+  - id: PH-30C
+    name: PH-30 · G08 e-signature and feedback routes
+    prompt: docs/spec/pipeline/prompts/PH-30C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-30c.sh
+    gate: auto
+    depends_on: [PH-30B]
+  - id: PH-30D
+    name: PH-30 · Tranche-17 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-30D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-30d.sh
+    gate: human
+    depends_on: [PH-30C]
