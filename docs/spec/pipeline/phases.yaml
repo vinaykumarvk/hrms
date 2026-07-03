@@ -745,3 +745,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-19d.sh
     gate: human
     depends_on: [PH-19C]
+
+  # PH-20 — remediation tranche 7 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Targets: G07 vendor empanelment, G13 watermark/certified copies, G02 request templates.
+  - id: PH-20A
+    name: PH-20 · G07 vendor / external-trainer empanelment
+    prompt: docs/spec/pipeline/prompts/PH-20A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-20a.sh
+    gate: auto
+    depends_on: [PH-19D]
+  - id: PH-20B
+    name: PH-20 · G13 watermarking and certified true copies
+    prompt: docs/spec/pipeline/prompts/PH-20B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-20b.sh
+    gate: auto
+    depends_on: [PH-20A]
+  - id: PH-20C
+    name: PH-20 · G02 change-request templates
+    prompt: docs/spec/pipeline/prompts/PH-20C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-20c.sh
+    gate: auto
+    depends_on: [PH-20B]
+  - id: PH-20D
+    name: PH-20 · Tranche-7 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-20D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-20d.sh
+    gate: human
+    depends_on: [PH-20C]
