@@ -28,6 +28,7 @@ import { Feedback360Service, InMemoryFeedback360Repository } from "../modules/g0
 import { JurisdictionRetireeService, InMemoryJurisdictionRetireeRepository } from "../modules/g09/jurisdictionRetireeService";
 import { DigitalSignatureService, InMemoryDigitalSignatureRepository } from "../modules/g08/digitalSignatureService";
 import { OcrSearchService, InMemoryOcrSearchRepository } from "../modules/g13/ocrSearchService";
+import { NlQueryService, InMemoryNlQueryRepository } from "../modules/g14/nlQueryService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -113,6 +114,7 @@ export interface FoundationServices {
   jurisdictionRetiree: JurisdictionRetireeService;
   digitalSignature: DigitalSignatureService;
   ocrSearch: OcrSearchService;
+  nlQuery: NlQueryService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -297,6 +299,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const jurisdictionRetiree = new JurisdictionRetireeService(authorization, audit, new InMemoryJurisdictionRetireeRepository());
   const digitalSignature = new DigitalSignatureService(authorization, audit, new InMemoryDigitalSignatureRepository());
   const ocrSearch = new OcrSearchService(authorization, audit, new InMemoryOcrSearchRepository());
+  const nlQuery = new NlQueryService(authorization, audit, new InMemoryNlQueryRepository());
   const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
@@ -465,6 +468,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     jurisdictionRetiree,
     digitalSignature,
     ocrSearch,
+    nlQuery,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
