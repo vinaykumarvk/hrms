@@ -2,7 +2,8 @@ import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalNumber, optionalString, optionalStringArray, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
-import { DpcPanelMember, SanctionedPostInput, SenioritySeed } from "../modules/g06/promotionService";
+import { DpcPanelMember, QualifyingServiceComputeInput, SanctionedPostInput, SenioritySeed } from "../modules/g06/promotionService";
+import { SuccessionReadiness } from "../modules/g06/careerSuccessionService";
 import { LegalForum, LegalLinkedEntityType, MacpClockEffect, ReservationCategory, RotationMethod, RotationStartSlot } from "../modules/g06/promotionDepthRepository";
 
 export const g06RouteEvidence = {
@@ -518,6 +519,93 @@ export function registerG06Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g06.establishment.read",
       handler: (context) => ok(context.services.promotion.getVacancyComputation(context.scope, requiredParam(context.params, "id"))),
+    },
+    // PH-59A — G06 succession-planning + qualifying-service route exposure (tested careerSuccession /
+    // promotion backing).
+    {
+      method: "POST",
+      path: "/api/v1/promotions/succession-plans",
+      operationId: "g06.createSuccessionPlan",
+      protected: true,
+      permission: "g06.succession.plan",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({ plan: context.services.careerSuccession.createSuccessionPlan(context.actor, { positionId: requiredString(body, "positionId"), incumbentEmployeeId: optionalString(body, "incumbentEmployeeId") }) });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/promotions/succession-plans/{id}:add-candidate",
+      operationId: "g06.addSuccessionCandidate",
+      protected: true,
+      permission: "g06.succession.candidate",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          plan: context.services.careerSuccession.addSuccessionCandidate(context.actor, requiredParam(context.params, "id"), {
+            employeeId: requiredString(body, "employeeId"),
+            rank: optionalNumber(body, "rank") ?? 1,
+            readiness: requiredString(body, "readiness") as SuccessionReadiness,
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/succession-plans/{id}",
+      operationId: "g06.getSuccessionPlan",
+      protected: true,
+      permission: "g06.succession.read",
+      handler: (context) => ok({ plan: context.services.careerSuccession.getSuccessionPlan(context.scope, requiredParam(context.params, "id")) ?? null }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/career-paths/{id}",
+      operationId: "g06.getCareerPath",
+      protected: true,
+      permission: "g06.succession.read",
+      handler: (context) => ok({ careerPath: context.services.careerSuccession.getCareerPath(context.scope, requiredParam(context.params, "id")) ?? null }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/orders",
+      operationId: "g06.listPromotionOrders",
+      protected: true,
+      permission: "g06.promotion.read",
+      handler: (context) => ok({ items: context.services.promotion.listPromotionOrders(context.scope) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/promotions/qualifying-service:compute",
+      operationId: "g06.computeQualifyingService",
+      protected: true,
+      permission: "g06.qsl.compute",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        const input: QualifyingServiceComputeInput = {
+          employeeId: requiredString(body, "employeeId"),
+          gradeDesignationId: requiredString(body, "gradeDesignationId"),
+          asOfDate: requiredString(body, "asOfDate"),
+          grossServiceDays: optionalNumber(body, "grossServiceDays") ?? 0,
+          periods: Array.isArray(body.periods) ? (body.periods as QualifyingServiceComputeInput["periods"]) : [],
+          serviceExclusionRuleId: requiredString(body, "serviceExclusionRuleId"),
+        };
+        return created(context.services.promotion.computeQualifyingService(context.actor, input));
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/promotions/qualifying-service/{snapshotId}",
+      operationId: "g06.getQualifyingServiceSnapshot",
+      protected: true,
+      permission: "g06.establishment.read",
+      handler: (context) => ok({ snapshot: context.services.promotion.getQualifyingServiceSnapshot(context.scope, requiredParam(context.params, "snapshotId")) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));
