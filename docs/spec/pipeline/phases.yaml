@@ -1340,3 +1340,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-45b.sh
     depends_on: [PH-45A]
+
+  # PH-46 — remediation tranche 33 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose FR-G10-08 loan lifecycle (instalment recovery + foreclosure)
+  # + Rule-3 concessional perquisite valuation + reads. Ratchet 451/34.1% -> 456/34.5% (G10 28.7% -> 34.5%).
+  - id: PH-46A
+    name: PH-46 · G10 loan/perquisite route exposure (coverage ratchet 451->456 / 34.5%)
+    prompt: docs/spec/pipeline/prompts/PH-46A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-46a.sh
+    gate: auto
+    depends_on: [PH-45B]
+  - id: PH-46B
+    name: PH-46 · Tranche-33 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-46B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-46b.sh
+    depends_on: [PH-46A]
