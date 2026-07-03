@@ -799,3 +799,30 @@ phases:
     exit_criteria: bash docs/spec/pipeline/checks/ph-21d.sh
     gate: human
     depends_on: [PH-21C]
+
+  # PH-22 — remediation tranche 9 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Targets: G08 DSC/non-repudiation signing, G13 OCR + permission-aware search, G14 NL query.
+  - id: PH-22A
+    name: PH-22 · G08 DSC / non-repudiation signing
+    prompt: docs/spec/pipeline/prompts/PH-22A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-22a.sh
+    gate: auto
+    depends_on: [PH-21D]
+  - id: PH-22B
+    name: PH-22 · G13 OCR and permission-aware search
+    prompt: docs/spec/pipeline/prompts/PH-22B.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-22b.sh
+    gate: auto
+    depends_on: [PH-22A]
+  - id: PH-22C
+    name: PH-22 · G14 natural-language query
+    prompt: docs/spec/pipeline/prompts/PH-22C.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-22c.sh
+    gate: auto
+    depends_on: [PH-22B]
+  - id: PH-22D
+    name: PH-22 · Tranche-9 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-22D.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-22d.sh
+    gate: human
+    depends_on: [PH-22C]
