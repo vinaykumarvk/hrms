@@ -2,7 +2,8 @@ import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
-import { SponsorshipType } from "../modules/g07/trainingDepthRepository";
+import { CredentialVerificationMethod, SponsorshipType } from "../modules/g07/trainingDepthRepository";
+import { FoundationError } from "../platform/types";
 
 export const g07RouteEvidence = {
   sessions: "/api/v1/training/sessions",
@@ -479,6 +480,148 @@ export function registerG07Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g07.sponsorship.read",
       handler: (context) => ok({ items: context.services.training.listSponsorshipCosts(context.scope, requiredParam(context.params, "id")) }),
+    },
+    // PH-42A — FR-G07-018 external-credential lifecycle (capture -> evidence-review -> verify/reject;
+    // SoD; VAL-G07-CREDREF; VERIFIED significant credential posts to G12) + reads.
+    {
+      method: "POST",
+      path: "/api/v1/training/external-credentials",
+      operationId: "g07.captureExternalCredential",
+      protected: true,
+      permission: "g07.credential.submit",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created(
+          context.services.training.captureExternalCredential(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            title: requiredString(body, "title"),
+            issuingBody: requiredString(body, "issuingBody"),
+            externalReferenceNo: requiredString(body, "externalReferenceNo"),
+            issueDate: requiredString(body, "issueDate"),
+            validUntil: optionalString(body, "validUntil"),
+            evidenceDocumentId: optionalString(body, "evidenceDocumentId"),
+            significantForSr: optionalBoolean(body, "significantForSr"),
+          })
+        );
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/external-credentials/{id}:review-evidence",
+      operationId: "g07.reviewCredentialEvidence",
+      protected: true,
+      permission: "g07.credential.verify",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          verification: context.services.training.reviewCredentialEvidence(context.actor, requiredParam(context.params, "id"), {
+            reviewedOn: requiredString(body, "reviewedOn"),
+            comments: optionalString(body, "comments"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/external-credentials/{id}:verify",
+      operationId: "g07.verifyExternalCredential",
+      protected: true,
+      permission: "g07.credential.verify",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted(
+          context.services.training.verifyExternalCredential(context.actor, requiredParam(context.params, "id"), {
+            verifiedOn: requiredString(body, "verifiedOn"),
+            verificationMethod: optionalString(body, "verificationMethod") as CredentialVerificationMethod | undefined,
+            comments: optionalString(body, "comments"),
+            idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+          })
+        );
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/external-credentials/{id}:reject",
+      operationId: "g07.rejectExternalCredential",
+      protected: true,
+      permission: "g07.credential.verify",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted(
+          context.services.training.rejectExternalCredential(context.actor, requiredParam(context.params, "id"), {
+            rejectedOn: requiredString(body, "rejectedOn"),
+            comments: requiredString(body, "comments"),
+          })
+        );
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/training/external-credentials/{id}",
+      operationId: "g07.getExternalCredential",
+      protected: true,
+      permission: "g07.credential.read",
+      handler: (context) => ok({ credential: context.services.training.getExternalCredential(context.scope, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/training/external-credentials/{id}/verifications",
+      operationId: "g07.listCredentialVerifications",
+      protected: true,
+      permission: "g07.credential.read",
+      handler: (context) => ok({ items: context.services.training.listCredentialVerifications(context.scope, requiredParam(context.params, "id")) }),
+    },
+    // PH-42A — vendor-empanelment review/decide (4-eyes) + read (applyForEmpanelment already routed).
+    {
+      method: "POST",
+      path: "/api/v1/training/vendor-empanelments/{id}:review",
+      operationId: "g07.reviewEmpanelment",
+      protected: true,
+      permission: "g07.empanelment.review",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ empanelment: context.services.vendorEmpanelment.reviewEmpanelment(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/training/vendor-empanelments/{id}:decide",
+      operationId: "g07.decideEmpanelment",
+      protected: true,
+      permission: "g07.empanelment.decide",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          empanelment: context.services.vendorEmpanelment.decideEmpanelment(context.actor, requiredParam(context.params, "id"), {
+            decision: requiredString(body, "decision") as "EMPANELLED" | "REJECTED",
+            contractRef: optionalString(body, "contractRef"),
+            reason: optionalString(body, "reason"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/training/vendor-empanelments/{id}",
+      operationId: "g07.getEmpanelment",
+      protected: true,
+      permission: "g07.empanelment.read",
+      handler: (context) => {
+        const row = context.services.vendorEmpanelment.getEmpanelment(context.scope, requiredParam(context.params, "id"));
+        if (!row) {
+          throw new FoundationError("NOT_FOUND", "Vendor empanelment not found");
+        }
+        return ok({ empanelment: row });
+      },
     },
   ];
   routes.forEach((route) => kernel.register(route));
