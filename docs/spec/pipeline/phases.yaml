@@ -1564,3 +1564,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-59b.sh
     depends_on: [PH-59A]
+
+  # PH-60 — remediation tranche 47 (hand-built; subagent credits exhausted until 2026-07-08). Second-pass
+  # deepening: expose G03 attendance-policy config + leave-ledger/attendance/comp-off-balance reads (real,
+  # service-tested backing). Ratchet 543/41% -> 547/41.3% (G03 47.8% -> 52.2%).
+  - id: PH-60A
+    name: PH-60 · G03 attendance-policy route exposure (coverage ratchet 543->547 / 41.3%)
+    prompt: docs/spec/pipeline/prompts/PH-60A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-60a.sh
+    gate: auto
+    depends_on: [PH-59B]
+  - id: PH-60B
+    name: PH-60 · Tranche-47 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-60B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-60b.sh
+    depends_on: [PH-60A]
