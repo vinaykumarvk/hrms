@@ -403,6 +403,43 @@ export function registerG13Routes(kernel: ApiKernel): void {
       });
     },
   });
+
+  // PH-32C — G13 certified true copies + OCR permission-aware search (route exposure).
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/documents/{id}/certified-copies",
+    operationId: "g13.issueCertifiedCopy",
+    protected: true,
+    permission: "g13.certifiedcopy.issue",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        certifiedCopy: context.services.certifiedCopy.issueCertifiedCopy(context.actor, {
+          sourceDocumentId: requiredParam(context.params, "id"),
+          sourceStatus: requiredString(body, "sourceStatus"),
+          issuingAuthority: requiredString(body, "issuingAuthority"),
+          purpose: requiredString(body, "purpose"),
+          issuedAt: requiredString(body, "issuedAt"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/documents:ocr-search",
+    operationId: "g13.ocrSearch",
+    protected: true,
+    permission: "g13.ocr.search",
+    handler: (context) =>
+      ok(
+        context.services.ocrSearch.search(context.actor, {
+          query: String(context.request.query?.q ?? ""),
+          clearance: (String(context.request.query?.clearance ?? "PUBLIC") as "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "SECRET" | "TOP_SECRET"),
+        })
+      ),
+  });
 }
 
 function readDsrType(body: Record<string, unknown>): "ACCESS" | "ERASURE" | "RECTIFICATION" | "PORTABILITY" {
