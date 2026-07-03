@@ -1209,6 +1209,25 @@ export class DisciplinaryService {
     };
   }
 
+  /**
+   * PH-28B — list a case's evidence-vault artefacts (charge memo, inquiry report, penalty orders)
+   * with WORM / legal-hold / served flags, for the G09 evidence-vault listing UI (PH-27C).
+   */
+  listCaseEvidence(scope: TenantScope, caseId: string): Array<{ documentId: string; artefactType: string; isWorm: boolean; legalHold: boolean; isServed: boolean }> {
+    const disciplinaryCase = this.requireCase(scope, caseId);
+    const items: Array<{ documentId: string; artefactType: string; isWorm: boolean; legalHold: boolean; isServed: boolean }> = [];
+    if (disciplinaryCase.chargeMemoDocumentId) {
+      items.push({ documentId: disciplinaryCase.chargeMemoDocumentId, artefactType: "CHARGE_MEMO", isWorm: true, legalHold: false, isServed: true });
+    }
+    if (disciplinaryCase.inquiryReportDocumentId) {
+      items.push({ documentId: disciplinaryCase.inquiryReportDocumentId, artefactType: "INQUIRY_REPORT", isWorm: true, legalHold: false, isServed: false });
+    }
+    for (const order of this.penaltyOrders.filter((o) => this.inScope(o, scope) && o.disciplinaryCaseId === caseId && o.documentId)) {
+      items.push({ documentId: order.documentId, artefactType: "PENALTY_ORDER", isWorm: true, legalHold: false, isServed: order.status === "SERVED" });
+    }
+    return items;
+  }
+
   private assertAuthorityCompetence(chargedEmployeeId: string, authorityEmployeeId: string): void {
     if (chargedEmployeeId === authorityEmployeeId) {
       throw new FoundationError("CONFLICT", "G09_AUTHORITY_COMPETENCE blocks self disciplinary authority", { details: { marker: "G09_AUTHORITY_COMPETENCE" } });

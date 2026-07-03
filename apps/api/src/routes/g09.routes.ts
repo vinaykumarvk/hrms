@@ -138,6 +138,15 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.case.read",
       handler: (context) => ok(context.services.disciplinary.summary(context.scope)),
     },
+    // PH-28B — case evidence-vault listing (consumed by the G09 evidence-vault UI, PH-27C).
+    {
+      method: "GET",
+      path: "/api/v1/disciplinary/cases/{id}/evidence",
+      operationId: "g09.listCaseEvidence",
+      protected: true,
+      permission: "g09.case.read",
+      handler: (context) => ok({ items: context.services.disciplinary.listCaseEvidence(context.scope, requiredParam(context.params, "id")), limit: 25, next_cursor: null }),
+    },
     // ---------------------------------------------------------------------------------
     // PH-08E natural-justice chain (FR-G09-002/003/018/019/027/028)
     // ---------------------------------------------------------------------------------
