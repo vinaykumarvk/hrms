@@ -897,6 +897,75 @@ export function registerG01Routes(kernel: ApiKernel): void {
       return ok({ removed: true });
     },
   });
+
+  // PH-64A — FR-EPM-006 education register (NET-NEW backing): list / add / update / soft-delete with the
+  // single-highest invariant (promoting a record auto-demotes the prior highest) and row_version locking.
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees/{id}/education",
+    operationId: "g01.listEducation",
+    protected: true,
+    permission: "g01.employee.read",
+    handler: (context) => ok({ items: context.services.education.listEducation(context.scope, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/education",
+    operationId: "g01.addEducation",
+    protected: true,
+    permission: "g01.education.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        education: context.services.education.addEducation(context.actor, requiredParam(context.params, "id"), {
+          level: requiredString(body, "level"),
+          institution: optionalString(body, "institution"),
+          isHighest: optionalBoolean(body, "isHighest"),
+          isVerified: optionalBoolean(body, "isVerified"),
+          yearOfPassing: optionalNumber(body, "yearOfPassing"),
+          gradeType: optionalString(body, "gradeType") as "CGPA" | "GPA" | "PERCENTAGE" | "GRADE" | undefined,
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "PATCH",
+    path: "/api/v1/employees/{id}/education/{educationId}",
+    operationId: "g01.updateEducation",
+    protected: true,
+    permission: "g01.education.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return ok({
+        education: context.services.education.updateEducation(context.actor, requiredParam(context.params, "educationId"), {
+          rowVersion: readNomineeNumber(body, "rowVersion"),
+          level: optionalString(body, "level"),
+          institution: optionalString(body, "institution"),
+          isHighest: optionalBoolean(body, "isHighest"),
+          isVerified: optionalBoolean(body, "isVerified"),
+          yearOfPassing: optionalNumber(body, "yearOfPassing"),
+          gradeType: optionalString(body, "gradeType") as "CGPA" | "GPA" | "PERCENTAGE" | "GRADE" | undefined,
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/education/{educationId}:remove",
+    operationId: "g01.removeEducation",
+    protected: true,
+    permission: "g01.education.write",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      context.services.education.removeEducation(context.actor, requiredParam(context.params, "educationId"));
+      return ok({ removed: true });
+    },
+  });
 }
 
 /** A required numeric body field accepting a JSON number or a numeric string. */

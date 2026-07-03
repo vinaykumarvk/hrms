@@ -1628,3 +1628,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-63b.sh
     depends_on: [PH-63A]
+
+  # PH-64 — remediation tranche 51 (hand-built; subagent credits exhausted until 2026-07-08). NET-NEW:
+  # implement the FR-EPM-006 education register end-to-end — new EducationService + single-highest invariant
+  # (auto-demotion) + year-of-passing validation + row_version lock + soft-delete. Ratchet 560/42.3% -> 564/42.6%.
+  - id: PH-64A
+    name: PH-64 · G01 education register (net-new; coverage ratchet 560->564 / 42.6%)
+    prompt: docs/spec/pipeline/prompts/PH-64A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-64a.sh
+    gate: auto
+    depends_on: [PH-63B]
+  - id: PH-64B
+    name: PH-64 · Tranche-51 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-64B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-64b.sh
+    depends_on: [PH-64A]

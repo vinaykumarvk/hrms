@@ -13,7 +13,7 @@ attributed to a module by `operationId` prefix.
 
 | Module | Contract ops | Implemented routes | Coverage |
 |---|---:|---:|---:|
-| G01 | 165 | 58 | 35.2% |
+| G01 | 165 | 62 | 37.6% |
 | G02 | 65 | 31 | 47.7% |
 | G03 | 92 | 48 | 52.2% |
 | G04 | 45 | 21 | 46.7% |
@@ -28,11 +28,11 @@ attributed to a module by `operationId` prefix.
 | G13 | 114 | 38 | 33.3% |
 | G14 | 90 | 26 | 28.9% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **560** | **42.3%** |
+| **Total** | **1323** | **564** | **42.6%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 42.3%** and **implemented routes ≥ 560**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 42.6%** and **implemented routes ≥ 564**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
 
@@ -69,7 +69,9 @@ management — 5 real, service-tested operations wired to the kernel) → **556 
 nominee register — NET-NEW `NomineeService` (list/add/update/soft-delete; VAL-NOMINEE share invariant;
 row_version optimistic lock), 4 contracted operations implemented end-to-end) → **560 / 42.3%** (PH-63A:
 G01 FR-EPM-005 emergency-contact register — NET-NEW `EmergencyContactService` (unique call-order priority
-invariant; row_version optimistic lock; soft-delete), 4 contracted operations implemented end-to-end).
+invariant; row_version optimistic lock; soft-delete), 4 contracted operations implemented end-to-end) →
+**564 / 42.6%** (PH-64A: G01 FR-EPM-006 education register — NET-NEW `EducationService` (single-highest
+invariant with auto-demotion; year-of-passing validation; row_version lock; soft-delete), 4 operations).
 
 ## Honest limitation (what this metric is NOT)
 
