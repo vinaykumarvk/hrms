@@ -3,7 +3,7 @@ import { optionalNumber, optionalString, optionalStringArray, readBodyRecord, re
 import { pageItems } from "../http/pagination";
 import { RouteDefinition } from "../http/apiTypes";
 import { FoundationError } from "../platform/types";
-import { G14RefreshRunType } from "../modules/g14/analyticsEngineRepository";
+import { G14RefreshRunType, G14ScopeType } from "../modules/g14/analyticsEngineRepository";
 
 export const g14RouteEvidence = {
   dashboard: "/api/v1/analytics/dashboards/executive-readiness",
@@ -308,6 +308,85 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.analytics.read",
       handler: (context) => ok({ items: context.services.analytics.listBiKpis(context.scope), limit: 25, next_cursor: null }),
     },
+    // PH-43A — G14 analytics-engine reads + KPI target-setting + predictive-score reads (route exposure
+    // for already-tested backing: kpiSeries, listDatamarts, setKpiTarget, drillCohort, listScopePolicies,
+    // predictiveAnalytics.listScores).
+    {
+      method: "GET",
+      path: "/api/v1/analytics/kpis/{code}/series",
+      operationId: "g14.kpiSeries",
+      protected: true,
+      permission: "g14.analytics.read",
+      handler: (context) =>
+        ok(
+          context.services.analyticsEngine.kpiSeries(context.scope, {
+            kpiCode: requiredParam(context.params, "code"),
+            periodKeys: (context.request.query?.periodKeys ?? "").split(",").map((k) => k.trim()).filter((k) => k.length > 0),
+            acknowledgeCrossVersion: context.request.query?.acknowledgeCrossVersion === "true",
+          })
+        ),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/analytics/datamarts",
+      operationId: "g14.listDatamarts",
+      protected: true,
+      permission: "g14.analytics.read",
+      handler: (context) => ok({ items: context.services.analyticsEngine.listDatamarts(context.scope) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/analytics/datamarts/{martCode}/cohort",
+      operationId: "g14.drillCohort",
+      protected: true,
+      permission: "g14.analytics.drill_through",
+      handler: (context) => {
+        const dimension = context.request.query?.dimension;
+        const key = context.request.query?.key;
+        if (!dimension || !key) {
+          throw new FoundationError("VALIDATION_FAILED", "dimension and key query parameters are required", { field: "dimension" });
+        }
+        return ok(context.services.analyticsEngine.drillCohort(context.actor, { martCode: requiredParam(context.params, "martCode"), dimension, key }));
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/analytics/kpis/{code}/targets",
+      operationId: "g14.setKpiTarget",
+      protected: true,
+      permission: "g14.kpi.manage",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          target: context.services.analyticsEngine.setKpiTarget(context.actor, {
+            kpiCode: requiredParam(context.params, "code"),
+            scopeType: optionalString(body, "scopeType") as G14ScopeType | undefined,
+            scopeId: optionalString(body, "scopeId"),
+            targetValue: requiredNumber(body, "targetValue"),
+            effectiveFrom: requiredString(body, "effectiveFrom"),
+            effectiveTo: optionalString(body, "effectiveTo"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/analytics/scope-policies",
+      operationId: "g14.listScopePolicies",
+      protected: true,
+      permission: "g14.scope.manage",
+      handler: (context) => ok({ items: context.services.analyticsEngine.listScopePolicies(context.scope) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/analytics/attrition-scores",
+      operationId: "g14.listAttritionScores",
+      protected: true,
+      permission: "g14.predict.attrition",
+      handler: (context) => ok({ items: context.services.predictiveAnalytics.listScores(context.scope) }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
@@ -318,4 +397,14 @@ function requiredParam(params: Record<string, string>, key: string): string {
     throw new Error(`Missing route parameter ${key}`);
   }
   return value;
+}
+
+/** A required numeric body field accepting a JSON number or a numeric string. */
+function requiredNumber(body: Record<string, unknown>, key: string): number {
+  const value = body[key];
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) {
+    throw new Error(`${key} must be a number`);
+  }
+  return n;
 }
