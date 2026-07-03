@@ -1244,3 +1244,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-39b.sh
     depends_on: [PH-39A]
+
+  # PH-40 — remediation tranche 27 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G08 continuous-feedback (check-in + reads), 360-feedback
+  # (rate/release/read), signature reads — real, service-tested backing. Ratchet 404/30.5% -> 411/31.1%.
+  - id: PH-40A
+    name: PH-40 · G08 feedback/signature route exposure (coverage ratchet 404->411 / 31.1%)
+    prompt: docs/spec/pipeline/prompts/PH-40A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-40a.sh
+    gate: auto
+    depends_on: [PH-39B]
+  - id: PH-40B
+    name: PH-40 · Tranche-27 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-40B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-40b.sh
+    depends_on: [PH-40A]

@@ -3,6 +3,8 @@ import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requir
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
 import { CalibrationMethod, PipMilestoneStatus, PipOutcome, ProbationOutcome } from "../modules/g08/aparDepthRepository";
+import { RaterType } from "../modules/g08/feedback360Service";
+import { FoundationError } from "../platform/types";
 
 export const g08RouteEvidence = {
   forms: "/api/v1/apar/forms",
@@ -611,8 +613,108 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.read",
       handler: (context) => ok({ items: context.services.apar.listGoalSnapshots(context.scope, requiredParam(context.params, "id")) }),
     },
+    // PH-40A — continuous-feedback check-ins/reads, 360-feedback rate/release/read, signature reads.
+    // All backed by already-tested G08 services (continuousFeedback, feedback360, digitalSignature).
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/continuous-feedback/check-ins",
+      operationId: "g08.recordCheckIn",
+      protected: true,
+      permission: "g08.checkin.record",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          checkIn: context.services.continuousFeedback.recordCheckIn(context.actor, {
+            cycleId: requiredString(body, "cycleId"),
+            appraiseeId: requiredString(body, "appraiseeId"),
+            note: requiredString(body, "note"),
+            checkInDate: requiredString(body, "checkInDate"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/appraisals/continuous-feedback",
+      operationId: "g08.listContinuousFeedback",
+      protected: true,
+      permission: "g08.apar.read",
+      handler: (context) =>
+        ok({ items: context.services.continuousFeedback.listFeedback(context.scope, requiredQuery(context, "cycleId"), requiredQuery(context, "appraiseeId")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/appraisals/continuous-feedback/check-ins",
+      operationId: "g08.listCheckIns",
+      protected: true,
+      permission: "g08.apar.read",
+      handler: (context) =>
+        ok({ items: context.services.continuousFeedback.listCheckIns(context.scope, requiredQuery(context, "cycleId"), requiredQuery(context, "appraiseeId")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/360-feedback/{id}:rate",
+      operationId: "g08.submitRating",
+      protected: true,
+      permission: "g08.360.submit",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          feedback360: context.services.feedback360.submitRating(context.actor, requiredParam(context.params, "id"), {
+            raterId: requiredString(body, "raterId"),
+            raterType: requiredString(body, "raterType") as RaterType,
+            score: requiredNumber(body, "score"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/appraisals/360-feedback/{id}:release",
+      operationId: "g08.release360",
+      protected: true,
+      permission: "g08.360.release",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ release: context.services.feedback360.release360(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/appraisals/360-feedback/{id}",
+      operationId: "g08.get360",
+      protected: true,
+      permission: "g08.apar.read",
+      handler: (context) => {
+        const row = context.services.feedback360.get360(context.scope, requiredParam(context.params, "id"));
+        if (!row) {
+          throw new FoundationError("NOT_FOUND", "360 feedback not found");
+        }
+        return ok({ feedback360: row });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/apar/forms/{id}/signatures",
+      operationId: "g08.listSignatures",
+      protected: true,
+      permission: "g08.apar.read",
+      handler: (context) => ok({ items: context.services.digitalSignature.listSignatures(context.scope, requiredParam(context.params, "id")) }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
+}
+
+/** A required query-string field. */
+function requiredQuery(context: { request: { query?: Record<string, string | undefined> } }, key: string): string {
+  const value = context.request.query?.[key];
+  if (value === undefined || value === "") {
+    throw new FoundationError("VALIDATION_FAILED", `Missing required query parameter ${key}`, { field: key });
+  }
+  return value;
 }
 
 /** A required numeric body field accepting a JSON number or a numeric string. */
