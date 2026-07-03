@@ -426,6 +426,41 @@ export function registerG13Routes(kernel: ApiKernel): void {
       });
     },
   });
+  // PH-35B — G01 self-service data-principal rights (DPDP) — backed by the G13 DSR engine.
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/me/rights-requests",
+    operationId: "g13.listMyRightsRequests",
+    protected: true,
+    permission: "g13.dsr.read",
+    handler: (context) =>
+      ok(
+        pageItems(
+          context.services.documentVault
+            .listDataSubjectRequests(context.scope)
+            .filter((r) => r.dataSubjectEmployeeId === context.actor.actorUserId || r.dataSubjectEmployeeId === context.actor.userId),
+          context.pagination ?? { limit: 25 }
+        )
+      ),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/me/rights-requests",
+    operationId: "g13.raiseMyRightsRequest",
+    protected: true,
+    permission: "g13.dsr.register",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        rightsRequest: context.services.documentVault.registerDataSubjectRequest(context.scope, {
+          dataSubjectEmployeeId: context.actor.actorUserId ?? context.actor.userId,
+          requestType: readDsrType(body),
+        }),
+      });
+    },
+  });
   kernel.register({
     method: "GET",
     path: "/api/v1/documents:ocr-search",
