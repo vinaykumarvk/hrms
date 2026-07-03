@@ -487,6 +487,26 @@ export function registerG11Routes(kernel: ApiKernel): void {
         });
       },
     },
+    {
+      method: "POST",
+      path: "/api/v1/pension/grievances",
+      operationId: "g11.raiseGrievance",
+      protected: true,
+      permission: "g11.grievance.raise",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          grievance: context.services.pensionTreasury.raiseGrievance(context.actor, {
+            pensionerId: requiredString(body, "pensionerId"),
+            category: requiredString(body, "category"),
+            description: requiredString(body, "description"),
+            receivedOn: requiredString(body, "receivedOn"),
+          }),
+        });
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }

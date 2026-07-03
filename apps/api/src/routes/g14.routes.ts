@@ -282,6 +282,24 @@ export function registerG14Routes(kernel: ApiKernel): void {
         );
       },
     },
+    {
+      method: "POST",
+      path: "/api/v1/analytics/fairness-report",
+      operationId: "g14.fairnessReport",
+      protected: true,
+      permission: "g14.predict.fairness",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return ok(
+          context.services.predictiveAnalytics.fairnessReport(context.actor, {
+            attribute: requiredString(body, "attribute"),
+            observations: Array.isArray(body.observations) ? (body.observations as Array<{ group: string; riskScore: number }>) : [],
+          })
+        );
+      },
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }
