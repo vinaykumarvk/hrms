@@ -25,14 +25,14 @@ attributed to a module by `operationId` prefix.
 | G10 | 87 | 25 | 28.7% |
 | G11 | 90 | 27 | 30% |
 | G12 | 65 | 28 | 43.1% |
-| G13 | 114 | 29 | 25.4% |
+| G13 | 114 | 36 | 31.6% |
 | G14 | 90 | 26 | 28.9% |
 | P01 | 16 | 14 | 87.5% |
-| **Total** | **1323** | **436** | **33%** |
+| **Total** | **1323** | **443** | **33.5%** |
 
 ## Ratchet floor
 
-The gate `ph-37a.sh` enforces **total coverage ≥ 33%** and **implemented routes ≥ 436**. Coverage can only
+The gate `ph-37a.sh` enforces **total coverage ≥ 33.5%** and **implemented routes ≥ 443**. Coverage can only
 be raised by adding real, tested routes; deleting routes (dropping below the floor) fails the gate. When a
 future tranche raises coverage, refresh this report and the floor together.
 
@@ -41,7 +41,8 @@ future tranche raises coverage, refresh this report and the floor together.
 continuous-feedback + 360-feedback + signature reads) → 421 / 31.8% (PH-41A: FR-G07-020 training-
 sponsorship + service-bond lifecycle) → 430 / 32.5% (PH-42A: FR-G07-018 external-credential lifecycle +
 vendor-empanelment decisions) → **436 / 33%** (PH-43A: G14 analytics-engine reads + KPI target-setting +
-predictive-score reads — 6 real, service-tested operations wired to the kernel).
+predictive-score reads) → **443 / 33.5%** (PH-44A: G13 checkout-lock lifecycle + rescan + access-audit/
+scan-result/module-ref reads — 7 real, service-tested operations wired to the kernel).
 
 ## Honest limitation (what this metric is NOT)
 
