@@ -1,5 +1,5 @@
 import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
-import { optionalString, readBodyRecord, requiredString } from "../http/body";
+import { optionalNumber, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import type { SrMappingDisposition, SrMappingEventType, StraddleHandling, QualifyingServiceRule } from "../modules/g04/leaveSrCatalogService";
 
@@ -221,6 +221,110 @@ export function registerG04Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) =>
         accepted({ certificate: context.services.leaveSrCatalog.consumeCertificateForG11(context.actor, requiredParam(context.params, "id")) }),
+    },
+    // PH-51A — G04 X.3 outbound-integration connector lifecycle (register -> send -> conformance; read) +
+    // leave->SR relay enqueue/dead-letter reads. Route exposure for tested outboundIntegration / leaveSrRelay.
+    {
+      method: "POST",
+      path: "/api/v1/integration/connectors",
+      operationId: "g04.registerConnector",
+      protected: true,
+      permission: "g04.outbound.register",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          connector: context.services.outboundIntegration.registerConnector(context.actor, {
+            name: requiredString(body, "name"),
+            endpoint: requiredString(body, "endpoint"),
+            payloadVersion: optionalNumber(body, "payloadVersion"),
+            failureThreshold: optionalNumber(body, "failureThreshold"),
+            maxAttempts: optionalNumber(body, "maxAttempts"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/integration/connectors/{id}:send",
+      operationId: "g04.outboundSend",
+      protected: true,
+      permission: "g04.outbound.send",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({ send: context.services.outboundIntegration.send(context.actor, requiredParam(context.params, "id"), { payload: body.payload ?? {} }) });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/integration/connectors/{id}:conformance",
+      operationId: "g04.runConformance",
+      protected: true,
+      permission: "g04.outbound.conformance",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => ok(context.services.outboundIntegration.runConformance(context.actor, requiredParam(context.params, "id"))),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/integration/connectors/{id}",
+      operationId: "g04.getConnector",
+      protected: true,
+      permission: "g04.relay.read",
+      handler: (context) => ok({ connector: context.services.outboundIntegration.getConnector(context.scope, requiredParam(context.params, "id")) ?? null }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/leave-sr/enqueue-approved",
+      operationId: "g04.enqueueApprovedLeave",
+      protected: true,
+      permission: "g04.relay.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          event: context.services.leaveSrRelay.enqueueApprovedLeave(context.scope, {
+            leaveApplicationId: requiredString(body, "leaveApplicationId"),
+            employeeId: requiredString(body, "employeeId"),
+            eventDate: requiredString(body, "eventDate"),
+            payload: (body.payload as Record<string, unknown>) ?? {},
+            leaveTypeCode: optionalString(body, "leaveTypeCode"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/leave-sr/enqueue-cancellation",
+      operationId: "g04.enqueueLeaveCancellation",
+      protected: true,
+      permission: "g04.relay.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          event: context.services.leaveSrRelay.enqueueLeaveCancellation(context.scope, {
+            leaveApplicationId: requiredString(body, "leaveApplicationId"),
+            employeeId: requiredString(body, "employeeId"),
+            eventDate: requiredString(body, "eventDate"),
+            payload: (body.payload as Record<string, unknown>) ?? {},
+            leaveTypeCode: optionalString(body, "leaveTypeCode"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/leave-sr/dead-letters",
+      operationId: "g04.listDeadLetters",
+      protected: true,
+      permission: "g04.relay.read",
+      handler: (context) => ok({ items: context.services.leaveSrRelay.listDeadLetters(context.scope) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

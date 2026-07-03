@@ -1420,3 +1420,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-50b.sh
     depends_on: [PH-50A]
+
+  # PH-51 — remediation tranche 38 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G04 X.3 outbound-integration connector lifecycle + leave->SR
+  # relay enqueue/dead-letter reads (real, service-tested backing). Ratchet 482/36.4% -> 489/37% (G04 31.1% -> 46.7%).
+  - id: PH-51A
+    name: PH-51 · G04 outbound/relay route exposure (coverage ratchet 482->489 / 37%)
+    prompt: docs/spec/pipeline/prompts/PH-51A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-51a.sh
+    gate: auto
+    depends_on: [PH-50B]
+  - id: PH-51B
+    name: PH-51 · Tranche-38 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-51B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-51b.sh
+    depends_on: [PH-51A]
