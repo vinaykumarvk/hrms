@@ -300,6 +300,14 @@ export function registerG14Routes(kernel: ApiKernel): void {
         );
       },
     },
+    {
+      method: "GET",
+      path: "/api/v1/analytics/bi-kpis",
+      operationId: "g14.listBiKpis",
+      protected: true,
+      permission: "g14.analytics.read",
+      handler: (context) => ok({ items: context.services.analytics.listBiKpis(context.scope), limit: 25, next_cursor: null }),
+    },
   ];
   routes.forEach((route) => kernel.register(route));
 }

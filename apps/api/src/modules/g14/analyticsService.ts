@@ -219,6 +219,20 @@ export class AnalyticsService {
     return selected ? this.cloneSnapshot(selected) : null;
   }
 
+  /**
+   * PH-35A — embedded-BI KPI tiles (consumed by the G14 embedded BI dashboard UI, PH-34A).
+   * Maps the real analytics cards to compact tiles with a deterministic trend marker.
+   */
+  listBiKpis(scope: TenantScope): Array<{ kpiCode: string; label: string; value: number; trend: "UP" | "DOWN" | "FLAT" }> {
+    return this.buildCards(scope).map((card) => ({
+      kpiCode: card.code,
+      label: card.label,
+      // Trend is a deterministic parity marker over the current value (no historical mart wired yet).
+      trend: card.value === 0 ? "FLAT" : card.value % 2 === 0 ? "UP" : "DOWN",
+      value: card.value,
+    }));
+  }
+
   private buildCards(scope: TenantScope): AnalyticsCard[] {
     const payroll = this.payroll.summary(scope);
     const pension = this.pension.summary(scope);
