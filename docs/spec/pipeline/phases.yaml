@@ -1292,3 +1292,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-42b.sh
     depends_on: [PH-42A]
+
+  # PH-43 — remediation tranche 30 (hand-built; subagent credits exhausted until 2026-07-08).
+  # Raise measured contract coverage: expose G14 analytics-engine reads + KPI target-setting + predictive-
+  # score reads (real, service-tested backing). Ratchet 430/32.5% -> 436/33% (G14 22.2% -> 28.9%).
+  - id: PH-43A
+    name: PH-43 · G14 analytics-engine route exposure (coverage ratchet 430->436 / 33%)
+    prompt: docs/spec/pipeline/prompts/PH-43A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-43a.sh
+    gate: auto
+    depends_on: [PH-42B]
+  - id: PH-43B
+    name: PH-43 · Tranche-30 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-43B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-43b.sh
+    depends_on: [PH-43A]
