@@ -1612,3 +1612,19 @@ phases:
     gate: human
     exit_criteria: bash docs/spec/pipeline/checks/ph-62b.sh
     depends_on: [PH-62A]
+
+  # PH-63 — remediation tranche 50 (hand-built; subagent credits exhausted until 2026-07-08). NET-NEW:
+  # implement the FR-EPM-005 emergency-contact register end-to-end — new EmergencyContactService + unique
+  # call-order priority invariant + row_version optimistic lock + soft-delete. Ratchet 556/42% -> 560/42.3%.
+  - id: PH-63A
+    name: PH-63 · G01 emergency-contact register (net-new; coverage ratchet 556->560 / 42.3%)
+    prompt: docs/spec/pipeline/prompts/PH-63A.md
+    exit_criteria: bash docs/spec/pipeline/checks/ph-63a.sh
+    gate: auto
+    depends_on: [PH-62B]
+  - id: PH-63B
+    name: PH-63 · Tranche-50 verdict and coverage delta
+    prompt: docs/spec/pipeline/prompts/PH-63B.md
+    gate: human
+    exit_criteria: bash docs/spec/pipeline/checks/ph-63b.sh
+    depends_on: [PH-63A]
