@@ -4,16 +4,12 @@
 -- §2.18 counselling_sessions, §2.19 counselling_choices).
 -- Mutual coupling needs NO new tables: transfer_requests.mutual_counterpart_employee_id and
 -- transfer_orders.mutual_pair_order_id shipped in migration 0003, as did the frozen enums
--- g05_reservation_state, g05_turn_order_method, g05_counselling_session_status, and
--- g05_choice_action. Only g05_strength_source is new here (§1 of the data model).
+-- g05_reservation_state, g05_turn_order_method, g05_counselling_session_status,
+-- g05_choice_action, and g05_strength_source.
 -- vacant_count is DERIVED at read (sanctioned_strength_cached - filled_count_cached -
 -- reserved_count) and never stored — G05 is not authoritative for strength (BRD §5.2.7).
 -- counselling_choices is APPEND-ONLY (CONVENTIONS §3): created_at/created_by only —
 -- no updated_at, no is_deleted.
-
--- SECTION 1 — ENUM TYPES (frozen; g05_ prefix)
--- =====================================================================================
-CREATE TYPE g05_strength_source AS ENUM ('G06','G01','MANUAL_FALLBACK');
 
 -- SECTION 2 — 2.9 vacancy_positions (strength read-through cache)  [BRD §5.2.7]
 -- =====================================================================================
