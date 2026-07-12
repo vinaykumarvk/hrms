@@ -2,8 +2,9 @@ import { createHrmsClient } from "./api/hrmsClient";
 import { AppShell } from "./app/AppShell";
 import { LoginPanel } from "./app/LoginPanel";
 import { RouteGuard } from "./app/RouteGuard";
-import { endSession, HrmsSession, readStoredSession, startSession } from "./app/session";
-import { useCallback, useState } from "react";
+import { endSession, HrmsSession, readSessionMessage, readStoredSession, startEmployeeSession } from "./app/session";
+import { ReactNode, useCallback, useEffect, useState } from "react";
+import { primaryNavigation, workspaceForPath, WorkspaceId } from "./app/navigation";
 import { WorkflowWorkspace } from "./workflow/WorkflowWorkspace";
 import { WorkflowConfigConsole } from "./workflow/WorkflowConfigConsole";
 import { EmployeeProfile } from "./modules/g01/EmployeeProfile";
@@ -47,19 +48,23 @@ import { DataSubjectRequestConsole } from "./modules/g13/DataSubjectRequestConso
 const client = createHrmsClient({
   baseUrl: (import.meta.env.VITE_HRMS_API_BASE_URL as string | undefined) ?? "",
   tokenProvider: () => window.sessionStorage.getItem("hrms.session.token"),
+  onUnauthorized: () => window.dispatchEvent(new Event("hrms:unauthorized")),
 });
 
 export function App() {
   const [session, setSession] = useState<HrmsSession | null>(() => readStoredSession(window.sessionStorage));
+  const [loginMessage, setLoginMessage] = useState<string | null>(() => readSessionMessage(window.sessionStorage));
+  const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
   // PH-07E: the G02 editor and approver queue share a refresh token so a newly
   // created change request appears in the queue without a full reload.
   const [g02QueueRefresh, setG02QueueRefresh] = useState(0);
   const bumpG02Queue = useCallback(() => setG02QueueRefresh((token) => token + 1), []);
 
-  const handleSignIn = useCallback((token: string): boolean => {
-    const nextSession = startSession(window.sessionStorage, token);
+  const handleSignIn = useCallback((employeeId: string, password: string): boolean => {
+    const nextSession = startEmployeeSession(window.sessionStorage, employeeId, password);
     if (nextSession) {
       setSession(nextSession);
+      setLoginMessage(null);
     }
     return nextSession !== null;
   }, []);
@@ -69,99 +74,110 @@ export function App() {
     setSession(null);
   }, []);
 
+  useEffect(() => {
+    const handlePopState = () => setCurrentPath(window.location.pathname);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    const expire = () => {
+      endSession(window.sessionStorage);
+      window.sessionStorage.setItem("hrms.session.message", "Your session ended. Sign in again to continue safely.");
+      setSession(null);
+      setLoginMessage("Your session ended. Sign in again to continue safely.");
+    };
+    const handleUnauthorized = () => expire();
+    window.addEventListener("hrms:unauthorized", handleUnauthorized);
+    const delay = session.expiresAt === undefined ? undefined : Math.max(0, session.expiresAt - Date.now());
+    const timer = delay === undefined ? undefined : window.setTimeout(expire, delay);
+    return () => {
+      window.removeEventListener("hrms:unauthorized", handleUnauthorized);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [session]);
+
+  const permissions = session?.permissions ?? [];
+
+  const navigate = (path: string) => {
+    window.history.pushState({}, "", path);
+    setCurrentPath(path);
+  };
+
+  const changeWorkspace = (workspace: WorkspaceId) => {
+    const destination = primaryNavigation.find((item) => item.workspace === workspace && permissions.includes(item.requiredPermission));
+    if (destination) navigate(destination.href);
+  };
+
+  const effectivePath = currentPath === "/" && session ? defaultPath(permissions) : currentPath;
+
+  useEffect(() => {
+    if (session && currentPath === "/" && effectivePath !== "/") window.history.replaceState({}, "", effectivePath);
+  }, [currentPath, effectivePath, session]);
+
+  useEffect(() => {
+    if (session && currentPath !== "/") document.getElementById("route-heading")?.focus();
+  }, [currentPath, session]);
+
   if (!session) {
-    return (
-      <main className="hrms-app hrms-login" aria-label="HRMS sign in">
-        <header className="hrms-topbar">
-          <div>
-            <p className="eyebrow">Government HRMS</p>
-            <h1>Operations Workspace</h1>
-          </div>
-        </header>
-        <LoginPanel onSignIn={handleSignIn} />
-      </main>
-    );
+    return <LoginPanel message={loginMessage} onSignIn={handleSignIn} />;
   }
 
-  const permissions = session.permissions;
-
   return (
-    <AppShell permissions={permissions} sessionUser={session.displayName} onSignOut={handleSignOut}>
-      <RouteGuard permissions={permissions} requiredPermission="p01.workflow.read" routeLabel="Workflow inbox">
-        <div className="workflow-grid">
-          <WorkflowWorkspace client={client} />
-          <WorkflowConfigConsole />
-        </div>
-      </RouteGuard>
-      <section className="workspace-grid" aria-label="Phase 06 vertical slices">
-        <RouteGuard permissions={permissions} requiredPermission="g02.change.read" routeLabel="Personal Details workspace (G02)">
-          <PersonalDetailsWorkspace client={client} />
-          <ChangeRequestEditor client={client} onCreated={bumpG02Queue} />
-          <ChangeRequestApproverQueue client={client} refreshToken={g02QueueRefresh} onDecided={bumpG02Queue} />
-        </RouteGuard>
-        <RouteGuard permissions={permissions} requiredPermission="g03.leave.read" routeLabel="Attendance & Leave workspace (G03)">
-          <LeaveWorkspace client={client} />
-          <SelfServiceSummary client={client} />
-        </RouteGuard>
-        <RouteGuard permissions={permissions} requiredPermission="g04.relay.read" routeLabel="Leave-SR Relay workspace (G04)">
-          <LeaveSrRelayWorkspace client={client} />
-        </RouteGuard>
-        <RouteGuard permissions={permissions} requiredPermission="g05.transfer.read" routeLabel="Transfers workspace (G05)">
-          <TransferWorkspace client={client} />
-          <CounsellingConsole client={client} />
-        </RouteGuard>
-      </section>
-      <section className="workspace-grid" aria-label="Phase 08 statutory administration wave">
-        <RouteGuard permissions={permissions} requiredPermission="g06.promotion.read" routeLabel="Promotions workspace (G06)">
-          <PromotionWorkspace client={client} />
-          <DpcConvenePanel client={client} />
-          <SealedCoverReview client={client} />
-        </RouteGuard>
-        <RouteGuard permissions={permissions} requiredPermission="g07.training.read" routeLabel="Training workspace (G07)">
-          <TrainingWorkspace client={client} />
-          <TrainingNominationForm client={client} />
-        </RouteGuard>
-        <RouteGuard permissions={permissions} requiredPermission="g08.apar.read" routeLabel="APAR workspace (G08)">
-          <AparWorkspace client={client} />
-          <AparTierForms client={client} permissions={permissions} />
-        </RouteGuard>
-        <RouteGuard permissions={permissions} requiredPermission="g09.case.read" routeLabel="Disciplinary workspace (G09)">
-          <DisciplinaryWorkspace client={client} />
-          <DisciplinaryCaseWorkbench client={client} />
-          <EvidenceVaultList client={client} />
-        </RouteGuard>
-      </section>
-      <section className="workspace-grid" aria-label="Phase 09 compensation wave">
-        <RouteGuard permissions={permissions} requiredPermission="g10.payroll.read" routeLabel="Payroll workspace (G10)">
-          <PayrollWorkspace client={client} />
-          <PayrollRunConsole client={client} permissions={permissions} />
-        </RouteGuard>
-        <RouteGuard permissions={permissions} requiredPermission="g11.pension.read" routeLabel="Pension & Retirement workspace (G11)">
-          <PensionWorkspace client={client} />
-          <PensionCaseConsole client={client} permissions={permissions} />
-        </RouteGuard>
-      </section>
-      <section className="workspace-grid" aria-label="Phase 10 analytics and release readiness">
-        <RouteGuard permissions={permissions} requiredPermission="g14.analytics.read" routeLabel="Analytics workspace (G14)">
-          <AnalyticsWorkspace client={client} />
-          <EmbeddedBiDashboard client={client} />
-        </RouteGuard>
-      </section>
-      <section className="workspace-grid" aria-label="Phase 05D foundation record views">
-        <RouteGuard permissions={permissions} requiredPermission="g01.employee.read" routeLabel="Employees workspace (G01)">
-          <EmployeeProfile client={client} />
-          <PrivacyConsole client={client} />
-          <EmployeeContactsPanel client={client} />
-          <EmployeeDependentsPanel client={client} />
-        </RouteGuard>
-        <RouteGuard permissions={permissions} requiredPermission="g12.sr.read" routeLabel="Service Register workspace (G12)">
-          <ServiceRegisterTimeline client={client} />
-        </RouteGuard>
-        <RouteGuard permissions={permissions} requiredPermission="g13.document.read" routeLabel="Documents workspace (G13)">
-          <DocumentVaultView client={client} />
-          <DataSubjectRequestConsole client={client} />
-        </RouteGuard>
-      </section>
+    <AppShell
+      activePath={effectivePath}
+      activeWorkspace={workspaceForPath(effectivePath)}
+      onNavigate={navigate}
+      onSignOut={handleSignOut}
+      onWorkspaceChange={changeWorkspace}
+      permissions={permissions}
+      sessionUser={session.displayName}
+    >
+      {renderRoute(effectivePath, permissions, g02QueueRefresh, bumpG02Queue, navigate)}
     </AppShell>
   );
+}
+
+function defaultPath(permissions: readonly string[]): string {
+  return primaryNavigation.find((item) => permissions.includes(item.requiredPermission))?.href ?? "/no-permission";
+}
+
+function routePage(label: string, permission: string, permissions: readonly string[], content: ReactNode): ReactNode {
+  return (
+    <section aria-labelledby="route-heading" className="route-page">
+      <h2 className="route-title" id="route-heading" tabIndex={-1}>{label}</h2>
+      <RouteGuard permissions={permissions} requiredPermission={permission} routeLabel={label}>
+        <div className="workspace-grid">{content}</div>
+      </RouteGuard>
+    </section>
+  );
+}
+
+function renderRoute(path: string, permissions: readonly string[], refresh: number, bump: () => void, navigate: (path: string) => void): ReactNode {
+  const workspace = workspaceForPath(path);
+  const workspacePermission = `workspace.${workspace}`;
+  if (!permissions.includes(workspacePermission)) {
+    return routePage("Restricted workspace", workspacePermission, permissions, null);
+  }
+  switch (path) {
+    case "/me/inbox": return routePage("Workflow inbox", "p01.workflow.read", permissions, <WorkflowWorkspace client={client} />);
+    case "/me/employees": return routePage("Employees", "g01.employee.read", permissions, <><EmployeeProfile client={client} /><PrivacyConsole client={client} /><EmployeeContactsPanel client={client} /><EmployeeDependentsPanel client={client} /></>);
+    case "/me/personal-details": return routePage("Personal Details", "g02.change.read", permissions, <><PersonalDetailsWorkspace client={client} /><ChangeRequestEditor client={client} onCreated={bump} /><ChangeRequestApproverQueue client={client} refreshToken={refresh} onDecided={bump} /></>);
+    case "/me/attendance-leave": return routePage("Attendance & Leave", "g03.leave.read", permissions, <><LeaveWorkspace client={client} /><SelfServiceSummary client={client} /></>);
+    case "/me/service-register": return routePage("Service Register", "g12.sr.read", permissions, <ServiceRegisterTimeline client={client} />);
+    case "/me/documents": return routePage("Documents", "g13.document.read", permissions, <><DocumentVaultView client={client} /><DataSubjectRequestConsole client={client} /></>);
+    case "/team/transfers": return routePage("Transfers", "g05.transfer.read", permissions, <><TransferWorkspace client={client} /><CounsellingConsole client={client} /></>);
+    case "/team/promotions": return routePage("Promotions", "g06.promotion.read", permissions, <><PromotionWorkspace client={client} /><DpcConvenePanel client={client} /><SealedCoverReview client={client} /></>);
+    case "/team/training": return routePage("Training", "g07.training.read", permissions, <><TrainingWorkspace client={client} /><TrainingNominationForm client={client} /></>);
+    case "/team/apar": return routePage("APAR", "g08.apar.read", permissions, <><AparWorkspace client={client} /><AparTierForms client={client} permissions={permissions} /></>);
+    case "/team/disciplinary": return routePage("Disciplinary", "g09.case.read", permissions, <><DisciplinaryWorkspace client={client} /><DisciplinaryCaseWorkbench client={client} /><EvidenceVaultList client={client} /></>);
+    case "/admin/leave-sr-relay": return routePage("Leave-SR Relay", "g04.relay.read", permissions, <LeaveSrRelayWorkspace client={client} />);
+    case "/admin/payroll": return routePage("Payroll", "g10.payroll.read", permissions, <><PayrollWorkspace client={client} /><PayrollRunConsole client={client} permissions={permissions} /></>);
+    case "/admin/pension-retirement": return routePage("Pension & Retirement", "g11.pension.read", permissions, <><PensionWorkspace client={client} /><PensionCaseConsole client={client} permissions={permissions} /></>);
+    case "/admin/analytics": return routePage("Analytics", "g14.analytics.read", permissions, <><AnalyticsWorkspace client={client} /><EmbeddedBiDashboard client={client} /></>);
+    case "/admin/workflow-config": return routePage("Workflow Config", "p01.workflow.config.review", permissions, <WorkflowConfigConsole />);
+    default:
+      return <section className="not-found" aria-labelledby="route-heading"><h2 id="route-heading" tabIndex={-1}>Page not found</h2><p>The requested HRMS destination does not exist.</p><button type="button" onClick={() => navigate(defaultPath(permissions))}>Go to your workspace</button></section>;
+  }
 }

@@ -8,6 +8,8 @@ import {
 } from "../../api/hrmsClient";
 import { OperationalState } from "../../app/OperationalStates";
 import { PayslipView } from "./PayslipView";
+import { Button } from "../../components/ui/Button";
+import { Dialog } from "../../components/ui/Dialog";
 
 /** The g10 state machine the console mirrors: exactly one lifecycle verb is valid per status. */
 const RUN_LIFECYCLE: { verb: PayrollRunLifecycleVerb; from: PayrollRunStatus; label: string; permission: string }[] = [
@@ -71,6 +73,7 @@ export function PayrollRunConsole({ client, permissions, defaultEmployeeId = "" 
 
   // --- lifecycle action state ---
   const [actionPhase, setActionPhase] = useState<ActionPhase>({ kind: "idle" });
+  const [pendingLifecycleVerb, setPendingLifecycleVerb] = useState<PayrollRunLifecycleVerb | null>(null);
 
   if (!permissions.includes("g10.payroll.read")) {
     return (
@@ -136,7 +139,7 @@ export function PayrollRunConsole({ client, permissions, defaultEmployeeId = "" 
       .catch((error: unknown) => setCreatePhase(toErrorPhase(error)));
   }
 
-  function handleLifecycleAction(verb: PayrollRunLifecycleVerb) {
+  function performLifecycleAction(verb: PayrollRunLifecycleVerb) {
     if (!selectedRun) {
       return;
     }
@@ -148,6 +151,14 @@ export function PayrollRunConsole({ client, permissions, defaultEmployeeId = "" 
         setActionPhase({ kind: "success", message: `Run ${result.payrollRun.id} is now ${result.payrollRun.status}.` });
       })
       .catch((error: unknown) => setActionPhase(toErrorPhase(error)));
+  }
+
+  function handleLifecycleAction(verb: PayrollRunLifecycleVerb) {
+    if (["lock-inputs", "lock", "disburse"].includes(verb)) {
+      setPendingLifecycleVerb(verb);
+      return;
+    }
+    performLifecycleAction(verb);
   }
 
   const actionSubmitting = actionPhase.kind === "submitting";
@@ -287,6 +298,17 @@ export function PayrollRunConsole({ client, permissions, defaultEmployeeId = "" 
       </section>
 
       <PayslipView client={client} run={selectedRun} />
+      <Dialog
+        description={pendingLifecycleVerb && selectedRun ? `${pendingLifecycleVerb} changes payroll run ${selectedRun.id} from ${selectedRun.status}. Verify the run before continuing.` : undefined}
+        onOpenChange={(open) => { if (!open) setPendingLifecycleVerb(null); }}
+        open={pendingLifecycleVerb !== null}
+        title="Confirm payroll lifecycle action"
+      >
+        <div className="action-row">
+          <Button type="button" variant="secondary" onClick={() => setPendingLifecycleVerb(null)}>Cancel</Button>
+          <Button type="button" variant="destructive" onClick={() => { const verb = pendingLifecycleVerb; setPendingLifecycleVerb(null); if (verb) performLifecycleAction(verb); }}>Confirm {pendingLifecycleVerb}</Button>
+        </div>
+      </Dialog>
     </section>
   );
 }

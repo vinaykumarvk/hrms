@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+:root {
+  --color-background: #f5f7fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #edf2f5;
+  --color-text: #172c3b;
+  --color-text-muted: #53606f;
+  --color-border: #c8d0dc;
+  --color-brand: #0b6f63;
+  --color-brand-strong: #084f49;
+  --color-focus: #075fcc;
+  --color-danger: #9d2c2c;
+  --color-danger-surface: #fff1f1;
+  --color-success: #235f55;
+  --color-success-surface: #edf7f5;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.08);
+  --shadow-md: 0 12px 30px rgb(15 23 42 / 0.16);
+  --duration-fast: 150ms;
+  --duration-normal: 220ms;
+}
+
+@theme inline {
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-muted: var(--color-surface-muted);
+  --color-foreground: var(--color-text);
+  --color-muted-foreground: var(--color-text-muted);
+  --color-border: var(--color-border);
+  --color-primary: var(--color-brand);
+  --color-primary-foreground: #ffffff;
+  --color-destructive: var(--color-danger);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+*:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

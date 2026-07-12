@@ -12,3 +12,7 @@ coverage/
 docs/spec/pipeline/.state/
 docs/spec/pipeline/logs/
 docs/spec/pipeline/approvals/
+
+# local run logs
+/dev.log
+/install.log

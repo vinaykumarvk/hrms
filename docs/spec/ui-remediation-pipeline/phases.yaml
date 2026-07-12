@@ -1,0 +1,67 @@
+version: 1
+defaults:
+  phase_timeout_seconds: 7200
+
+phases:
+  - id: UIR-00
+    name: Resolve conflicts and freeze remediation envelope
+    prompt: docs/spec/ui-remediation-pipeline/prompts/UIR-00.md
+    exit_criteria: bash docs/spec/ui-remediation-pipeline/checks/uir-00.sh
+    gate: auto
+    depends_on: []
+
+  - id: UIR-01
+    name: Restore baseline and design-neutral repairs
+    prompt: docs/spec/ui-remediation-pipeline/prompts/UIR-01.md
+    exit_criteria: bash docs/spec/ui-remediation-pipeline/checks/uir-01.sh
+    gate: auto
+    depends_on: [UIR-00]
+
+  - id: UIR-02
+    name: Deterministic personas fixtures and acceptance oracles
+    prompt: docs/spec/ui-remediation-pipeline/prompts/UIR-02.md
+    exit_criteria: bash docs/spec/ui-remediation-pipeline/checks/uir-02.sh
+    gate: auto
+    depends_on: [UIR-00]
+
+  - id: UIR-03
+    name: Approved workspace and session service semantics
+    prompt: docs/spec/ui-remediation-pipeline/prompts/UIR-03.md
+    exit_criteria: bash docs/spec/ui-remediation-pipeline/checks/uir-03.sh
+    gate: auto
+    depends_on: [UIR-01, UIR-02]
+
+  - id: UIR-04
+    name: Approved UI-supporting API contracts
+    prompt: docs/spec/ui-remediation-pipeline/prompts/UIR-04.md
+    exit_criteria: bash docs/spec/ui-remediation-pipeline/checks/uir-04.sh
+    gate: auto
+    depends_on: [UIR-03]
+
+  - id: UIR-05
+    name: Approved design system and browser harness
+    prompt: docs/spec/ui-remediation-pipeline/prompts/UIR-05.md
+    exit_criteria: bash docs/spec/ui-remediation-pipeline/checks/uir-05.sh
+    gate: auto
+    depends_on: [UIR-01, UIR-02]
+
+  - id: UIR-06
+    name: Shell and critical journey vertical slices
+    prompt: docs/spec/ui-remediation-pipeline/prompts/UIR-06.md
+    exit_criteria: bash docs/spec/ui-remediation-pipeline/checks/uir-06.sh
+    gate: auto
+    depends_on: [UIR-04, UIR-05]
+
+  - id: UIR-07
+    name: Remaining module and conditional quality migration
+    prompt: docs/spec/ui-remediation-pipeline/prompts/UIR-07.md
+    exit_criteria: bash docs/spec/ui-remediation-pipeline/checks/uir-07.sh
+    gate: auto
+    depends_on: [UIR-06]
+
+  - id: UIR-08
+    name: Integration validation and human release decision
+    prompt: docs/spec/ui-remediation-pipeline/prompts/UIR-08.md
+    exit_criteria: bash docs/spec/ui-remediation-pipeline/checks/uir-08.sh
+    gate: auto
+    depends_on: [UIR-07]

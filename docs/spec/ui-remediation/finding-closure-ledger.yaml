@@ -1,0 +1,198 @@
+version: 1
+status: approved_by_user_2026_07_11
+source_review: docs/reviews/ui-review-all-2026-07-11.md
+defaults: &defaults
+  source_evidence: docs/reviews/ui-review-all-2026-07-11.md
+  disposition: fix
+  blocking_gate: interaction_predictability
+  affected_personas: [employee, manager, admin]
+  affected_journeys: [CJ-EMPLOYEE, CJ-MANAGER, CJ-ADMIN]
+  expected_files: []
+  automated_tests: []
+  manual_evidence: [viewport screenshots, keyboard traversal]
+  viewport_matrix: [360x800, 768x1024, 1280x800]
+  theme_matrix: [light]
+  authorization_negative_cases: [denied direct route, stale selection after workspace change]
+  rollback_trigger: critical journey or authorization regression
+  owner: frontend
+  target_date: 2026-08-15
+  closure_status: closed
+findings:
+  - <<: *defaults
+    id: UI-01
+    disposition: merge_with_UI-25
+    expected_files: [apps/web/src/App.tsx, apps/web/src/app/navigation.ts]
+    automated_tests: [all visible routes resolve and focus headings]
+    closure_status: merged_closed
+  - <<: *defaults
+    id: UI-02
+    disposition: merge_with_UI-26
+    blocking_gate: mobile_navigation
+    expected_files: [apps/web/src/app/AppShell.tsx, apps/web/src/styles.css]
+    automated_tests: [mobile drawer keyboard and pointer behavior]
+    closure_status: merged_closed
+  - <<: *defaults
+    id: UI-03
+    disposition: contract_gated_fix
+    blocking_gate: behavioral_trust
+    expected_files: [apps/web/src/App.tsx, apps/web/src/app/WorkspaceSwitcher.tsx]
+    automated_tests: [workspace positive and negative permission matrix]
+  - <<: *defaults
+    id: UI-04
+    disposition: merge_into_primitive_contract
+    blocking_gate: accessibility
+    expected_files: [apps/web/src/styles/tokens.css, apps/web/src/components/ui]
+    automated_tests: [focus-visible coverage]
+    closure_status: merged_closed
+  - <<: *defaults
+    id: UI-05
+    blocking_gate: error_boundary_coverage
+    expected_files: [apps/web/src/app/ErrorBoundary.tsx, apps/web/src/main.tsx]
+    automated_tests: [render failure recovery]
+    closure_status: partial
+  - <<: *defaults
+    id: UI-06
+    blocking_gate: login_completeness
+    expected_files: [apps/web/src/app/LoginPanel.tsx]
+    automated_tests: [delayed login and double submit]
+  - <<: *defaults
+    id: UI-07
+    disposition: quarantined_pending_auth_contract
+    blocking_gate: login_completeness
+    expected_files: [apps/web/src/app/LoginPanel.tsx]
+    automated_tests: [unsupported reset control absent]
+    owner: auth_product_owner
+    closure_status: deferred
+  - <<: *defaults
+    id: UI-08
+    disposition: split_supported_or_hide
+    blocking_gate: behavioral_trust
+    expected_files: [apps/web/src/workflow/WorkflowConfigConsole.tsx]
+    automated_tests: [each visible control has observable outcome]
+  - <<: *defaults
+    id: UI-09
+    blocking_gate: system_status_visibility
+    expected_files: [apps/web/src/app/AppShell.tsx]
+    automated_tests: [false state gallery absent]
+  - <<: *defaults
+    id: UI-10
+    disposition: terminal_actions_only
+    blocking_gate: sensitive_action_safety
+    expected_files: [apps/web/src/workflow, apps/web/src/modules/g10]
+    automated_tests: [terminal confirmation and cancel]
+  - <<: *defaults
+    id: UI-11
+    disposition: architecture_gated_fix
+    blocking_gate: accessibility
+    expected_files: [apps/web/src/components/ui]
+    automated_tests: [primitive component contracts]
+    closure_status: partial
+  - <<: *defaults
+    id: UI-12
+    disposition: merge_into_primitive_contract
+    blocking_gate: accessibility
+    expected_files: [apps/web/src/components/ui, apps/web/src/styles/tokens.css]
+    automated_tests: [computed touch targets at least 44px]
+    closure_status: merged_closed
+  - <<: *defaults
+    id: UI-13
+    disposition: fix_where_overflow_reproduced
+    blocking_gate: mobile_responsiveness
+    expected_files: [apps/web/src/components/ui/Table.tsx, apps/web/src/modules]
+    automated_tests: [responsive tables with long values]
+  - <<: *defaults
+    id: UI-14
+    disposition: merge_into_primitive_contract
+    blocking_gate: accessibility
+    expected_files: [apps/web/src/styles.css]
+    automated_tests: [reduced motion emulation]
+    closure_status: merged_closed
+  - <<: *defaults
+    id: UI-15
+    disposition: contract_gated_fix
+    blocking_gate: error_prevention_recovery
+    expected_files: [apps/web/src/app/OperationalStates.tsx, apps/web/src/modules]
+    automated_tests: [safe error message regression]
+  - <<: *defaults
+    id: UI-16
+    blocking_gate: state_resilience
+    expected_files: [package.json, package-lock.json]
+    automated_tests: [clean typecheck build test PH-05E]
+  - <<: *defaults
+    id: UI-17
+    blocking_gate: accessibility
+    expected_files: [apps/web/playwright.config.ts, apps/web/test/e2e]
+    automated_tests: [role viewport keyboard axe matrix]
+  - <<: *defaults
+    id: UI-18
+    disposition: architecture_gated_fix
+    blocking_gate: accessibility
+    expected_files: [apps/web/src/styles/tokens.css]
+    automated_tests: [token lint]
+    closure_status: partial
+  - <<: *defaults
+    id: UI-19
+    disposition: deferred_unless_architecture_confirms_shipped_dark_theme
+    blocking_gate: non_blocking_dark_mode
+    expected_files: [apps/web/src/styles/tokens.css]
+    automated_tests: [conditional dark screenshots and contrast]
+    owner: design_owner
+    closure_status: deferred
+  - <<: *defaults
+    id: UI-20
+    disposition: deferred_pending_locale_policy
+    blocking_gate: non_blocking_content
+    expected_files: [apps/web/src/locales]
+    automated_tests: [conditional locale parity and long strings]
+    owner: product_localization_owner
+    closure_status: deferred
+  - <<: *defaults
+    id: UI-21
+    disposition: critical_journeys_first
+    blocking_gate: empty_state_coverage
+    expected_files: [apps/web/src/app/OperationalStates.tsx, apps/web/src/modules]
+    automated_tests: [empty and retry actions]
+  - <<: *defaults
+    id: UI-22
+    disposition: recovery_blocking_skeleton_polish_conditional
+    blocking_gate: system_status_visibility
+    expected_files: [apps/web/src/components/ui/Skeleton.tsx, apps/web/src/modules]
+    automated_tests: [loading timeout recovery and conditional CLS]
+  - <<: *defaults
+    id: UI-23
+    blocking_gate: system_status_visibility
+    expected_files: [apps/web/src/components/ui/Alert.tsx, apps/web/src/components/ui/Notifications.tsx]
+    automated_tests: [mutation live feedback]
+  - <<: *defaults
+    id: UI-24
+    disposition: contract_gated_fix
+    blocking_gate: state_resilience
+    expected_files: [apps/web/src/app/session.ts, apps/web/src/app/LoginPanel.tsx]
+    automated_tests: [safe session expiry and intended redirect]
+  - <<: *defaults
+    id: UI-25
+    disposition: merged_with_UI-01
+    blocking_gate: interaction_predictability
+    expected_files: [apps/web/src/app/navigation.ts]
+    automated_tests: [active navigation and heading focus]
+    closure_status: merged_closed
+  - <<: *defaults
+    id: UI-26
+    disposition: merged_with_UI-02
+    blocking_gate: mobile_navigation
+    expected_files: [apps/web/src/app/AppShell.tsx, apps/web/src/styles.css]
+    automated_tests: [safe-area notched viewport]
+    closure_status: partial
+  - <<: *defaults
+    id: UI-27
+    disposition: routing_fix_search_conditional
+    blocking_gate: progressive_disclosure
+    expected_files: [apps/web/src/App.tsx, apps/web/src/modules]
+    automated_tests: [one surface mounted per route, conditional search URL state]
+  - <<: *defaults
+    id: UI-28
+    disposition: architecture_gated_fix
+    blocking_gate: accessibility
+    expected_files: [apps/web/src/styles/tokens.css]
+    automated_tests: [WCAG AA contrast report]
+    closure_status: partial

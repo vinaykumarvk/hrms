@@ -1,0 +1,16 @@
+phase: UIR-04
+status: complete_no_new_api_required
+decision: >
+  The critical UI journeys use existing P01 and module API contracts. The approved
+  UIR-00 decisions quarantine password reset and new server export behavior, and
+  keep workflow-config minimum operations client-side. No new route is required.
+  Existing route middleware, scope, pagination, idempotency, and error tests remain
+  the authoritative API oracle.
+evidence:
+  - docs/contracts/openapi/P01-workflow.yaml
+  - apps/api/src/routes/p01-workflow.routes.ts
+  - apps/web/src/api/hrmsClient.ts
+  - docs/spec/ui-remediation/auth-action-contract-decisions.md
+tests:
+  - apps/api/test/ui-remediation-api.test.cjs
+

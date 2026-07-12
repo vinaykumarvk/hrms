@@ -1,0 +1,22 @@
+version: 1
+personas: [employee, manager, admin, denied_user]
+viewports: [360x800, 768x1024, 1280x800]
+blocking_gates:
+  - { id: accessibility, oracle: "axe plus keyboard critical journeys; zero serious or critical violations" }
+  - { id: mobile_responsiveness, oracle: "critical journeys pass at 360x800 without horizontal document overflow" }
+  - { id: mobile_navigation, oracle: "drawer open close escape focus-return and denied-link tests pass" }
+  - { id: login_completeness, oracle: "loading double-submit error association and session message tests pass" }
+  - { id: interaction_predictability, oracle: "every visible navigation and workflow-config control has an observable outcome" }
+  - { id: sensitive_action_safety, oracle: "terminal action confirmation and cancellation tests pass" }
+  - { id: system_status_visibility, oracle: "canonical loading error empty partial and live-feedback states pass" }
+  - { id: error_prevention_recovery, oracle: "validation retry and safe error boundary tests pass" }
+  - { id: progressive_disclosure, oracle: "one canonical destination is active and focused per route" }
+  - { id: state_resilience, oracle: "history workspace switch and session-expiry tests pass" }
+  - { id: graceful_degradation, oracle: "network failure and retry tests pass on critical journeys" }
+  - { id: empty_state_coverage, oracle: "critical views expose intentional empty guidance and action" }
+  - { id: error_boundary_coverage, oracle: "forced render failure recovers without protected detail" }
+  - { id: ui_determinism, oracle: "seeded persona and canonical-state runs are repeatable" }
+  - { id: behavioral_trust, oracle: "no dead destination false state or visible no-op remains" }
+  - { id: component_substance, oracle: "forms retain inputs API calls and proportional data rendering" }
+finding_coverage: [UI-01, UI-02, UI-03, UI-04, UI-05, UI-06, UI-07, UI-08, UI-09, UI-10, UI-11, UI-12, UI-13, UI-14, UI-15, UI-16, UI-17, UI-18, UI-19, UI-20, UI-21, UI-22, UI-23, UI-24, UI-25, UI-26, UI-27, UI-28]
+

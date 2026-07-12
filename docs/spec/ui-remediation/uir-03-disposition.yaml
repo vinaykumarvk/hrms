@@ -1,0 +1,16 @@
+phase: UIR-03
+status: complete_no_new_service_required
+decision: >
+  Existing API services already receive authenticated actor and tenant/entity scope.
+  The approved workspace contract makes workspace a presentation filter only and
+  explicitly forbids widening server scope. Password reset and server evidence
+  export are quarantined. Session expiry remains a client session concern in UIR-06.
+evidence:
+  - apps/api/src/http/api.ts
+  - apps/api/src/platform/authorization/authorizationService.ts
+  - apps/api/src/routes/p01-workflow.routes.ts
+  - docs/spec/ui-remediation/route-workspace-contract.md
+  - docs/spec/ui-remediation/auth-action-contract-decisions.md
+tests:
+  - apps/api/test/ui-remediation-service.test.cjs
+

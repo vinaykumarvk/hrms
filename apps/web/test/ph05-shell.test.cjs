@@ -34,9 +34,10 @@ test("PH-05B route guard records entitlement metadata", () => {
 });
 
 test("PH-05B workspace switcher is operable by buttons", () => {
-  for (const marker of ["role=\"tablist\"", "role=\"tab\"", "aria-selected", "onWorkspaceChange"]) {
+  for (const marker of ["<button", "aria-current", "onWorkspaceChange", "permissions.includes"]) {
     assert.equal(shellSource.includes(marker), true, marker);
   }
+  assert.equal(shellSource.includes('role="tab"'), false, "workspace controls are buttons, not incomplete ARIA tabs");
 });
 
 test("PH-05B navigation reaches all 14 module workspaces with distinct permissions", () => {
@@ -63,22 +64,23 @@ test("PH-05B navigation reaches all 14 module workspaces with distinct permissio
 });
 
 test("PH-05B unauthenticated visitor gets the login/sign-in state, not the shell", () => {
-  for (const marker of ["readStoredSession", "if (!session)", "<LoginPanel onSignIn="]) {
+  for (const marker of ["readStoredSession", "if (!session)", "<LoginPanel", "onSignIn={handleSignIn}"]) {
     assert.equal(appSource.includes(marker), true, marker);
   }
-  for (const marker of ["Sign in to HRMS", "Access token", "parseSessionToken", "return null"]) {
+  for (const marker of ["Welcome back", "Employee ID", "Password", "startEmployeeSession", "parseSessionToken", "return null"]) {
     assert.equal(shellSource.includes(marker), true, marker);
   }
 });
 
 test("PH-05B guard denies workspaces without a session grant (no wildcard, no-permission render)", () => {
   assert.equal(appSource.includes('permissions={["*"]}'), false, "App must not hardcode a wildcard grant");
-  const guardedSurfaces = appSource.match(/requiredPermission="/g) ?? [];
+  const guardedSurfaces = appSource.match(/routePage\("/g) ?? [];
   assert.equal(
     guardedSurfaces.length >= 14,
     true,
     `expected >=14 guarded surfaces, found ${guardedSurfaces.length}`
   );
+  assert.equal(appSource.includes("<RouteGuard permissions={permissions} requiredPermission={permission}"), true, "route helper must enforce each permission");
   for (const marker of ["canAccess", "no-permission"]) {
     assert.equal(shellSource.includes(marker), true, `denied path missing ${marker}`);
   }

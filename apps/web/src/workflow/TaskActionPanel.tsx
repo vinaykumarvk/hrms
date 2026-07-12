@@ -1,4 +1,6 @@
 import { FormEvent, useId, useState } from "react";
+import { Button } from "../components/ui/Button";
+import { Dialog } from "../components/ui/Dialog";
 import { requiresReason, TASK_ACTIONS, TaskAction, TaskActionInput, validateTaskAction } from "./taskActions";
 
 export interface TaskActionPanelProps {
@@ -13,6 +15,7 @@ export function TaskActionPanel({ taskId, submitting, submitErrorCode, onSubmitA
   const [reason, setReason] = useState("");
   const [delegateTo, setDelegateTo] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false);
   const reasonErrorId = useId();
   const mandatoryReason = requiresReason(selectedAction);
   const helperText = mandatoryReason
@@ -33,6 +36,10 @@ export function TaskActionPanel({ taskId, submitting, submitErrorCode, onSubmitA
       return;
     }
     setFieldError(null);
+    if (input.action === "cancel") {
+      setCancelConfirmationOpen(true);
+      return;
+    }
     onSubmitAction(input);
   }
 
@@ -58,7 +65,7 @@ export function TaskActionPanel({ taskId, submitting, submitErrorCode, onSubmitA
         </label>
         <textarea
           aria-describedby={reasonErrorId}
-          aria-invalid={fieldError !== null || undefined}
+          aria-invalid={fieldError !== null}
           aria-required={mandatoryReason}
           id={`${reasonErrorId}-reason`}
           onChange={(event) => setReason(event.target.value)}
@@ -89,6 +96,17 @@ export function TaskActionPanel({ taskId, submitting, submitErrorCode, onSubmitA
           {submitting ? "Submitting action…" : "Submit action"}
         </button>
       </form>
+      <Dialog
+        description="Cancelling ends this workflow instance. Review the reason before continuing."
+        onOpenChange={setCancelConfirmationOpen}
+        open={cancelConfirmationOpen}
+        title="Cancel this workflow?"
+      >
+        <div className="action-row">
+          <Button type="button" variant="secondary" onClick={() => setCancelConfirmationOpen(false)}>Keep workflow active</Button>
+          <Button type="button" variant="destructive" onClick={() => { setCancelConfirmationOpen(false); onSubmitAction({ action: "cancel", reason, delegateTo }); }}>Cancel workflow</Button>
+        </div>
+      </Dialog>
     </section>
   );
 }

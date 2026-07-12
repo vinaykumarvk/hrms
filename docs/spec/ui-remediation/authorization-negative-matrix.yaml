@@ -1,0 +1,26 @@
+version: 1
+cases:
+  - id: AUTH-NEG-01
+    persona: employee
+    attempt: direct navigation to /admin/payroll
+    expected: no-permission without mounting payroll content
+  - id: AUTH-NEG-02
+    persona: denied_user
+    attempt: direct navigation to /me/employees
+    expected: no-permission without employee data
+  - id: AUTH-NEG-03
+    persona: manager
+    attempt: browser history restores prior admin URL
+    expected: permission check replaces protected content
+  - id: AUTH-NEG-04
+    persona: employee
+    attempt: workspace switch after stale team record selection
+    expected: selection cleared and no stale team record rendered
+  - id: AUTH-NEG-05
+    persona: admin
+    attempt: session expires while protected data is mounted
+    expected: protected state cleared and generic login message rendered
+  - id: AUTH-NEG-06
+    persona: denied_user
+    attempt: invoke hidden workflow config action
+    expected: no control and API remains protected

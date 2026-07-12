@@ -38,7 +38,7 @@ test("PH-09 workspace renders G10 and G11 compensation panels", () => {
   for (const marker of ["G11", "SR_VERIFICATION_GATE", "QUALIFYING_SERVICE_LOCKED", "PENSION_CALC_TRACE", "PPO_ISSUED", "G11_SR_POSTED"]) {
     assert.equal(g11Source.includes(marker), true, marker);
   }
-  for (const marker of ["PayrollWorkspace", "PensionWorkspace", "Phase 09 compensation wave"]) {
+  for (const marker of ["PayrollWorkspace", "PensionWorkspace", 'case "/admin/payroll"', 'case "/admin/pension-retirement"']) {
     assert.equal(appSource.includes(marker), true, marker);
   }
 });

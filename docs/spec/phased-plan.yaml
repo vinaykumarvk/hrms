@@ -1410,6 +1410,578 @@ phases:
       - PH-14A through PH-14E checks pass.
       - Full API and web regression passes.
 
+ui_remediation_2026_07_11:
+  plan_id: HRMS-UIR-20260711
+  title: Council-Amended UI Release Remediation Plan
+  status: proposed_awaiting_architecture_and_contract_decisions
+  classification: standard
+  objective: >
+    Close every finding from the 2026-07-11 UI review through an explicit
+    disposition and make all 16 blocking UI gates pass with deterministic,
+    role-aware, responsive, accessibility, authorization-negative, and
+    regression evidence while preserving existing API, RBAC, workflow, data,
+    and error contracts.
+  source_artifacts:
+    - docs/reviews/ui-review-all-2026-07-11.md
+    - doc/evaluations/hrms-ui-remediation-council-report-20260711.md
+    - docs/architecture.md
+    - docs/spec/ph-05-ui-implementation-plan.md
+    - docs/spec/ph-05-verdict.md
+    - docs/contracts/auth-matrix.yaml
+    - docs/contracts/error-taxonomy.yaml
+  council_constraints:
+    - The 27 findings and 28 backlog rows overlap; consolidation must not erase traceability.
+    - Every original UI-01 through UI-28 item receives fix, merge, defer, or reject disposition with evidence.
+    - All 16 blocking gates must pass; backlog completion percentage is not a release criterion.
+    - Do not invent workspace, password-reset, session-expiry, workflow-export, locale, or confirmation semantics.
+    - UI routing never widens server-enforced authorization or data scope.
+    - Production dependencies require the repository amendment workflow.
+    - Preserve current functional forms, API payloads, RBAC checks, and module state behavior unless an approved contract changes.
+  finding_closure_schema:
+    required_fields:
+      - finding_or_backlog_id
+      - source_evidence
+      - disposition
+      - blocking_gate
+      - affected_personas
+      - affected_journeys
+      - expected_files
+      - automated_tests
+      - manual_evidence
+      - viewport_matrix
+      - theme_matrix
+      - authorization_negative_cases
+      - rollback_trigger
+      - owner
+      - target_date
+      - closure_status
+  critical_journeys:
+    - id: CJ-EMPLOYEE
+      persona: Employee
+      flow: authenticate, enter Me workspace, navigate to profile and leave, submit a permitted request, observe recoverable status
+    - id: CJ-MANAGER
+      persona: Manager
+      flow: authenticate, enter My Team, open workflow inbox, review and act on a task with mandatory reason and safe confirmation
+    - id: CJ-ADMIN
+      persona: HR or payroll administrator
+      flow: authenticate, enter Admin, navigate to governed configuration or payroll, perform a permitted finalizing action, verify denial boundaries
+  evidence_matrix:
+    viewports: ["360x800", "768x1024", "1280x800"]
+    personas: [employee, manager, admin, denied_user]
+    modes: [ready, loading, empty, error, no_permission, partial_data, session_expired]
+    interaction: [pointer, keyboard, screen_reader_smoke]
+    themes: >
+      Light is mandatory. Dark is added to the mandatory matrix only if the
+      architecture decision confirms a shipped dark theme; otherwise dark mode
+      is explicitly deferred with owner and date.
+  parallel_groups:
+    PG-0-entry:
+      after: UIR-00
+      can_run_in_parallel: [UIR-01, UIR-02]
+      sync_gate: UIR-G1
+    PG-1-contracts:
+      after: UIR-G1
+      can_run_in_parallel: [UIR-03, UIR-04]
+      sync_gate: UIR-G2
+    PG-2-ui-slices:
+      after: UIR-05
+      can_run_in_parallel:
+        - UIR-06A-login
+        - UIR-06B-workflow
+        - UIR-06C-payroll
+      sync_gate: UIR-G4
+  phases:
+    - id: UIR-00
+      name: Resolve Conflicts and Freeze the Remediation Envelope
+      planner_stage: CONFLICT/migration
+      status: blocked_pending_human_decisions
+      goal: >
+        Resolve architecture and product-contract conflicts before changing UI
+        behavior or introducing dependencies, and create the closure ledger that
+        prevents any original finding from disappearing.
+      requirements:
+        - Decide the authoritative design-system contract: Tailwind plus shadcn, or an approved architecture amendment for equivalent local primitives.
+        - Approve any new routing, component, i18n, or browser-test production/development dependencies through dependency policy.
+        - Freeze route and destination ownership for Inbox and G01 through G14.
+        - Freeze Me, My Team, and Admin data-scope behavior with server-enforced authorization expectations.
+        - Freeze supported login, password-reset, session-expiry, workflow-config, evidence-export, error-reference, and sensitive-action confirmation behavior.
+        - Classify each UI-01 through UI-28 row as fix, merge, defer, or reject with rationale.
+      dependencies: []
+      expected_files:
+        create:
+          - docs/spec/ui-remediation/finding-closure-ledger.yaml
+          - docs/spec/ui-remediation/design-system-decision.md
+          - docs/spec/ui-remediation/route-workspace-contract.md
+          - docs/spec/ui-remediation/auth-action-contract-decisions.md
+          - docs/spec/ui-remediation/critical-journey-acceptance.md
+        modify:
+          - docs/architecture.md
+          - docs/spec/ph-05-ui-implementation-plan.md
+          - package.json
+          - package-lock.json
+      generated_tests:
+        contract:
+          - closure ledger schema validation covers UI-01 through UI-28 exactly once
+          - route table has a unique destination and permission for every visible navigation entry
+          - workspace matrix includes positive and negative scope assertions
+      review_criteria:
+        - No unresolved equal-evidence product choice is hidden in implementation steps.
+        - Dependency changes have explicit approval and deterministic versions.
+        - Deferred items have owner, rationale, target date, and non-blocking gate evidence.
+        - Architecture and PH-05 no longer contradict each other on the design system.
+      rollback_retry_policy:
+        rollback: Revert decision artifacts only; no runtime behavior changes in this phase.
+        retry: Time-box unresolved decisions and quarantine the affected finding while unrelated evidence work continues.
+        quarantine: Workspace, reset, export, session, locale, or action behavior without an approved contract cannot enter implementation.
+      exit_criteria:
+        - Architecture and dependency decision is approved.
+        - UI-01 through UI-28 have stable dispositions.
+        - Route, workspace, auth, and sensitive-action contracts are accepted.
+
+    - id: UIR-01
+      name: Restore Baseline and Apply Design-Neutral Partial Repairs
+      planner_stage: PARTIAL modifications
+      status: planned
+      goal: >
+        Restore deterministic verification, capture the pre-migration baseline,
+        and close low-blast-radius confirmed defects that do not depend on the
+        design-system decision.
+      requirements:
+        - Replace the broken sibling-linked TypeScript dependency through the approved dependency source.
+        - Clean-install and record web typecheck, build, tests, and PH-05E output before UI changes.
+        - Preserve and record existing user changes on the active feature branch.
+        - Remove the production StandardOperationalStates gallery.
+        - Correct 100vh to a 100dvh strategy, direct aria-invalid expression, password-toggle state naming, and reduced-motion handling.
+        - Add the global error boundary without changing API behavior.
+      dependencies: [UIR-00]
+      finding_coverage: [UI-05, UI-09, UI-14, UI-16]
+      expected_files:
+        create:
+          - apps/web/src/app/ErrorBoundary.tsx
+          - apps/web/test/ui-remediation-baseline.test.cjs
+          - docs/evidence/ui-remediation/baseline-command-log.md
+        modify:
+          - package.json
+          - package-lock.json
+          - apps/web/src/main.tsx
+          - apps/web/src/app/AppShell.tsx
+          - apps/web/src/app/LoginPanel.tsx
+          - apps/web/src/workflow/TaskActionPanel.tsx
+          - apps/web/src/styles.css
+      generated_tests:
+        unit:
+          - ErrorBoundary renders retry and safe recovery actions
+          - false operational-state gallery is absent from ready shell
+          - password toggle exposes accessible name and pressed state
+        static:
+          - no 100vh remains in web production source
+          - prefers-reduced-motion rule exists
+        commands:
+          - npm run web:typecheck
+          - npm run web:build
+          - npm run web:test
+          - bash docs/spec/pipeline/checks/ph-05e.sh
+      review_criteria:
+        - All command failures are product failures, not missing-tool failures.
+        - No production dependency beyond UIR-00 approval is introduced.
+        - Error UI does not reveal stack traces, paths, secrets, or PII.
+      rollback_retry_policy:
+        rollback: Revert each design-neutral fix independently; restore the prior package lock only if clean install remains reproducible.
+        retry: Repair dependency resolution before any later phase; do not waive typecheck.
+        quarantine: A failing error-boundary slice does not block baseline evidence, but blocks UIR-06.
+      exit_criteria:
+        - Clean-install web checks and PH-05E are green or remaining RED items are documented product defects assigned to later phases.
+        - Pre-change build size, screenshots where possible, and command logs are sealed.
+
+    - id: UIR-02
+      name: Create Deterministic Personas, Fixtures, and Acceptance Oracles
+      planner_stage: MISSING data
+      status: planned
+      goal: >
+        Make every critical role, workspace, denial, loading, error, and recovery
+        scenario reproducible so later UI evidence is independent of ambient backend state.
+      requirements:
+        - Seed Employee, Manager, Admin, and denied-user personas with explicit permission sets.
+        - Seed Me, My Team, and Admin workspace data with non-overlapping records.
+        - Provide deterministic loading, empty, error, partial-data, session-expired, and stale-cache controls in test-only adapters.
+        - Define deep-link and cached-data authorization-negative fixtures.
+        - Map all 16 blocking gates and UI-01 through UI-28 to acceptance evidence.
+      dependencies: [UIR-00]
+      finding_coverage: [UI-17]
+      expected_files:
+        create:
+          - apps/web/test/fixtures/ui-personas.ts
+          - apps/web/test/fixtures/ui-workspaces.ts
+          - apps/web/test/fixtures/ui-state-controls.ts
+          - docs/spec/ui-remediation/gate-acceptance-matrix.yaml
+          - docs/spec/ui-remediation/authorization-negative-matrix.yaml
+        modify:
+          - apps/web/src/api/fixtureHrmsClient.ts
+      generated_tests:
+        fixture:
+          - each persona has deterministic grants and denials
+          - workspace fixture records never cross persona scope
+          - every canonical state can be selected without production code paths
+      review_criteria:
+        - Fixtures contain synthetic data only and no real PII.
+        - Test-only controls cannot be enabled in production builds.
+        - Every blocking gate has at least one observable oracle.
+      rollback_retry_policy:
+        rollback: Remove fixture additions without changing production client behavior.
+        retry: Regenerate synthetic IDs and rerun determinism tests.
+        quarantine: Missing backend scenarios may use contract-faithful test adapters but cannot be claimed as live integration proof.
+      exit_criteria:
+        - All personas, workspaces, canonical states, and negative cases reproduce deterministically.
+        - Finding closure ledger links to the acceptance matrix.
+
+    - id: UIR-03
+      name: Implement Approved Workspace and Session Service Semantics
+      planner_stage: service
+      status: planned_if_contract_requires
+      goal: >
+        Supply only the server-enforced service behavior required by accepted
+        workspace, session, reset, export, and error-reference contracts.
+      requirements:
+        - Workspace scope is resolved by P02/RLS-backed services, never client labels alone.
+        - Session-expiry semantics preserve intended destination without exposing protected data.
+        - Password-reset and evidence-export services are implemented only if approved and absent.
+        - User-safe error references preserve correlation while internal details remain server-side.
+      dependencies: [UIR-01, UIR-02]
+      finding_coverage: [UI-03, UI-07, UI-08, UI-15, UI-24]
+      expected_files:
+        inspect_then_modify:
+          - apps/api/src/**
+          - apps/web/src/api/hrmsClient.ts
+          - docs/contracts/auth-matrix.yaml
+          - docs/contracts/error-taxonomy.yaml
+      generated_tests:
+        service:
+          - Employee cannot resolve My Team or Admin scope
+          - stale and cached workspace reads fail closed after scope change
+          - session expiry invalidates protected requests and retains only safe redirect metadata
+          - reset and export operations follow maker-checker/audit policy where applicable
+      review_criteria:
+        - No client-side workspace state is treated as authorization.
+        - No new error code, auth behavior, or export behavior exists without contract amendment.
+        - Sensitive operations are audited without logging PII values or tokens.
+      rollback_retry_policy:
+        rollback: Disable new optional service routes and retain existing fail-closed behavior.
+        retry: Correct service contract implementation without weakening denial tests.
+        quarantine: Unsupported reset/export functions remain hidden or clearly unavailable; no no-op control ships.
+      exit_criteria:
+        - Required service behaviors pass positive and negative scope/session tests.
+
+    - id: UIR-04
+      name: Expose Approved UI-Supporting API Contracts
+      planner_stage: API
+      status: planned_if_contract_requires
+      goal: >
+        Expose typed, protected, bounded endpoints needed by the accepted UI
+        journeys without changing unrelated module contracts.
+      requirements:
+        - Every endpoint is explicitly protected by project auth middleware unless the contract marks it public.
+        - Workspace list/read operations are bounded and scoped.
+        - Reset, session, export, and supported workflow-config verbs have typed request/response and safe errors.
+        - Unsupported workflow-config controls are removed from UI rather than backed by invented endpoints.
+      dependencies: [UIR-01, UIR-02, UIR-03]
+      finding_coverage: [UI-03, UI-07, UI-08, UI-15, UI-24]
+      expected_files:
+        inspect_then_modify:
+          - apps/api/src/http/**
+          - apps/api/src/routes/**
+          - apps/api/src/openapi/contractRegistry.ts
+          - docs/contracts/openapi/P01-workflow.yaml
+          - apps/web/src/api/hrmsClient.ts
+      generated_tests:
+        contract:
+          - auth and scope denial for every new route
+          - schema and error-envelope validation
+          - bounded pagination for list operations
+          - idempotency for unsafe operations
+      review_criteria:
+        - OpenAPI, code, client types, and tests agree.
+        - No route leaks another workspace through deep link, cache, or stale token.
+        - No hardcoded localhost, token, PII, or stack trace appears.
+      rollback_retry_policy:
+        rollback: Feature-disable the individual new route and hide its UI entry.
+        retry: Amend and regenerate the contract before implementation correction.
+        quarantine: One unsupported route blocks only its UI verb, not unrelated critical journeys.
+      exit_criteria:
+        - Required UI-supporting APIs pass contract, auth, scope, idempotency, and error tests.
+
+    - id: UIR-05
+      name: Establish the Approved Design System and Test Harness
+      planner_stage: UI
+      status: planned
+      goal: >
+        Build a small, approved, accessible foundation and browser harness before
+        migrating critical journeys or dozens of controls.
+      requirements:
+        - Follow the UIR-00 design-system decision; if Tailwind/shadcn is approved, configure it and add only approved deterministic dependencies.
+        - Define framework-neutral tokens and component contracts for Button, Input, Select, Field, Alert, Card, Dialog, Drawer, Table, Skeleton, and live notifications.
+        - Enforce focus-visible, disabled/loading, 44px targets, reduced motion, semantic colors, and safe responsive defaults in primitives.
+        - Retain old CSS during migration and prevent duplicate visual systems from expanding.
+        - Install/configure approved browser and accessibility tooling with viewport and persona fixtures.
+      dependencies: [UIR-01, UIR-02]
+      finding_coverage: [UI-04, UI-11, UI-12, UI-14, UI-17, UI-18, UI-28]
+      expected_files:
+        create_or_modify_per_decision:
+          - tailwind.config.ts
+          - components.json
+          - apps/web/src/components/ui/**
+          - apps/web/src/styles/tokens.css
+          - apps/web/src/lib/cn.ts
+          - apps/web/test/e2e/**
+          - apps/web/playwright.config.ts
+        modify:
+          - package.json
+          - package-lock.json
+          - apps/web/src/styles.css
+      generated_tests:
+        component:
+          - every primitive has default, hover, active, focus-visible, disabled, loading, and error coverage where applicable
+          - Dialog and Drawer trap focus, close on Escape, return focus, and lock body scroll
+        browser:
+          - primitive gallery at 360x800, 768x1024, and 1280x800
+          - keyboard and axe smoke tests
+          - measured contrast pairs meet WCAG AA
+      review_criteria:
+        - The foundation proves the architecture decision without a whole-app rewrite.
+        - shadcn/Tailwind usage is required only if UIR-00 approved it; otherwise equivalent local contracts are documented.
+        - Bundle and CSS size deltas are recorded.
+      rollback_retry_policy:
+        rollback: Remove the new foundation slice and keep existing CSS/components unchanged.
+        retry: Correct tokens/primitives before migrating critical flows.
+        quarantine: A failing primitive blocks only consumers of that primitive; existing functional UI remains available behind a feature flag.
+      exit_criteria:
+        - Minimal primitive set passes component, keyboard, contrast, and viewport tests.
+        - Clean install, typecheck, build, and existing web tests remain green.
+
+    - id: UIR-06
+      name: Repair Shell and Critical Journeys by Vertical Slice
+      planner_stage: UI
+      status: planned
+      goal: >
+        Make navigation, workspaces, login, workflow, and payroll trustworthy,
+        responsive, accessible, and contract-correct using the approved foundation.
+      dependencies: [UIR-03, UIR-04, UIR-05]
+      finding_coverage:
+        - UI-01
+        - UI-02
+        - UI-03
+        - UI-04
+        - UI-06
+        - UI-07
+        - UI-08
+        - UI-10
+        - UI-12
+        - UI-13
+        - UI-15
+        - UI-21
+        - UI-23
+        - UI-24
+        - UI-25
+        - UI-26
+        - UI-27
+      increments:
+        - id: UIR-06A-shell
+          requirements:
+            - Real destinations and progressive disclosure for every visible nav item.
+            - Active state and heading focus transfer.
+            - Mobile drawer with hamburger, icons, backdrop, Escape, focus management, scroll lock, and safe areas.
+            - Workspace content/scope matches the approved contract and denies deep links/cache leakage.
+          expected_files:
+            - apps/web/src/App.tsx
+            - apps/web/src/app/AppShell.tsx
+            - apps/web/src/app/navigation.ts
+            - apps/web/src/app/WorkspaceSwitcher.tsx
+            - apps/web/src/styles.css
+          generated_tests:
+            - click every nav entry and assert destination, heading focus, active state, and permission
+            - mobile drawer keyboard/touch tests at 360x800
+            - workspace positive and negative authorization tests
+        - id: UIR-06B-login
+          requirements:
+            - Async loading and double-submit prevention.
+            - Error clearing and field-linked validation.
+            - Intended redirect and session-expiry message where contract supports them.
+            - Reset panel only where approved; otherwise no misleading control.
+          expected_files:
+            - apps/web/src/app/LoginPanel.tsx
+            - apps/web/src/app/session.ts
+          generated_tests:
+            - delayed login and rapid double-click
+            - invalid credential accessibility tree
+            - reset/session redirect contract tests
+        - id: UIR-06C-workflow
+          requirements:
+            - Validate, simulate, review, publish, and export controls produce visible supported outcomes or are removed/quarantined.
+            - Mandatory reason and safe, user-readable feedback remain intact.
+            - Confirm only actions classified as irreversible or finalizing.
+          expected_files:
+            - apps/web/src/workflow/**
+          generated_tests:
+            - every visible verb changes visible state or invokes a supported API
+            - maker-checker and denial tests
+            - keyboard confirmation and cancel tests
+        - id: UIR-06D-payroll
+          requirements:
+            - Finalizing payroll actions use the approved confirmation policy.
+            - Disabled actions explain prerequisites accessibly.
+            - Lifecycle status and errors remain contract-faithful and user-safe.
+          expected_files:
+            - apps/web/src/modules/g10/**
+          generated_tests:
+            - irreversible/finalizing action confirmation and cancellation
+            - permission and lifecycle denial matrices
+      review_criteria:
+        - CJ-EMPLOYEE, CJ-MANAGER, and CJ-ADMIN pass at all three viewports.
+        - No visible no-op, dead destination, false state, or client-only authorization exists.
+        - Keyboard traversal and axe have no blocking violations.
+        - Existing API payload and RBAC tests remain green.
+      rollback_retry_policy:
+        rollback: Feature-flag routing, workspace behavior, and each critical flow independently; retain hash parity until routed parity passes.
+        retry: Correct one vertical slice without weakening acceptance or authorization-negative tests.
+        quarantine: Unsupported reset/export/config verbs are hidden while login, inbox, and supported workflow actions continue.
+      exit_criteria:
+        - All critical journeys and their denial cases pass browser, keyboard, responsive, and accessibility checks.
+
+    - id: UIR-07
+      name: Migrate Remaining Modules and Conditional Quality Features
+      planner_stage: UI
+      status: planned
+      goal: >
+        Apply the proven shell/primitives to remaining module surfaces, close
+        reproduced responsive and state gaps, and implement conditional
+        architecture/requirements obligations without widening release scope.
+      requirements:
+        - Migrate remaining module controls incrementally; preserve real fields, client calls, RBAC, and canonical states.
+        - Reflow record tables into cards below the approved breakpoint unless the content is a true matrix.
+        - Provide critical empty/error/retry/live feedback; add layout-matching skeletons only where measured value justifies them.
+        - Implement i18n and dark theme only if UIR-00 confirms them as shipped requirements; otherwise record explicit deferrals.
+        - Add search/filter only to accepted list-view requirements, with bounded/debounced queries and URL state where approved.
+      dependencies: [UIR-06]
+      finding_coverage: [UI-13, UI-19, UI-20, UI-21, UI-22, UI-23, UI-27, UI-28]
+      expected_files:
+        inspect_then_modify:
+          - apps/web/src/modules/g01/**
+          - apps/web/src/modules/g02/**
+          - apps/web/src/modules/g03/**
+          - apps/web/src/modules/g04/**
+          - apps/web/src/modules/g05/**
+          - apps/web/src/modules/g06/**
+          - apps/web/src/modules/g07/**
+          - apps/web/src/modules/g08/**
+          - apps/web/src/modules/g09/**
+          - apps/web/src/modules/g11/**
+          - apps/web/src/modules/g12/**
+          - apps/web/src/modules/g13/**
+          - apps/web/src/modules/g14/**
+          - apps/web/src/locales/**
+          - apps/web/src/styles/**
+      generated_tests:
+        module:
+          - canonical state and mutation regressions for every migrated module
+          - responsive table/card tests with long values
+          - locale parity and long-string tests if i18n is approved
+          - light/dark contrast snapshots if dark theme is approved
+        performance:
+          - bundle delta and route chunk report
+          - throttled loading and CLS evidence for skeletonized views
+      review_criteria:
+        - No skeleton or thin functional component is introduced.
+        - Conditional features link to approved requirements or explicit deferrals.
+        - Every migrated module retains permission and error behavior.
+      rollback_retry_policy:
+        rollback: Roll back one module migration to its prior functional presentation without reverting the shared shell.
+        retry: Remediate module-specific visual/accessibility regressions behind the module flag.
+        quarantine: A failing non-critical module or conditional feature does not reopen proven critical journeys.
+      exit_criteria:
+        - Every UI-01 through UI-28 ledger entry is fixed, merged to closed evidence, or formally deferred/rejected.
+        - All reproduced mobile overflow, contrast, and state failures are closed.
+
+    - id: UIR-08
+      name: Integrate, Validate, and Prepare the Human Release Decision
+      planner_stage: integration
+      status: planned
+      goal: >
+        Prove the amended UI against all blocking gates and produce a human
+        approval package without claiming evidence that was not executed.
+      dependencies: [UIR-07]
+      finding_coverage: [UI-01, UI-02, UI-03, UI-04, UI-05, UI-06, UI-07, UI-08, UI-09, UI-10, UI-11, UI-12, UI-13, UI-14, UI-15, UI-16, UI-17, UI-18, UI-19, UI-20, UI-21, UI-22, UI-23, UI-24, UI-25, UI-26, UI-27, UI-28]
+      expected_files:
+        create:
+          - docs/evidence/ui-remediation/final-command-log.md
+          - docs/evidence/ui-remediation/screenshot-matrix/**
+          - docs/evidence/ui-remediation/accessibility-summary.md
+          - docs/evidence/ui-remediation/keyboard-traversal.md
+          - docs/evidence/ui-remediation/authorization-negative-results.md
+          - docs/release/ui-remediation-readiness.md
+        modify:
+          - docs/spec/ui-remediation/finding-closure-ledger.yaml
+          - docs/reviews/ui-review-all-2026-07-11.md
+          - docs/spec/ph-05-verdict.md
+      generated_tests:
+        full_regression:
+          - clean install, typecheck, build, web tests, API tests, and PH-05E
+          - CJ-EMPLOYEE, CJ-MANAGER, and CJ-ADMIN at all required viewports
+          - denied-user, deep-link, stale-cache, and session-expiry negatives
+          - keyboard-only and axe scans on login, shell, workflow, payroll, and representative module
+          - light and conditional dark screenshots
+        human_validation:
+          - representative employee, manager, and admin task walkthrough
+          - keyboard or screen-reader user critical-journey walkthrough
+      review_criteria:
+        - All 16 blocking gates are PASS; PARTIAL is not release-ready for this remediation plan.
+        - Every evidence claim names the command/artifact and execution result.
+        - No unresolved P0/P1 finding lacks accepted defer/reject authority.
+        - Human validation issues are triaged before release decision.
+      rollback_retry_policy:
+        rollback: Revert or disable the failing vertical slice; do not waive a blocking gate.
+        retry: Rerun only after root-cause remediation and then rerun the full critical-journey matrix.
+        quarantine: One module may be disabled if its absence does not break a signed critical journey; shell, auth, authorization, and workflow safety cannot be quarantined for release.
+      exit_criteria:
+        - Blocking gates are 16 of 16 PASS.
+        - Finding ledger has no unowned or unexplained open item.
+        - Required screenshot, keyboard, accessibility, role, viewport, command, and regression evidence is complete.
+        - Human release owner records GO or NO-GO.
+  gates:
+    - id: UIR-G0
+      after: UIR-00
+      pass_when:
+        - Architecture/dependency decision approved.
+        - Route/workspace/auth/action contracts frozen.
+        - UI-01 through UI-28 dispositions complete.
+      blocks: [UIR-01, UIR-02]
+    - id: UIR-G1
+      after: [UIR-01, UIR-02]
+      pass_when:
+        - Deterministic build/test baseline exists.
+        - Persona, workspace, canonical-state, and authorization-negative fixtures pass.
+      blocks: [UIR-03, UIR-04, UIR-05]
+    - id: UIR-G2
+      after: [UIR-03, UIR-04]
+      pass_when:
+        - Required service/API contracts pass scope, auth, error, and idempotency tests.
+        - Unsupported behaviors are explicitly hidden or quarantined.
+      blocks: [UIR-06]
+    - id: UIR-G3
+      after: UIR-05
+      pass_when:
+        - Approved primitives and harness pass viewport, keyboard, contrast, and build tests.
+      blocks: [UIR-06]
+    - id: UIR-G4
+      after: UIR-06
+      pass_when:
+        - Three critical journeys and denial cases pass at all viewports.
+      blocks: [UIR-07]
+    - id: UIR-G5
+      after: UIR-08
+      pass_when:
+        - All 16 blocking gates pass.
+        - Finding ledger and evidence package are complete.
+      outcome: human_release_decision
+
 phase_gates:
   gate_0_workflow_platform_extraction:
     after: PH-00

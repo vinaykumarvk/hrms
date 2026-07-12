@@ -1007,6 +1007,8 @@ export interface HrmsClientOptions {
   correlationId?: string;
   fetcher?: HrmsFetch;
   tokenProvider?: HrmsTokenProvider;
+  requestTimeoutMs?: number;
+  onUnauthorized?: () => void;
 }
 
 export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
@@ -1014,6 +1016,7 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
   const correlationId = options.correlationId ?? "corr-web-ph05";
   const fetcher = options.fetcher ?? fetch;
   const tokenProvider = options.tokenProvider;
+  const requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
 
   async function request<TResponse>(route: string, init: RequestInit = {}): Promise<TResponse> {
     const headers = new Headers(init.headers);
@@ -1026,9 +1029,16 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);
     }
-    const response = await fetcher(`${baseUrl}${route}`, { ...init, headers });
+    const timeoutSignal = AbortSignal.timeout(requestTimeoutMs);
+    const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal;
+    const response = await fetcher(`${baseUrl}${route}`, {
+      ...init,
+      headers,
+      signal,
+    });
     const parsed = (await response.json()) as TResponse;
     if (!response.ok) {
+      if (response.status === 401) options.onUnauthorized?.();
       throw new HrmsApiError(response.status, parsed);
     }
     return parsed;

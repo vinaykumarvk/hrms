@@ -4,13 +4,14 @@
   "private": true,
   "description": "Government HRMS modular-monolith foundation services.",
   "scripts": {
-    "typecheck": "node /Users/n15318/workflow-platform/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
-    "build": "node /Users/n15318/workflow-platform/node_modules/typescript/bin/tsc -p tsconfig.json",
+    "typecheck": "npx tsc -p tsconfig.json --noEmit",
+    "build": "npx tsc -p tsconfig.json",
     "test": "npm run build && node --test apps/api/test/*.test.cjs",
     "check": "npm run typecheck && npm test",
-    "web:typecheck": "node /Users/n15318/workflow-platform/node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
+    "web:typecheck": "npx tsc -p apps/web/tsconfig.json --noEmit",
     "web:build": "node node_modules/vite/bin/vite.js build --config apps/web/vite.config.ts",
     "web:test": "node --test apps/web/test/*.test.cjs",
+    "web:test:e2e": "playwright test --config apps/web/playwright.config.ts",
     "web:check": "npm run web:typecheck && npm run web:build && npm run web:test",
     "web:dev": "node node_modules/vite/bin/vite.js --config apps/web/vite.config.ts --host 127.0.0.1"
   },
@@ -21,16 +22,26 @@
     "@hrms-workflow/workflow-postgres": "file:../workflow-platform/packages/workflow-postgres",
     "@hrms-workflow/workflow-resolvers": "file:../workflow-platform/packages/workflow-resolvers",
     "@hrms-workflow/workflow-test-kit": "file:../workflow-platform/packages/workflow-test-kit",
+    "@radix-ui/react-dialog": "1.1.15",
     "@types/pg": "^8.20.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "lucide-react": "0.468.0",
     "pg": "^8.22.0",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "tailwind-merge": "3.3.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
+    "@playwright/test": "1.55.1",
+    "@tailwindcss/postcss": "4.1.14",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
-    "typescript": "file:../workflow-platform/node_modules/typescript",
+    "postcss": "8.5.17",
+    "tailwindcss": "4.1.14",
+    "typescript": "5.7.3",
     "vite": "^8.1.2"
   }
 }
