@@ -1,6 +1,6 @@
 import { AuditService } from "../../platform/audit/auditService";
 import { AuthorizationService } from "../../platform/authorization/authorizationService";
-import { ActorContext, TenantScope, pseudoHash64, requireTenantScope, stableStringify } from "../../platform/types";
+import { ActorContext, FoundationError, TenantScope, pseudoHash64, requireTenantScope, stableStringify } from "../../platform/types";
 import { EmployeeMasterService } from "../g01/employeeMasterService";
 import { DisciplinaryService } from "../g09/disciplinaryService";
 import { PayrollService } from "../g10/payrollService";
@@ -8,6 +8,7 @@ import { PensionService } from "../g11/pensionService";
 import { ServiceRegisterService } from "../g12/serviceRegisterService";
 import { DocumentVaultService } from "../g13/documentVaultService";
 import { HrmsWorkflowService } from "../../platform/workflow/hrmsWorkflowService";
+import { LeaveService } from "../g03/leaveService";
 
 export interface AnalyticsCard {
   code: string;
@@ -65,6 +66,49 @@ export interface AnalyticsDataHealth {
   reconciliationStatus: "RECONCILED";
 }
 
+/** Self-service "own personal dashboard" (BRD §3.2 "Own personal dashboard": R for all roles,
+ *  including Employee) — a thin read reusing existing G03 leave/attendance data directly, not
+ *  the KPI/mart/datamart engine the rest of this module runs on. */
+export interface PersonalDashboard {
+  employeeId: string;
+  leaveBalance: { leaveTypeId: string; leaveYear: number; currentBalance: number; reserved: number; debited: number; availableBalance: number };
+  attendanceSummary: { totalRecords: number; presentDays: number; regularisedDays: number };
+}
+
+/** hr_admin `g14.report.build` capability — self-service report builder over the existing mart
+ *  cards: pick a subset of cards, render JSON or CSV, optionally schedule recurring distribution.
+ *  Deliberately thin: reuses `buildCards()`, does not introduce a parallel data model. */
+export interface ReportDefinition {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  name: string;
+  cardCodes: string[];
+  format: "JSON" | "CSV";
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface ReportOutput {
+  id: string;
+  reportDefinitionId: string;
+  format: "JSON" | "CSV";
+  generatedAt: string;
+  content: string;
+}
+
+export interface ScheduledReport {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  reportDefinitionId: string;
+  cronExpression: string;
+  recipients: string[];
+  createdByUserId: string;
+  createdAt: string;
+  active: boolean;
+}
+
 export interface AnalyticsSummary {
   dashboards: number;
   cards: number;
@@ -80,6 +124,11 @@ export interface AnalyticsSummary {
 
 export class AnalyticsService {
   private readonly martSnapshots: AnalyticsMartSnapshot[] = [];
+  private readonly reportDefinitions: ReportDefinition[] = [];
+  private readonly scheduledReports: ScheduledReport[] = [];
+  private reportCounter = 0;
+  private outputCounter = 0;
+  private scheduleCounter = 0;
 
   constructor(
     private readonly employeeMaster: EmployeeMasterService,
@@ -90,7 +139,8 @@ export class AnalyticsService {
     private readonly payroll: PayrollService,
     private readonly pension: PensionService,
     private readonly authorization: AuthorizationService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly leave: LeaveService
   ) {}
 
   refreshMart(actor: ActorContext): AnalyticsMartSnapshot {
@@ -151,6 +201,38 @@ export class AnalyticsService {
     };
   }
 
+  /** Self-service "own personal dashboard": own leave balance + own attendance summary, reusing
+   *  `LeaveService`'s own self-or-override gate directly rather than duplicating it here — both
+   *  calls throw FORBIDDEN if `actor.userId !== employeeId` and the actor holds no override role.
+   *  Post-full-review fix: uses a DISTINCT permission (`g14.analytics.read.self`) from the org-wide
+   *  `g14.analytics.read` the executive dashboard/KPI/cohort routes use — unlike every other
+   *  self-service reuse of an existing permission string this session, `getDashboard()` has no
+   *  per-employee filtering at all (it's inherently an aggregate view), so sharing one permission
+   *  string would have let any self-service employee holding it reach the org-wide executive
+   *  dashboard directly via the API (the `workspace.admin` gate that appears to protect it is
+   *  frontend-only, not enforced server-side). */
+  getMyDashboard(actor: ActorContext, employeeId: string): PersonalDashboard {
+    this.authorization.check(actor, "g14.analytics.read.self", actor);
+    const leaveBalance = this.leave.getBalance(actor, employeeId, "EL");
+    const attendance = this.leave.listMyAttendance(actor, employeeId);
+    return {
+      employeeId,
+      leaveBalance: {
+        leaveTypeId: leaveBalance.leaveTypeId,
+        leaveYear: leaveBalance.leaveYear,
+        currentBalance: leaveBalance.currentBalance,
+        reserved: leaveBalance.reserved,
+        debited: leaveBalance.debited,
+        availableBalance: leaveBalance.availableBalance,
+      },
+      attendanceSummary: {
+        totalRecords: attendance.length,
+        presentDays: attendance.filter((record) => record.status === "PRESENT").length,
+        regularisedDays: attendance.filter((record) => record.status === "REGULARISED" || record.isRegularised).length,
+      },
+    };
+  }
+
   drillThrough(actor: ActorContext, widgetCode: string): AnalyticsDrillThrough {
     this.authorization.check(actor, "g14.analytics.drill_through", actor);
     const rows = this.employeeMaster.list(actor).map((employee) => ({
@@ -189,6 +271,107 @@ export class AnalyticsService {
       staleSources: [],
       reconciliationStatus: "RECONCILED",
     };
+  }
+
+  defineReport(actor: ActorContext, input: { name: string; cardCodes: string[]; format: "JSON" | "CSV" }): ReportDefinition {
+    this.authorization.check(actor, "g14.report.build", actor);
+    if (!input.name?.trim() || input.cardCodes.length === 0) {
+      throw new FoundationError("VALIDATION_FAILED", "name and at least one cardCode are required", { field: "cardCodes" });
+    }
+    const validCodes = new Set(this.buildCards(actor).map((card) => card.code));
+    const unknown = input.cardCodes.filter((code) => !validCodes.has(code));
+    if (unknown.length > 0) {
+      throw new FoundationError("VALIDATION_FAILED", `Unknown card codes: ${unknown.join(", ")}`, { field: "cardCodes" });
+    }
+    this.reportCounter += 1;
+    const definition: ReportDefinition = {
+      id: `g14-report-def-${String(this.reportCounter).padStart(6, "0")}`,
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      name: input.name,
+      cardCodes: [...input.cardCodes],
+      format: input.format,
+      createdByUserId: actor.userId,
+      createdAt: "2026-07-02T00:00:00.000Z",
+    };
+    this.reportDefinitions.push(definition);
+    this.audit.recordMutation(actor, { action: "G14_REPORT_DEFINED", subjectRef: `g14_report_definitions:${definition.id}` });
+    return { ...definition, cardCodes: [...definition.cardCodes] };
+  }
+
+  listReportDefinitions(actor: ActorContext): ReportDefinition[] {
+    this.authorization.check(actor, "g14.report.build", actor);
+    return this.reportDefinitions
+      .filter((definition) => this.inTenantScope(definition, actor))
+      .map((definition) => ({ ...definition, cardCodes: [...definition.cardCodes] }));
+  }
+
+  /** Build (render) a report from a previously defined report definition. */
+  buildReport(actor: ActorContext, reportDefinitionId: string): ReportOutput {
+    this.authorization.check(actor, "g14.report.build", actor);
+    const definition = this.reportDefinitions.find((entry) => entry.id === reportDefinitionId && this.inTenantScope(entry, actor));
+    if (!definition) {
+      throw new FoundationError("NOT_FOUND", "Report definition not found");
+    }
+    const cards = this.buildCards(actor).filter((card) => definition.cardCodes.includes(card.code));
+    const content = definition.format === "CSV" ? this.renderCsv(cards) : JSON.stringify(cards);
+    this.outputCounter += 1;
+    const output: ReportOutput = {
+      id: `g14-report-out-${String(this.outputCounter).padStart(6, "0")}`,
+      reportDefinitionId: definition.id,
+      format: definition.format,
+      generatedAt: "2026-07-02T00:00:00.000Z",
+      content,
+    };
+    this.audit.recordMutation(actor, {
+      action: "G14_REPORT_BUILT",
+      subjectRef: `g14_report_definitions:${definition.id}`,
+      metadata: { format: definition.format, outputId: output.id },
+    });
+    return output;
+  }
+
+  scheduleReport(actor: ActorContext, input: { reportDefinitionId: string; cronExpression: string; recipients: string[] }): ScheduledReport {
+    this.authorization.check(actor, "g14.report.build", actor);
+    const definition = this.reportDefinitions.find((entry) => entry.id === input.reportDefinitionId && this.inTenantScope(entry, actor));
+    if (!definition) {
+      throw new FoundationError("NOT_FOUND", "Report definition not found");
+    }
+    if (!input.cronExpression?.trim() || input.recipients.length === 0) {
+      throw new FoundationError("VALIDATION_FAILED", "cronExpression and at least one recipient are required", { field: "cronExpression" });
+    }
+    this.scheduleCounter += 1;
+    const schedule: ScheduledReport = {
+      id: `g14-report-schedule-${String(this.scheduleCounter).padStart(6, "0")}`,
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      reportDefinitionId: definition.id,
+      cronExpression: input.cronExpression,
+      recipients: [...input.recipients],
+      createdByUserId: actor.userId,
+      createdAt: "2026-07-02T00:00:00.000Z",
+      active: true,
+    };
+    this.scheduledReports.push(schedule);
+    this.audit.recordMutation(actor, { action: "G14_REPORT_SCHEDULED", subjectRef: `g14_scheduled_reports:${schedule.id}` });
+    return { ...schedule, recipients: [...schedule.recipients] };
+  }
+
+  listScheduledReports(actor: ActorContext): ScheduledReport[] {
+    this.authorization.check(actor, "g14.report.build", actor);
+    return this.scheduledReports
+      .filter((schedule) => this.inTenantScope(schedule, actor))
+      .map((schedule) => ({ ...schedule, recipients: [...schedule.recipients] }));
+  }
+
+  private inTenantScope(row: { tenantId: string; entityId?: string }, scope: TenantScope): boolean {
+    return row.tenantId === scope.tenantId && (!scope.entityId || row.entityId === scope.entityId);
+  }
+
+  private renderCsv(cards: AnalyticsCard[]): string {
+    const header = "code,label,value,sourceModules";
+    const rows = cards.map((card) => `${card.code},${card.label},${card.value},"${card.sourceModules.join(";")}"`);
+    return [header, ...rows].join("\n");
   }
 
   summary(scope: TenantScope): AnalyticsSummary {

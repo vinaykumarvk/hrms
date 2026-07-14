@@ -2,9 +2,24 @@ import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { readBodyRecord, optionalBoolean, optionalNumber, optionalString, requiredString } from "../http/body";
 import { pageItems } from "../http/pagination";
 import type { AddressType, ContactType, DependentRelationship, EmployeeContact } from "../modules/g01/employeeMasterService";
+import type { BankAccount } from "../modules/g01/bankAccountService";
+import type { BgvRecord, BgvReviewOutcome, BgvStatus, BgvVerificationType } from "../modules/g01/backgroundVerificationService";
 import { FoundationError } from "../platform/types";
 
+function toWireBgvRecord(row: BgvRecord): Omit<BgvRecord, "tenantId" | "entityId"> {
+  const { tenantId, entityId, ...rest } = row;
+  return rest;
+}
+
 type EmployeeContactVisibility = EmployeeContact["visibility"];
+
+/** submittedByUserId is an internal maker-identity used only for the SOD (maker!=checker) check on
+ *  approval; it must never reach a wire response — even a self-service employee with only
+ *  g01.employee.read can list bank accounts, and internal actor ids are not for client consumption. */
+function toWireBankAccount(account: BankAccount): Omit<BankAccount, "submittedByUserId"> {
+  const { submittedByUserId: _submittedByUserId, ...wire } = account;
+  return wire;
+}
 
 export const g01RouteEvidence = {
   base: "/api/v1/employees",
@@ -122,6 +137,24 @@ export function registerG01Routes(kernel: ApiKernel): void {
         effectiveDate: optionalString(body, "effectiveDate") ?? "2026-07-01",
       });
       return created(result);
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}:correct-pii",
+    operationId: "g01.correctEmployeePii",
+    protected: true,
+    permission: "g01.employee.pii.correct",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      const profile = context.services.employeeMaster.correctPii(context.actor, requiredParam(context.params, "id"), {
+        pan: optionalString(body, "pan"),
+        dob: optionalString(body, "dob"),
+        reason: requiredString(body, "reason"),
+      });
+      return ok({ profile });
     },
   });
   kernel.register({
@@ -975,7 +1008,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.listBankAccounts",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => ok({ items: context.services.bankAccount.listBankAccounts(context.scope, requiredParam(context.params, "id")) }),
+    handler: (context) =>
+      ok({ items: context.services.bankAccount.listBankAccounts(context.scope, requiredParam(context.params, "id")).map(toWireBankAccount) }),
   });
   kernel.register({
     method: "POST",
@@ -988,12 +1022,14 @@ export function registerG01Routes(kernel: ApiKernel): void {
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        bankAccount: context.services.bankAccount.addBankAccount(context.actor, requiredParam(context.params, "id"), {
-          bankName: requiredString(body, "bankName"),
-          ifsc: requiredString(body, "ifsc"),
-          accountNumberMasked: requiredString(body, "accountNumberMasked"),
-          isPrimarySalary: optionalBoolean(body, "isPrimarySalary"),
-        }),
+        bankAccount: toWireBankAccount(
+          context.services.bankAccount.addBankAccount(context.actor, requiredParam(context.params, "id"), {
+            bankName: requiredString(body, "bankName"),
+            ifsc: requiredString(body, "ifsc"),
+            accountNumberMasked: requiredString(body, "accountNumberMasked"),
+            isPrimarySalary: optionalBoolean(body, "isPrimarySalary"),
+          })
+        ),
       });
     },
   });
@@ -1008,13 +1044,15 @@ export function registerG01Routes(kernel: ApiKernel): void {
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
       return ok({
-        bankAccount: context.services.bankAccount.updateBankAccount(context.actor, requiredParam(context.params, "accountId"), {
-          rowVersion: readNomineeNumber(body, "rowVersion"),
-          bankName: optionalString(body, "bankName"),
-          ifsc: optionalString(body, "ifsc"),
-          accountNumberMasked: optionalString(body, "accountNumberMasked"),
-          isPrimarySalary: optionalBoolean(body, "isPrimarySalary"),
-        }),
+        bankAccount: toWireBankAccount(
+          context.services.bankAccount.updateBankAccount(context.actor, requiredParam(context.params, "accountId"), {
+            rowVersion: readNomineeNumber(body, "rowVersion"),
+            bankName: optionalString(body, "bankName"),
+            ifsc: optionalString(body, "ifsc"),
+            accountNumberMasked: optionalString(body, "accountNumberMasked"),
+            isPrimarySalary: optionalBoolean(body, "isPrimarySalary"),
+          })
+        ),
       });
     },
   });
@@ -1026,7 +1064,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.bank.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted({ bankAccount: context.services.bankAccount.approveBankAccount(context.actor, requiredParam(context.params, "accountId")) }),
+    handler: (context) =>
+      accepted({ bankAccount: toWireBankAccount(context.services.bankAccount.approveBankAccount(context.actor, requiredParam(context.params, "accountId"))) }),
   });
   kernel.register({
     method: "POST",
@@ -1038,7 +1077,13 @@ export function registerG01Routes(kernel: ApiKernel): void {
     requiresIdempotencyKey: true,
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
-      return accepted({ bankAccount: context.services.bankAccount.recordPennyDrop(context.actor, requiredParam(context.params, "accountId"), { result: requiredString(body, "result") as "VERIFIED" | "FAILED" }) });
+      return accepted({
+        bankAccount: toWireBankAccount(
+          context.services.bankAccount.recordPennyDrop(context.actor, requiredParam(context.params, "accountId"), {
+            result: requiredString(body, "result") as "VERIFIED" | "FAILED",
+          })
+        ),
+      });
     },
   });
   kernel.register({
@@ -1053,6 +1098,61 @@ export function registerG01Routes(kernel: ApiKernel): void {
       context.services.bankAccount.removeBankAccount(context.actor, requiredParam(context.params, "accountId"));
       return ok({ removed: true });
     },
+  });
+  // Post-hr_admin-goal thin build: bgv_review capability (view verification reports/vendor BGV
+  // results/discrepancy alerts).
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/employees/{id}/bgv-records",
+    operationId: "g01.recordBgvResult",
+    protected: true,
+    permission: "g01.bgv.record",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        bgvRecord: toWireBgvRecord(
+          context.services.backgroundVerification.recordBgvResult(context.actor, {
+            employeeId: requiredParam(context.params, "id"),
+            vendorName: requiredString(body, "vendorName"),
+            verificationType: requiredString(body, "verificationType") as BgvVerificationType,
+            status: requiredString(body, "status") as BgvStatus,
+            reportDate: requiredString(body, "reportDate"),
+            discrepancyNotes: optionalString(body, "discrepancyNotes"),
+          })
+        ),
+      });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/bgv-records/{id}:review",
+    operationId: "g01.reviewBgvResult",
+    protected: true,
+    permission: "g01.bgv.review",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return ok({
+        bgvRecord: toWireBgvRecord(
+          context.services.backgroundVerification.reviewBgvResult(context.actor, requiredParam(context.params, "id"), {
+            outcome: requiredString(body, "outcome") as BgvReviewOutcome,
+            notes: requiredString(body, "notes"),
+          })
+        ),
+      });
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees/{id}/bgv-records",
+    operationId: "g01.listBgvRecords",
+    protected: true,
+    permission: "g01.bgv.read",
+    handler: (context) =>
+      ok({ items: context.services.backgroundVerification.listBgvRecords(context.actor, requiredParam(context.params, "id")).map(toWireBgvRecord) }),
   });
 }
 

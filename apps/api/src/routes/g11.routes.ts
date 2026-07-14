@@ -1,6 +1,7 @@
 import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalNumber, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { ApiContext, ApiQuery, ApiResponse, RouteDefinition } from "../http/apiTypes";
+import type { PensionCase } from "../modules/g11/pensionService";
 import { PensionScheme } from "../modules/g11/pensionService";
 import { G11MoneyRounding, G11RuleAppliesTo } from "../modules/g11/pensionRuleRepository";
 import { AccountVerifyMethod, AccountVerifyResult, PenDisbursementLineType } from "../modules/g11/pensionDisbursementRepository";
@@ -57,6 +58,11 @@ export const g11RouteEvidence = {
   ],
 };
 
+function toWirePensionCase(pensionCase: PensionCase): Omit<PensionCase, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = pensionCase;
+  return wire;
+}
+
 export function registerG11Routes(kernel: ApiKernel): void {
   const routes: RouteDefinition[] = [
     {
@@ -70,11 +76,13 @@ export function registerG11Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          pensionCase: context.services.pension.createCase(context.actor, {
-            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
-            separationDate: requiredString(body, "separationDate"),
-            scheme: readPensionScheme(body),
-          }),
+          pensionCase: toWirePensionCase(
+            context.services.pension.createCase(context.actor, {
+              employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+              separationDate: requiredString(body, "separationDate"),
+              scheme: readPensionScheme(body),
+            })
+          ),
         });
       },
     },
@@ -89,11 +97,13 @@ export function registerG11Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          pensionCase: context.services.pension.verifyService(context.actor, requiredParam(context.params, "id"), {
-            totalServiceMonths: optionalNumber(body, "totalServiceMonths") ?? 360,
-            penaltyExclusionMonths: optionalNumber(body, "penaltyExclusionMonths"),
-            srCertified: readBoolean(body, "srCertified", true),
-          }),
+          pensionCase: toWirePensionCase(
+            context.services.pension.verifyService(context.actor, requiredParam(context.params, "id"), {
+              totalServiceMonths: optionalNumber(body, "totalServiceMonths") ?? 360,
+              penaltyExclusionMonths: optionalNumber(body, "penaltyExclusionMonths"),
+              srCertified: readBoolean(body, "srCertified", true),
+            })
+          ),
         });
       },
     },
@@ -108,15 +118,49 @@ export function registerG11Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          pensionCase: context.services.pension.computeBenefits(context.actor, requiredParam(context.params, "id"), {
-            ruleVersion: optionalString(body, "ruleVersion") ?? "PENSION-RULE-2026-01",
-            asOf: optionalString(body, "asOf"),
-            scheme: optionalString(body, "scheme") === undefined ? undefined : readPensionSchemeValue(requiredString(body, "scheme")),
+          pensionCase: toWirePensionCase(
+            context.services.pension.computeBenefits(context.actor, requiredParam(context.params, "id"), {
+              ruleVersion: optionalString(body, "ruleVersion") ?? "PENSION-RULE-2026-01",
+              asOf: optionalString(body, "asOf"),
+              scheme: optionalString(body, "scheme") === undefined ? undefined : readPensionSchemeValue(requiredString(body, "scheme")),
+              upsOptedIn: readOptionalBoolean(body, "upsOptedIn"),
+              npsEvent: readNpsEvent(optionalString(body, "npsEvent")),
+            })
+          ),
+        });
+      },
+    },
+    // ---- FR-G11-15: self-service non-binding estimate + "my cases" tracker ----
+    {
+      method: "POST",
+      path: "/api/v1/pension/estimates",
+      operationId: "g11.estimateBenefits",
+      protected: true,
+      permission: "g11.pension.self.read",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          estimate: context.services.pension.estimateBenefits(context.actor, {
+            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+            scheme: readPensionScheme(body),
+            asOf: requiredString(body, "asOf"),
+            qualifyingServiceMonths: optionalNumber(body, "qualifyingServiceMonths"),
+            emolumentsBaseCents: optionalNumber(body, "emolumentsBaseCents"),
             upsOptedIn: readOptionalBoolean(body, "upsOptedIn"),
             npsEvent: readNpsEvent(optionalString(body, "npsEvent")),
           }),
         });
       },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/pension/employees/{id}/cases",
+      operationId: "g11.listMyPensionCases",
+      protected: true,
+      permission: "g11.pension.self.read",
+      handler: (context) => ok({ items: context.services.pension.listMyCases(context.actor, requiredParam(context.params, "id")).map(toWirePensionCase) }),
     },
     // ---- PH-09C / FR-G11-06: commutation (factor lookup by age-next-birthday) ----
     {
@@ -238,7 +282,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.sanction",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ pensionCase: context.services.pension.sanction(context.actor, requiredParam(context.params, "id")) }),
+      handler: (context) => accepted({ pensionCase: toWirePensionCase(context.services.pension.sanction(context.actor, requiredParam(context.params, "id"))) }),
     },
     {
       method: "POST",
@@ -250,9 +294,11 @@ export function registerG11Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) =>
         accepted({
-          pensionCase: context.services.pension.issuePpo(context.actor, requiredParam(context.params, "id"), {
-            idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
-          }),
+          pensionCase: toWirePensionCase(
+            context.services.pension.issuePpo(context.actor, requiredParam(context.params, "id"), {
+              idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+            })
+          ),
         }),
     },
     {

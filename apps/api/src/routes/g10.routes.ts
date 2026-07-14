@@ -4,10 +4,27 @@ import { ApiQuery, RouteDefinition } from "../http/apiTypes";
 import { PayrollAdjustmentCode, PayrollAdjustmentSource } from "../modules/g10/payrollService";
 import { PayCalcMethod, PayComponentCategory, RateTableType, TaxRegime } from "../modules/g10/payRuleRepository";
 import { PerquisiteType } from "../modules/g10/loanPerquisiteGlService";
-import { EngineRunMode } from "../modules/g10/payrollEngineRepository";
+import { EngineRunMode, EnginePayslip, EnginePayslipLine } from "../modules/g10/payrollEngineRepository";
 import { PreviousEmployerIncome, Relief891, RemittanceScheme } from "../modules/g10/taxEngineRepository";
 import { FoundationError } from "../platform/types";
 import { ph03Ids } from "../seed/ph03Seed";
+
+/** FR-G10-13 self-service wire shape: strips tenantId/entityId/runId and calcTrace (rule-engine
+ *  internals — formula/rate-table/proration debug detail with no business meaning to an employee)
+ *  before a payslip reaches the wire, mirroring the toWireBankAccount/toWireAttendance pattern
+ *  used elsewhere in this session for other internal-only fields. */
+function toWirePayslipRecord(record: { payslip: EnginePayslip; lines: EnginePayslipLine[] }): {
+  payslip: Pick<EnginePayslip, "id" | "payslipNo" | "employeeId" | "period" | "version" | "status" | "grossCents" | "deductionsCents" | "netPayCents">;
+  lines: Pick<EnginePayslipLine, "componentCode" | "lineType" | "amountCents" | "sequenceNo">[];
+} {
+  const { id, payslipNo, employeeId, period, version, status, grossCents, deductionsCents, netPayCents } = record.payslip;
+  return {
+    payslip: { id, payslipNo, employeeId, period, version, status, grossCents, deductionsCents, netPayCents },
+    lines: record.lines
+      .map(({ componentCode, lineType, amountCents, sequenceNo }) => ({ componentCode, lineType, amountCents, sequenceNo }))
+      .sort((left, right) => left.sequenceNo - right.sequenceNo),
+  };
+}
 
 export const g10RouteEvidence = {
   salaryStructures: "/api/v1/payroll/salary-structures",
@@ -159,6 +176,54 @@ export function registerG10Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g10.payroll.read",
       handler: (context) => ok(context.services.payroll.summary(context.scope)),
+    },
+    // Engine enrolment (route exposure for the already-tested PayrollEngineService.enrolEmployee;
+    // a prerequisite admin setup step before any engine run can produce a payslip for an employee).
+    {
+      method: "POST",
+      path: "/api/v1/payroll/employees/{id}/enrolments",
+      operationId: "g10.enrolEmployee",
+      protected: true,
+      permission: "g10.salary.write",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        const rawAmounts = body.componentAmountsCents;
+        const componentAmountsCents: Record<string, number> = {};
+        if (rawAmounts && typeof rawAmounts === "object") {
+          for (const [code, amount] of Object.entries(rawAmounts as Record<string, unknown>)) {
+            componentAmountsCents[code] = Number(amount);
+          }
+        }
+        return created({
+          enrolment: context.services.payrollEngine.enrolEmployee(context.actor, {
+            employeeId: requiredParam(context.params, "id"),
+            stateOfPosting: optionalString(body, "stateOfPosting"),
+            componentAmountsCents,
+            effectiveFrom: requiredString(body, "effectiveFrom"),
+          }),
+        });
+      },
+    },
+    // FR-G10-13/FR-G10-06 self-service: an employee's own payslip history and YTD statement
+    // (P02 own-record scope enforced inside PayrollEngineService, not just by the flat permission).
+    {
+      method: "GET",
+      path: "/api/v1/payroll/employees/{id}/payslips",
+      operationId: "g10.listMyPayslips",
+      protected: true,
+      permission: "g10.payroll.read",
+      handler: (context) =>
+        ok({ items: context.services.payrollEngine.listMyPayslips(context.actor, requiredParam(context.params, "id")).map(toWirePayslipRecord) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/payroll/employees/{id}/ytd",
+      operationId: "g10.getMyYtdStatement",
+      protected: true,
+      permission: "g10.payroll.read",
+      handler: (context) => ok({ ytd: context.services.payrollEngine.getYtdStatement(context.actor, requiredParam(context.params, "id")) }),
     },
     // ---- PH-09A rule substrate: E05 pay_components / E06 pay_rules / E07 rate_tables ----
     {
@@ -656,6 +721,33 @@ export function registerG10Routes(kernel: ApiKernel): void {
       unsafe: true,
       requiresIdempotencyKey: true,
       handler: (context) => accepted({ settlement: context.services.compensationIntegration.approveFnfSettlement(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/fnf-settlements/{id}:sanction",
+      operationId: "g10.sanctionFnfSettlement",
+      protected: true,
+      permission: "g10.fnf.settle",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ settlement: context.services.compensationIntegration.sanctionFnfSettlement(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/payroll/fnf-settlements/{id}:pay",
+      operationId: "g10.payFnfSettlement",
+      protected: true,
+      permission: "g10.fnf.settle",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          settlement: context.services.compensationIntegration.payFnfSettlement(context.actor, requiredParam(context.params, "id"), {
+            paymentRef: requiredString(body, "paymentRef"),
+          }),
+        });
+      },
     },
     {
       method: "GET",

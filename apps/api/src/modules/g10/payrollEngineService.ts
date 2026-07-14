@@ -90,6 +90,11 @@ interface EmployeeComputation {
   lwpDaysHundredths: number;
 }
 
+/** Org-wide override roles for the FR-G10-13/FR-G10-06 self-service payroll reads (P02 own-record
+ *  scoping) — an HR/payroll admin may look up any employee's payslip/YTD, an employee may only
+ *  read their own. */
+const PAYROLL_SELF_SERVICE_OVERRIDE_ROLES = new Set(["hr_admin", "payroll_officer", "payroll_admin", "system"]);
+
 export class PayrollEngineService {
   private policy: EnginePolicy = { perDayBasis: "CALENDAR_DAYS", netPayFloorBps: 5000 };
 
@@ -573,9 +578,11 @@ export class PayrollEngineService {
    * VAL-G10-YTD-DERIVE: YTD figures are DERIVED from the immutable payslip_lines ledger over
    * surviving (PUBLISHED, non-REVERSED) payslips — never from a mutable running counter.
    * Reopen/supersede self-corrects the YTD because REVERSED payslips drop out of the sum.
+   * FR-G10-06 self-service scope: an employee may only read their own YTD statement.
    */
-  getYtdStatement(scope: TenantScope, employeeId: string): EngineYtdStatement {
-    requireTenantScope(scope);
+  getYtdStatement(actor: ActorContext, employeeId: string): EngineYtdStatement {
+    this.assertSelfOrOverride(actor, employeeId);
+    const scope = actor;
     const survivingPayslipIds = new Set(
       this.repository
         .listPayslipsForEmployee(scope, employeeId)
@@ -624,6 +631,34 @@ export class PayrollEngineService {
       .filter((item) => item.status === "PUBLISHED")
       .sort((left, right) => right.period.localeCompare(left.period) || right.version - left.version)[0];
     return payslip ? this.clonePayslip(payslip) : undefined;
+  }
+
+  /**
+   * FR-G10-13 self-service payslip history: the employee's own PUBLISHED payslips across all
+   * periods, each with full line-item detail (BRD: "Employees see only their own (P02)").
+   */
+  listMyPayslips(actor: ActorContext, employeeId: string): { payslip: EnginePayslip; lines: EnginePayslipLine[] }[] {
+    this.assertSelfOrOverride(actor, employeeId);
+    return this.repository
+      .listPayslipsForEmployee(actor, employeeId)
+      .filter((payslip) => payslip.status === "PUBLISHED")
+      .sort((left, right) => right.period.localeCompare(left.period) || right.version - left.version)
+      .map((payslip) => ({
+        payslip: this.clonePayslip(payslip),
+        lines: this.repository
+          .listLinesForPayslip(actor, payslip.id)
+          .sort((left, right) => left.sequenceNo - right.sequenceNo)
+          .map((line) => ({ ...line, calcTrace: { ...line.calcTrace } })),
+      }));
+  }
+
+  /** Self-or-override guard shared by the FR-G10-13/FR-G10-06 self-service reads below. */
+  private assertSelfOrOverride(actor: ActorContext, employeeId: string): void {
+    requireTenantScope(actor);
+    const isOverride = actor.permissions?.includes("*") || actor.roles?.some((role) => PAYROLL_SELF_SERVICE_OVERRIDE_ROLES.has(role));
+    if (!isOverride && actor.userId !== employeeId) {
+      throw new FoundationError("FORBIDDEN", "You may only view your own payroll records", { field: "employeeId" });
+    }
   }
 
   listRunPayslips(scope: TenantScope, runId: string): { payslip: EnginePayslip; lines: EnginePayslipLine[] }[] {

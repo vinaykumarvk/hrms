@@ -14,7 +14,7 @@ test("UIR-07 all routed module destinations remain substantive", () => {
     const source = fs.readdirSync(directory).filter((name) => name.endsWith(".tsx")).map((name) => fs.readFileSync(path.join(directory, name), "utf8")).join("\n");
     assert.match(source, /client|OperationalState|form|table|data-/i, `G${module} substance`);
   }
-  assert.equal((app.match(/case "\/(me|team|admin)\//g) ?? []).length, 16);
+  assert.equal((app.match(/case "\/(me|team|admin)\//g) ?? []).length, 24);
 });
 
 test("UIR-07 shared form table target and overflow rules cover remaining raw module controls", () => {

@@ -807,6 +807,19 @@ matrix:
         scope: entity
         pii_tier_gate: null
         sod: "policy = System Admin; holds = Dept Head/SR Custodian/DPO; erasure sign-off = DPO"
+      # NOTE: the entry below uses the literal runtime permission string (g01.bank.approve), unlike the
+      # epm.* codes above which are a documentation-only naming layer not wired to the actual
+      # AuthorizationService checks in code (apps/api/src/modules/g01/bankAccountService.ts). Recorded
+      # here to close the specific F-4 traceability gap for the bank-account maker!=checker control;
+      # reconciling the epm.* vs runtime-string drift across the rest of this module is a separate,
+      # larger amendment not undertaken here.
+      - action_code: g01.bank.approve
+        description: "Second-approver action on a PENDING bank account (FR-EPM-008 AC3/AC7 4-eyes/SOD)."
+        allowed_roles: [hr_admin, finance_admin]
+        required_capability_flags: []
+        scope: entity
+        pii_tier_gate: "TIER-1 bank detail; masked account number only"
+        sod: "maker (submittedByUserId) != checker (approving actor); SOD_VIOLATION on match unless the approver holds an override role/permission"
 
   G02:
     module: "Personal Details Modification Workflow"

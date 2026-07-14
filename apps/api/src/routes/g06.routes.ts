@@ -2,9 +2,30 @@ import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalNumber, optionalString, optionalStringArray, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
-import { DpcPanelMember, QualifyingServiceComputeInput, SanctionedPostInput, SenioritySeed } from "../modules/g06/promotionService";
+import { DpcPanelMember, PromotionOrder, QualifyingServiceComputeInput, SanctionedPostInput, SenioritySeed } from "../modules/g06/promotionService";
 import { SuccessionReadiness } from "../modules/g06/careerSuccessionService";
-import { LegalForum, LegalLinkedEntityType, MacpClockEffect, ReservationCategory, RotationMethod, RotationStartSlot } from "../modules/g06/promotionDepthRepository";
+import { LegalForum, LegalLinkedEntityType, MacpClockEffect, ProbationRecord, PromotionRefusal, ReservationCategory, RotationMethod, RotationStartSlot } from "../modules/g06/promotionDepthRepository";
+import { SealedCoverCase } from "../modules/g06/sealedCoverService";
+
+function toWirePromotionOrder(order: PromotionOrder): Omit<PromotionOrder, "tenantId" | "entityId"> {
+  const { tenantId, entityId, ...rest } = order;
+  return rest;
+}
+
+function toWireProbationRecord(record: ProbationRecord): Omit<ProbationRecord, "tenantId" | "entityId"> {
+  const { tenantId, entityId, ...rest } = record;
+  return rest;
+}
+
+function toWirePromotionRefusal(refusal: PromotionRefusal): Omit<PromotionRefusal, "tenantId" | "entityId"> {
+  const { tenantId, entityId, ...rest } = refusal;
+  return rest;
+}
+
+function toWireSealedCover(cover: SealedCoverCase): Omit<SealedCoverCase, "tenantId" | "entityId"> {
+  const { tenantId, entityId, ...rest } = cover;
+  return rest;
+}
 
 export const g06RouteEvidence = {
   seniorityLists: "/api/v1/promotions/seniority-lists",
@@ -243,7 +264,11 @@ export function registerG06Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g06.promotion.read",
       handler: (context) =>
-        ok({ probationRecords: context.services.promotion.listProbationRecords(context.scope, optionalString(context.request.query ?? {}, "employeeId") ?? ph03Ids.employee) }),
+        ok({
+          probationRecords: context.services.promotion
+            .listProbationRecords(context.actor, optionalString(context.request.query ?? {}, "employeeId") ?? ph03Ids.employee)
+            .map(toWireProbationRecord),
+        }),
     },
     {
       method: "GET",
@@ -252,7 +277,11 @@ export function registerG06Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g06.promotion.read",
       handler: (context) =>
-        ok({ refusals: context.services.promotion.listPromotionRefusals(context.scope, optionalString(context.request.query ?? {}, "employeeId") ?? ph03Ids.employee) }),
+        ok({
+          refusals: context.services.promotion
+            .listPromotionRefusals(context.actor, optionalString(context.request.query ?? {}, "employeeId") ?? ph03Ids.employee)
+            .map(toWirePromotionRefusal),
+        }),
     },
     {
       method: "POST",
@@ -405,7 +434,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g06.sealedcover.read",
       handler: (context) =>
-        ok({ items: context.services.sealedCover.listSealedCovers(context.scope) }),
+        ok({ items: context.services.sealedCover.listSealedCovers(context.actor).map(toWireSealedCover) }),
     },
     {
       method: "POST",
@@ -576,7 +605,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.listPromotionOrders",
       protected: true,
       permission: "g06.promotion.read",
-      handler: (context) => ok({ items: context.services.promotion.listPromotionOrders(context.scope) }),
+      handler: (context) => ok({ items: context.services.promotion.listPromotionOrders(context.actor).map(toWirePromotionOrder) }),
     },
     {
       method: "POST",

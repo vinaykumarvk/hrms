@@ -3,7 +3,23 @@ import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requir
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
 import { CredentialVerificationMethod, SponsorshipType } from "../modules/g07/trainingDepthRepository";
+import type { TrainingSession, TrainingNomination } from "../modules/g07/trainingService";
 import { FoundationError } from "../platform/types";
+
+/** Session catalog rows carry no maker/internal-only fields beyond tenantId/entityId (a
+ *  pre-existing, codebase-wide convention this session's other fixes don't retroactively touch —
+ *  see the G12 coverage report's F2 discussion), so only the entity/tenant pair is stripped here. */
+function toWireSession(session: TrainingSession): Omit<TrainingSession, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = session;
+  return wire;
+}
+
+/** workflowInstanceId is an internal P01 linkage id with no meaning to the employee viewing their
+ *  own nomination history; strips it alongside tenantId/entityId. */
+function toWireNomination(nomination: TrainingNomination): Omit<TrainingNomination, "tenantId" | "entityId" | "workflowInstanceId"> {
+  const { tenantId: _tenantId, entityId: _entityId, workflowInstanceId: _workflowInstanceId, ...wire } = nomination;
+  return wire;
+}
 
 export const g07RouteEvidence = {
   sessions: "/api/v1/training/sessions",
@@ -40,6 +56,22 @@ export function registerG07Routes(kernel: ApiKernel): void {
       },
     },
     {
+      method: "GET",
+      path: "/api/v1/training/sessions",
+      operationId: "g07.listSessions",
+      protected: true,
+      permission: "g07.training.read",
+      handler: (context) => ok({ items: context.services.training.listSessions(context.scope).map(toWireSession) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/training/employees/{id}/nominations",
+      operationId: "g07.listMyNominations",
+      protected: true,
+      permission: "g07.training.read",
+      handler: (context) => ok({ items: context.services.training.listMyNominations(context.actor, requiredParam(context.params, "id")).map(toWireNomination) }),
+    },
+    {
       method: "POST",
       path: "/api/v1/training/nominations",
       operationId: "g07.nominate",
@@ -50,10 +82,12 @@ export function registerG07Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          nomination: context.services.training.nominate(context.actor, {
-            sessionId: requiredString(body, "sessionId"),
-            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
-          }),
+          nomination: toWireNomination(
+            context.services.training.nominate(context.actor, {
+              sessionId: requiredString(body, "sessionId"),
+              employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+            })
+          ),
         });
       },
     },
@@ -65,7 +99,8 @@ export function registerG07Routes(kernel: ApiKernel): void {
       permission: "g07.nomination.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ nomination: context.services.training.approveNomination(context.actor, requiredParam(context.params, "id")) }),
+      handler: (context) =>
+        accepted({ nomination: toWireNomination(context.services.training.approveNomination(context.actor, requiredParam(context.params, "id"))) }),
     },
     {
       method: "POST",
@@ -77,14 +112,13 @@ export function registerG07Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(
-          context.services.training.completeNomination(context.actor, requiredParam(context.params, "id"), {
-            passed: optionalBoolean(body, "passed") ?? true,
-            significantForSr: optionalBoolean(body, "significantForSr") ?? false,
-            completionDate: requiredString(body, "completionDate"),
-            idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
-          })
-        );
+        const result = context.services.training.completeNomination(context.actor, requiredParam(context.params, "id"), {
+          passed: optionalBoolean(body, "passed") ?? true,
+          significantForSr: optionalBoolean(body, "significantForSr") ?? false,
+          completionDate: requiredString(body, "completionDate"),
+          idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+        });
+        return accepted({ ...result, nomination: toWireNomination(result.nomination) });
       },
     },
     {

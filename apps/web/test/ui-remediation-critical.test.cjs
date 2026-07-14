@@ -10,10 +10,10 @@ test("UIR-06 every navigation destination has route workspace icon and permissio
   const nav = read("apps/web/src/app/navigation.ts");
   const routes = read("apps/web/src/App.tsx");
   const destinations = [...nav.matchAll(/href: "([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(destinations.length, 16);
+  assert.equal(destinations.length, 24);
   for (const destination of destinations) assert.ok(routes.includes(`case "${destination}"`), destination);
-  assert.equal((nav.match(/workspace: "/g) ?? []).length, 16);
-  assert.equal((nav.match(/icon: "/g) ?? []).length, 16);
+  assert.equal((nav.match(/workspace: "/g) ?? []).length, 24);
+  assert.equal((nav.match(/icon: "/g) ?? []).length, 24);
 });
 
 test("UIR-06 shell has accessible mobile disclosure and active navigation", () => {

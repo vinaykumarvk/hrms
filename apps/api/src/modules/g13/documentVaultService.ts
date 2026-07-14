@@ -1,5 +1,5 @@
 import { AuditService } from "../../platform/audit/auditService";
-import { FoundationError, TenantScope, inScope, nextId, requireTenantScope, sha256Hex, sha256HexBytes } from "../../platform/types";
+import { ActorContext, FoundationError, TenantScope, inScope, nextId, requireTenantScope, sha256Hex, sha256HexBytes } from "../../platform/types";
 import {
   DataSubjectRequestRecord,
   DispositionRecord,
@@ -187,6 +187,10 @@ export const DPDP_REDACTION_MARKER = "[DPDP-REDACTED]";
 /** Checkout locks auto-expire (BRD G13 E14 `expires_at`, e.g. +8h) to prevent stuck locks. */
 const CHECKOUT_LOCK_TTL_MS = 8 * 60 * 60 * 1000;
 
+/** BRD S3.2 permission-matrix roles with document-domain access beyond "own" (Librarian/Records
+ *  Mgr and equivalents), plus the org-wide hr_admin/system override used across other modules. */
+const DOCUMENT_ACCESS_OVERRIDE_ROLES = new Set(["hr_admin", "librarian", "records_manager", "system"]);
+
 export class DocumentVaultService {
   private readonly documents: DocumentRecord[];
   // Append-only sub-ledger of immutable version rows (document_versions) — rows are frozen on
@@ -359,9 +363,52 @@ export class DocumentVaultService {
     return this.clone(document);
   }
 
-  list(scope: TenantScope): DocumentRecord[] {
+  /** BRD §3.2 permission matrix: Librarian/Records-Mgr/Auditor/etc. get a plain "R" (any
+   *  document); Employee gets "R (own)" only. Non-override actors are need-to-know scoped to
+   *  documents they own — a plain `g13.document.read` grant (which every employee holds) never
+   *  by itself surfaces another employee's document metadata. Documents with no
+   *  `ownerEmployeeId` (organisational artefacts with no single personal owner) are unaffected —
+   *  the "(own)" restriction has nothing to scope them by. */
+  list(scope: TenantScope & { roles?: string[]; permissions?: string[] }): DocumentRecord[] {
     requireTenantScope(scope);
-    return this.documents.filter((document) => inScope(document, scope)).map((document) => this.clone(document));
+    const inTenant = this.documents.filter((document) => inScope(document, scope));
+    const visible = this.isDocumentAccessOverride(scope)
+      ? inTenant
+      : inTenant.filter((document) => !document.ownerEmployeeId || document.ownerEmployeeId === scope.actorUserId);
+    return visible.map((document) => this.clone(document));
+  }
+
+  /** Self-service "access personal documents" discovery surface: every document the given
+   *  employee owns, newest first. Appraisee-of-the-documents-self or an override role/wildcard
+   *  only — this is the same need-to-know scope `list()` now applies for non-override actors,
+   *  exposed as an explicit "my documents" query for a specific employee id. */
+  listMyDocuments(scope: TenantScope & { roles?: string[]; permissions?: string[] }, employeeId: string): DocumentRecord[] {
+    requireTenantScope(scope);
+    this.assertSelfOrOverride(scope, employeeId);
+    return this.documents.filter((document) => inScope(document, scope) && document.ownerEmployeeId === employeeId).map((document) => this.clone(document));
+  }
+
+  private isDocumentAccessOverride(scope: TenantScope & { roles?: string[]; permissions?: string[] }): boolean {
+    return Boolean(scope.permissions?.includes("*") || scope.roles?.some((role) => DOCUMENT_ACCESS_OVERRIDE_ROLES.has(role)));
+  }
+
+  private assertSelfOrOverride(scope: TenantScope & { roles?: string[]; permissions?: string[] }, employeeId: string): void {
+    if (this.isDocumentAccessOverride(scope) || scope.actorUserId === employeeId) {
+      return;
+    }
+    throw new FoundationError("FORBIDDEN", "You may only view your own documents", { field: "employeeId" });
+  }
+
+  /** Need-to-know gate (BRD §3.3: "an ACL/relationship grant exists (deny-by-default)... need-to-
+   *  know restricts CONFIDENTIAL+ to principals on the document's ACL"). This codebase has no
+   *  separate ACL entity; a document's own owner is its ACL for the self-service surface, so a
+   *  non-override actor may only `get`/`fetch` a document they own — a classification-level
+   *  clearance grant is necessary but not sufficient for someone else's document. */
+  private assertOwnerOrOverride(scope: TenantScope & { roles?: string[]; permissions?: string[] }, document: DocumentRecord): void {
+    if (this.isDocumentAccessOverride(scope) || !document.ownerEmployeeId || document.ownerEmployeeId === scope.actorUserId) {
+      return;
+    }
+    throw new FoundationError("FORBIDDEN", "You may only access your own documents", { field: "documentId" });
   }
 
   listVersions(scope: TenantScope, documentId: string): DocumentVersionView[] {
@@ -529,8 +576,13 @@ export class DocumentVaultService {
   // FR-G13-016 R2: intent-resolved fetch. VIEW and DOWNLOAD return structurally different bodies and
   // each lands its own access-audit event in the append-only E12 document_audit ledger.
   // Gate order (all fail-closed): lifecycle -> DI-11 scan gate -> FR-006 clearance -> FR-005 integrity.
-  fetch(scope: TenantScope & { roles?: string[] }, documentId: string, intent: DocumentFetchIntent): DocumentViewDescriptor | DocumentDownloadGrant {
+  fetch(
+    scope: TenantScope & { roles?: string[]; permissions?: string[] },
+    documentId: string,
+    intent: DocumentFetchIntent
+  ): DocumentViewDescriptor | DocumentDownloadGrant {
     const document = this.requireDocument(scope, documentId);
+    this.assertOwnerOrOverride(scope, document);
     if (document.status === "DISPOSED" || document.status === "DELETED") {
       // Taxonomy ERR-G13-DOCUMENT_DISPOSED: fetch of a disposed document surfaces as NOT_FOUND.
       throw new FoundationError("NOT_FOUND", "Document is no longer available", {
@@ -740,6 +792,12 @@ export class DocumentVaultService {
     return clearance;
   }
 
+  /** Read path for the E21 security_clearances the deny-by-default gate above consults. */
+  listSecurityClearances(scope: TenantScope): SecurityClearanceRecord[] {
+    requireTenantScope(scope);
+    return this.security.listClearances(scope.tenantId);
+  }
+
   /** BRD G13 FR-009 (E8): define a tenant retention class (binds disposition eligibility). */
   defineRetentionClass(
     scope: TenantScope,
@@ -938,11 +996,19 @@ export class DocumentVaultService {
    * legal basis recorded); only where none applies is the document marked for erasure.
    */
   adjudicateDataSubjectRequest(
-    scope: TenantScope,
+    scope: ActorContext,
     dsrId: string,
     input: { decision?: "PROCEED" | "REJECT"; resolutionNote?: string } = {}
   ): DataSubjectRequestRecord {
     const dpo = this.requireActor(scope);
+    // Post-hr_admin-goal fix: `g02.grievance.handle` names a `grievance_officer` capability flag
+    // for handling data-subject privacy grievances — this DSR adjudication IS that capability
+    // (a DSR is the formal mechanism for a privacy grievance), but the flag was never checked;
+    // only the route-level `g13.dsr.adjudicate` permission gated this. Modeled as an additional
+    // role string, same convention as every other capability-flag fix this goal.
+    if (!scope.permissions?.includes("*") && !scope.roles?.some((role) => role === "grievance_officer" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Adjudicating a data-subject request requires the grievance_officer capability", { field: "actor" });
+    }
     const request = this.requireDataSubjectRequest(scope, dsrId);
     if (request.status !== "RECEIVED") {
       throw new FoundationError("PRECONDITION_FAILED", "Only a RECEIVED data-subject request can be adjudicated", {
@@ -1164,9 +1230,13 @@ export class DocumentVaultService {
     return request;
   }
 
-  get(scope: TenantScope, documentId: string): DocumentRecord | null {
+  get(scope: TenantScope & { roles?: string[]; permissions?: string[] }, documentId: string): DocumentRecord | null {
     const document = this.documents.find((item) => inScope(item, scope) && item.id === documentId);
-    return document ? this.clone(document) : null;
+    if (!document) {
+      return null;
+    }
+    this.assertOwnerOrOverride(scope, document);
+    return this.clone(document);
   }
 
   listByModuleRef(scope: TenantScope, moduleCode: string, entityRefId: string): DocumentRecord[] {

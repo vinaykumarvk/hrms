@@ -1,6 +1,7 @@
 import { NotificationService } from "../../notifications/notificationService";
 import { AuditService } from "../../platform/audit/auditService";
 import { AuthorizationService } from "../../platform/authorization/authorizationService";
+import { AuthorityResolutionService } from "../../platform/authority-resolution/authorityResolutionService";
 import { HrmsWorkflowService } from "../../platform/workflow/hrmsWorkflowService";
 import { ActorContext, FoundationError, TenantScope, nextId, pseudoHash64, requireTenantScope, stableStringify } from "../../platform/types";
 import { EmployeeMasterService } from "../g01/employeeMasterService";
@@ -109,6 +110,19 @@ export interface Certification {
   renewalOfCertificationId?: string;
 }
 
+/** FR-G07-009 AC1 override roles: "L&D/HR can nominate anyone in scope" — beyond self-nomination
+ *  and the resolved reporting-chain manager, which are checked dynamically per employeeId below.
+ *  Post-hr_admin-goal SoD correction: hr_admin deliberately excluded — training stays with the
+ *  dedicated L&D chain (ld_officer/ld_manager), per the hr_admin capability audit's explicit
+ *  "G07 owned by ld_officer/ld_manager" boundary. */
+const NOMINATION_OVERRIDE_ROLES = new Set(["ld_manager", "ld_officer", "system"]);
+
+/** FR-G07-010 "Authorization: Trainer own session; L&D any" — completion/attendance outcomes are
+ *  never self-attested by the nominee; only a trainer/L&D/admin role (or an explicit
+ *  override) may record pass/fail. Post-hr_admin-goal SoD correction: hr_admin excluded, same
+ *  reasoning as NOMINATION_OVERRIDE_ROLES above. */
+const COMPLETION_OVERRIDE_ROLES = new Set(["trainer", "ld_manager", "ld_officer", "system"]);
+
 export class TrainingService {
   private readonly sessions: TrainingSession[] = [];
   private readonly nominations: TrainingNomination[] = [];
@@ -122,6 +136,7 @@ export class TrainingService {
     private readonly serviceRegister: ServiceRegisterService,
     private readonly documentVault: DocumentVaultService,
     private readonly notifications: NotificationService,
+    private readonly authorityResolution: AuthorityResolutionService,
     // PH-08D: taxonomy/model/inventory/gap/contract/campaign depth behind the repository seam.
     private readonly depth: TrainingDepthRepository = new InMemoryTrainingDepthRepository()
   ) {}
@@ -146,6 +161,26 @@ export class TrainingService {
     return { ...session };
   }
 
+  /** Browse available training sessions/programs (no per-row scoping — a catalog, not PII). */
+  listSessions(scope: TenantScope): TrainingSession[] {
+    requireTenantScope(scope);
+    return this.sessions.filter((session) => this.inScope(session, scope)).map((session) => ({ ...session }));
+  }
+
+  /** FR-G07-009/010 self-service: an employee's own nominations (and their completion/certification
+   *  status), self-or-override scoped the same way as nominate()/completeNomination(). */
+  listMyNominations(actor: ActorContext, employeeId: string): TrainingNomination[] {
+    requireTenantScope(actor);
+    const isOverride = actor.permissions?.includes("*") || actor.roles?.some((role) => NOMINATION_OVERRIDE_ROLES.has(role));
+    if (!isOverride && actor.userId !== employeeId) {
+      const resolution = this.authorityResolution.resolve(actor, { mechanism: "REPORTING_CHAIN", subjectEmployeeId: employeeId }, "2026-07-02");
+      if (!resolution.selectedAssignees.some((assignee) => assignee.employeeId === actor.userId)) {
+        throw new FoundationError("FORBIDDEN", "You may only view your own training nominations (or your direct reports')", { field: "employeeId" });
+      }
+    }
+    return this.nominations.filter((nomination) => this.inScope(nomination, actor) && nomination.employeeId === employeeId).map((nomination) => ({ ...nomination }));
+  }
+
   nominate(actor: ActorContext, input: { sessionId: string; employeeId: string }): TrainingNomination {
     this.authorization.check(actor, "g07.nomination.submit", actor);
     const session = this.requireSession(actor, input.sessionId);
@@ -155,6 +190,7 @@ export class TrainingService {
     if (!this.employeeMaster.getById(actor, input.employeeId)) {
       throw new FoundationError("NOT_FOUND", "Employee not found");
     }
+    this.assertCanNominate(actor, input.employeeId);
     const started = this.workflow.start(actor, {
       workflowCode: "WF-G07-NOMINATION",
       subjectRef: `g07_training_nominations:${input.employeeId}:${session.id}`,
@@ -215,6 +251,7 @@ export class TrainingService {
     }
   ): { nomination: TrainingNomination; certification?: Certification } {
     this.authorization.check(actor, "g07.nomination.complete", actor);
+    this.assertCanRecordCompletion(actor);
     const nomination = this.requireNomination(actor, nominationId);
     const session = this.requireSession(actor, nomination.sessionId);
     if (nomination.status !== "APPROVED") {
@@ -1198,6 +1235,35 @@ export class TrainingService {
       metadata: { contractVersion: contract.contractVersion, consumers: ["G06", "G08"] },
     });
     return contract;
+  }
+
+  /** FR-G07-009 AC1: "An employee can self-nominate; a manager can nominate reports; L&D/HR can
+   *  nominate anyone in scope." Reuses the same REPORTING_CHAIN resolution the workflow start
+   *  below uses to route approval, so "is this actor the employee's manager" is answered
+   *  consistently with who the P01 approval task actually goes to. */
+  private assertCanNominate(actor: ActorContext, employeeId: string): void {
+    if (actor.permissions?.includes("*") || actor.roles?.some((role) => NOMINATION_OVERRIDE_ROLES.has(role))) {
+      return;
+    }
+    if (actor.userId === employeeId) {
+      return;
+    }
+    // Same fixed reference date the adjacent workflow.start() call below resolves against, so
+    // "is this actor the employee's manager" agrees with who the P01 approval task actually goes to.
+    const resolution = this.authorityResolution.resolve(actor, { mechanism: "REPORTING_CHAIN", subjectEmployeeId: employeeId }, "2026-07-02");
+    if (resolution.selectedAssignees.some((assignee) => assignee.employeeId === actor.userId)) {
+      return;
+    }
+    throw new FoundationError("FORBIDDEN", "You may only nominate yourself or your own direct reports", { field: "employeeId" });
+  }
+
+  /** FR-G07-010 "Authorization: Trainer own session; L&D any" — the nominee never records their
+   *  own pass/fail outcome. */
+  private assertCanRecordCompletion(actor: ActorContext): void {
+    if (actor.permissions?.includes("*") || actor.roles?.some((role) => COMPLETION_OVERRIDE_ROLES.has(role))) {
+      return;
+    }
+    throw new FoundationError("FORBIDDEN", "Only a trainer or L&D/HR role may record a training completion outcome", { field: "actor" });
   }
 
   private requireSession(scope: TenantScope, sessionId: string): TrainingSession {

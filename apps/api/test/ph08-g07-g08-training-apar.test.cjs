@@ -60,7 +60,7 @@ test("PH-08 G08 APAR chain posts final grade and sealed-cover suppresses G06 fee
     reviewingOfficerId: ph03Ids.manager,
     acceptingAuthorityId: ph03Ids.manager,
   });
-  services.apar.submitSelf(actor(), form.id);
+  services.apar.submitSelf(actor(), form.id, { narrative: "Strong statutory output this cycle" });
   services.apar.recordReporting(actor(), form.id, { grade: "VERY_GOOD", narrative: "Strong statutory output" });
   services.apar.recordReview(actor(), form.id, { concur: true, remarks: "Concurred" });
   services.apar.accept(actor(), form.id, { finalGrade: "VERY_GOOD" });

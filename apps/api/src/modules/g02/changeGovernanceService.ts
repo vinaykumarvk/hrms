@@ -229,6 +229,13 @@ export class ChangeGovernanceService {
     input: { outcome: G02RiskReviewOutcome; comment: string | undefined }
   ): { signal: CrRiskSignal; request: G02GovernedChangeRequest } {
     this.authorization.check(actor, "g02.risk.review", actor);
+    // Post-hr_admin-goal fix: the `fraud_reviewer` capability (auth-matrix flag; "triage HIGH/
+    // BLOCKED risk-scored requests") was never actually checked — any `g02.risk.review` holder
+    // could triage the fraud queue regardless of whether they held the flag. Modeled as an
+    // additional role string, same convention as every other capability-flag fix this goal.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "fraud_reviewer" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Fraud queue review requires the fraud_reviewer capability", { field: "actor" });
+    }
     const request = this.requireRequest(actor, requestId);
     if (actor.userId === request.requestedBy) {
       throw new FoundationError("FORBIDDEN", "Fraud review requires a principal distinct from the requester", {

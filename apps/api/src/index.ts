@@ -70,4 +70,5 @@ export * from "./platform/types";
 export * from "./platform/workflow/hrmsWorkflowService";
 export * from "./security/foundationServiceRegistry";
 export * from "./seed/ph03Seed";
+export * from "./seed/testEmployeesSeed";
 export * from "./routes";

@@ -253,6 +253,13 @@ export class LeaveSrRelayService {
 
   replayDeadLetter(actor: ActorContext, outboxEventId: string): LeaveSrOutboxEvent {
     this.authorization.check(actor, "g04.relay.replay", actor);
+    // Post-hr_admin-goal fix: `g04.dlq.triage_replay` names a `g04_dlq_ops` capability flag that
+    // was never checked — any `g04.relay.replay` holder could trigger a DLQ replay regardless of
+    // the flag. Modeled as an additional role string, same convention as every other
+    // capability-flag fix this goal.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "g04_dlq_ops" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Replaying a dead-lettered relay event requires the g04_dlq_ops capability", { field: "actor" });
+    }
     const event = this.requireOutbox(actor, outboxEventId);
     if (event.status !== "DEAD_LETTERED" && event.status !== "QUARANTINED") {
       throw new FoundationError("PRECONDITION_FAILED", "Only dead-lettered relay events can be replayed");
@@ -266,6 +273,9 @@ export class LeaveSrRelayService {
 
   discardDeadLetter(actor: ActorContext, outboxEventId: string, reason: string): LeaveSrOutboxEvent {
     this.authorization.check(actor, "g04.relay.discard", actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "g04_dlq_ops" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Discarding a dead-lettered relay event requires the g04_dlq_ops capability", { field: "actor" });
+    }
     const event = this.requireOutbox(actor, outboxEventId);
     if (event.status !== "DEAD_LETTERED" && event.status !== "QUARANTINED") {
       throw new FoundationError("PRECONDITION_FAILED", "Only dead-lettered relay events can be discarded");
@@ -321,6 +331,9 @@ export class LeaveSrRelayService {
     input: { ledgerEntries: G03LeaveLedgerEntryLike[]; runType?: ReconciliationRun["runType"] }
   ): { run: ReconciliationRun; findings: ReconciliationFinding[] } {
     this.authorization.check(actor, "g04.relay.reconcile", actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "g04_dlq_ops" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Triggering a statutory reconciliation run requires the g04_dlq_ops capability", { field: "actor" });
+    }
     const startedAt = this.clock().toISOString();
     const run: ReconciliationRun = {
       id: nextId("g04-recon-run", this.repository.countReconciliationRuns()),

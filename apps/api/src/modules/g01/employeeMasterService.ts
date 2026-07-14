@@ -186,6 +186,7 @@ export interface EmployeeProfileView {
   orgUnitId: string;
   designation?: string;
   dateOfJoining?: string;
+  dob?: string;
   pan?: string;
   aadhaarMasked?: string;
   category?: string;
@@ -1234,10 +1235,72 @@ export class EmployeeMasterService {
       orgUnitId: employee.orgUnitId,
       designation: employee.designation,
       dateOfJoining: employee.dateOfJoining,
+      // BRD Appendix B field-access policy: HR Admin FULL, Reporting Mgr MASKED, Employee(self)
+      // FULL, DPO MASKED. Post-hr_admin-goal fix: `dob` was never projected onto the wire view at
+      // all (not even for hr_admin) — added, gated by the same canSeeField() field-grant pattern
+      // pan/aadhaar/category already use.
+      dob: this.authz.canSeeField(actor, "employee.dob") ? employee.dob : "[HIDDEN]",
       pan: this.authz.canSeeField(actor, "employee.pan") ? employee.pan : "[HIDDEN]",
       aadhaarMasked: this.authz.canSeeField(actor, "employee.aadhaar") ? employee.aadhaarMasked : "[HIDDEN]",
       category: this.authz.canSeeField(actor, "employee.category") ? employee.category : "[HIDDEN]",
       rowVersion: employee.rowVersion,
     };
+  }
+
+  /**
+   * Post-hr_admin-goal thin build (`epm.field.pii_unmask` write side): BRD Appendix B marks
+   * `employees.dob`/`employees.pan` as "FULL (governed write)"/"FULL(reason)" for HR Admin — a
+   * correction with a recorded reason, not a free-form update. No write path existed for these
+   * fields after initial creation/import before this. Deliberately proportionate: a direct,
+   * audited, reason-required correction (with an attribute-history entry per field, matching this
+   * class's established audit-trail convention) — not a full generalisation of the existing
+   * `requestGovernedChange`/`approveGovernedChange` two-step maker-checker system, which is
+   * tightly coupled to `display_name` today. Flagged as a deferred enhancement if a genuine
+   * second-approver step is wanted for PII corrections specifically (see BRD-coverage doc).
+   */
+  correctPii(actor: ActorContext, employeeId: string, input: { pan?: string; dob?: string; reason: string }): EmployeeProfileView {
+    this.authz.check(actor, "g01.employee.pii.correct", actor);
+    if (!input.reason || !input.reason.trim()) {
+      throw new FoundationError("VALIDATION_FAILED", "A reason is required to correct PAN or date of birth", { field: "reason" });
+    }
+    if (input.pan === undefined && input.dob === undefined) {
+      throw new FoundationError("VALIDATION_FAILED", "At least one of pan or dob must be supplied", { field: "pan" });
+    }
+    const employee = this.getMutable(actor, employeeId);
+    const effectiveDate = todayIso();
+    if (input.pan !== undefined) {
+      if (!PAN_PATTERN.test(input.pan)) {
+        throw new FoundationError("VALIDATION_FAILED", "PAN must match VAL-PAN format", { field: "pan" });
+      }
+      employee.pan = input.pan;
+      this.appendAttributeHistory(actor, {
+        employeeId: employee.id,
+        attributePath: "pan",
+        valueText: input.pan,
+        effectiveFrom: effectiveDate,
+        changeReason: "CORRECTION",
+        source: "G01",
+        closePrior: true,
+      });
+    }
+    if (input.dob !== undefined) {
+      employee.dob = input.dob;
+      this.appendAttributeHistory(actor, {
+        employeeId: employee.id,
+        attributePath: "dob",
+        valueText: input.dob,
+        effectiveFrom: effectiveDate,
+        changeReason: "CORRECTION",
+        source: "G01",
+        closePrior: true,
+      });
+    }
+    employee.rowVersion += 1;
+    this.audit.recordMutation(actor, {
+      action: "G01_EMPLOYEE_PII_CORRECTED",
+      subjectRef: `employees:${employee.id}`,
+      metadata: { reason: input.reason, fieldsChanged: [input.pan !== undefined ? "pan" : null, input.dob !== undefined ? "dob" : null].filter(Boolean) },
+    });
+    return this.serializeEmployee(employee, actor);
   }
 }

@@ -2,6 +2,7 @@ import { JobService } from "../jobs/jobService";
 import { MigrationStagingService } from "../migration/staging/migrationStagingService";
 import { EmployeeMasterService } from "../modules/g01/employeeMasterService";
 import { NomineeService } from "../modules/g01/nomineeService";
+import { BackgroundVerificationService } from "../modules/g01/backgroundVerificationService";
 import { EmergencyContactService } from "../modules/g01/emergencyContactService";
 import { EducationService } from "../modules/g01/educationService";
 import { BankAccountService } from "../modules/g01/bankAccountService";
@@ -44,6 +45,7 @@ import { TimestampAuthorityService, LocalTimestampAuthority } from "../modules/g
 import { PredictiveAnalyticsService, InMemoryPredictiveAnalyticsRepository } from "../modules/g14/predictiveAnalyticsService";
 import { RetroImpactService, InMemoryRetroImpactRepository } from "../modules/g02/retroImpactService";
 import { PunchAnomalyService, InMemoryPunchAnomalyRepository } from "../modules/g03/punchAnomalyService";
+import { BiometricGovernanceService } from "../modules/g03/biometricGovernanceService";
 import { InMemoryAttendanceOpsRepository } from "../modules/g03/attendanceOpsRepository";
 import { LeaveSrRelayService } from "../modules/g04/leaveSrRelayService";
 import { InMemoryLeaveSrRelayRepository } from "../modules/g04/leaveSrRelayRepository";
@@ -91,6 +93,7 @@ import { InMemorySrIntegrityRepository } from "../modules/g12/srIntegrityReposit
 import { SrAdmissibilityService } from "../modules/g12/srAdmissibilityService";
 import { InMemorySrAdmissibilityRepository } from "../modules/g12/srAdmissibilityRepository";
 import { DocumentVaultService, ScanProvider, StubScanProvider } from "../modules/g13/documentVaultService";
+import { LetterTemplateService } from "../modules/g13/letterTemplateService";
 import { InMemoryDocumentSecurityRepository } from "../modules/g13/documentSecurityRepository";
 import { KeyProvider, LocalMasterKeyProvider } from "../modules/g13/keyProvider";
 import { AnalyticsService } from "../modules/g14/analyticsService";
@@ -98,6 +101,24 @@ import { AnalyticsEngineService } from "../modules/g14/analyticsEngineService";
 import { InMemoryAnalyticsEngineRepository } from "../modules/g14/analyticsEngineRepository";
 import { NotificationService } from "../notifications/notificationService";
 import { ph03AuthorityFacts, ph03Documents, ph03Employees, ph03Ids, ph03LeaveTypes } from "../seed/ph03Seed";
+import {
+  seedTestEmployeeMasters,
+  seedTestEmployeeSatellites,
+  seedTestLeaveCalendar,
+  seedTestPayrollLifecycle,
+  seedTestTraining,
+  seedTestApar,
+  seedTestDocumentClearance,
+  seedTestTransfer,
+  seedTestPensionEstimate,
+  seedTestPromotion,
+  seedTestSealedCover,
+  seedTestDisciplinaryCase,
+  testEmployeeAuthorityFacts,
+  testEmployeeSeedActor,
+  TestEmployeeIdMap,
+} from "../seed/testEmployeesSeed";
+import { ManagerHierarchyIdMap, managerHierarchyAuthorityFacts, seedManagerHierarchyMasters } from "../seed/managerHierarchySeed";
 import { AuditService } from "./audit/auditService";
 import { AuthorityResolutionService } from "./authority-resolution/authorityResolutionService";
 import { AuthorizationService } from "./authorization/authorizationService";
@@ -109,6 +130,7 @@ export interface FoundationServices {
   authorityResolution: AuthorityResolutionService;
   employeeMaster: EmployeeMasterService;
   nominee: NomineeService;
+  backgroundVerification: BackgroundVerificationService;
   emergencyContact: EmergencyContactService;
   education: EducationService;
   bankAccount: BankAccountService;
@@ -146,6 +168,7 @@ export interface FoundationServices {
   predictiveAnalytics: PredictiveAnalyticsService;
   retroImpact: RetroImpactService;
   punchAnomaly: PunchAnomalyService;
+  biometricGovernance: BiometricGovernanceService;
   leaveSrRelay: LeaveSrRelayService;
   leaveSrCatalog: LeaveSrCatalogService;
   transfer: TransferService;
@@ -172,6 +195,7 @@ export interface FoundationServices {
   srIntegrity: SrIntegrityService;
   srAdmissibility: SrAdmissibilityService;
   documentVault: DocumentVaultService;
+  letterTemplate: LetterTemplateService;
   analytics: AnalyticsService;
   analyticsEngine: AnalyticsEngineService;
   workflow: HrmsWorkflowService;
@@ -216,6 +240,19 @@ export interface FoundationServicesOptions {
    * circuit-breaker / retry / dead-letter paths are testable without a live external endpoint.
    */
   g04OutboundTransport?: import("../modules/g04/outboundIntegrationService").OutboundTransport;
+  /**
+   * Dev/testing only: seed 5 additional realistic fictional employees (and their satellite
+   * records — contacts, addresses, dependents, nominee, emergency contact, education, bank
+   * account, leave balances, attendance, one document) alongside the PH-03 pair. Off by default
+   * so every existing test that boots createFoundationServices() with no options is unaffected.
+   */
+  seedTestEmployees?: boolean;
+  /**
+   * Dev/testing only: seed a single 6-person reporting chain (leaf -> L1 -> L2 -> L3 -> L4 -> L5)
+   * for the manager-hierarchy role-validation suite. Off by default so every existing test that
+   * boots createFoundationServices() with no options is unaffected. Independent of seedTestEmployees.
+   */
+  seedManagerHierarchy?: boolean;
 }
 
 /**
@@ -240,12 +277,28 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const serviceRegister = new ServiceRegisterService(audit);
   const employeeProfileRepository = new InMemoryEmployeeProfileRepository();
   const employeeMaster = new EmployeeMasterService(ph03Employees(), authorization, audit, serviceRegister, employeeProfileRepository);
+  // Dev/testing only (options.seedTestEmployees, default off): 5 additional fictional employees
+  // created through the same FR-EPM-001 create() validation path as a real hire. Their generated
+  // ids feed testEmployeeAuthorityFacts() below so REPORTING_CHAIN resolution (leave workflow)
+  // works for them too.
+  const testEmployeeIds: TestEmployeeIdMap | null = options.seedTestEmployees
+    ? seedTestEmployeeMasters(employeeMaster, testEmployeeSeedActor()).ids
+    : null;
+  // Dev/testing only (options.seedManagerHierarchy, default off): a 6-person reporting chain
+  // (leaf -> L1..L5) consumed by the manager-hierarchy role-validation suite. Their generated ids
+  // feed managerHierarchyAuthorityFacts() below so REPORTING_CHAIN resolution works for every link.
+  const managerHierarchyIds: ManagerHierarchyIdMap | null = options.seedManagerHierarchy
+    ? seedManagerHierarchyMasters(employeeMaster, testEmployeeSeedActor())
+    : null;
   // PH-62A: G01 FR-EPM-004 nominee register (net-new; VAL-NOMINEE share invariant, soft-delete, row_version).
   const nominee = new NomineeService(employeeMaster, authorization, audit);
   // PH-63A: G01 FR-EPM-005 emergency-contact register (net-new; unique-priority invariant, soft-delete).
   const emergencyContact = new EmergencyContactService(employeeMaster, authorization, audit);
   // PH-64A: G01 FR-EPM-006 education register (net-new; single-highest invariant, soft-delete, row_version).
   const education = new EducationService(employeeMaster, authorization, audit);
+  // Post-hr_admin-goal thin build: G01 bgv_review capability (view verification reports/vendor
+  // BGV results/discrepancy alerts).
+  const backgroundVerification = new BackgroundVerificationService(employeeMaster, authorization, audit);
   // PH-65A: G01 FR-EPM-008 bank-account register (net-new; VAL-IFSC + single-salary + PENDING lifecycle + penny-drop).
   const bankAccount = new BankAccountService(employeeMaster, authorization, audit);
   // PH-16A: G01 dedup/alias-merge (E19/E21), bulk import (E20a/E20b), and lifecycle
@@ -271,7 +324,20 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     new InMemoryDocumentSecurityRepository(options.g13KeyProvider ?? new LocalMasterKeyProvider()),
     options.g13ScanProvider ?? new StubScanProvider()
   );
-  const authorityResolution = new AuthorityResolutionService(ph03AuthorityFacts());
+  const letterTemplate = new LetterTemplateService(authorization, audit, documentVault);
+  const ph03Facts = ph03AuthorityFacts();
+  const testEmployeeFacts = testEmployeeIds
+    ? testEmployeeAuthorityFacts(testEmployeeIds)
+    : { orgUnits: [], positions: [], assignments: [] };
+  const managerHierarchyFacts = managerHierarchyIds
+    ? managerHierarchyAuthorityFacts(managerHierarchyIds)
+    : { orgUnits: [], positions: [], assignments: [] };
+  const authorityResolution = new AuthorityResolutionService({
+    ...ph03Facts,
+    orgUnits: [...ph03Facts.orgUnits, ...testEmployeeFacts.orgUnits, ...managerHierarchyFacts.orgUnits],
+    positions: [...ph03Facts.positions, ...testEmployeeFacts.positions, ...managerHierarchyFacts.positions],
+    assignments: [...ph03Facts.assignments, ...testEmployeeFacts.assignments, ...managerHierarchyFacts.assignments],
+  });
   const notifications = new NotificationService();
   const workflow = new HrmsWorkflowService(authorityResolution, audit, notifications);
   const jobs = new JobService();
@@ -318,7 +384,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   for (const leaveType of ph03LeaveTypes()) {
     leaveRepository.saveLeaveType(leaveType);
   }
-  const leave = new LeaveService(employeeMaster, authorization, audit, workflow, leaveSrRelay, jobs, notifications, leaveRepository);
+  const leave = new LeaveService(employeeMaster, authorization, audit, workflow, leaveSrRelay, jobs, notifications, leaveRepository, authorityResolution);
   // PH-15C: G03 operational attendance core — E1 shifts / E2 rosters (VAL-G03-SHIFT-TIMES,
   // VAL-G03-ROSTER-OVERLAP with supersede-on-publish), the E6 attendance_punches append-only
   // ledger (dedup on (device_id, source_ref), DEVICE_NOT_AUTHORIZED fail-closed device auth,
@@ -357,7 +423,20 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const predictiveAnalytics = new PredictiveAnalyticsService(authorization, audit, new InMemoryPredictiveAnalyticsRepository());
   const retroImpact = new RetroImpactService(authorization, audit, new InMemoryRetroImpactRepository());
   const punchAnomaly = new PunchAnomalyService(authorization, audit, new InMemoryPunchAnomalyRepository());
-  const transfer = new TransferService(employeeMaster, authorization, audit, workflow, serviceRegister, documentVault, notifications, new InMemoryTransferRepository());
+  // Post-hr_admin-goal thin build: G03 biometric.govern capability (consent/lawful-basis/
+  // retention-purge governance).
+  const biometricGovernance = new BiometricGovernanceService(authorization, audit);
+  const transfer = new TransferService(
+    employeeMaster,
+    authorization,
+    audit,
+    workflow,
+    serviceRegister,
+    documentVault,
+    notifications,
+    new InMemoryTransferRepository(),
+    authorityResolution
+  );
   // PH-08A: FR-015 establishment register + FR-016 qualifying-service ledger kernels behind the repository seam.
   // PH-08C: roster/refusal/probation/legal-case depth entities behind the same repository pattern.
   // PH-10D: shared with the G14 engine as the MART_ESTABLISHMENT contracted read source.
@@ -400,6 +479,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     serviceRegister,
     documentVault,
     notifications,
+    authorityResolution,
     new InMemoryTrainingDepthRepository()
   );
   const apar = new AparService(
@@ -491,7 +571,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   // feed (E16, since_seq/last_delivered_seq, WEBHOOK/MESSAGE_BUS -> SR_DELIVERY_MODE_DEFERRED),
   // and sr_ltv_renewals re-anchoring over existing heads (E25) — behind the repository pattern.
   const srAdmissibility = new SrAdmissibilityService(audit, serviceRegister, srIntegrity, new InMemorySrAdmissibilityRepository(), options.g12TimestampAuthority);
-  const analytics = new AnalyticsService(employeeMaster, workflow, serviceRegister, documentVault, disciplinary, payroll, pension, authorization, audit);
+  const analytics = new AnalyticsService(employeeMaster, workflow, serviceRegister, documentVault, disciplinary, payroll, pension, authorization, audit, leave);
   // PH-10D: the real G14 analytics engine (migration 0021) — governed/versioned kpi_definitions,
   // append-only bitemporal kpi_snapshots (FR-23), JOB-G14-MART-* refresh over the seeded
   // analytics_datamarts with datamart_refresh_logs (FR-03), k-anonymity suppression_policies
@@ -500,12 +580,30 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
   const analyticsEngine = new AnalyticsEngineService(authorization, audit, jobs, leave, apar, establishmentQslRepository, new InMemoryAnalyticsEngineRepository());
   analyticsEngine.seedTenantDefaults({ tenantId: ph03Ids.tenant, entityId: ph03Ids.entity });
   const migrationStaging = new MigrationStagingService(employeeMaster);
+  if (testEmployeeIds) {
+    seedTestEmployeeSatellites(
+      { employeeMaster, nominee, emergencyContact, education, bankAccount, leave, attendanceOps, documentVault },
+      testEmployeeIds,
+      testEmployeeSeedActor()
+    );
+    seedTestLeaveCalendar(leave, testEmployeeSeedActor());
+    seedTestPayrollLifecycle({ payRules, payrollEngine }, testEmployeeIds.arjun, testEmployeeSeedActor());
+    seedTestTraining(training, testEmployeeIds.devika, testEmployeeSeedActor());
+    seedTestApar(apar, { rohan: testEmployeeIds.rohan, arjun: testEmployeeIds.arjun }, testEmployeeSeedActor());
+    seedTestDocumentClearance(documentVault, testEmployeeIds.rohan, testEmployeeSeedActor());
+    seedTestTransfer(transfer, testEmployeeIds.priya, testEmployeeSeedActor());
+    seedTestPensionEstimate({ payroll, pensionRules }, testEmployeeIds.arjun, testEmployeeSeedActor());
+    seedTestPromotion(promotion, testEmployeeIds.sunita, testEmployeeSeedActor());
+    seedTestSealedCover(sealedCover, testEmployeeIds.devika, testEmployeeSeedActor());
+    seedTestDisciplinaryCase(disciplinary, testEmployeeIds.meera, testEmployeeIds.arjun, testEmployeeSeedActor());
+  }
   return {
     audit,
     authorization,
     authorityResolution,
     employeeMaster,
     nominee,
+    backgroundVerification,
     emergencyContact,
     education,
     bankAccount,
@@ -543,6 +641,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     predictiveAnalytics,
     retroImpact,
     punchAnomaly,
+    biometricGovernance,
     leaveSrRelay,
     leaveSrCatalog,
     transfer,
@@ -569,6 +668,7 @@ export function createFoundationServices(options: FoundationServicesOptions = {}
     srIntegrity,
     srAdmissibility,
     documentVault,
+    letterTemplate,
     analytics,
     analyticsEngine,
     workflow,

@@ -6,7 +6,14 @@ import { ActorContext, FoundationError, TenantScope, nextId, pseudoHash64, requi
 import { EmployeeMasterService } from "../g01/employeeMasterService";
 import { ServiceRegisterService } from "../g12/serviceRegisterService";
 import { DocumentRecord, DocumentVaultService } from "../g13/documentVaultService";
+import { AuthorityResolutionService } from "../../platform/authority-resolution/authorityResolutionService";
 import { ClearanceDepartmentConfig, JoiningTimeRule, TransferAdministrationPolicy, TransferRepository } from "./transferRepository";
+
+/** BRD §3.2 permission matrix: HR Src/Dest/Admin get a plain "C"/"R" (any employee); Employee
+ *  gets "C (own)"/"R (own)". Reporting manager additionally gets "C (team)" for raising a
+ *  transfer request on a direct report's behalf — resolved via AuthorityResolutionService, not
+ *  a role name, since "team" is a live reporting-chain fact, not a flag. */
+const TRANSFER_ACCESS_OVERRIDE_ROLES = new Set(["hr_admin", "hr_src_officer", "hr_dest_officer", "system"]);
 
 export type TransferOrderStatus = "PENDING_APPROVAL" | "APPROVED" | "RELIEVED" | "JOINED" | "RETAINED" | "CANCELLED" | "DEEMED_RELIEVED";
 export type ClearanceStatus = "OPEN" | "CLEARED" | "DEEMED_CLEARED";
@@ -273,8 +280,33 @@ export class TransferService {
     private readonly serviceRegister: ServiceRegisterService,
     private readonly documentVault: DocumentVaultService,
     private readonly notifications: NotificationService,
-    private readonly repository: TransferRepository
+    private readonly repository: TransferRepository,
+    private readonly authorityResolution: AuthorityResolutionService
   ) {}
+
+  private isTransferAccessOverride(actor: ActorContext): boolean {
+    return Boolean(actor.permissions?.includes("*") || actor.roles?.some((role) => TRANSFER_ACCESS_OVERRIDE_ROLES.has(role)));
+  }
+
+  private assertSelfOrOverride(actor: ActorContext, employeeId: string): void {
+    if (this.isTransferAccessOverride(actor) || actor.userId === employeeId) {
+      return;
+    }
+    throw new FoundationError("FORBIDDEN", "You may only act on your own transfer", { field: "employeeId" });
+  }
+
+  /** "Raise transfer request: C (own) | C (team)" — the resolved reporting-chain manager may
+   *  also raise a request for a direct report, in addition to self or an HR/system override. */
+  private assertSelfOrManagerOrOverride(actor: ActorContext, employeeId: string, asOfDate: string): void {
+    if (this.isTransferAccessOverride(actor) || actor.userId === employeeId) {
+      return;
+    }
+    const resolution = this.authorityResolution.resolve(actor, { mechanism: "REPORTING_CHAIN", subjectEmployeeId: employeeId }, asOfDate);
+    if (resolution.selectedAssignees.some((assignee) => assignee.employeeId === actor.userId)) {
+      return;
+    }
+    throw new FoundationError("FORBIDDEN", "You may only raise a transfer request for yourself or your own direct reports", { field: "employeeId" });
+  }
 
   /** Per-office clearance department configuration (g05_clearance_department domain). */
   configureClearanceDepartments(actor: ActorContext, officeOrgUnitId: string, departments: ClearanceDepartmentConfig[]): void {
@@ -313,6 +345,7 @@ export class TransferService {
     if (!this.employeeMaster.getById(actor, input.employeeId)) {
       throw new FoundationError("NOT_FOUND", "Employee not found");
     }
+    this.assertSelfOrManagerOrOverride(actor, input.employeeId, input.orderDate);
     const orderId = nextId("transfer-order", this.repository.countOrders());
     const started = this.workflow.start(actor, {
       workflowCode: "WF-G05-TRANSFER-ORDER",
@@ -500,6 +533,12 @@ export class TransferService {
 
   completeClearance(actor: ActorContext, transferOrderId: string, clearanceCode: string, completedOn: string): TransferOrder {
     this.authorization.check(actor, "g05.transfer.clearance", actor);
+    // Post-hr_admin-goal fix: `g05.clearance.grant` names a `g05_clearance_officer` capability
+    // flag that was never checked — any `g05.transfer.clearance` holder could grant/deny a
+    // departmental no-dues clearance regardless of the flag.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "g05_clearance_officer" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Granting a departmental clearance requires the g05_clearance_officer capability", { field: "actor" });
+    }
     const order = this.requireOrder(actor, transferOrderId);
     const checklist = this.requireChecklist(actor, order);
     const item = this.requireClearance(checklist, clearanceCode);
@@ -517,6 +556,9 @@ export class TransferService {
 
   deemClearance(actor: ActorContext, transferOrderId: string, clearanceCode: string, deemedOn: string): TransferOrder {
     this.authorization.check(actor, "g05.transfer.clearance.deem", actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "g05_clearance_officer" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Deeming a departmental clearance requires the g05_clearance_officer capability", { field: "actor" });
+    }
     const order = this.requireOrder(actor, transferOrderId);
     const checklist = this.requireChecklist(actor, order);
     const item = this.requireClearance(checklist, clearanceCode);
@@ -1075,6 +1117,7 @@ export class TransferService {
   acknowledgeOrder(actor: ActorContext, transferOrderId: string, input: { acknowledgedAt: string }): OrderAcknowledgement {
     this.authorization.check(actor, "g05.transfer.acknowledge", actor);
     const order = this.requireOrder(actor, transferOrderId);
+    this.assertSelfOrOverride(actor, order.employeeId);
     const acknowledgement = this.requireAcknowledgement(actor, order);
     if (acknowledgement.acknowledgementStatus !== "SERVED") {
       throw new FoundationError("PRECONDITION_FAILED", "Only a served, unacknowledged order can be acknowledged", {
@@ -1152,8 +1195,14 @@ export class TransferService {
     return { ...acknowledgement };
   }
 
-  getServiceRecord(scope: TenantScope, transferOrderId: string): OrderAcknowledgement | undefined {
-    requireTenantScope(scope);
+  /** Post-full-review fix: this read named its own transfer order but never checked that the
+   *  order belongs to the caller — same ownership gate as `getOrder()`, since a service record
+   *  is a sub-resource of the order it acknowledges. */
+  getServiceRecord(scope: ActorContext, transferOrderId: string): OrderAcknowledgement | undefined {
+    const order = this.requireOrder(scope, transferOrderId);
+    if (!this.isTransferAccessOverride(scope) && order.employeeId !== scope.userId) {
+      throw new FoundationError("FORBIDDEN", "You may only access your own transfer order", { field: "transferOrderId" });
+    }
     const acknowledgement = this.repository.findAcknowledgementByOrder(scope, transferOrderId);
     return acknowledgement ? { ...acknowledgement } : undefined;
   }
@@ -1320,9 +1369,23 @@ export class TransferService {
     return { ...handover };
   }
 
-  listChargeHandovers(scope: TenantScope, transferOrderId: string): ChargeHandover[] {
+  /** Post-full-review fix: charge handovers name both a relinquisher and an acceptor
+   *  (`order.employeeId` plus `receivingEmployeeId`), so either party (or an override actor) may
+   *  read the order's handover history — not any arbitrary `g05.transfer.read` holder. List reads
+   *  never 404 on an unknown/garbage transferOrderId (matches this kernel's list-route
+   *  convention) — a missing order simply narrows the ownership check to the handover rows
+   *  themselves. */
+  listChargeHandovers(scope: ActorContext, transferOrderId: string): ChargeHandover[] {
     requireTenantScope(scope);
-    return this.repository.listChargeHandoversByOrder(scope, transferOrderId).map((handover) => ({ ...handover }));
+    const handovers = this.repository.listChargeHandoversByOrder(scope, transferOrderId).map((handover) => ({ ...handover }));
+    if (this.isTransferAccessOverride(scope)) {
+      return handovers;
+    }
+    const order = this.repository.findOrder(scope, transferOrderId);
+    if (order && order.employeeId === scope.userId) {
+      return handovers;
+    }
+    return handovers.filter((handover) => handover.receivingEmployeeId === scope.userId);
   }
 
   /**
@@ -1561,6 +1624,11 @@ export class TransferService {
   /** FR-G05-022 AC1: Authority approval. SoD: the requesting officer cannot approve. */
   approveQuarterRetention(actor: ActorContext, quarterAllotmentId: string, input: { approvedOn: string }): QuarterAllotment {
     this.authorization.check(actor, "g05.quarter.approve", actor);
+    // Post-hr_admin-goal fix: `g05.estate.record` names a `g05_estate_officer` capability flag
+    // that was never checked on any of the estate/quarter write actions.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "g05_estate_officer" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Approving accommodation retention requires the g05_estate_officer capability", { field: "actor" });
+    }
     const allotment = this.requireQuarterAllotment(actor, quarterAllotmentId);
     if (allotment.retentionStatus !== "RETENTION_REQUESTED") {
       throw new FoundationError("PRECONDITION_FAILED", "Only requested retentions can be approved", { details: { retentionStatus: allotment.retentionStatus } });
@@ -1587,6 +1655,9 @@ export class TransferService {
    */
   flagQuarterOverstay(actor: ActorContext, quarterAllotmentId: string, input: { asOf: string }): QuarterAllotment {
     this.authorization.check(actor, "g05.quarter.overstay", actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "g05_estate_officer" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Flagging an accommodation overstay requires the g05_estate_officer capability", { field: "actor" });
+    }
     const allotment = this.requireQuarterAllotment(actor, quarterAllotmentId);
     if (allotment.retentionStatus === "VACATED" || allotment.retentionStatus === "OVERSTAY") {
       throw new FoundationError("PRECONDITION_FAILED", "Quarter is already vacated or flagged", { details: { retentionStatus: allotment.retentionStatus } });
@@ -1629,6 +1700,9 @@ export class TransferService {
   /** FR-G05-022 AC4: vacation recording closes the retention. */
   recordQuarterVacation(actor: ActorContext, quarterAllotmentId: string, input: { vacatedOn: string }): QuarterAllotment {
     this.authorization.check(actor, "g05.quarter.vacate", actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "g05_estate_officer" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Recording accommodation vacation requires the g05_estate_officer capability", { field: "actor" });
+    }
     const allotment = this.requireQuarterAllotment(actor, quarterAllotmentId);
     if (allotment.retentionStatus === "VACATED") {
       throw new FoundationError("PRECONDITION_FAILED", "Quarter is already vacated");
@@ -1649,28 +1723,53 @@ export class TransferService {
     return this.repository.listQuarterAllotments(scope).map((allotment) => ({ ...allotment }));
   }
 
-  listOrders(scope: TenantScope): TransferOrder[] {
+  /** BRD §3.2: HR Src/Dest/Admin/Transfer Auth get a plain "R" (any order); Employee gets
+   *  "R (own)". Non-override actors are need-to-know scoped to orders raised for them. */
+  listOrders(scope: ActorContext): TransferOrder[] {
     requireTenantScope(scope);
-    return this.repository.listOrders(scope).map((order) => this.cloneOrder(order));
+    const inTenant = this.repository.listOrders(scope);
+    const visible = this.isTransferAccessOverride(scope) ? inTenant : inTenant.filter((order) => order.employeeId === scope.userId);
+    return visible.map((order) => this.cloneOrder(order));
   }
 
-  getOrder(scope: TenantScope, transferOrderId: string): TransferOrder {
-    return this.cloneOrder(this.requireOrder(scope, transferOrderId));
+  /** Self-service "track status" discovery surface: every transfer order raised for the given
+   *  employee, newest first. Self-or-override only. */
+  listMyOrders(actor: ActorContext, employeeId: string): TransferOrder[] {
+    requireTenantScope(actor);
+    this.assertSelfOrOverride(actor, employeeId);
+    return this.repository
+      .listOrders(actor)
+      .filter((order) => order.employeeId === employeeId)
+      .map((order) => this.cloneOrder(order));
   }
 
-  listRepresentations(scope: TenantScope): TransferRepresentation[] {
-    requireTenantScope(scope);
-    return this.repository.listRepresentations(scope).map((representation) => this.cloneRepresentation(representation));
+  getOrder(scope: ActorContext, transferOrderId: string): TransferOrder {
+    const order = this.requireOrder(scope, transferOrderId);
+    if (!this.isTransferAccessOverride(scope) && order.employeeId !== scope.userId) {
+      throw new FoundationError("FORBIDDEN", "You may only access your own transfer order", { field: "transferOrderId" });
+    }
+    return this.cloneOrder(order);
   }
 
-  listRelievingOrders(scope: TenantScope): RelievingOrder[] {
+  /** Post-full-review fix (F2): same need-to-know scoping as `listOrders()` — these were
+   *  tenant-scoped only, the exact bug class an earlier feature's full-review caught in G13's
+   *  `list()`. Non-override actors now see only rows naming them as the employee. */
+  listRepresentations(scope: ActorContext): TransferRepresentation[] {
     requireTenantScope(scope);
-    return this.repository.listRelievingOrders(scope).map((relievingOrder) => ({ ...relievingOrder }));
+    const inTenant = this.repository.listRepresentations(scope).map((representation) => this.cloneRepresentation(representation));
+    return this.isTransferAccessOverride(scope) ? inTenant : inTenant.filter((representation) => representation.employeeId === scope.userId);
   }
 
-  listJoiningReports(scope: TenantScope): JoiningReport[] {
+  listRelievingOrders(scope: ActorContext): RelievingOrder[] {
     requireTenantScope(scope);
-    return this.repository.listJoiningReports(scope).map((joiningReport) => ({ ...joiningReport }));
+    const inTenant = this.repository.listRelievingOrders(scope).map((relievingOrder) => ({ ...relievingOrder }));
+    return this.isTransferAccessOverride(scope) ? inTenant : inTenant.filter((relievingOrder) => relievingOrder.employeeId === scope.userId);
+  }
+
+  listJoiningReports(scope: ActorContext): JoiningReport[] {
+    requireTenantScope(scope);
+    const inTenant = this.repository.listJoiningReports(scope).map((joiningReport) => ({ ...joiningReport }));
+    return this.isTransferAccessOverride(scope) ? inTenant : inTenant.filter((joiningReport) => joiningReport.employeeId === scope.userId);
   }
 
   private requireOrder(scope: TenantScope, transferOrderId: string): TransferOrder {

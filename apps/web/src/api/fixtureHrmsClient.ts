@@ -2,6 +2,9 @@ import {
   BiKpiTile,
   MyRightsRequest,
   SealedCoverCase,
+  PromotionOrderView,
+  ProbationRecordView,
+  PromotionRefusalView,
   CaseEvidenceItem,
   CounsellingChoiceResult,
   CounsellingSessionView,
@@ -10,17 +13,33 @@ import {
   AparFormView,
   AparReportingInput,
   AparReviewInput,
+  AparSelfAppraisalInput,
   ChangeRequestDiffResult,
   ChargeMemoInput,
   DisciplinaryCaseOpenInput,
   DisciplinaryCaseView,
+  MyDisciplinaryCaseView,
+  ShowCauseNoticeView,
+  RespondToShowCauseInput,
+  PersonalHearingView,
+  RequestPersonalHearingInput,
   DocumentSummary,
   DpcHoldInput,
+  AttendanceCaptureInput,
+  AttendanceRecordView,
+  EmployeeAddressAddInput,
+  EmployeeAddressRecord,
   EmployeeContactAddInput,
   EmployeeContactRecord,
   EmployeeDependentAddInput,
   EmployeeDependentRecord,
   EmployeeProfileView,
+  EmergencyContactAddInput,
+  EmergencyContactRecord,
+  NomineeAddInput,
+  NomineeRecord,
+  BankAccountAddInput,
+  BankAccountRecord,
   EmployeeSummary,
   AnalyticsAggregateCell,
   AnalyticsAggregateResult,
@@ -34,6 +53,7 @@ import {
   PromotionCaseView,
   TrainingNominationInput,
   TrainingNominationView,
+  TrainingSessionView,
   LeaveApplicationRecord,
   LeaveApplicationSubmitInput,
   LeaveBalanceView,
@@ -43,6 +63,7 @@ import {
   PageResult,
   PersonalDetailChangeCreateInput,
   PersonalDetailChangeRecord,
+  TransferAcknowledgeInput,
   TransferInitiateInput,
   TransferOrderRecord,
   PayrollRunActionResult,
@@ -54,6 +75,8 @@ import {
   PensionCaseCreateInput,
   PensionCaseView,
   PensionEstimateInput,
+  PensionSelfEstimateInput,
+  PensionSelfEstimateResult,
   PensionServiceVerifyInput,
   PensionSliceSummary,
   SalaryStructureCreateInput,
@@ -445,6 +468,31 @@ export function createFixtureHrmsClient(): HrmsClient {
     { id: "sc-1", employeeId: "emp-1", reason: "Disciplinary case pending", status: "SEALED" },
     { id: "sc-2", employeeId: "emp-2", reason: "Vigilance case pending", status: "SEALED" },
   ];
+  const promotionOrders: PromotionOrderView[] = [
+    {
+      id: "promo-order-1",
+      orderNo: "PROM/2026/00001",
+      promotionCaseId: "promo-case-1",
+      employeeId: employees[0].id,
+      fromDesignation: "Assistant Section Officer",
+      toDesignation: "Section Officer",
+      status: "EFFECTED",
+      documentId: "doc-promo-1",
+      srEventId: "sr-event-promo-1",
+    },
+  ];
+  const probationRecords: ProbationRecordView[] = [
+    {
+      id: "probation-1",
+      promotionOrderId: "promo-order-1",
+      employeeId: employees[0].id,
+      probationStart: "2026-06-15",
+      probationMonths: 24,
+      scheduledEnd: "2028-06-15",
+      status: "ON_PROBATION",
+    },
+  ];
+  const promotionRefusals: PromotionRefusalView[] = [];
   const dsrRows: DsrRecord[] = [
     { id: "dsr-1", subjectEmployeeId: "emp-1", requestType: "ERASE", status: "RECEIVED", legalBasis: undefined },
     { id: "dsr-2", subjectEmployeeId: "emp-2", requestType: "ACCESS", status: "UNDER_REVIEW", legalBasis: undefined },
@@ -500,6 +548,77 @@ export function createFixtureHrmsClient(): HrmsClient {
       nationalIdMasked: "xxxx-xxxx-5678",
     },
   ];
+  const employeeAddresses: EmployeeAddressRecord[] = [
+    {
+      id: "addr-fixture-000001",
+      employeeId: employees[0].id,
+      addressType: "PERMANENT",
+      line1: "12 MG Road",
+      city: "Bengaluru",
+      state: "Karnataka",
+      country: "India",
+      pincode: "560001",
+      isCurrent: true,
+      validFrom: "2019-06-01",
+      rowVersion: 1,
+    },
+  ];
+  const employeeNominees: NomineeRecord[] = [
+    {
+      id: "nom-fixture-000001",
+      employeeId: employees[0].id,
+      name: "Meera Rao",
+      benefitType: "GRATUITY",
+      sharePct: 100,
+      isFamilyPensionRecipient: true,
+      status: "ACTIVE",
+      rowVersion: 1,
+    },
+  ];
+  const employeeEmergencyContacts: EmergencyContactRecord[] = [
+    {
+      id: "ec-fixture-000001",
+      employeeId: employees[0].id,
+      name: "Meera Rao (Spouse)",
+      phone: "+91-98450-00099",
+      priority: 1,
+      status: "ACTIVE",
+      rowVersion: 1,
+    },
+  ];
+  const employeeBankAccounts: BankAccountRecord[] = [
+    {
+      id: "bank-fixture-000001",
+      employeeId: employees[0].id,
+      bankName: "State Public Bank",
+      ifsc: "SPBK0001234",
+      accountNumberMasked: "XXXXXXXX9001",
+      isPrimarySalary: true,
+      isVerified: true,
+      status: "APPROVED",
+      pennyDropStatus: "VERIFIED",
+      lifecycle: "ACTIVE",
+      rowVersion: 1,
+    },
+  ];
+  const attendanceRecords: AttendanceRecordView[] = [
+    {
+      id: "att-fixture-000001",
+      employeeId: employees[0].id,
+      attendanceDate: "2026-07-10",
+      inTime: "09:05",
+      outTime: "17:35",
+      status: "PRESENT",
+    },
+    {
+      id: "att-fixture-000002",
+      employeeId: employees[0].id,
+      attendanceDate: "2026-07-11",
+      inTime: "09:10",
+      status: "ANOMALY",
+      anomalyCode: "MISSING_OUT",
+    },
+  ];
   const changeRequests: PersonalDetailChangeRecord[] = [
     {
       id: "g02-fixture-000001",
@@ -531,6 +650,34 @@ export function createFixtureHrmsClient(): HrmsClient {
 
   // --- PH-08F statutory-wave interactive fixtures (stateful per client, like the real API) ---
   const disciplinaryCases: DisciplinaryCaseView[] = [];
+  const myDisciplinaryCases: MyDisciplinaryCaseView[] = [
+    {
+      id: "disciplinary-case-fixture-000001",
+      caseNo: "DCP/00001",
+      chargedEmployeeId: employees[0].id,
+      disciplinaryAuthorityId: employees[1]?.id ?? "emp-manager-fixture",
+      stage: "INQUIRY_REPORT",
+      caseStatus: "OPEN",
+      isUnderSuspension: false,
+      misconductCategory: "GENERAL",
+      isPoshCase: false,
+      openedOn: "2026-05-01",
+      chargeMemoDocumentId: "doc-fixture-charge-memo-000001",
+    },
+  ];
+  const myShowCauseNotices: ShowCauseNoticeView[] = [
+    {
+      id: "g09-show-cause-fixture-000001",
+      caseId: "disciplinary-case-fixture-000001",
+      noticeNo: "SCN/DCP-00001/001",
+      proposedPenaltyJson: ["CENSURE", "WITHHOLD_INCREMENT"],
+      issuedDate: "2026-06-15",
+      servedDate: "2026-06-15",
+      responseDueDate: "2026-07-15",
+      status: "SERVED",
+    },
+  ];
+  const myPersonalHearings: PersonalHearingView[] = [];
   const promotionCase: PromotionCaseView = {
     id: "promotion-case-fixture-000001",
     caseNo: "PC/2026/00001",
@@ -546,13 +693,17 @@ export function createFixtureHrmsClient(): HrmsClient {
       id: "apar-fixture-000001",
       formNo: "APAR/2026/00001",
       employeeId: employees[0].id,
+      periodStart: "2026-01-01",
+      periodEnd: "2026-12-31",
       status: "SELF_APPRAISAL",
       reportingOfficerId: "99999999-9999-9999-9999-999999999903",
       reviewingOfficerId: "99999999-9999-9999-9999-999999999904",
       sealedCover: false,
     },
   ];
-  const trainingSessions = [{ id: "training-session-fixture-000001", capacity: 2, status: "OPEN" as const }];
+  const trainingSessions: TrainingSessionView[] = [
+    { id: "training-session-fixture-000001", programCode: "PROG-LEAD-101", title: "Leadership Fundamentals", capacity: 2, enrolled: 0, status: "OPEN" },
+  ];
   const trainingNominations: TrainingNominationView[] = [];
 
   // --- PH-09E compensation-wave interactive fixtures (stateful, mirroring the API state machines) ---
@@ -703,6 +854,113 @@ export function createFixtureHrmsClient(): HrmsClient {
       employeeDependents.push(dependent);
       return Promise.resolve({ dependent: { ...dependent } });
     },
+    listEmployeeAddresses: () => Promise.resolve(page(employeeAddresses.map((address) => ({ ...address })))),
+    addEmployeeAddress: (employeeId: string, input: EmployeeAddressAddInput) => {
+      const address: EmployeeAddressRecord = {
+        id: `addr-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        employeeId,
+        addressType: input.addressType,
+        line1: input.line1,
+        line2: input.line2,
+        city: input.city,
+        district: input.district,
+        state: input.state,
+        country: input.country ?? "India",
+        pincode: input.pincode,
+        isCurrent: true,
+        validFrom: input.validFrom,
+        rowVersion: 1,
+      };
+      fixtureSequence += 1;
+      employeeAddresses.push(address);
+      return Promise.resolve({ address: { ...address } });
+    },
+    listEmployeeNominees: () => Promise.resolve({ items: employeeNominees.map((nominee) => ({ ...nominee })) }),
+    addEmployeeNominee: (employeeId: string, input: NomineeAddInput) => {
+      // VAL-NOMINEE caps share_pct per (employee, benefit_type), not globally — see nomineeService.ts activeShareTotal.
+      const totalShare =
+        employeeNominees.filter((n) => n.status === "ACTIVE" && n.benefitType === input.benefitType).reduce((sum, n) => sum + n.sharePct, 0) +
+        input.sharePct;
+      if (totalShare > 100) {
+        return Promise.reject(fixtureError(422, "VALIDATION_FAILED", "Total nominee share for this benefit type cannot exceed 100%", "ERR-G01-NOMINEE-SHARE"));
+      }
+      const nominee: NomineeRecord = {
+        id: `nom-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        employeeId,
+        name: input.name,
+        benefitType: input.benefitType,
+        sharePct: input.sharePct,
+        guardian: input.guardian,
+        isFamilyPensionRecipient: Boolean(input.isFamilyPensionRecipient),
+        status: "ACTIVE",
+        rowVersion: 1,
+      };
+      fixtureSequence += 1;
+      employeeNominees.push(nominee);
+      return Promise.resolve({ nominee: { ...nominee } });
+    },
+    listEmployeeEmergencyContacts: () => Promise.resolve({ items: employeeEmergencyContacts.map((contact) => ({ ...contact })) }),
+    addEmergencyContact: (employeeId: string, input: EmergencyContactAddInput) => {
+      if (employeeEmergencyContacts.some((contact) => contact.priority === input.priority && contact.status === "ACTIVE")) {
+        return Promise.reject(fixtureError(409, "CONFLICT", "That priority is already assigned to another emergency contact", "ERR-G01-EC-PRIORITY"));
+      }
+      const contact: EmergencyContactRecord = {
+        id: `ec-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        employeeId,
+        name: input.name,
+        phone: input.phone,
+        priority: input.priority,
+        status: "ACTIVE",
+        rowVersion: 1,
+      };
+      fixtureSequence += 1;
+      employeeEmergencyContacts.push(contact);
+      return Promise.resolve({ emergencyContact: { ...contact } });
+    },
+    listEmployeeBankAccounts: () => Promise.resolve({ items: employeeBankAccounts.map((account) => ({ ...account })) }),
+    addBankAccount: (employeeId: string, input: BankAccountAddInput) => {
+      const account: BankAccountRecord = {
+        id: `bank-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        employeeId,
+        bankName: input.bankName,
+        ifsc: input.ifsc,
+        accountNumberMasked: input.accountNumberMasked,
+        isPrimarySalary: Boolean(input.isPrimarySalary),
+        isVerified: false,
+        status: "PENDING",
+        pennyDropStatus: "PENDING",
+        lifecycle: "ACTIVE",
+        rowVersion: 1,
+      };
+      fixtureSequence += 1;
+      employeeBankAccounts.push(account);
+      return Promise.resolve({ bankAccount: { ...account } });
+    },
+    // NOTE: this fixture client has no notion of the calling actor's identity (unlike the real
+    // HrmsClient over HTTP, its methods are not actor-scoped), so it cannot model the real backend's
+    // maker!=checker SOD_VIOLATION gate (bankAccountService.ts approveBankAccount). Any test that
+    // needs to verify SOD behavior must use the real API (createFoundationApi), not this fixture —
+    // see apps/api/test/personal-details-self-service.test.cjs and the Playwright e2e spec, both of
+    // which correctly exercise SOD against the live service, not this mock.
+    approveBankAccount: (_employeeId: string, accountId: string) => {
+      const account = employeeBankAccounts.find((item) => item.id === accountId);
+      if (!account) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", "Bank account not found"));
+      }
+      account.status = "APPROVED";
+      account.rowVersion += 1;
+      return Promise.resolve({ bankAccount: { ...account } });
+    },
+    recordBankPennyDrop: (_employeeId: string, accountId: string, result: "VERIFIED" | "FAILED") => {
+      const account = employeeBankAccounts.find((item) => item.id === accountId);
+      if (!account) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", "Bank account not found"));
+      }
+      account.pennyDropStatus = result;
+      account.isVerified = result === "VERIFIED";
+      account.rowVersion += 1;
+      return Promise.resolve({ bankAccount: { ...account } });
+    },
     listPersonalDetailChangeRequests: () => Promise.resolve(page(changeRequests.map((request) => ({ ...request })))),
     createPersonalDetailChangeRequest: (input: PersonalDetailChangeCreateInput) => {
       const request: PersonalDetailChangeRecord = {
@@ -757,6 +1015,35 @@ export function createFixtureHrmsClient(): HrmsClient {
         ],
       };
       return Promise.resolve(diff);
+    },
+    listAttendance: () => Promise.resolve(page(attendanceRecords.map((record) => ({ ...record })))),
+    captureAttendance: (input: AttendanceCaptureInput) => {
+      const record: AttendanceRecordView = {
+        id: `att-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        employeeId: input.employeeId,
+        attendanceDate: input.attendanceDate,
+        inTime: input.inTime,
+        outTime: input.outTime,
+        status: input.inTime && input.outTime ? "PRESENT" : "ANOMALY",
+        anomalyCode: input.inTime && input.outTime ? undefined : input.inTime ? "MISSING_OUT" : "MISSING_IN",
+      };
+      fixtureSequence += 1;
+      attendanceRecords.push(record);
+      return Promise.resolve({ attendance: { ...record } });
+    },
+    // NOTE: like approveBankAccount above, this fixture has no notion of caller identity and
+    // cannot model the real backend's maker!=checker SOD_VIOLATION gate (leaveService.ts
+    // regulariseAttendance). Tests needing to verify that gate must use the real API — see
+    // apps/api/test/attendance-capture-regularization.test.cjs and the Playwright e2e spec.
+    regulariseAttendance: (attendanceId: string, _reason: string) => {
+      const record = attendanceRecords.find((item) => item.id === attendanceId);
+      if (!record) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", "Attendance record not found"));
+      }
+      record.status = "REGULARISED";
+      record.anomalyCode = undefined;
+      record.isRegularised = true;
+      return Promise.resolve({ attendance: { ...record } });
     },
     getLeaveBalance: () => Promise.resolve({ ...leaveBalance }),
     listMyRightsRequests: () => Promise.resolve(page(rightsRequests.map((r) => ({ ...r })))),
@@ -838,6 +1125,12 @@ export function createFixtureHrmsClient(): HrmsClient {
       Promise.resolve(
         page(transferOrders.map((order) => ({ ...order, clearanceItems: order.clearanceItems.map((item) => ({ ...item })) })))
       ),
+    listMyTransferOrders: (employeeId: string) =>
+      Promise.resolve({
+        items: transferOrders
+          .filter((order) => order.employeeId === employeeId)
+          .map((order) => ({ ...order, clearanceItems: order.clearanceItems.map((item) => ({ ...item })) })),
+      }),
     initiateTransferOrder: (input: TransferInitiateInput) => {
       const order: TransferOrderRecord = {
         id: `transfer-fixture-${String(fixtureSequence).padStart(6, "0")}`,
@@ -859,6 +1152,23 @@ export function createFixtureHrmsClient(): HrmsClient {
       transferOrders.push(order);
       return Promise.resolve({ order: { ...order, clearanceItems: order.clearanceItems.map((item) => ({ ...item })) } });
     },
+    acknowledgeTransferOrder: (transferOrderId: string, input: TransferAcknowledgeInput) => {
+      const order = transferOrders.find((candidate) => candidate.id === transferOrderId);
+      if (!order) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture transfer order ${transferOrderId} not found`));
+      }
+      order.acknowledgedAt = input.acknowledgedAt;
+      return Promise.resolve({
+        acknowledgement: {
+          id: `transfer-ack-fixture-${transferOrderId}`,
+          transferOrderId,
+          employeeId: order.employeeId,
+          servedOnDate: order.servedOnDate ?? input.acknowledgedAt,
+          acknowledgementStatus: "ACKNOWLEDGED" as const,
+          acknowledgedAt: input.acknowledgedAt,
+        },
+      });
+    },
     listWorkflowTasks: () => Promise.resolve(page(workflowTasks)),
     actOnWorkflowTask: (taskId, verb, body, idempotencyKey) =>
       Promise.resolve({ accepted: true, fixture: true, taskId, verb, reason: body.reason ?? null, toUserId: body.toUserId ?? null, idempotencyKey }),
@@ -868,15 +1178,61 @@ export function createFixtureHrmsClient(): HrmsClient {
     getEmployeeProfile: () => Promise.resolve({ ...employeeProfile }),
     getServiceRegisterTimeline: () => Promise.resolve(page(srTimeline)),
     listDocuments: () => Promise.resolve(page(documents)),
+    listMyDocuments: () => Promise.resolve({ items: documents.map((document) => ({ ...document })) }),
+    fetchDocument: (documentId: string, intent: "VIEW" | "DOWNLOAD") => {
+      if (!documents.some((document) => document.id === documentId)) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture document ${documentId} not found`));
+      }
+      if (intent === "VIEW") {
+        return Promise.resolve({
+          fetch: { documentId, intent: "VIEW" as const, render: { renderToken: "fixture-render-token", expiresInSeconds: 300, watermarked: true, sessionBound: true, disposition: "inline" } },
+        });
+      }
+      return Promise.resolve({
+        fetch: { documentId, intent: "DOWNLOAD" as const, grant: { grantToken: "fixture-grant-token", right: "DOWNLOAD", versionNo: 1, contentHash: "fixture-hash", disposition: "attachment" } },
+      });
+    },
     getLeaveSlice: () => Promise.resolve({ ...leaveSlice }),
     getPersonalDetailsSlice: () => Promise.resolve({ ...personalDetailsSlice }),
     getLeaveSrRelaySlice: () => Promise.resolve({ ...leaveSrRelaySlice }),
     getTransferSlice: () => Promise.resolve({ ...transferSlice, clearances: transferSlice.clearances.map((clearance) => ({ ...clearance })) }),
     getPromotionSlice: () => Promise.resolve({ ...promotionSlice }),
+    listMyPromotionOrders: () => Promise.resolve(page(promotionOrders.map((order) => ({ ...order })))),
+    listMyProbationRecords: (employeeId: string) =>
+      Promise.resolve({ probationRecords: probationRecords.filter((record) => record.employeeId === employeeId).map((record) => ({ ...record })) }),
+    listMyPromotionRefusals: (employeeId: string) =>
+      Promise.resolve({ refusals: promotionRefusals.filter((refusal) => refusal.employeeId === employeeId).map((refusal) => ({ ...refusal })) }),
     getTrainingSlice: () => Promise.resolve({ ...trainingSlice }),
     getAparSlice: () => Promise.resolve({ ...aparSlice }),
+    listMyAparForms: (employeeId: string) => Promise.resolve({ items: aparForms.filter((form) => form.employeeId === employeeId).map((form) => ({ ...form })) }),
     getDisciplinarySlice: () => Promise.resolve({ ...disciplinarySlice }),
     getPayrollSlice: () => Promise.resolve({ ...payrollSlice }),
+    listMyPayslips: () =>
+      Promise.resolve({
+        items: [
+          {
+            payslip: {
+              id: "payslip-fixture-000001",
+              payslipNo: "PS-2026-06-fixture-V1",
+              employeeId: employees[0].id,
+              period: "2026-06",
+              version: 1,
+              status: "PUBLISHED",
+              grossCents: 8500000,
+              deductionsCents: 30000,
+              netPayCents: 8470000,
+            },
+            lines: [
+              { componentCode: "BASIC", lineType: "EARNING", amountCents: 8500000, sequenceNo: 1 },
+              { componentCode: "PT", lineType: "DEDUCTION", amountCents: 30000, sequenceNo: 2 },
+            ],
+          },
+        ],
+      }),
+    getMyYtdStatement: () =>
+      Promise.resolve({
+        ytd: { employeeId: employees[0].id, byComponent: { BASIC: 8500000, PT: 30000 }, grossCents: 8500000, deductionsCents: 30000, netCents: 8470000, lineCount: 2 },
+      }),
     createSalaryStructure: (input: SalaryStructureCreateInput) => {
       const structure: FixtureSalaryStructure = {
         id: `salary-structure-fixture-${String(fixtureSequence).padStart(6, "0")}`,
@@ -1053,7 +1409,42 @@ export function createFixtureHrmsClient(): HrmsClient {
       fixtureSequence += 1;
       return Promise.resolve<PensionCaseActionResult>({ pensionCase: clonePensionCase(pensionCase) });
     },
+    runMyPensionEstimate: (input: PensionSelfEstimateInput) => {
+      if (!input.asOf) {
+        return Promise.reject(fixtureError(400, "VALIDATION_FAILED", "asOf must use YYYY-MM-DD"));
+      }
+      const qualifyingServiceMonths = input.qualifyingServiceMonths ?? 240;
+      const emolumentsBaseCents = input.emolumentsBaseCents ?? fixtureLastBasicPayCents;
+      const belowThreshold = qualifyingServiceMonths < fixturePensionLimits.minQualifyingYearsForPension * 12;
+      const pensionCents = belowThreshold
+        ? 0
+        : Math.min(fixturePensionLimits.maxPensionCents, Math.max(fixturePensionLimits.minPensionCents, Math.floor(emolumentsBaseCents / 2)));
+      return Promise.resolve<PensionSelfEstimateResult>({
+        estimate: {
+          isBinding: false,
+          employeeId: input.employeeId,
+          scheme: input.scheme,
+          asOf: input.asOf,
+          qualifyingServiceMonths,
+          emolumentsBaseCents,
+          benefitOutcome: belowThreshold ? "SERVICE_GRATUITY_ONLY" : "FULL_PENSION",
+          pensionCents,
+          formula: "Fixture non-binding estimate mirror of OPS flat-50% (FR-G11-15 AC1/AC2)",
+          ruleVersionRef: "pen-limit-rule-fixture-000001",
+        },
+      });
+    },
+    listMyPensionCases: (employeeId: string) =>
+      Promise.resolve({ items: pensionCases.filter((pensionCase) => pensionCase.employeeId === employeeId).map(clonePensionCase) }),
     getAnalyticsSlice: () => Promise.resolve({ ...analyticsSlice }),
+    getMyDashboard: (employeeId: string) =>
+      Promise.resolve({
+        dashboard: {
+          employeeId,
+          leaveBalance: { leaveTypeId: "EL", leaveYear: 2026, currentBalance: 18, reserved: 0, debited: 12, availableBalance: 18 },
+          attendanceSummary: { totalRecords: 20, presentDays: 18, regularisedDays: 1 },
+        },
+      }),
     listAnalyticsKpis: (kpiCode?: string) =>
       Promise.resolve(page(analyticsKpis.filter((kpi) => !kpiCode || kpi.kpiCode === kpiCode).map((kpi) => ({ ...kpi })))),
     queryKpiAggregate: (martCode: string, dimension: string) => {
@@ -1108,6 +1499,36 @@ export function createFixtureHrmsClient(): HrmsClient {
       fixtureSequence += 1;
       return Promise.resolve({ disciplinaryCase: { ...disciplinaryCase } });
     },
+    listMyDisciplinaryCases: (employeeId: string) =>
+      Promise.resolve({ items: myDisciplinaryCases.filter((item) => item.chargedEmployeeId === employeeId).map((item) => ({ ...item })) }),
+    listMyShowCauseNotices: (caseId: string) =>
+      Promise.resolve({ items: myShowCauseNotices.filter((notice) => notice.caseId === caseId).map((notice) => ({ ...notice })) }),
+    respondToShowCause: (noticeId: string, input: RespondToShowCauseInput) => {
+      const notice = myShowCauseNotices.find((candidate) => candidate.id === noticeId);
+      if (!notice) {
+        return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture show-cause notice ${noticeId} not found`));
+      }
+      notice.status = "RESPONDED";
+      notice.representationText = input.representationText;
+      notice.respondedAt = input.respondedAt;
+      return Promise.resolve({ notice: { ...notice } });
+    },
+    listMyPersonalHearings: (caseId: string) =>
+      Promise.resolve({ items: myPersonalHearings.filter((hearing) => hearing.caseId === caseId).map((hearing) => ({ ...hearing })) }),
+    requestPersonalHearing: (caseId: string, input: RequestPersonalHearingInput) => {
+      const hearing: PersonalHearingView = {
+        id: `g09-personal-hearing-fixture-${String(fixtureSequence).padStart(6, "0")}`,
+        caseId,
+        stage: input.stage,
+        requested: true,
+        requestedOn: input.requestedOn,
+        status: "REQUESTED",
+        granted: false,
+      };
+      fixtureSequence += 1;
+      myPersonalHearings.push(hearing);
+      return Promise.resolve({ personalHearing: { ...hearing } });
+    },
     holdDpc: (promotionCaseId: string, input: DpcHoldInput) => {
       if (promotionCaseId !== promotionCase.id) {
         return Promise.reject(fixtureError(404, "NOT_FOUND", `Fixture promotion case ${promotionCaseId} not found`));
@@ -1136,8 +1557,14 @@ export function createFixtureHrmsClient(): HrmsClient {
       promotionCase.dpc = { quorumRequired, participatingMembers, recusedEmployeeIds: [...recused], verdict: "FIT_PANEL" };
       return Promise.resolve({ promotionCase: { ...promotionCase, candidates: promotionCase.candidates.map((candidate) => ({ ...candidate })) } });
     },
-    submitAparSelf: (formId: string) => {
-      return aparTierAction(formId, "SELF_APPRAISAL", "RO_ASSESSMENT");
+    submitAparSelf: (formId: string, input: AparSelfAppraisalInput) => {
+      if (!input.narrative.trim()) {
+        return Promise.reject(fixtureError(400, "VALIDATION_FAILED", "Achievements narrative is required"));
+      }
+      return aparTierAction(formId, "SELF_APPRAISAL", "RO_ASSESSMENT", (form) => {
+        form.selfAppraisalNarrative = input.narrative;
+        form.selfAppraisalRatings = input.selfRatings ? { ...input.selfRatings } : undefined;
+      });
     },
     recordAparReporting: (formId: string, input: AparReportingInput) => {
       if (!input.grade.trim() || !input.narrative.trim()) {
@@ -1171,6 +1598,9 @@ export function createFixtureHrmsClient(): HrmsClient {
       trainingNominations.push(nomination);
       return Promise.resolve({ nomination: { ...nomination } });
     },
+    listTrainingSessions: () => Promise.resolve({ items: trainingSessions.map((session) => ({ ...session })) }),
+    listMyTrainingNominations: (employeeId: string) =>
+      Promise.resolve({ items: trainingNominations.filter((nomination) => nomination.employeeId === employeeId).map((nomination) => ({ ...nomination })) }),
     ingestServiceRegister: (input: ServiceRegisterIngestInput, idempotencyKey: string) =>
       Promise.resolve({
         event: {

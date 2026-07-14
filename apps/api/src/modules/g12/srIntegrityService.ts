@@ -167,6 +167,16 @@ export interface SrCertifiedExtractInput {
  * completeness gap register (JOB-G12-GAPSCAN, E21/E22), custodian attestations (E11),
  * and purpose-redacted certified extracts (E14, P02 field mask fail-closed).
  */
+/** This whole integrity subsystem (gap-scan, anchoring, attestation) is admin/system-only tooling
+ *  gated by its own authorization.check() calls on each public method; none of it is a user-facing
+ *  "read my own record" path. The two ServiceRegisterService.getEvent() calls below need an
+ *  ActorContext (for its FR-09 self-scope check) but these methods only carry a TenantScope —
+ *  this synthesizes a system-override actor so an already-authorized integrity operation isn't
+ *  blocked by a check meant for direct employee reads. */
+function asIntegrityOverrideActor(scope: TenantScope): ActorContext {
+  return { ...scope, userId: "g12-integrity-system", roles: ["system"], permissions: ["*"] };
+}
+
 export class SrIntegrityService {
   constructor(
     private readonly authorization: AuthorizationService,
@@ -419,7 +429,7 @@ export class SrIntegrityService {
       throw new FoundationError("VALIDATION_FAILED", "EXPLAINED requires an explanationCode", { field: "explanationCode" });
     }
     if (input.gapStatus === "CLOSED_RECORDED") {
-      if (!input.resolvedEventId || !this.serviceRegister.getEvent(scope, input.resolvedEventId)) {
+      if (!input.resolvedEventId || !this.serviceRegister.getEvent(asIntegrityOverrideActor(scope), input.resolvedEventId)) {
         throw new FoundationError("VALIDATION_FAILED", "CLOSED_RECORDED requires an existing resolvedEventId", { field: "resolvedEventId" });
       }
     }
@@ -516,7 +526,7 @@ export class SrIntegrityService {
     if (!input.issuedTo) {
       throw new FoundationError("VALIDATION_FAILED", "issuedTo is required", { field: "issuedTo" });
     }
-    const chain = this.serviceRegister.getTimeline(scope, input.employeeId);
+    const chain = this.serviceRegister.getTimeline(actor, input.employeeId);
     const chainHead = chain[chain.length - 1];
     if (!chainHead) {
       throw new FoundationError("NOT_FOUND", "Employee has no service register entries to extract");
@@ -591,7 +601,7 @@ export class SrIntegrityService {
   }
 
   private requireEventHash(scope: TenantScope, eventId: string): string {
-    const event = this.serviceRegister.getEvent(scope, eventId);
+    const event = this.serviceRegister.getEvent(asIntegrityOverrideActor(scope), eventId);
     if (!event) {
       throw new FoundationError("NOT_FOUND", "SR event not found");
     }

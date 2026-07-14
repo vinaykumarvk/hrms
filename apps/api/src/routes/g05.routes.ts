@@ -1,10 +1,64 @@
 import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalNumber, optionalRecord, optionalString, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
-import type { ChargePhase, ChargeType, DeemedServiceBasis, DeliveryChannel } from "../modules/g05/transferService";
-import type { CounsellingChoiceAction, TurnOrderMethod } from "../modules/g05/counsellingVacancyService";
+import type {
+  ChargeHandover,
+  ChargePhase,
+  ChargeType,
+  DeemedServiceBasis,
+  DeliveryChannel,
+  JoiningReport,
+  OrderAcknowledgement,
+  RelievingOrder,
+  TransferOrder,
+  TransferRepresentation,
+} from "../modules/g05/transferService";
+import type { CounsellingChoiceAction, TransferPreference, TurnOrderMethod } from "../modules/g05/counsellingVacancyService";
 import { FoundationError } from "../platform/types";
 import { ph03Ids } from "../seed/ph03Seed";
+
+function toWireOrder(order: TransferOrder): Omit<TransferOrder, "tenantId" | "entityId" | "workflowInstanceId" | "workflowTaskId" | "clearanceWorkflowInstanceId" | "orderNumberSequenceId"> {
+  const {
+    tenantId: _tenantId,
+    entityId: _entityId,
+    workflowInstanceId: _workflowInstanceId,
+    workflowTaskId: _workflowTaskId,
+    clearanceWorkflowInstanceId: _clearanceWorkflowInstanceId,
+    orderNumberSequenceId: _orderNumberSequenceId,
+    ...wire
+  } = order;
+  return wire;
+}
+
+function toWireAcknowledgement(acknowledgement: OrderAcknowledgement): Omit<OrderAcknowledgement, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = acknowledgement;
+  return wire;
+}
+
+function toWirePreference(preference: TransferPreference): Omit<TransferPreference, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = preference;
+  return wire;
+}
+
+function toWireRepresentation(representation: TransferRepresentation): Omit<TransferRepresentation, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = representation;
+  return wire;
+}
+
+function toWireRelievingOrder(relievingOrder: RelievingOrder): Omit<RelievingOrder, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = relievingOrder;
+  return wire;
+}
+
+function toWireJoiningReport(joiningReport: JoiningReport): Omit<JoiningReport, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = joiningReport;
+  return wire;
+}
+
+function toWireChargeHandover(chargeHandover: ChargeHandover): Omit<ChargeHandover, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = chargeHandover;
+  return wire;
+}
 
 export const g05RouteEvidence = {
   transferOrders: "/api/v1/transfers/orders",
@@ -54,17 +108,24 @@ export function registerG05Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return created(
-          context.services.transfer.initiate(context.actor, {
-            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
-            fromOrgUnitId: optionalString(body, "fromOrgUnitId") ?? ph03Ids.orgRevenue,
-            toOrgUnitId: requiredString(body, "toOrgUnitId"),
-            orderDate: requiredString(body, "orderDate"),
-            effectiveDate: requiredString(body, "effectiveDate"),
-            reason: optionalString(body, "reason"),
-          })
-        );
+        const result = context.services.transfer.initiate(context.actor, {
+          employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+          fromOrgUnitId: optionalString(body, "fromOrgUnitId") ?? ph03Ids.orgRevenue,
+          toOrgUnitId: requiredString(body, "toOrgUnitId"),
+          orderDate: requiredString(body, "orderDate"),
+          effectiveDate: requiredString(body, "effectiveDate"),
+          reason: optionalString(body, "reason"),
+        });
+        return created({ ...result, order: toWireOrder(result.order) });
       },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/transfers/employees/{id}",
+      operationId: "g05.listMyTransferOrders",
+      protected: true,
+      permission: "g05.transfer.read",
+      handler: (context) => ok({ items: context.services.transfer.listMyOrders(context.actor, requiredParam(context.params, "id")).map(toWireOrder) }),
     },
     {
       method: "GET",
@@ -75,7 +136,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       list: { defaultLimit: 25, maxLimit: 100 },
       handler: (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const orders = context.services.transfer.listOrders(context.scope);
+        const orders = context.services.transfer.listOrders(context.actor).map(toWireOrder);
         return ok({ items: orders.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -87,12 +148,12 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) =>
-        accepted(
-          context.services.transfer.approve(context.actor, requiredParam(context.params, "id"), {
-            idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
-          })
-        ),
+      handler: (context) => {
+        const result = context.services.transfer.approve(context.actor, requiredParam(context.params, "id"), {
+          idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+        });
+        return accepted({ ...result, order: toWireOrder(result.order) });
+      },
     },
     {
       method: "GET",
@@ -100,7 +161,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.getTransferClearance",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) => ok({ clearanceItems: context.services.transfer.getOrder(context.scope, requiredParam(context.params, "id")).clearanceItems }),
+      handler: (context) => ok({ clearanceItems: context.services.transfer.getOrder(context.actor, requiredParam(context.params, "id")).clearanceItems }),
     },
     {
       method: "POST",
@@ -113,11 +174,13 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          order: context.services.transfer.completeClearance(
-            context.actor,
-            requiredParam(context.params, "id"),
-            requiredParam(context.params, "clearance_code"),
-            optionalString(body, "completedOn") ?? "2026-07-11"
+          order: toWireOrder(
+            context.services.transfer.completeClearance(
+              context.actor,
+              requiredParam(context.params, "id"),
+              requiredParam(context.params, "clearance_code"),
+              optionalString(body, "completedOn") ?? "2026-07-11"
+            )
           ),
         });
       },
@@ -133,11 +196,13 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          order: context.services.transfer.deemClearance(
-            context.actor,
-            requiredParam(context.params, "id"),
-            requiredParam(context.params, "clearance_code"),
-            optionalString(body, "deemedOn") ?? "2026-07-12"
+          order: toWireOrder(
+            context.services.transfer.deemClearance(
+              context.actor,
+              requiredParam(context.params, "id"),
+              requiredParam(context.params, "clearance_code"),
+              optionalString(body, "deemedOn") ?? "2026-07-12"
+            )
           ),
         });
       },
@@ -152,13 +217,17 @@ export function registerG05Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(
-          context.services.transfer.relieveAndJoin(context.actor, requiredParam(context.params, "id"), {
-            relievingDate: requiredString(body, "relievingDate"),
-            joiningDate: requiredString(body, "joiningDate"),
-            idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
-          })
-        );
+        const result = context.services.transfer.relieveAndJoin(context.actor, requiredParam(context.params, "id"), {
+          relievingDate: requiredString(body, "relievingDate"),
+          joiningDate: requiredString(body, "joiningDate"),
+          idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+        });
+        return accepted({
+          ...result,
+          order: toWireOrder(result.order),
+          relievingOrder: toWireRelievingOrder(result.relievingOrder),
+          joiningReport: toWireJoiningReport(result.joiningReport),
+        });
       },
     },
     {
@@ -172,10 +241,12 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          representation: context.services.transfer.fileRepresentation(context.actor, requiredParam(context.params, "id"), {
-            grounds: requiredString(body, "grounds"),
-            evidenceTitle: optionalString(body, "evidenceTitle"),
-          }),
+          representation: toWireRepresentation(
+            context.services.transfer.fileRepresentation(context.actor, requiredParam(context.params, "id"), {
+              grounds: requiredString(body, "grounds"),
+              evidenceTitle: optionalString(body, "evidenceTitle"),
+            })
+          ),
         });
       },
     },
@@ -188,7 +259,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       list: { defaultLimit: 25, maxLimit: 100 },
       handler: (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const representations = context.services.transfer.listRepresentations(context.scope);
+        const representations = context.services.transfer.listRepresentations(context.actor).map(toWireRepresentation);
         return ok({ items: representations.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -202,13 +273,12 @@ export function registerG05Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(
-          context.services.transfer.retainOnRepresentation(context.actor, requiredParam(context.params, "id"), {
-            decisionDate: requiredString(body, "decisionDate"),
-            reason: requiredString(body, "reason"),
-            idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
-          })
-        );
+        const result = context.services.transfer.retainOnRepresentation(context.actor, requiredParam(context.params, "id"), {
+          decisionDate: requiredString(body, "decisionDate"),
+          reason: requiredString(body, "reason"),
+          idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+        });
+        return accepted({ ...result, representation: toWireRepresentation(result.representation), order: toWireOrder(result.order) });
       },
     },
     {
@@ -221,13 +291,12 @@ export function registerG05Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(
-          context.services.transfer.cancel(context.actor, requiredParam(context.params, "id"), {
-            cancellationDate: requiredString(body, "cancellationDate"),
-            reason: requiredString(body, "reason"),
-            idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
-          })
-        );
+        const result = context.services.transfer.cancel(context.actor, requiredParam(context.params, "id"), {
+          cancellationDate: requiredString(body, "cancellationDate"),
+          reason: requiredString(body, "reason"),
+          idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+        });
+        return accepted({ ...result, order: toWireOrder(result.order) });
       },
     },
     {
@@ -240,13 +309,12 @@ export function registerG05Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(
-          context.services.transfer.deemRelieved(context.actor, requiredParam(context.params, "id"), {
-            deemedRelievingDate: requiredString(body, "deemedRelievingDate"),
-            reason: requiredString(body, "reason"),
-            idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
-          })
-        );
+        const result = context.services.transfer.deemRelieved(context.actor, requiredParam(context.params, "id"), {
+          deemedRelievingDate: requiredString(body, "deemedRelievingDate"),
+          reason: requiredString(body, "reason"),
+          idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+        });
+        return accepted({ ...result, order: toWireOrder(result.order) });
       },
     },
     // --- PH-08B: proof-of-service & acknowledgement (FR-G05-020) -------------------------
@@ -261,11 +329,13 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          acknowledgement: context.services.transfer.serveOrder(context.actor, requiredParam(context.params, "id"), {
-            servedOnDate: requiredString(body, "servedOnDate"),
-            deliveryChannel: requiredString(body, "deliveryChannel") as DeliveryChannel,
-            proofDocumentTitle: optionalString(body, "proofDocumentTitle"),
-          }),
+          acknowledgement: toWireAcknowledgement(
+            context.services.transfer.serveOrder(context.actor, requiredParam(context.params, "id"), {
+              servedOnDate: requiredString(body, "servedOnDate"),
+              deliveryChannel: requiredString(body, "deliveryChannel") as DeliveryChannel,
+              proofDocumentTitle: optionalString(body, "proofDocumentTitle"),
+            })
+          ),
         });
       },
     },
@@ -280,9 +350,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          acknowledgement: context.services.transfer.acknowledgeOrder(context.actor, requiredParam(context.params, "id"), {
-            acknowledgedAt: requiredString(body, "acknowledgedAt"),
-          }),
+          acknowledgement: toWireAcknowledgement(
+            context.services.transfer.acknowledgeOrder(context.actor, requiredParam(context.params, "id"), {
+              acknowledgedAt: requiredString(body, "acknowledgedAt"),
+            })
+          ),
         });
       },
     },
@@ -297,11 +369,13 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          acknowledgement: context.services.transfer.deemOrderServed(context.actor, requiredParam(context.params, "id"), {
-            asOf: requiredString(body, "asOf"),
-            basis: requiredString(body, "basis") as DeemedServiceBasis,
-            reason: requiredString(body, "reason"),
-          }),
+          acknowledgement: toWireAcknowledgement(
+            context.services.transfer.deemOrderServed(context.actor, requiredParam(context.params, "id"), {
+              asOf: requiredString(body, "asOf"),
+              basis: requiredString(body, "basis") as DeemedServiceBasis,
+              reason: requiredString(body, "reason"),
+            })
+          ),
         });
       },
     },
@@ -311,8 +385,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.getTransferServiceRecord",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) =>
-        ok({ acknowledgement: context.services.transfer.getServiceRecord(context.scope, requiredParam(context.params, "id")) ?? null }),
+      handler: (context) => {
+        const record = context.services.transfer.getServiceRecord(context.actor, requiredParam(context.params, "id"));
+        return ok({ acknowledgement: record ? toWireAcknowledgement(record) : null });
+      },
     },
     // --- PH-08B: charge handover incl. under-protest (FR-G05-007) ------------------------
     {
@@ -326,15 +402,17 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          chargeHandover: context.services.transfer.recordChargeHandover(context.actor, requiredParam(context.params, "id"), {
-            receivingEmployeeId: requiredString(body, "receivingEmployeeId"),
-            handoverDate: requiredString(body, "handoverDate"),
-            phase: optionalString(body, "phase") as ChargePhase | undefined,
-            chargeType: optionalString(body, "chargeType") as ChargeType | undefined,
-            cashImprestAmount: optionalNumber(body, "cashImprestAmount"),
-            pendingFilesCount: optionalNumber(body, "pendingFilesCount"),
-            noteTitle: optionalString(body, "noteTitle"),
-          }),
+          chargeHandover: toWireChargeHandover(
+            context.services.transfer.recordChargeHandover(context.actor, requiredParam(context.params, "id"), {
+              receivingEmployeeId: requiredString(body, "receivingEmployeeId"),
+              handoverDate: requiredString(body, "handoverDate"),
+              phase: optionalString(body, "phase") as ChargePhase | undefined,
+              chargeType: optionalString(body, "chargeType") as ChargeType | undefined,
+              cashImprestAmount: optionalNumber(body, "cashImprestAmount"),
+              pendingFilesCount: optionalNumber(body, "pendingFilesCount"),
+              noteTitle: optionalString(body, "noteTitle"),
+            })
+          ),
         });
       },
     },
@@ -349,9 +427,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          chargeHandover: context.services.transfer.acceptChargeHandover(context.actor, requiredParam(context.params, "id"), {
-            acceptedAt: requiredString(body, "acceptedAt"),
-          }),
+          chargeHandover: toWireChargeHandover(
+            context.services.transfer.acceptChargeHandover(context.actor, requiredParam(context.params, "id"), {
+              acceptedAt: requiredString(body, "acceptedAt"),
+            })
+          ),
         });
       },
     },
@@ -366,10 +446,12 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          chargeHandover: context.services.transfer.disputeChargeHandover(context.actor, requiredParam(context.params, "id"), {
-            remarks: requiredString(body, "remarks"),
-            disputedAt: requiredString(body, "disputedAt"),
-          }),
+          chargeHandover: toWireChargeHandover(
+            context.services.transfer.disputeChargeHandover(context.actor, requiredParam(context.params, "id"), {
+              remarks: requiredString(body, "remarks"),
+              disputedAt: requiredString(body, "disputedAt"),
+            })
+          ),
         });
       },
     },
@@ -384,10 +466,12 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          chargeHandover: context.services.transfer.certifyHandoverUnderProtest(context.actor, requiredParam(context.params, "id"), {
-            asOf: requiredString(body, "asOf"),
-            reason: requiredString(body, "reason"),
-          }),
+          chargeHandover: toWireChargeHandover(
+            context.services.transfer.certifyHandoverUnderProtest(context.actor, requiredParam(context.params, "id"), {
+              asOf: requiredString(body, "asOf"),
+              reason: requiredString(body, "reason"),
+            })
+          ),
         });
       },
     },
@@ -612,11 +696,13 @@ export function registerG05Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          preferences: context.services.transferCounselling.capturePreferences(context.actor, {
-            driveId: requiredParam(context.params, "id"),
-            employeeId: requiredString(body, "employeeId"),
-            preferences: readPreferenceRows(body.preferences),
-          }),
+          preferences: context.services.transferCounselling
+            .capturePreferences(context.actor, {
+              driveId: requiredParam(context.params, "id"),
+              employeeId: requiredString(body, "employeeId"),
+              preferences: readPreferenceRows(body.preferences),
+            })
+            .map(toWirePreference),
         });
       },
     },
@@ -905,7 +991,12 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listPreferences",
       protected: true,
       permission: "g05.counselling.read",
-      handler: (context) => ok({ items: context.services.transferCounselling.listPreferences(context.actor, requiredParam(context.params, "driveId"), requiredParam(context.params, "employeeId")) }),
+      handler: (context) =>
+        ok({
+          items: context.services.transferCounselling
+            .listPreferences(context.actor, requiredParam(context.params, "driveId"), requiredParam(context.params, "employeeId"))
+            .map(toWirePreference),
+        }),
     },
     {
       method: "GET",
@@ -929,7 +1020,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listChargeHandovers",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) => ok({ items: context.services.transfer.listChargeHandovers(context.scope, requiredParam(context.params, "id")) }),
+      handler: (context) => ok({ items: context.services.transfer.listChargeHandovers(context.actor, requiredParam(context.params, "id")).map(toWireChargeHandover) }),
     },
     {
       method: "GET",
@@ -937,7 +1028,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listRelievingOrders",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) => ok({ items: context.services.transfer.listRelievingOrders(context.scope) }),
+      handler: (context) => ok({ items: context.services.transfer.listRelievingOrders(context.actor).map(toWireRelievingOrder) }),
     },
     {
       method: "GET",
@@ -945,7 +1036,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listJoiningReports",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) => ok({ items: context.services.transfer.listJoiningReports(context.scope) }),
+      handler: (context) => ok({ items: context.services.transfer.listJoiningReports(context.actor).map(toWireJoiningReport) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

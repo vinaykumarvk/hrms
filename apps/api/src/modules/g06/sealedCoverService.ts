@@ -11,6 +11,11 @@ import { ActorContext, FoundationError, TenantScope, nextId, requireTenantScope 
  * released with a recorded reason (a release requires a non-empty reason). Backs the PH-34B UI.
  */
 
+/** Post-full-review-goal fix: self-service reads need a need-to-know gate. */
+/** hr_admin deliberately excluded (SoD boundary): promotion self-service data stays with the
+ *  dedicated statutory promotion chain, not the general HR-admin superset role. */
+const SEALED_COVER_ACCESS_OVERRIDE_ROLES = new Set(["promotion_officer", "system"]);
+
 export type SealedCoverStatus = "SEALED" | "RELEASED";
 
 /** sealed_cover_cases — a sealed DPC recommendation pending a proceeding outcome. */
@@ -85,9 +90,23 @@ export class SealedCoverService {
     return { ...row };
   }
 
-  listSealedCovers(scope: TenantScope): SealedCoverCase[] {
-    requireTenantScope(scope);
-    return this.repo.list(scope);
+  private isSealedCoverAccessOverride(actor: ActorContext): boolean {
+    return Boolean(actor.permissions?.includes("*") || actor.roles?.some((role) => SEALED_COVER_ACCESS_OVERRIDE_ROLES.has(role)));
+  }
+
+  /** Post-full-review-goal fix: was a tenant-wide dump with no per-employee filter at all — any
+   *  actor holding `g06.sealedcover.read` saw every employee's sealed-cover status AND its
+   *  `reason`/`releaseReason` text, which (per BRD G09 confidentiality rules — sealed-cover
+   *  contents are hard-masked from the concerned employee) routinely names the underlying
+   *  disciplinary/vigilance matter. Non-override actors now see only their own row, with
+   *  `reason`/`releaseReason` stripped — status only. */
+  listSealedCovers(actor: ActorContext): SealedCoverCase[] {
+    requireTenantScope(actor);
+    const inTenant = this.repo.list(actor);
+    if (this.isSealedCoverAccessOverride(actor)) {
+      return inTenant;
+    }
+    return inTenant.filter((row) => row.employeeId === actor.userId).map((row) => ({ ...row, reason: "", releaseReason: undefined }));
   }
 
   /** Release a sealed cover with a recorded reason (a release requires a non-empty reason). */

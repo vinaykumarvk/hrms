@@ -137,6 +137,16 @@ export interface DisciplinaryImpactSignal {
   status: "READY_FOR_G06_G11";
 }
 
+/** Post-full-review-goal fix: self-service reads/writes (my case, my show-cause response, my
+ *  hearing request) need a need-to-know gate, same shape as every other module's self-scope.
+ *  Post-hr_admin-goal SoD correction: hr_admin deliberately excluded — the BRD's own text names
+ *  an "HR-DCP Admin" persona mapped to HR Admin, but only alongside a distinct G09 module-admin
+ *  entitlement flag (never implemented) and explicitly scoped "operational, non-deciding" — the
+ *  hr_admin capability audit treats disciplinary case access as belonging to the dedicated
+ *  disciplinary_authority chain, not the general superset role, and that instruction supersedes
+ *  the module BRD's looser language here. */
+const DISCIPLINARY_ACCESS_OVERRIDE_ROLES = new Set(["disciplinary_authority", "system"]);
+
 export class DisciplinaryService {
   private readonly cases: DisciplinaryCase[] = [];
   private readonly penaltyOrders: PenaltyOrder[] = [];
@@ -591,10 +601,15 @@ export class DisciplinaryService {
     return { ...notice };
   }
 
-  /** E15: record the respondent's representation against the show-cause notice. */
+  /** E15: record the respondent's representation against the show-cause notice.
+   *  Post-full-review-goal fix: this had no ownership check at all — any `g09.show-cause.respond`
+   *  holder could submit a representation on behalf of a case that was not theirs, impersonating
+   *  the actual respondent. Self-or-override only. */
   respondToShowCause(actor: ActorContext, noticeId: string, input: { representationText: string; respondedAt: string }): ShowCauseNotice {
     this.authorization.check(actor, "g09.show-cause.respond", actor);
     const notice = this.requireShowCauseNotice(actor, noticeId);
+    const disciplinaryCase = this.requireCase(actor, notice.caseId);
+    this.assertSelfOrDisciplinaryOverride(actor, disciplinaryCase.chargedEmployeeId);
     if (notice.status !== "ISSUED" && notice.status !== "SERVED") {
       throw new FoundationError("PRECONDITION_FAILED", "Show-cause notice is not open for a response");
     }
@@ -604,6 +619,15 @@ export class DisciplinaryService {
     this.dueProcess.saveShowCauseNotice(notice);
     this.appendTimeline(actor, notice.caseId, "SHOW_CAUSE", "STAGE_COMPLETED", "Show-cause representation received", input.respondedAt);
     return { ...notice };
+  }
+
+  /** Self-service "view my show-cause notice(s)": lets the charged officer see the proposed
+   *  penalties and response deadline before submitting a representation via `respondToShowCause`.
+   *  Self-or-override only. */
+  listMyShowCauseNotices(actor: ActorContext, caseId: string): ShowCauseNotice[] {
+    const disciplinaryCase = this.requireCase(actor, caseId);
+    this.assertSelfOrDisciplinaryOverride(actor, disciplinaryCase.chargedEmployeeId);
+    return this.dueProcess.listShowCauseNotices(actor, caseId).map((notice) => ({ ...notice }));
   }
 
   /** E14: DA records a tentative disagreement with the inquiry report and serves it. */
@@ -873,7 +897,10 @@ export class DisciplinaryService {
   // PH-15F FR-G09-025: personal_hearings (SHOW_CAUSE / APPEAL) — grant / deny-with-reason
   // -------------------------------------------------------------------------------------
 
-  /** FR-G09-025 AC-1: record the charged officer's hearing request (requested=true). */
+  /** FR-G09-025 AC-1: record the charged officer's hearing request (requested=true).
+   *  Post-full-review-goal fix: this had no ownership check at all — any
+   *  `g09.personal-hearing.request` holder could request a hearing on a case that was not
+   *  theirs. Self-or-override only. */
   requestPersonalHearing(
     actor: ActorContext,
     caseId: string,
@@ -881,6 +908,7 @@ export class DisciplinaryService {
   ): PersonalHearing {
     this.authorization.check(actor, "g09.personal-hearing.request", actor);
     const disciplinaryCase = this.requireCase(actor, caseId);
+    this.assertSelfOrDisciplinaryOverride(actor, disciplinaryCase.chargedEmployeeId);
     this.assertNotAbated(disciplinaryCase);
     if (input.showCauseNoticeId) {
       const notice = this.requireShowCauseNotice(actor, input.showCauseNoticeId);
@@ -976,9 +1004,14 @@ export class DisciplinaryService {
     return { ...hearing };
   }
 
-  listPersonalHearings(scope: TenantScope, caseId: string): PersonalHearing[] {
-    requireTenantScope(scope);
-    return this.dueProcess.listPersonalHearings(scope, caseId);
+  /** Post-full-review-goal fix: this had no ownership check at all — any `g09.case.read` holder
+   *  could read any case's personal-hearing requests/decisions. Self-or-override only, since the
+   *  charged officer needs to see their own hearing request's GRANT/DENY outcome. */
+  listPersonalHearings(actor: ActorContext, caseId: string): PersonalHearing[] {
+    requireTenantScope(actor);
+    const disciplinaryCase = this.requireCase(actor, caseId);
+    this.assertSelfOrDisciplinaryOverride(actor, disciplinaryCase.chargedEmployeeId);
+    return this.dueProcess.listPersonalHearings(actor, caseId);
   }
 
   // -------------------------------------------------------------------------------------
@@ -1244,9 +1277,15 @@ export class DisciplinaryService {
     return { disciplinaryCase: { ...disciplinaryCase }, penaltyOrder: { ...order }, srEventId: sr.event.id };
   }
 
-  /** DI-21: the case timeline as stored (seq_no/prev_hash/row_hash chain). */
+  /** DI-21: the case timeline as stored (seq_no/prev_hash/row_hash chain). Post-full-review-goal
+   *  fix: (1) had no ownership check at all — any `g09.case.read` holder could read any case's
+   *  timeline; (2) the permission string here (`g09.timeline.read`) didn't match the route's
+   *  declared gate (`g09.case.read`), so a caller needed both to ever reach this method — aligned
+   *  to `g09.case.read`, matching every other case-scoped read in this service. */
   listCaseTimeline(actor: ActorContext, caseId: string): CaseTimelineEvent[] {
-    this.authorization.check(actor, "g09.timeline.read", actor);
+    this.authorization.check(actor, "g09.case.read", actor);
+    const disciplinaryCase = this.requireCase(actor, caseId);
+    this.assertSelfOrDisciplinaryOverride(actor, disciplinaryCase.chargedEmployeeId);
     return this.dueProcess.listTimelineEvents(actor, caseId);
   }
 
@@ -1259,6 +1298,21 @@ export class DisciplinaryService {
     const rows = this.dueProcess.listTimelineEvents(actor, caseId);
     verifyTimelineChainRows(rows);
     return { verified: true, eventCount: rows.length };
+  }
+
+  /** Self-service "view my disciplinary case status": every case naming this employee as the
+   *  charged officer, self-or-override only. `inquiryReportDocumentId` is stripped for a
+   *  non-override (self-service) caller — the preliminary/inquiry report is never served-by-
+   *  default (see `listCaseEvidence`'s `isServed: false` for `INQUIRY_REPORT`), so its document
+   *  reference should not leak via the case row either. */
+  listMyCases(actor: ActorContext, employeeId: string): DisciplinaryCase[] {
+    requireTenantScope(actor);
+    this.assertSelfOrDisciplinaryOverride(actor, employeeId);
+    const cases = this.cases.filter((item) => this.inScope(item, actor) && item.chargedEmployeeId === employeeId).map((item) => ({ ...item }));
+    if (this.isDisciplinaryAccessOverride(actor)) {
+      return cases;
+    }
+    return cases.map((item) => ({ ...item, inquiryReportDocumentId: undefined }));
   }
 
   /**
@@ -1275,13 +1329,16 @@ export class DisciplinaryService {
   /**
    * G10 FR-09 linkage seam: scoped read of one penalty order. The G10 recovery scheduler
    * consumes this so every scheduled recovery ties to a real upstream G09 order — never a stub.
+   * Post-full-review-goal fix: this had no ownership check at all — any `g09.case.read` holder
+   * could read any employee's penalty order. Self-or-override only.
    */
-  getPenaltyOrder(scope: TenantScope, penaltyOrderId: string): PenaltyOrder {
-    requireTenantScope(scope);
-    const order = this.penaltyOrders.find((item) => this.inScope(item, scope) && item.id === penaltyOrderId);
+  getPenaltyOrder(actor: ActorContext, penaltyOrderId: string): PenaltyOrder {
+    requireTenantScope(actor);
+    const order = this.penaltyOrders.find((item) => this.inScope(item, actor) && item.id === penaltyOrderId);
     if (!order) {
       throw new FoundationError("NOT_FOUND", "Penalty order not found");
     }
+    this.assertSelfOrDisciplinaryOverride(actor, order.employeeId);
     return { ...order, penaltyItems: order.penaltyItems ? [...order.penaltyItems] : undefined };
   }
 
@@ -1299,9 +1356,15 @@ export class DisciplinaryService {
   /**
    * PH-28B — list a case's evidence-vault artefacts (charge memo, inquiry report, penalty orders)
    * with WORM / legal-hold / served flags, for the G09 evidence-vault listing UI (PH-27C).
+   * Post-full-review-goal fix: this had no ownership check at all — any `g09.case.read` holder
+   * could read any case's evidence list. Self-or-override only; a non-override (self-service)
+   * caller additionally only ever sees `isServed: true` items — BRD §3.3 confines the charged
+   * officer to formally served/disclosed artefacts (the preliminary/inquiry report is withheld
+   * unless relied upon in evidence, which this simplified model treats as never-served-by-default).
    */
-  listCaseEvidence(scope: TenantScope, caseId: string): Array<{ documentId: string; artefactType: string; isWorm: boolean; legalHold: boolean; isServed: boolean }> {
-    const disciplinaryCase = this.requireCase(scope, caseId);
+  listCaseEvidence(actor: ActorContext, caseId: string): Array<{ documentId: string; artefactType: string; isWorm: boolean; legalHold: boolean; isServed: boolean }> {
+    const disciplinaryCase = this.requireCase(actor, caseId);
+    this.assertSelfOrDisciplinaryOverride(actor, disciplinaryCase.chargedEmployeeId);
     const items: Array<{ documentId: string; artefactType: string; isWorm: boolean; legalHold: boolean; isServed: boolean }> = [];
     if (disciplinaryCase.chargeMemoDocumentId) {
       items.push({ documentId: disciplinaryCase.chargeMemoDocumentId, artefactType: "CHARGE_MEMO", isWorm: true, legalHold: false, isServed: true });
@@ -1309,10 +1372,10 @@ export class DisciplinaryService {
     if (disciplinaryCase.inquiryReportDocumentId) {
       items.push({ documentId: disciplinaryCase.inquiryReportDocumentId, artefactType: "INQUIRY_REPORT", isWorm: true, legalHold: false, isServed: false });
     }
-    for (const order of this.penaltyOrders.filter((o) => this.inScope(o, scope) && o.disciplinaryCaseId === caseId && o.documentId)) {
+    for (const order of this.penaltyOrders.filter((o) => this.inScope(o, actor) && o.disciplinaryCaseId === caseId && o.documentId)) {
       items.push({ documentId: order.documentId, artefactType: "PENALTY_ORDER", isWorm: true, legalHold: false, isServed: order.status === "SERVED" });
     }
-    return items;
+    return this.isDisciplinaryAccessOverride(actor) ? items : items.filter((item) => item.isServed);
   }
 
   private assertAuthorityCompetence(chargedEmployeeId: string, authorityEmployeeId: string): void {
@@ -1475,6 +1538,19 @@ export class DisciplinaryService {
 
   private inScope(row: { tenantId: string; entityId?: string }, scope: TenantScope): boolean {
     return row.tenantId === scope.tenantId && (!scope.entityId || row.entityId === scope.entityId);
+  }
+
+  private isDisciplinaryAccessOverride(actor: ActorContext): boolean {
+    return Boolean(actor.permissions?.includes("*") || actor.roles?.some((role) => DISCIPLINARY_ACCESS_OVERRIDE_ROLES.has(role)));
+  }
+
+  /** BRD §3.3: only the charged officer (self) or an authorised role may access case-scoped
+   *  self-service reads/writes — never any arbitrary `g09.case.read`/`g09.show-cause.respond`/
+   *  `g09.personal-hearing.request` holder. */
+  private assertSelfOrDisciplinaryOverride(actor: ActorContext, chargedEmployeeId: string): void {
+    if (!this.isDisciplinaryAccessOverride(actor) && actor.userId !== chargedEmployeeId) {
+      throw new FoundationError("FORBIDDEN", "You may only access your own disciplinary case", { field: "caseId" });
+    }
   }
 }
 

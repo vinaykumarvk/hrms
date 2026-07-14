@@ -30,6 +30,10 @@ import {
   validateWeightageSumWSUM,
 } from "./aparDepthRepository";
 
+/** FR-G08-03/BRD S3.2: appraisee has C/R/U on their own form only; HR/APAR Cell (HR Admin +
+ * Performance Admin) may act on behalf per BRD S2 role mapping. */
+const APAR_SELF_OVERRIDE_ROLES = new Set(["hr_admin", "performance_admin", "system"]);
+
 /** Adds whole days to an ISO date (yyyy-mm-dd) — representation window arithmetic. */
 export function addDaysIso(isoDate: string, days: number): string {
   const [year, month, day] = isoDate.split("-").map((part) => Number.parseInt(part, 10));
@@ -81,6 +85,10 @@ export interface AparForm {
   representationDueBy?: string;
   /** FR-G08-18: supervision-weighted aggregate of part-period grades (multi-RO). */
   provisionalGrade?: number;
+  /** E7 self_appraisals (FR-G08-03 AC2): the appraisee's own achievements narrative. */
+  selfAppraisalNarrative?: string;
+  /** E7 self_appraisals (FR-G08-03 AC2): per-goal self-ratings, keyed by goal id. */
+  selfAppraisalRatings?: Record<string, number>;
 }
 
 export class AparService {
@@ -160,14 +168,46 @@ export class AparService {
     return { ...form };
   }
 
-  submitSelf(actor: ActorContext, formId: string): AparForm {
+  /** Every form the given employee appears on as appraisee, newest first. Appraisee-self or an
+   * HR/APAR Cell override role only — this is the self-service form-discovery surface (BRD S3.2:
+   * appraisee has R on their own forms), not a manager/RO/RvO reporting view. */
+  listMyForms(actor: ActorContext, employeeId: string): AparForm[] {
+    requireTenantScope(actor);
+    this.assertSelfOrOverride(actor, employeeId);
+    return this.forms.filter((form) => this.inScope(form, actor) && form.employeeId === employeeId).map((form) => ({ ...form }));
+  }
+
+  /** AC2: "Achievements narrative mandatory (VAL-REQUIRED); per-goal self-ratings within scale
+   *  bounds." Ratings are keyed by goal id; each must name a real goal on this form, and — when
+   *  the form's cycle resolves a rating scale — fall within that scale's min/max (never an
+   *  invented bound when no cycle/scale is bound to the form). */
+  submitSelf(actor: ActorContext, formId: string, input: { narrative: string; selfRatings?: Record<string, number> }): AparForm {
     this.authorization.check(actor, "g08.apar.self.submit", actor);
     const form = this.requireForm(actor, formId);
+    this.assertSelfOrOverride(actor, form.employeeId);
     this.requireStatus(form, "GOALS_PENDING");
     // R6/R21: once goals exist they must be locked (WSUM-validated + snapshotted) before self-appraisal.
     if (!form.goalsLocked && this.depth.listGoals(actor, form.id).length > 0) {
       throw new FoundationError("PRECONDITION_FAILED", "Goals must be locked (VAL-WEIGHTAGE/WSUM) before self-appraisal");
     }
+    if (!input.narrative.trim()) {
+      throw new FoundationError("VALIDATION_FAILED", "Achievements narrative is required", { field: "narrative" });
+    }
+    if (input.selfRatings) {
+      const goals = this.depth.listGoals(actor, form.id);
+      const cycle = form.cycleId ? this.depth.findCycle(actor, form.cycleId) : undefined;
+      const scale = cycle ? this.depth.findRatingScale(actor, cycle.ratingScaleId) : undefined;
+      for (const [goalId, rating] of Object.entries(input.selfRatings)) {
+        if (!goals.some((goal) => goal.id === goalId)) {
+          throw new FoundationError("VALIDATION_FAILED", `Self-rating references an unknown goal: ${goalId}`, { field: "selfRatings" });
+        }
+        if (scale && (rating < scale.minValue || rating > scale.maxValue)) {
+          throw new FoundationError("VALIDATION_FAILED", `Self-rating for goal ${goalId} is outside the scale bounds`, { field: "selfRatings" });
+        }
+      }
+    }
+    form.selfAppraisalNarrative = input.narrative;
+    form.selfAppraisalRatings = input.selfRatings ? { ...input.selfRatings } : undefined;
     form.status = "RO_ASSESSMENT";
     this.audit.recordMutation(actor, { action: "G08_SELF_SUBMITTED", subjectRef: `g08_apar_forms:${form.id}` });
     return { ...form };
@@ -220,8 +260,20 @@ export class AparService {
     return { ...form };
   }
 
+  /**
+   * Post-hr_admin-goal fix: `g08_dual_control` names a second-person-approval capability for
+   * "APAR disposal and confidentiality downgrade" — releasing a sealed cover IS that
+   * confidentiality downgrade (SEALED_COVER -> DISCLOSURE), but had no dual-control check at all.
+   * Modeled as requiring the `g08_dual_control` capability role, consistent with every other
+   * capability-flag fix this goal — not a full two-actor request/approve workflow (sealed cover is
+   * set automatically at case-open time via `underCharge`, so there is no natural "maker" identity
+   * to check a distinct "checker" against).
+   */
   releaseSealedCover(actor: ActorContext, formId: string, input: { reason: string }): AparForm {
     this.authorization.check(actor, "g08.apar.sealed.release", actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "g08_dual_control" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Releasing a sealed cover (confidentiality downgrade) requires the g08_dual_control capability", { field: "actor" });
+    }
     const form = this.requireForm(actor, formId);
     this.requireStatus(form, "SEALED_COVER");
     form.status = "DISCLOSURE";
@@ -492,6 +544,7 @@ export class AparService {
   fileRepresentation(actor: ActorContext, formId: string, input: { filedOn: string; grounds: string; condoned?: boolean }): AparRepresentation {
     this.authorization.check(actor, "g08.apar.representation.file", actor);
     const form = this.requireForm(actor, formId);
+    this.assertSelfOrOverride(actor, form.employeeId);
     if (!form.disclosedOn || !form.representationDueBy) {
       throw new FoundationError("PRECONDITION_FAILED", "APAR must be disclosed before a representation can be filed");
     }
@@ -1054,6 +1107,12 @@ export class AparService {
       throw new FoundationError("NOT_FOUND", "Calibration recommendation not found");
     }
     return recommendation;
+  }
+
+  private assertSelfOrOverride(actor: ActorContext, employeeId: string): void {
+    if (actor.permissions?.includes("*") || actor.roles?.some((role) => APAR_SELF_OVERRIDE_ROLES.has(role))) return;
+    if (actor.userId === employeeId) return;
+    throw new FoundationError("FORBIDDEN", "You may only act on your own APAR form", { field: "employeeId" });
   }
 
   private requireForm(scope: TenantScope, formId: string): AparForm {

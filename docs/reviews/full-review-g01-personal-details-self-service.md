@@ -1,0 +1,96 @@
+# Full Review: G01 Personal Details Self-Service
+
+## Verdict
+**CONDITIONAL** — core functionality (4 new panels + bank-account SOD gate) is real, wired end-to-end, and passes all automated tests, but one HIGH data-exposure finding (internal actor-identity field leaking on the wire) and one HIGH fixture/backend validation-logic mismatch should be resolved before this is called done for the maker-checker control's threat model.
+
+## Scope
+- **Target**: G01 personal-details self-service — bank-account SOD (maker≠checker) enforcement + 4 new satellite panels (addresses, nominees, emergency contacts, bank accounts) wired into `/me/employees`.
+- **Selected path**: Light/standard hybrid — review-only, no fixes applied (per instruction).
+- **Files reviewed**:
+  - `apps/api/src/modules/g01/bankAccountService.ts`
+  - `apps/web/src/api/hrmsClient.ts` (types + client methods, lines ~590-713, ~1225-1295)
+  - `apps/web/src/api/fixtureHrmsClient.ts` (lines ~760-865)
+  - `apps/web/src/modules/g01/EmployeeAddressesPanel.tsx`
+  - `apps/web/src/modules/g01/EmployeeNomineesPanel.tsx`
+  - `apps/web/src/modules/g01/EmployeeEmergencyContactsPanel.tsx`
+  - `apps/web/src/modules/g01/EmployeeBankAccountsPanel.tsx`
+  - `apps/web/src/App.tsx` (route wiring, line 169)
+  - `apps/web/src/app/session.ts` (demo permissions + token construction)
+  - `apps/api/test/personal-details-self-service.test.cjs`
+  - `apps/web/test/e2e/personal-details-self-service.spec.ts`
+- **Reference/context artefacts read**: `apps/web/src/modules/g01/EmployeeContactsPanel.tsx`, `EmployeeDependentsPanel.tsx` (established pattern), `apps/web/src/app/OperationalStates.tsx`, `apps/api/src/platform/workflow/hrmsWorkflowService.ts` (SOD precedent), `apps/api/src/routes/g01.routes.ts` (lines 160-217, 760-1057), `apps/api/src/modules/g01/nomineeService.ts`, `apps/api/src/platform/types.ts` (error taxonomy), `apps/api/src/http/apiKernel.ts`, `tools/local-api-server.mjs`, `docs/contracts/auth-matrix.yaml`.
+
+## Checks run
+| Check | Ran? | Result | Evidence |
+|---|---|---|---|
+| Backend build (`npm run build`) | Yes | PASS | Clean `tsc` compile, no output/errors |
+| Web typecheck (`npm run web:typecheck`) | Yes | PASS | Clean `tsc --noEmit` compile, no output/errors |
+| New backend test suite (`node --test apps/api/test/personal-details-self-service.test.cjs`) | Yes | PASS | 7/7 tests pass, 0 failures |
+| Route permission string cross-check (client method ↔ route ↔ service `authorization.check`) | Yes | PASS | Addresses `g01.employee.address.write`, nominees `g01.nominee.write`, emergency contacts `g01.emergency_contact.write`, bank `g01.bank.write`/`g01.bank.approve` all match across `apps/web/src/app/session.ts:18-19`, `apps/api/src/routes/g01.routes.ts:198,788,853,985,1026,1036`, and `bankAccountService.ts:118,162,207,228,243` |
+| Actor/role provenance (client-supplied vs server-issued) | Yes | FINDING | See F-1 below — dev bridge trusts unsigned token claims |
+| Live wire-shape probe of bank-account GET response | Yes | FINDING | See F-2 below — `submittedByUserId` leaks in JSON body (captured via direct `api.dispatch()` call) |
+| Fixture vs real-backend validation parity (nominee share cap, EC priority conflict, bank SOD) | Yes | FINDING | See F-3 below — nominee cap scope differs; bank-approve fixture has no SOD check at all |
+| Component substance check (4 panels: real fields, real submit handlers, real API calls) | Yes | PASS | See table below |
+| React state-machine consistency vs reference panels | Yes | PASS | All 4 panels replicate the `loading/error/empty/ready` + `SubmitPhase` idle/submitting/success/error pattern exactly |
+| Accessibility spot-check (label/id pairs, ARIA regions, keyboard operability) | Yes | PASS | Every input has a matching `<label htmlFor>`/`id` pair; all sections are `<section aria-label=...>` (implicit ARIA region, matches Playwright `getByRole("region", …)` selectors); buttons are native `<button>` (keyboard-operable by default) |
+| Error taxonomy check (`SOD_VIOLATION` registered code) | Yes | PASS | `apps/api/src/platform/types.ts:23` declares `SOD_VIOLATION` as part of `G01DomainErrorCode`; precedent 403 usage in `identityOpsService.ts:183,219,692` and `documentVaultService.ts:820` |
+| Auth-matrix traceability for `g01.bank.approve` | Yes | GAP (MEDIUM) | `docs/contracts/auth-matrix.yaml` has no explicit resource entry for `g01.bank.approve`/bank-account approval; `finance_admin`/`hr_admin` role codes themselves are defined (lines 73, 78) so the override roles are not fabricated, but the specific action-to-role binding is not independently documented |
+
+## Findings
+
+| ID | Severity | Domain | File:line | Claim | Evidence | Recommended action | Repair mode eligible? |
+|---|---|---|---|---|---|---|---|
+| F-1 | HIGH | Security | `tools/local-api-server.mjs:18,38-58`; `apps/web/src/app/session.ts:122-137` | The maker≠checker SOD control's override-role bypass (`hr_admin`, `finance_admin`, `system`) can be self-granted by any client because the local dev API bridge decodes JWT-style bearer tokens **without signature verification**, and the web session layer's demo login constructs those tokens client-side (`alg: "none"`). Any actor can mint a token claiming `roles: ["hr_admin"]` or `permissions: ["*"]` and bypass the SOD gate entirely, including self-approving their own submitted bank account. | `tools/local-api-server.mjs:18` explicitly states "NOT for production use: tokens are not signature-verified"; `decodeActor()` (lines 38-58) takes `roles`/`permissions` straight from the unverified JWT payload; `apps/web/src/app/session.ts:128-135` builds such a token in-browser with `window.btoa` and no signing key. This is a **pre-existing architectural caveat** (documented, not introduced this session), but the new SOD control's security guarantee is only as strong as this trust boundary — worth flagging explicitly since the SOD feature's entire value proposition (an employee cannot self-approve their own bank account) is defeated if the actor's roles are self-declared. | Confirm (in a comment on `bankAccountService.ts` and/or a caveat note) that this SOD control's guarantee is scoped to "trusted, server-issued ActorContext" and depends on a production auth layer (not yet built) performing real token verification / role issuance. Not a regression in this session's diff, but the SOD claim should not be marketed as a hard security boundary until real auth exists. | No — this is a pre-existing platform/auth-boundary gap, not an implementation bug in the reviewed diff. Route to amendment/environment-contract, not implementation repair. |
+| F-2 | HIGH | Security / Data integrity | `apps/api/src/modules/g01/bankAccountService.ts:43` (field def), `apps/api/src/routes/g01.routes.ts:978,991,1029` (route pass-through), verified live via `api.dispatch()` | The new `submittedByUserId` field (the maker's internal user id) is serialized into every GET/POST/approve bank-account wire response, even though it is not declared in the `BankAccountRecord` client type (`apps/web/src/api/hrmsClient.ts:683-695`) and no route projects a stripped DTO. | Live probe against the running service (`node -e "...api.dispatch({method:'GET', path:'/api/v1/employees/.../bank-accounts', ...})"`) returned: `"submittedByUserId": "seed-test-employees"` in the JSON body alongside `tenantId`/`entityId`. The routes call `ok(...)`/`created(...)`/`accepted(...)` with the raw service-layer object (`g01.routes.ts:978, 991, 1029`), and `apiKernel.ts:138-148` JSON-serializes that body verbatim with no field allow-list. | Add an explicit response-shaping step (either a DTO mapper in the route handler, or an explicit destructure omitting `submittedByUserId`/`tenantId`/`entityId`) before returning `bankAccount` from the list/add/approve/penny-drop routes, so internal actor identifiers are not exposed to any caller holding only `g01.employee.read` (which the low-privilege self-service employee has). | Yes — implementation-only fix (route/DTO shaping), eligible for `--fix high+`. |
+| F-3 | HIGH | Quality / Test fidelity | `apps/web/src/api/fixtureHrmsClient.ts:789-793` vs `apps/api/src/modules/g01/nomineeService.ts:81-93,110-114`; `apps/web/src/api/fixtureHrmsClient.ts:846-854` vs `apps/api/src/modules/g01/bankAccountService.ts:206-224` | Two fixture validation rules diverge from real backend semantics in ways that could mislead a UI-only test/demo run: (1) the fixture's nominee share cap sums shares **across all benefit types** for the employee, while the real `VAL-NOMINEE` rule caps shares **per benefit_type** (an employee can legally have 100% GRATUITY + 100% PROVIDENT_FUND nominees; the fixture would incorrectly reject the second at any positive share once the first reaches 100%). (2) the fixture's `approveBankAccount` mock performs **no SOD check at all** — it unconditionally sets `status: "APPROVED"` regardless of who submitted vs who approves, so a fixture-backed UI test/demo can never observe or verify the SOD_VIOLATION path that the real backend enforces. | Fixture: `fixtureHrmsClient.ts:790` — `employeeNominees.filter(n => n.status === "ACTIVE").reduce((sum,n)=>sum+n.sharePct,0)` (no `benefitType` filter). Real: `nomineeService.ts:88-93` — `activeShareTotal` filters `n.benefitType === benefitType`. Fixture bank-approve: `fixtureHrmsClient.ts:846-854` sets `account.status = "APPROVED"` with no maker/checker comparison, unlike `bankAccountService.ts:212-218`. | (a) Scope the fixture's nominee share-cap check to `input.benefitType` to match `VAL-NOMINEE`. (b) Either add a submittedBy-tracking + SOD check to the fixture's `approveBankAccount`, or explicitly document (code comment) that the fixture intentionally does not model SOD and that SOD behavior must be verified only against the real backend (as the E2E spec correctly does via a real API, not the fixture client). | Yes — implementation-only fix to fixture logic, eligible for `--fix high+`. |
+| F-4 | MEDIUM | Traceability | `docs/contracts/auth-matrix.yaml` (no `g01.bank.approve` resource entry) vs `apps/api/src/modules/g01/bankAccountService.ts:25` | The override-role set `BANK_APPROVAL_OVERRIDE_ROLES = ["hr_admin", "finance_admin", "system"]` is not independently documented in the auth-matrix contract for the bank-account-approve action specifically (the roles themselves exist in auth-matrix.yaml, lines 73/78, but not bound to this action there). | `grep -n "g01.bank" docs/contracts/auth-matrix.yaml` returns no resource-level match; the only bank-related lines (44, 685, 790) reference "bank-account entry (masked)" for `office_admin`, not the approve verb. | Add a `g01.bank.approve` entry to `docs/contracts/auth-matrix.yaml` naming `finance_admin`/`hr_admin` as the intended approvers, so the override-role set has a spec-level source of truth rather than living only in a code comment. | No — contract amendment, not implementation repair. |
+| F-5 | LOW | Quality | `apps/web/src/modules/g01/EmployeeAddressesPanel.tsx:53-58,79-97` | The address add-form only collects `addressType, line1, city, state, pincode, validFrom` — optional fields `line2`, `district`, `country` from `EmployeeAddressAddInput` are not exposed in the UI at all (not even as an optional collapsed section). This is a completeness gap, not a skeleton (all required fields are present and wired), but a real employee filling in an overseas/multi-line address has no way to do so through this panel. | `EmployeeAddressAddInput` (`hrmsClient.ts:611-622`) declares `line2?`, `district?`, `country?` as valid optional fields; `EmployeeAddressesPanel.tsx` has no corresponding state/inputs for any of the three. | Consider adding optional `line2`/`district`/`country` inputs in a follow-up if overseas/multi-line addresses are in near-term scope; not blocking for this review. | Yes, if scope is confirmed — but out of current approved scope, so log as backlog, not silent fix. |
+
+## Component substance check
+
+| Component | File | Inputs | API calls | Data renders | Verdict |
+|---|---|---|---|---|---|
+| EmployeeAddressesPanel | `apps/web/src/modules/g01/EmployeeAddressesPanel.tsx` | 6 real fields (addressType select, line1, city, state, pincode, validFrom date) wired via `onChange`/`value` to component state; 5 of 8 possible `EmployeeAddressAddInput` fields covered (optional `line2`/`district`/`country` omitted, see F-5) | `client.listEmployeeAddresses(targetId)` on load (line 31); `client.addEmployeeAddress(state.employeeId, {...}, crypto.randomUUID())` on submit (lines 86-90) — real client methods, not stubs | Renders `state.addresses.map(...)` as a real list with `addressType`, `line1`, `city`, `state`, `pincode`, current-flag (lines 124-133) | Real, substantive — not a skeleton |
+| EmployeeNomineesPanel | `apps/web/src/modules/g01/EmployeeNomineesPanel.tsx` | 3 real fields (name, benefitType select, sharePct number) matching `NomineeAddInput`'s required fields (`guardian`/`isFamilyPensionRecipient` optional, correctly omitted from the minimal form) | `client.listEmployeeNominees(targetId)` on load, filtered to `ACTIVE` (lines 29-31); `client.addEmployeeNominee(state.employeeId, {...}, crypto.randomUUID())` on submit (line 87) — real methods | Renders `state.nominees.map(...)` with name, benefitType, sharePct, family-pension flag (lines 120-125) | Real, substantive — not a skeleton |
+| EmployeeEmergencyContactsPanel | `apps/web/src/modules/g01/EmployeeEmergencyContactsPanel.tsx` | 3 real fields (name, phone, priority number), exactly matching `EmergencyContactAddInput`'s 3 fields | `client.listEmployeeEmergencyContacts(targetId)` filtered to `ACTIVE` (lines 29-31); `client.addEmergencyContact(state.employeeId, {...}, crypto.randomUUID())` on submit (line 86) — real methods | Renders `state.contacts.map(...)` with name, phone, priority (lines 123-127) | Real, substantive — not a skeleton |
+| EmployeeBankAccountsPanel | `apps/web/src/modules/g01/EmployeeBankAccountsPanel.tsx` | 4 real fields (bankName, ifsc, accountNumberMasked, isPrimarySalary checkbox), matching all 4 `BankAccountAddInput` fields | `client.listEmployeeBankAccounts(targetId)` on load (line 29); `client.addBankAccount(...)` on submit (line 86); `client.approveBankAccount(...)` (line 108) and `client.recordBankPennyDrop(...)` (line 126) wired to real conditional action buttons (status-gated: approve only shown for PENDING, penny-drop only for APPROVED+PENDING penny-drop) — all real methods, no console.log/no-op handlers found | Renders `state.accounts.map(...)` with bankName, ifsc, accountNumberMasked, primary flag, status, penny-drop status, and per-row action buttons with per-row error surfacing (lines 158-184) | Real, substantive — not a skeleton; most complete of the 4 (includes the SOD-gated approval workflow UI) |
+
+## Traceability impact
+- New SOD_VIOLATION path on `POST /employees/{id}/bank-accounts/{accountId}:approve` is exercised by both the new backend test (`personal-details-self-service.test.cjs`, test "the maker of a bank-account submission cannot also approve it") and implicitly guarded against in the E2E spec (finance-officer session is a distinct actor from the employee who added the account) — traceability to FR-EPM-008 AC3/AC7 is intact in code comments (`bankAccountService.ts:203-205`) but not yet reflected in `docs/contracts/auth-matrix.yaml` (F-4).
+- `session.ts`'s permission-list fix (adding the previously-missing `g01.*.write`/`g01.nominee.write`/`g01.emergency_contact.write`/`g01.bank.write` grants) is a bugfix that unblocks all 4 new panels for the demo employee; this is a **correctness fix**, confirmed necessary because without it every add-handler would 403 for the demo user the E2E test logs in as.
+- No requirements/BRD artefact under `docs/requirements/` was found scoped to this feature; FR-EPM-004/005/008 references exist only as inline code comments, not a discoverable requirements doc — `brd-coverage` was skipped (no requirements artefact to map against).
+
+## Required amendments
+1. **F-1**: Add an explicit caveat/environment-contract note (not a code fix) stating the SOD control's guarantee depends on a real, signature-verified auth layer that does not yet exist in this repo; the current dev bridge (`tools/local-api-server.mjs`) is documented as non-production but the SOD feature's threat model should say so explicitly too.
+2. **F-4**: Amend `docs/contracts/auth-matrix.yaml` to add a `g01.bank.approve` resource entry naming the override roles, so the override-role set in code has a contract-level source of truth.
+
+## Verification commands
+```bash
+# Backend build + new test suite
+npm run build
+node --test apps/api/test/personal-details-self-service.test.cjs
+
+# Web typecheck
+npm run web:typecheck
+
+# E2E (requires dev servers running — not run in this review; static-analyzed only)
+npx playwright test apps/web/test/e2e/personal-details-self-service.spec.ts
+
+# Re-probe wire shape after F-2 fix to confirm submittedByUserId no longer appears:
+node -e "
+const { createFoundationApi, createFoundationServices, ph03Ids } = require('./dist/apps/api/src');
+const services = createFoundationServices({ seedTestEmployees: true });
+const api = createFoundationApi(services);
+const admin = { tenantId: ph03Ids.tenant, entityId: ph03Ids.entity, userId: 'test-admin', actorUserId: 'test-admin', permissions: ['*'], roles: ['employee'], fieldGrants: ['*'] };
+const rohan = services.employeeMaster.getByServiceNo(admin, 'GOV-100301');
+const res = api.dispatch({ method: 'GET', path: '/api/v1/employees/' + rohan.id + '/bank-accounts', headers: {}, actor: admin });
+console.log(JSON.stringify(res.body, null, 2));
+"
+```
+
+## Remaining risks
+- **F-1** is an accepted, pre-existing architectural risk (unsigned dev-mode tokens) that this session's SOD feature inherits rather than introduces; it should not block merging this diff, but it does mean the SOD control cannot be relied upon as a real security boundary until production auth (token signature verification, server-issued roles) is built.
+- **F-2** (submittedByUserId leak) is a new exposure introduced by this session's diff and is the most actionable finding — low effort to fix (response shaping), moderate value (avoids leaking internal actor ids to any `g01.employee.read` holder).
+- **F-3** (fixture/backend validation drift) creates risk only for fixture-backed UI tests/demos that assume SOD or per-benefit-type nominee caps are enforced client-fixture-side; the real Playwright E2E spec correctly uses the live API bridge, not the fixture client, for the SOD assertion, so the production-facing test suite is not misled — but any future fixture-only unit/story test would be.
+- E2E spec (`personal-details-self-service.spec.ts`) was statically reviewed for correctness (locator strategy, session construction) but not executed in this review (no local dev server was started); recommend running it before sign-off per the `local-deployment` skill if browser-level confirmation is required.
+- No requirements/BRD artefact exists for FR-EPM-004/005/008 in `docs/requirements/`; traceability rests entirely on inline code comments referencing FR-EPM-xxx codes. Acceptable for a brownfield light-path change but worth capturing formally if this module keeps growing.

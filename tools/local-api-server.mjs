@@ -13,6 +13,7 @@
 // Usage:
 //   node tools/local-api-server.mjs        # listens on 127.0.0.1:8787
 //   PORT=9000 node tools/local-api-server.mjs
+//   HRMS_SEED_TEST_EMPLOYEES=1 node tools/local-api-server.mjs   # + 6 fictional test employees + leave calendar
 //
 // NOT for production use: tokens are not signature-verified.
 
@@ -26,7 +27,12 @@ if (process.env.NODE_ENV === "production") {
 const require = createRequire(import.meta.url);
 const api = require("../dist/apps/api/src/index.js");
 
-const kernel = api.createFoundationApi(api.createFoundationServices());
+const seedTestEmployees = process.env.HRMS_SEED_TEST_EMPLOYEES === "1";
+const services = api.createFoundationServices({ seedTestEmployees });
+if (seedTestEmployees) {
+  console.log("Seeded 6 fictional test employees (GOV-100301..GOV-100306) + 2026 leave calendar — see apps/api/src/seed/testEmployeesSeed.ts");
+}
+const kernel = api.createFoundationApi(services);
 const PORT = Number(process.env.PORT ?? 8787);
 
 function decodeActor(authorizationHeader) {

@@ -7,6 +7,7 @@ import { EmployeeMasterService } from "../g01/employeeMasterService";
 import { LeaveSrOutboxEvent, LeaveSrRelayService } from "../g04/leaveSrRelayService";
 import { JobRun, JobService } from "../../jobs/jobService";
 import { LeaveRepository } from "./leaveRepository";
+import { AuthorityResolutionService } from "../../platform/authority-resolution/authorityResolutionService";
 
 export type LeaveApplicationStatus = "SUBMITTED" | "APPROVED" | "REJECTED" | "WITHDRAWN" | "CANCELLED";
 
@@ -31,6 +32,10 @@ export interface LeaveTypeConfig {
   /** Sanction-based entitlement cap per leave year (reserved + debited may not exceed it). */
   entitlementCapDays?: number;
   status: "ACTIVE" | "INACTIVE";
+  /** Post-hr_admin-goal thin build (`g03.leave.sanction_special`): special leave types
+   *  (maternity/study/sabbatical/commuted/LWP) require a distinct final-sanction sign-off beyond
+   *  ordinary manager approval, on top of (not instead of) the regular approve/reject flow. */
+  requiresFinalSanction?: boolean;
 }
 
 /** FR-02 holiday calendar entry (BRD G03 §5.2 E3/E4 holiday_calendars / holidays). */
@@ -75,6 +80,12 @@ export interface LeaveApplication {
   g04OutboxEventId?: string;
   /** G03-issued spell lineage key; stable across approve/amend/cancel and propagated to the G04 outbox. */
   leaveSpellLineageId: string;
+  /** Post-hr_admin-goal thin build (`g03.leave.sanction_special`): set once a distinct
+   *  sanctioning authority has given final sign-off on a special-leave-type application that has
+   *  already cleared ordinary manager approval. Additive to `status`, not a new state — an
+   *  APPROVED special-leave application is not "final" for entitlement purposes until sanctioned. */
+  finalSanctionedByUserId?: string;
+  finalSanctionedAt?: string;
 }
 
 export interface LeaveLedgerEntry {
@@ -119,6 +130,8 @@ export interface AttendanceRecord {
   anomalyCode?: "MISSING_IN" | "MISSING_OUT";
   /** FR-05: set when a day has been regularised (drives the per-period cap). */
   isRegularised?: boolean;
+  /** Maker of the capture (FR-05 "SoD by P02 (no self-approve)"); the regulariser must be a different user. */
+  capturedByUserId?: string;
 }
 
 export interface PayrollSignal {
@@ -171,6 +184,15 @@ export interface AttendancePolicy {
   halfDayUnderMinutes: number;
 }
 
+/** Org-wide override roles for the attendance-regularisation SoD gate (FR-05 "SoD by P02 (no
+ *  self-approve)"), mirroring the same override convention as bank-account approval and P01
+ *  workflow-approver enforcement elsewhere in this codebase. */
+const ATTENDANCE_REGULARISE_OVERRIDE_ROLES = new Set(["hr_admin", "attendance_admin", "system"]);
+
+/** Post-full-review-goal fix: self-service leave/attendance reads (my balance, my attendance
+ *  summary) need a need-to-know gate, same shape as every other module's self-scope. */
+const LEAVE_READ_OVERRIDE_ROLES = new Set(["hr_admin", "leave_admin", "system"]);
+
 const DEFAULT_ATTENDANCE_POLICY: AttendancePolicy = {
   backdateWindowDays: 30,
   regularisationCapPerPeriod: 3,
@@ -188,7 +210,8 @@ export class LeaveService {
     private readonly leaveSrRelay: LeaveSrRelayService,
     private readonly jobs: JobService,
     private readonly notifications: NotificationService,
-    private readonly repository: LeaveRepository
+    private readonly repository: LeaveRepository,
+    private readonly authorityResolution: AuthorityResolutionService
   ) {}
 
   submit(
@@ -365,6 +388,41 @@ export class LeaveService {
       mergeFields: { applicationNo: application.applicationNo, srEventId: postedOutbox.srEventId },
     });
     return { application: this.cloneApplication(application), action, srEventId: postedOutbox.srEventId, outboxEvent: postedOutbox };
+  }
+
+  /**
+   * Post-hr_admin-goal thin build (`g03.leave.sanction_special`): a distinct final sign-off for
+   * special leave types (maternity/study/sabbatical/commuted/LWP), required on top of — not
+   * instead of — ordinary manager approval. Only leave types configured with
+   * `requiresFinalSanction: true` are eligible; only an already-APPROVED application can be
+   * sanctioned. Additive: does not change `status` or the reserved/debited balance math approve()
+   * already performed.
+   */
+  sanctionSpecialLeave(actor: ActorContext, leaveApplicationId: string): LeaveApplication {
+    this.authorization.check(actor, "g03.leave.sanction_special", actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "sanctioning_authority" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Final sanction of a special leave requires the sanctioning_authority capability", { field: "actor" });
+    }
+    const application = this.requireApplication(actor, leaveApplicationId);
+    const leaveType = this.requireLeaveType(actor, application.leaveTypeId);
+    if (!leaveType.requiresFinalSanction) {
+      throw new FoundationError("VALIDATION_FAILED", "This leave type does not require a final sanction", { field: "leaveTypeId" });
+    }
+    if (application.status !== "APPROVED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only an approved special-leave application can be sanctioned");
+    }
+    if (application.finalSanctionedByUserId) {
+      return this.cloneApplication(application);
+    }
+    application.finalSanctionedByUserId = actor.userId;
+    application.finalSanctionedAt = new Date().toISOString();
+    this.repository.updateApplication(application);
+    this.audit.recordMutation(actor, {
+      action: "G03_LEAVE_SPECIAL_SANCTIONED",
+      subjectRef: `g03_leave_applications:${application.id}`,
+      metadata: { leaveTypeId: application.leaveTypeId },
+    });
+    return this.cloneApplication(application);
   }
 
   cancelApproved(actor: ActorContext, leaveApplicationId: string, idempotencyKey: string, cancelDate: string, expectedVersion?: number): LeaveApprovalResult {
@@ -580,6 +638,7 @@ export class LeaveService {
       outTime: input.outTime,
       status: derived.status,
       anomalyCode: derived.anomalyCode,
+      capturedByUserId: actor.userId,
     };
     this.repository.saveAttendance(record);
     this.audit.recordMutation(actor, { action: "G03_ATTENDANCE_CAPTURE", subjectRef: `attendance:${record.id}`, metadata: { status: record.status } });
@@ -590,6 +649,12 @@ export class LeaveService {
    * FR-05: missed-punch regularisation with backdate window (WINDOW_EXPIRED) and a
    * per-period cap (REGULARISATION_LIMIT). In a locked payroll period the correction is
    * routed as a payroll_feed_adjustments row (R6), never a locked-feed mutation.
+   *
+   * SoD CAVEAT (mirrors bankAccountService.ts's approveBankAccount): the maker!=checker
+   * guarantee below is only as strong as the caller's ActorContext. This repo's dev-only HTTP
+   * bridge (tools/local-api-server.mjs) decodes bearer tokens without signature verification, so
+   * roles/permissions are effectively self-declared until a real, signature-verified auth layer
+   * exists.
    */
   regulariseAttendance(
     actor: ActorContext,
@@ -599,6 +664,13 @@ export class LeaveService {
   ): { attendance: AttendanceRecord; job: JobRun; signal?: PayrollSignal; adjustment?: PayrollFeedAdjustment } {
     this.authorization.check(actor, "g03.attendance.regularise", actor);
     const attendance = this.requireAttendance(actor, attendanceId);
+    const isOverride = actor.permissions?.includes("*") || actor.roles?.some((role) => ATTENDANCE_REGULARISE_OVERRIDE_ROLES.has(role));
+    if (!isOverride && attendance.capturedByUserId !== undefined && attendance.capturedByUserId === actor.userId) {
+      throw new FoundationError("SOD_VIOLATION", "The employee who captured this attendance day may not also regularise it", {
+        field: "actor",
+        details: { attendanceId: attendance.id },
+      });
+    }
     const asOf = asOfDate ?? todayIso();
     if (!dateOnly(asOf)) {
       throw new FoundationError("VALIDATION_FAILED", "asOfDate must use YYYY-MM-DD", { field: "asOfDate" });
@@ -780,8 +852,36 @@ export class LeaveService {
     return this.repository.listApplications(scope).map((item) => this.cloneApplication(item));
   }
 
-  getBalance(scope: TenantScope, employeeId: string, leaveTypeId = "EL", leaveYear = 2026): LeaveBalance {
-    return this.cloneBalance(this.getOrCreateBalance(scope, employeeId, leaveTypeId, leaveYear));
+  /** Post-full-review-goal fix: had no ownership check at all — any `g03.leave.read` holder could
+   *  read any employee's leave balance via the `employeeId` query param. Self-or-override only. */
+  getBalance(actor: ActorContext, employeeId: string, leaveTypeId = "EL", leaveYear = 2026): LeaveBalance {
+    this.assertSelfOrLeaveReadOverride(actor, employeeId);
+    return this.cloneBalance(this.getOrCreateBalance(actor, employeeId, leaveTypeId, leaveYear));
+  }
+
+  private isLeaveReadOverride(actor: ActorContext): boolean {
+    return Boolean(actor.permissions?.includes("*") || actor.roles?.some((role) => LEAVE_READ_OVERRIDE_ROLES.has(role)));
+  }
+
+  /** Self, an org-wide override role, or the employee's own real resolved reporting-chain
+   *  manager (e.g. checking a report's balance right after deciding their leave application) may
+   *  read — never an arbitrary `g03.leave.read` holder. */
+  private assertSelfOrLeaveReadOverride(actor: ActorContext, employeeId: string): void {
+    if (this.isLeaveReadOverride(actor) || actor.userId === employeeId) {
+      return;
+    }
+    const resolution = this.authorityResolution.resolve(actor, { mechanism: "REPORTING_CHAIN", subjectEmployeeId: employeeId }, "2026-01-01");
+    if (resolution.selectedAssignees.some((assignee) => assignee.employeeId === actor.userId)) {
+      return;
+    }
+    throw new FoundationError("FORBIDDEN", "You may only access your own leave records or those of your direct reports", { field: "employeeId" });
+  }
+
+  /** Self-service "view my attendance summary" (G14 personal dashboard): own attendance records
+   *  only, self-or-override gated. */
+  listMyAttendance(actor: ActorContext, employeeId: string): AttendanceRecord[] {
+    this.assertSelfOrLeaveReadOverride(actor, employeeId);
+    return this.repository.listAttendance(actor).filter((record) => record.employeeId === employeeId).map((record) => ({ ...record }));
   }
 
   listOutbox(scope: TenantScope): LeaveSrOutboxEvent[] {
@@ -818,6 +918,7 @@ export class LeaveService {
       accrualPolicy: { frequency: "MONTHLY" | "HALF_YEARLY" | "YEARLY"; unitsPerPeriod: number };
       eligibility?: { minServiceMonths: number };
       entitlementCapDays?: number;
+      requiresFinalSanction?: boolean;
     }
   ): LeaveTypeConfig {
     this.authorization.check(actor, "g03.leave.configure", actor);
@@ -835,6 +936,7 @@ export class LeaveService {
       eligibility: input.eligibility ? { ...input.eligibility } : undefined,
       entitlementCapDays: input.entitlementCapDays,
       status: "ACTIVE",
+      requiresFinalSanction: input.requiresFinalSanction,
     };
     this.repository.saveLeaveType(config);
     this.audit.recordMutation(actor, { action: "G03_LEAVE_TYPE_CONFIGURE", subjectRef: `leave_types:${config.leaveTypeId}`, metadata: { openingBalance: config.openingBalance } });

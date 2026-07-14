@@ -14,6 +14,32 @@ import {
 } from "./pensionBenefitRepository";
 import { PensionRuleService } from "./pensionRuleService";
 
+/** Post-hr_admin-goal SoD correction: hr_admin deliberately excluded. G11's own BRD (§55, and
+ *  several FRs' "Primary Role(s)") names HR Admin alongside Pension Officer, but the platform's
+ *  broader RBAC design explicitly carves pension out as a dedicated statutory-role boundary — see
+ *  the hr_admin capability audit ("no direct grants in G06/G07/G09/G11... a deliberate
+ *  separation-of-duties boundary"). That instruction supersedes the module BRD's older, looser
+ *  language for this override set. */
+const PENSION_ACCESS_OVERRIDE_ROLES = new Set(["pension_officer", "system"]);
+
+function dateOnly(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/** Whole calendar months between two YYYY-MM-DD dates (never negative in the caller's use). */
+function monthsBetween(fromDate: string, toDate: string): number {
+  const [fromYear, fromMonth, fromDay] = fromDate.split("-").map((part) => Number.parseInt(part, 10));
+  const [toYear, toMonth, toDay] = toDate.split("-").map((part) => Number.parseInt(part, 10));
+  if (!fromYear || !fromMonth || !fromDay || !toYear || !toMonth || !toDay) {
+    throw new FoundationError("VALIDATION_FAILED", "Dates must use YYYY-MM-DD", { field: "asOf" });
+  }
+  let months = (toYear - fromYear) * 12 + (toMonth - fromMonth);
+  if (toDay < fromDay) {
+    months -= 1;
+  }
+  return months;
+}
+
 export type PensionCaseStatus = "DRAFT" | "SR_VERIFICATION" | "CALCULATION" | "PENDING_SANCTION" | "SANCTIONED" | "PPO_ISSUED" | "SETTLED" | "CLOSED" | "ON_HOLD";
 export type PensionScheme = "OPS" | "NPS" | "UPS";
 
@@ -84,6 +110,21 @@ export interface PensionSummary {
   serviceGateMarker: "SR_VERIFICATION_GATE";
   calculationMarker: "PENSION_CALC_TRACE";
   ppoMarker: "PPO_ISSUED";
+}
+
+/** FR-G11-15 AC1: "estimators label results indicative/non-binding... and never write to the
+ *  live case." This is the whole result shape — there is no case id because no case exists. */
+export interface PensionEstimateResult {
+  isBinding: false;
+  employeeId: string;
+  scheme: PensionScheme;
+  asOf: string;
+  qualifyingServiceMonths: number;
+  emolumentsBaseCents: number;
+  benefitOutcome: G11BenefitOutcome;
+  pensionCents: number;
+  formula: string;
+  ruleVersionRef: string;
 }
 
 /** PH-15B FR-G11-12: fired ON PPO AUTHORISATION so the pensioner master is created from the PPO. */
@@ -268,6 +309,112 @@ export class PensionService {
       },
     });
     return this.cloneCase(pensionCase);
+  }
+
+  /** FR-G11-15 self-service "check pension/retirement projections": a non-binding what-if
+   *  estimate. Reuses the exact same scheme-branch calculator (`computeSchemeBenefit`) as the
+   *  live case computation, but reads real employee/payroll data on the fly and never touches
+   *  `this.cases` or persists any row — AC1's "never write to the live case". Callers may vary
+   *  `qualifyingServiceMonths`/`emolumentsBaseCents`/`asOf` for a what-if (AC2); when omitted,
+   *  qualifying service defaults to (date of joining -> asOf) and emoluments default to the
+   *  employee's real G10 last-drawn pay. */
+  estimateBenefits(
+    actor: ActorContext,
+    input: {
+      employeeId: string;
+      scheme: PensionScheme;
+      asOf: string;
+      qualifyingServiceMonths?: number;
+      emolumentsBaseCents?: number;
+      upsOptedIn?: boolean;
+      npsEvent?: NpsBenefitEvent;
+    }
+  ): PensionEstimateResult {
+    // Deliberately a distinct, narrower permission from "g11.pension.read" (which gates every
+    // admin GET route in this module with no per-row ownership check) — granting the broad
+    // permission to a plain self-service employee would expose every one of those routes, the
+    // same class of gap this session's own G05/G13 full-reviews caught. This permission only
+    // ever gates the two self-scoped methods below, both of which enforce ownership themselves.
+    this.authorization.check(actor, "g11.pension.self.read", actor);
+    this.assertSelfOrOverride(actor, input.employeeId);
+    const employee = this.employeeMaster.getById(actor, input.employeeId);
+    if (!employee) {
+      throw new FoundationError("NOT_FOUND", "Employee not found");
+    }
+    if (!dateOnly(input.asOf)) {
+      throw new FoundationError("VALIDATION_FAILED", "asOf must use YYYY-MM-DD", { field: "asOf" });
+    }
+    if (input.qualifyingServiceMonths === undefined && !employee.dateOfJoining) {
+      throw new FoundationError("VALIDATION_FAILED", "qualifyingServiceMonths is required when the employee has no dateOfJoining on file", {
+        field: "qualifyingServiceMonths",
+      });
+    }
+    // A what-if is still a real input to a statutory formula (AC2) — bound it to plausible
+    // values rather than silently clamping a nonsensical one (e.g. a negative salary) into the
+    // E35 minimum-pension floor and reporting it back as an ordinary result.
+    if (
+      input.qualifyingServiceMonths !== undefined &&
+      (!Number.isInteger(input.qualifyingServiceMonths) || input.qualifyingServiceMonths < 0 || input.qualifyingServiceMonths > 600)
+    ) {
+      throw new FoundationError("VALIDATION_FAILED", "qualifyingServiceMonths must be an integer between 0 and 600 (50 years)", {
+        field: "qualifyingServiceMonths",
+      });
+    }
+    if (input.emolumentsBaseCents !== undefined && (!Number.isInteger(input.emolumentsBaseCents) || input.emolumentsBaseCents <= 0)) {
+      throw new FoundationError("VALIDATION_FAILED", "emolumentsBaseCents must be a positive integer", { field: "emolumentsBaseCents" });
+    }
+    const qualifyingServiceMonths = input.qualifyingServiceMonths ?? Math.max(0, monthsBetween(employee.dateOfJoining as string, input.asOf));
+    const emolumentsBaseCents = input.emolumentsBaseCents ?? this.payroll.getLastPayDrawn(actor, input.employeeId).basicPayCents;
+    const limits = this.pensionRules.resolvePensionLimits(actor, input.asOf);
+    const rounding = this.pensionRules.resolveRoundingRule(actor, input.asOf);
+    const result = computeSchemeBenefit({
+      scheme: input.scheme,
+      qualifyingServiceMonths,
+      emolumentsBaseCents,
+      avgEmoluments12mCents: emolumentsBaseCents,
+      limits,
+      rounding,
+      upsOptedIn: input.upsOptedIn,
+      npsEvent: input.npsEvent,
+    });
+    this.audit.recordMutation(actor, {
+      action: "G11_PENSION_ESTIMATED",
+      subjectRef: `employees:${input.employeeId}`,
+      metadata: { marker: "NON_BINDING_ESTIMATE", scheme: input.scheme, asOf: input.asOf, benefitOutcome: result.benefitOutcome },
+    });
+    return {
+      isBinding: false,
+      employeeId: input.employeeId,
+      scheme: input.scheme,
+      asOf: input.asOf,
+      qualifyingServiceMonths,
+      emolumentsBaseCents,
+      benefitOutcome: result.benefitOutcome,
+      pensionCents: result.basicPensionCents,
+      formula: result.formula,
+      ruleVersionRef: limits.id,
+    };
+  }
+
+  /** Self-service "track status" discovery surface: every pension case raised for the given
+   *  employee. Self-or-override only — the BRD's Employee-row scoping mirrors every other
+   *  module's "(own)" restriction. */
+  listMyCases(actor: ActorContext, employeeId: string): PensionCase[] {
+    this.authorization.check(actor, "g11.pension.self.read", actor);
+    requireTenantScope(actor);
+    this.assertSelfOrOverride(actor, employeeId);
+    return this.cases.filter((pensionCase) => this.inScope(pensionCase, actor) && pensionCase.employeeId === employeeId).map((pensionCase) => this.cloneCase(pensionCase));
+  }
+
+  private isPensionAccessOverride(actor: ActorContext): boolean {
+    return Boolean(actor.permissions?.includes("*") || actor.roles?.some((role) => PENSION_ACCESS_OVERRIDE_ROLES.has(role)));
+  }
+
+  private assertSelfOrOverride(actor: ActorContext, employeeId: string): void {
+    if (this.isPensionAccessOverride(actor) || actor.userId === employeeId) {
+      return;
+    }
+    throw new FoundationError("FORBIDDEN", "You may only access your own pension case or estimate", { field: "employeeId" });
   }
 
   /** Scoped case read for sibling G11 services (commutation / gratuity / FP / Rule 9). */

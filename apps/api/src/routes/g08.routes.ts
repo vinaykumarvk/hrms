@@ -3,8 +3,35 @@ import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requir
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
 import { CalibrationMethod, PipMilestoneStatus, PipOutcome, ProbationOutcome } from "../modules/g08/aparDepthRepository";
+import type { AparForm } from "../modules/g08/aparService";
+import type { AparRepresentation, AparReportPeriod, DisclosureLogEntry, FormGoalSnapshot } from "../modules/g08/aparDepthRepository";
 import { RaterType } from "../modules/g08/feedback360Service";
 import { FoundationError } from "../platform/types";
+
+function toWireAparForm(form: AparForm): Omit<AparForm, "tenantId" | "entityId" | "workflowInstanceId" | "documentId" | "srEventId"> {
+  const { tenantId: _tenantId, entityId: _entityId, workflowInstanceId: _workflowInstanceId, documentId: _documentId, srEventId: _srEventId, ...wire } = form;
+  return wire;
+}
+
+function toWireGoalSnapshot(snapshot: FormGoalSnapshot): Omit<FormGoalSnapshot, "tenantId"> {
+  const { tenantId: _tenantId, ...wire } = snapshot;
+  return wire;
+}
+
+function toWireDisclosure(entry: DisclosureLogEntry): Omit<DisclosureLogEntry, "tenantId"> {
+  const { tenantId: _tenantId, ...wire } = entry;
+  return wire;
+}
+
+function toWireReportPeriod(period: AparReportPeriod): Omit<AparReportPeriod, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = period;
+  return wire;
+}
+
+function toWireRepresentation(representation: AparRepresentation): Omit<AparRepresentation, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = representation;
+  return wire;
+}
 
 export const g08RouteEvidence = {
   forms: "/api/v1/apar/forms",
@@ -36,7 +63,7 @@ export function registerG08Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          form: context.services.apar.openForm(context.actor, {
+          form: toWireAparForm(context.services.apar.openForm(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             periodStart: requiredString(body, "periodStart"),
             periodEnd: requiredString(body, "periodEnd"),
@@ -44,7 +71,8 @@ export function registerG08Routes(kernel: ApiKernel): void {
             reviewingOfficerId: optionalString(body, "reviewingOfficerId") ?? ph03Ids.manager,
             acceptingAuthorityId: optionalString(body, "acceptingAuthorityId") ?? ph03Ids.manager,
             underCharge: optionalBoolean(body, "underCharge"),
-          }),
+            cycleId: optionalString(body, "cycleId"),
+          })),
         });
       },
     },
@@ -56,7 +84,17 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.self.submit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ form: context.services.apar.submitSelf(context.actor, requiredParam(context.params, "id")) }),
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return accepted({
+          form: toWireAparForm(
+            context.services.apar.submitSelf(context.actor, requiredParam(context.params, "id"), {
+              narrative: requiredString(body, "narrative"),
+              selfRatings: readSelfRatings(body),
+            })
+          ),
+        });
+      },
     },
     {
       method: "POST",
@@ -69,10 +107,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          form: context.services.apar.recordReporting(context.actor, requiredParam(context.params, "id"), {
+          form: toWireAparForm(context.services.apar.recordReporting(context.actor, requiredParam(context.params, "id"), {
             grade: requiredString(body, "grade"),
             narrative: requiredString(body, "narrative"),
-          }),
+          })),
         });
       },
     },
@@ -87,10 +125,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          form: context.services.apar.recordReview(context.actor, requiredParam(context.params, "id"), {
+          form: toWireAparForm(context.services.apar.recordReview(context.actor, requiredParam(context.params, "id"), {
             concur: optionalBoolean(body, "concur") ?? true,
             remarks: optionalString(body, "remarks") ?? "Reviewed",
-          }),
+          })),
         });
       },
     },
@@ -104,7 +142,7 @@ export function registerG08Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted({ form: context.services.apar.accept(context.actor, requiredParam(context.params, "id"), { finalGrade: requiredString(body, "finalGrade") }) });
+        return accepted({ form: toWireAparForm(context.services.apar.accept(context.actor, requiredParam(context.params, "id"), { finalGrade: requiredString(body, "finalGrade") })) });
       },
     },
     {
@@ -117,12 +155,11 @@ export function registerG08Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(
-          context.services.apar.postFinalGrade(context.actor, requiredParam(context.params, "id"), {
-            eventDate: requiredString(body, "eventDate"),
-            idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
-          })
-        );
+        const result = context.services.apar.postFinalGrade(context.actor, requiredParam(context.params, "id"), {
+          eventDate: requiredString(body, "eventDate"),
+          idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
+        });
+        return accepted({ ...result, form: toWireAparForm(result.form) });
       },
     },
     {
@@ -135,7 +172,7 @@ export function registerG08Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted({ form: context.services.apar.releaseSealedCover(context.actor, requiredParam(context.params, "id"), { reason: requiredString(body, "reason") }) });
+        return accepted({ form: toWireAparForm(context.services.apar.releaseSealedCover(context.actor, requiredParam(context.params, "id"), { reason: requiredString(body, "reason") })) });
       },
     },
     {
@@ -145,6 +182,14 @@ export function registerG08Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g08.apar.read",
       handler: (context) => ok(context.services.apar.summary(context.scope)),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/apar/employees/{id}/forms",
+      operationId: "g08.listMyForms",
+      protected: true,
+      permission: "g08.apar.read",
+      handler: (context) => ok({ items: context.services.apar.listMyForms(context.actor, requiredParam(context.params, "id")).map(toWireAparForm) }),
     },
     // ---------------------------------------------------------------------------------
     // PH-08D: masters — appraisal_cycles (E1), appraisal_templates (E2), rating_scales (E3)
@@ -248,11 +293,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(
-          context.services.apar.lockGoals(context.actor, requiredParam(context.params, "id"), {
-            lockedAt: requiredString(body, "lockedAt"),
-          })
-        );
+        const result = context.services.apar.lockGoals(context.actor, requiredParam(context.params, "id"), {
+          lockedAt: requiredString(body, "lockedAt"),
+        });
+        return accepted({ form: toWireAparForm(result.form), snapshots: result.snapshots.map(toWireGoalSnapshot) });
       },
     },
     // ---------------------------------------------------------------------------------
@@ -268,11 +312,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(
-          context.services.apar.discloseToEmployee(context.actor, requiredParam(context.params, "id"), {
-            dispatchedOn: requiredString(body, "dispatchedOn"),
-          })
-        );
+        const result = context.services.apar.discloseToEmployee(context.actor, requiredParam(context.params, "id"), {
+          dispatchedOn: requiredString(body, "dispatchedOn"),
+        });
+        return accepted({ form: toWireAparForm(result.form), disclosure: toWireDisclosure(result.disclosure) });
       },
     },
     {
@@ -286,11 +329,13 @@ export function registerG08Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          representation: context.services.apar.fileRepresentation(context.actor, requiredParam(context.params, "id"), {
-            filedOn: requiredString(body, "filedOn"),
-            grounds: requiredString(body, "grounds"),
-            condoned: optionalBoolean(body, "condoned"),
-          }),
+          representation: toWireRepresentation(
+            context.services.apar.fileRepresentation(context.actor, requiredParam(context.params, "id"), {
+              filedOn: requiredString(body, "filedOn"),
+              grounds: requiredString(body, "grounds"),
+              condoned: optionalBoolean(body, "condoned"),
+            })
+          ),
         });
       },
     },
@@ -327,7 +372,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.report_period.aggregate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted(context.services.apar.aggregateProvisionalGrade(context.actor, requiredParam(context.params, "id"))),
+      handler: (context) => {
+        const result = context.services.apar.aggregateProvisionalGrade(context.actor, requiredParam(context.params, "id"));
+        return accepted({ ...result, form: toWireAparForm(result.form), periods: result.periods.map(toWireReportPeriod) });
+      },
     },
     {
       method: "POST",
@@ -753,6 +801,23 @@ function readStringArray(body: Record<string, unknown>, key: string): string[] {
 }
 
 /** Optional target grade distribution (grade -> weight); undefined when absent. */
+function readSelfRatings(body: Record<string, unknown>): Record<string, number> | undefined {
+  const value = body.selfRatings;
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const record = readBodyRecord(value);
+  const out: Record<string, number> = {};
+  for (const [goalId, rating] of Object.entries(record)) {
+    const parsed = Number(rating);
+    if (!Number.isFinite(parsed)) {
+      throw new FoundationError("VALIDATION_FAILED", `selfRatings.${goalId} must be a finite number`, { field: "selfRatings" });
+    }
+    out[goalId] = parsed;
+  }
+  return out;
+}
+
 function readGradeDistribution(body: Record<string, unknown>): Record<string, number> | undefined {
   const value = body.targetDistribution;
   if (value === undefined || value === null) {

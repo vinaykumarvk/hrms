@@ -217,10 +217,11 @@ test("PH-08F APAR tier actions POST :submit-self, :report, and :review", async (
       return jsonResponse(202, { form: { id: "apar-1", formNo: "APAR/2026/00001", status: "RO_ASSESSMENT", sealedCover: false } });
     },
   });
-  await client.submitAparSelf("apar-1", "idem-ph08f-004");
+  await client.submitAparSelf("apar-1", { narrative: "Consistent output" }, "idem-ph08f-004");
   await client.recordAparReporting("apar-1", { grade: "VERY_GOOD", narrative: "Consistent output" }, "idem-ph08f-005");
   await client.recordAparReview("apar-1", { concur: true, remarks: "Concur" }, "idem-ph08f-006");
   assert.equal(calls[0].url, "/api/v1/apar/forms/apar-1:submit-self");
+  assert.equal(calls[0].body.narrative, "Consistent output");
   assert.equal(calls[1].url, "/api/v1/apar/forms/apar-1:report");
   assert.equal(calls[1].body.grade, "VERY_GOOD");
   assert.equal(calls[2].url, "/api/v1/apar/forms/apar-1:review");
@@ -295,7 +296,7 @@ test("PH-08F fixture enforces the APAR tier ordering self -> RO -> RvO", async (
     () => fixture.recordAparReporting("apar-fixture-000001", { grade: "GOOD", narrative: "Too early" }, "idem-7"),
     (error) => error instanceof HrmsApiError && error.code === "PRECONDITION_FAILED"
   );
-  const self = await fixture.submitAparSelf("apar-fixture-000001", "idem-8");
+  const self = await fixture.submitAparSelf("apar-fixture-000001", { narrative: "Delivered the statutory targets" }, "idem-8");
   assert.equal(self.form.status, "RO_ASSESSMENT");
   const reported = await fixture.recordAparReporting("apar-fixture-000001", { grade: "VERY_GOOD", narrative: "Solid year" }, "idem-9");
   assert.equal(reported.form.status, "RVO_REVIEW");

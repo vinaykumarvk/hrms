@@ -4,6 +4,11 @@ import { pageItems } from "../http/pagination";
 import { DocumentFetchIntent, DocumentRecord } from "../modules/g13/documentVaultService";
 import { FoundationError } from "../platform/types";
 
+function toWireDocument(document: DocumentRecord): Omit<DocumentRecord, "tenantId" | "entityId"> {
+  const { tenantId: _tenantId, entityId: _entityId, ...wire } = document;
+  return wire;
+}
+
 export const g13RouteEvidence = {
   base: "/api/v1/documents",
   attach: "documents:attach",
@@ -30,14 +35,16 @@ export function registerG13Routes(kernel: ApiKernel): void {
       // FR-G13-005/007: `content` is the gated byte-ingest path (server-side SHA-256 +
       // PENDING_SCAN); `contentHash` alone is the pre-scanned registration seam.
       return created({
-        document: context.services.documentVault.createDocument(context.scope, {
-          title: requiredString(body, "title"),
-          ownerEmployeeId: optionalString(body, "ownerEmployeeId"),
-          classification: readClassification(body),
-          contentHash: optionalString(body, "contentHash"),
-          content: optionalString(body, "content"),
-          isWorm: optionalBoolean(body, "isWorm"),
-        }),
+        document: toWireDocument(
+          context.services.documentVault.createDocument(context.scope, {
+            title: requiredString(body, "title"),
+            ownerEmployeeId: optionalString(body, "ownerEmployeeId"),
+            classification: readClassification(body),
+            contentHash: optionalString(body, "contentHash"),
+            content: optionalString(body, "content"),
+            isWorm: optionalBoolean(body, "isWorm"),
+          })
+        ),
       });
     },
   });
@@ -48,7 +55,16 @@ export function registerG13Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g13.document.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) => ok(pageItems(context.services.documentVault.list(context.scope), context.pagination ?? { limit: 25 })),
+    handler: (context) => ok(pageItems(context.services.documentVault.list(context.actor).map(toWireDocument), context.pagination ?? { limit: 25 })),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/documents/employees/{id}",
+    operationId: "g13.listMyDocuments",
+    protected: true,
+    permission: "g13.document.read",
+    handler: (context) =>
+      ok({ items: context.services.documentVault.listMyDocuments(context.actor, requiredParam(context.params, "id")).map(toWireDocument) }),
   });
   kernel.register({
     method: "POST",
@@ -62,12 +78,14 @@ export function registerG13Routes(kernel: ApiKernel): void {
       const body = readBodyRecord(context.request.body);
       const link = optionalRecord(body, "link") ?? body;
       return accepted({
-        document: context.services.documentVault.attach(context.scope, requiredString(body, "documentId"), {
-          moduleCode: requiredString(link, "moduleCode"),
-          entityName: requiredString(link, "entityName"),
-          entityRefId: requiredString(link, "entityRefId"),
-          linkRole: requiredString(link, "linkRole"),
-        }),
+        document: toWireDocument(
+          context.services.documentVault.attach(context.scope, requiredString(body, "documentId"), {
+            moduleCode: requiredString(link, "moduleCode"),
+            entityName: requiredString(link, "entityName"),
+            entityRefId: requiredString(link, "entityRefId"),
+            linkRole: requiredString(link, "linkRole"),
+          })
+        ),
       });
     },
   });
@@ -90,11 +108,13 @@ export function registerG13Routes(kernel: ApiKernel): void {
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted({
-        document: context.services.documentVault.checkIn(context.scope, requiredParam(context.params, "id"), {
-          contentHash: optionalString(body, "contentHash"),
-          content: optionalString(body, "content"),
-          title: optionalString(body, "title"),
-        }),
+        document: toWireDocument(
+          context.services.documentVault.checkIn(context.scope, requiredParam(context.params, "id"), {
+            contentHash: optionalString(body, "contentHash"),
+            content: optionalString(body, "content"),
+            title: optionalString(body, "title"),
+          })
+        ),
       });
     },
   });
@@ -108,7 +128,11 @@ export function registerG13Routes(kernel: ApiKernel): void {
     requiresIdempotencyKey: true,
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
-      return accepted({ document: context.services.documentVault.supersede(context.scope, requiredParam(context.params, "id"), optionalString(body, "replacementDocumentId")) });
+      return accepted({
+        document: toWireDocument(
+          context.services.documentVault.supersede(context.scope, requiredParam(context.params, "id"), optionalString(body, "replacementDocumentId"))
+        ),
+      });
     },
   });
   kernel.register({
@@ -164,11 +188,11 @@ export function registerG13Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g13.document.read",
     handler: (context) => {
-      const document = context.services.documentVault.get(context.scope, requiredParam(context.params, "id"));
+      const document = context.services.documentVault.get(context.actor, requiredParam(context.params, "id"));
       if (!document) {
         throw new FoundationError("NOT_FOUND", "Document not found");
       }
-      return ok({ document });
+      return ok({ document: toWireDocument(document) });
     },
   });
   kernel.register({
@@ -181,7 +205,9 @@ export function registerG13Routes(kernel: ApiKernel): void {
     requiresIdempotencyKey: true,
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
-      return accepted({ document: context.services.documentVault.placeLegalHold(context.scope, requiredString(body, "documentId"), requiredString(body, "reason")) });
+      return accepted({
+        document: toWireDocument(context.services.documentVault.placeLegalHold(context.scope, requiredString(body, "documentId"), requiredString(body, "reason"))),
+      });
     },
   });
   kernel.register({
@@ -194,7 +220,11 @@ export function registerG13Routes(kernel: ApiKernel): void {
     requiresIdempotencyKey: true,
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
-      return accepted({ document: context.services.documentVault.placeLegalHold(context.scope, requiredParam(context.params, "id"), optionalString(body, "reason") ?? "Approved") });
+      return accepted({
+        document: toWireDocument(
+          context.services.documentVault.placeLegalHold(context.scope, requiredParam(context.params, "id"), optionalString(body, "reason") ?? "Approved")
+        ),
+      });
     },
   });
   kernel.register({
@@ -207,7 +237,11 @@ export function registerG13Routes(kernel: ApiKernel): void {
     requiresIdempotencyKey: true,
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
-      return accepted({ document: context.services.documentVault.releaseLegalHold(context.scope, requiredParam(context.params, "id"), optionalString(body, "reason") ?? "Released") });
+      return accepted({
+        document: toWireDocument(
+          context.services.documentVault.releaseLegalHold(context.scope, requiredParam(context.params, "id"), optionalString(body, "reason") ?? "Released")
+        ),
+      });
     },
   });
   // FR-G13-006/017 (E21 security_clearances): grant path for the deny-by-default gate.
@@ -266,10 +300,8 @@ export function registerG13Routes(kernel: ApiKernel): void {
     handler: (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted({
-        document: context.services.documentVault.assignRetentionClass(
-          context.scope,
-          requiredParam(context.params, "id"),
-          requiredString(body, "retentionClassCode")
+        document: toWireDocument(
+          context.services.documentVault.assignRetentionClass(context.scope, requiredParam(context.params, "id"), requiredString(body, "retentionClassCode"))
         ),
       });
     },
@@ -375,7 +407,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     handler: (context) => {
       const body = readBodyRecord(context.request.body ?? {});
       return accepted({
-        dataSubjectRequest: context.services.documentVault.adjudicateDataSubjectRequest(context.scope, requiredParam(context.params, "id"), {
+        dataSubjectRequest: context.services.documentVault.adjudicateDataSubjectRequest(context.actor, requiredParam(context.params, "id"), {
           decision: readDsrDecision(body),
           resolutionNote: optionalString(body, "resolutionNote"),
         }),
@@ -517,7 +549,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.document.checkin",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted({ document: context.services.documentVault.rescan(context.actor, requiredParam(context.params, "id")) }),
+    handler: (context) => accepted({ document: toWireDocument(context.services.documentVault.rescan(context.actor, requiredParam(context.params, "id"))) }),
   });
   kernel.register({
     method: "GET",
@@ -547,7 +579,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
       if (!moduleCode || !entityRefId) {
         throw new FoundationError("VALIDATION_FAILED", "moduleCode and entityRefId query parameters are required", { field: "moduleCode" });
       }
-      return ok({ items: context.services.documentVault.listByModuleRef(context.actor, moduleCode, entityRefId) });
+      return ok({ items: context.services.documentVault.listByModuleRef(context.actor, moduleCode, entityRefId).map(toWireDocument) });
     },
   });
 
@@ -579,6 +611,94 @@ export function registerG13Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g13.ocr.search",
     handler: (context) => ok({ items: context.services.ocrSearch.listIndex(context.scope) }),
+  });
+
+  // hr_admin `g13.letter.author`/`letter_admin` capability — letter templates + merge-field
+  // generation, backed by the existing document vault for storage.
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/letter-templates",
+    operationId: "g13.authorLetterTemplate",
+    protected: true,
+    permission: "g13.letter.author",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        template: context.services.letterTemplate.authorTemplate(context.actor, {
+          templateCode: requiredString(body, "templateCode"),
+          title: requiredString(body, "title"),
+          bodyText: requiredString(body, "bodyText"),
+          mergeFields: readMergeFields(body),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/letter-templates/{id}",
+    operationId: "g13.updateLetterTemplate",
+    protected: true,
+    permission: "g13.letter.author",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return ok({
+        template: context.services.letterTemplate.updateTemplate(context.actor, requiredParam(context.params, "id"), {
+          title: optionalString(body, "title"),
+          bodyText: optionalString(body, "bodyText"),
+          mergeFields: body.mergeFields !== undefined ? readMergeFields(body) : undefined,
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/letter-templates",
+    operationId: "g13.listLetterTemplates",
+    protected: true,
+    permission: "g13.letter.author",
+    handler: (context) => ok({ items: context.services.letterTemplate.listTemplates(context.actor) }),
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/letter-templates/{id}:generate",
+    operationId: "g13.generateLetter",
+    protected: true,
+    permission: "g13.letter.author",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      const mergeValues = (optionalRecord(body, "mergeValues") as Record<string, string> | undefined) ?? {};
+      return created({
+        letter: context.services.letterTemplate.generateLetter(context.actor, {
+          templateId: requiredParam(context.params, "id"),
+          employeeId: requiredString(body, "employeeId"),
+          mergeValues,
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/generated-letters/{id}:certify",
+    operationId: "g13.certifyGeneratedLetter",
+    protected: true,
+    permission: "g13.letter.author",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => ok({ letter: context.services.letterTemplate.certifyGeneratedCopy(context.actor, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/employees/{id}/generated-letters",
+    operationId: "g13.listGeneratedLetters",
+    protected: true,
+    permission: "g13.letter.author",
+    handler: (context) => ok({ items: context.services.letterTemplate.listGeneratedLetters(context.actor, requiredParam(context.params, "id")) }),
   });
 }
 
@@ -660,6 +780,17 @@ function readClassification(body: Record<string, unknown>): DocumentRecord["clas
     default:
       throw new FoundationError("VALIDATION_FAILED", "Unsupported document classification", { field: "classification" });
   }
+}
+
+function readMergeFields(body: Record<string, unknown>): string[] {
+  const value = body.mergeFields;
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) {
+    throw new FoundationError("VALIDATION_FAILED", "mergeFields must be an array of strings", { field: "mergeFields" });
+  }
+  return value;
 }
 
 function requiredParam(params: Record<string, string>, key: string): string {

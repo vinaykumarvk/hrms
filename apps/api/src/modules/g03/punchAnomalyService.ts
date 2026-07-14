@@ -120,6 +120,13 @@ export class PunchAnomalyService {
     input: { decision: "CONFIRMED_FRAUD" | "VALID"; note: string }
   ): PunchAnomalyReview {
     this.authorization.check(actor, "g03.punch.review", actor);
+    // Post-hr_admin-goal fix: `g03.punch.review_anomaly` names an `anomaly_reviewer` capability
+    // flag that was never checked — any `g03.punch.review` holder could approve/reject/escalate a
+    // flagged punch regardless of the flag. Modeled as an additional role string, same convention
+    // as every other capability-flag fix this goal.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "anomaly_reviewer" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Reviewing a flagged punch anomaly requires the anomaly_reviewer capability", { field: "actor" });
+    }
     const review = this.require(actor, reviewId);
     if (review.status !== "FLAGGED") {
       throw new FoundationError("PRECONDITION_FAILED", "Anomaly is already reviewed");

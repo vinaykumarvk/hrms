@@ -107,7 +107,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     handler: (context) => {
       // Cursor paging via the kernel helper: stable sequenceNo ordering from getTimeline,
       // limit clamped to 100 by parsePagination, next_cursor computed from the window end.
-      const timeline = context.services.serviceRegister.getTimeline(context.scope, requiredParam(context.params, "id"));
+      const timeline = context.services.serviceRegister.getTimeline(context.actor, requiredParam(context.params, "id"));
       return ok(pageItems(timeline, context.pagination ?? { limit: 25 }));
     },
   });
@@ -627,7 +627,7 @@ function readSourceModule(body: Record<string, unknown>): SrSourceModule {
 }
 
 function requireSrEvent(context: ApiContext, eventId: string): SrEvent {
-  const event = context.services.serviceRegister.getEvent(context.scope, eventId);
+  const event = context.services.serviceRegister.getEvent(context.actor, eventId);
   if (!event) {
     throw new FoundationError("NOT_FOUND", "SR event not found");
   }

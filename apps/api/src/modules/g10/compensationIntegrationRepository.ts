@@ -152,6 +152,17 @@ export interface FnfSettlement {
   createdBy: string;
   /** SoD (§5.6): fnf_settlements.approved_by ≠ created_by. */
   approvedBy?: string;
+  /** Post-hr_admin-goal thin build (`g10.fnf.settle` "compute -> sanction -> approve -> pay"):
+   *  additive HOD sanction record — recorded independently of, and does not gate, the existing
+   *  compute->approve transition (a pre-existing, tested state machine this build does not
+   *  change). */
+  sanctionedBy?: string;
+  sanctionedAt?: string;
+  /** Additive disbursement record — the "pay" stage, gated on APPROVED (does not touch the
+   *  compute->approve preconditions). */
+  paidBy?: string;
+  paidAt?: string;
+  paymentRef?: string;
 }
 
 export interface CompensationIntegrationRepository {

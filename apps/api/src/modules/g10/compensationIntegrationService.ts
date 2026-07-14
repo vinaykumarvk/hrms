@@ -628,6 +628,60 @@ export class CompensationIntegrationService {
   }
 
   /**
+   * Post-hr_admin-goal thin build: the "sanction" stage of `g10.fnf.settle`'s named
+   * "compute -> sanction -> approve -> pay" flow. Additive record only — does not gate or change
+   * the pre-existing, tested compute->approve transition. May be recorded at any point once a
+   * settlement is COMPUTED (an HOD sanction typically precedes the finance approval in practice,
+   * but this thin build does not enforce an ordering it would need to invent from scratch).
+   */
+  sanctionFnfSettlement(actor: ActorContext, settlementId: string): FnfSettlement {
+    this.authorization.check(actor, "g10.fnf.settle", actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "sanctioning_authority" || role === "hod" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Sanctioning a full-and-final settlement requires the sanctioning authority (HOD) capability", { field: "actor" });
+    }
+    const settlement = this.repository.findFnfSettlement(actor, settlementId);
+    if (!settlement) {
+      throw new FoundationError("NOT_FOUND", "FnF settlement not found");
+    }
+    if (settlement.createdBy === actor.userId) {
+      throw new FoundationError("FORBIDDEN", "The settlement creator cannot sanction their own settlement (SoD)", { details: { marker: "FNF_SOD" } });
+    }
+    settlement.sanctionedBy = actor.userId;
+    settlement.sanctionedAt = new Date().toISOString();
+    this.repository.saveFnfSettlement(settlement);
+    this.audit.recordMutation(actor, { action: "G10_FNF_SANCTIONED", subjectRef: `g10_fnf_settlements:${settlement.id}` });
+    return { ...settlement, loanRefs: [...settlement.loanRefs], carryforwardRefs: [...settlement.carryforwardRefs] };
+  }
+
+  /**
+   * Post-hr_admin-goal thin build: the "pay" stage. Records that the APPROVED settlement has been
+   * disbursed — a real, present dataset addition (paymentRef/paidAt), not a duplicate of G10's
+   * separate payroll-run disbursement pipeline (which is for regular runs, not FnF settlements).
+   */
+  payFnfSettlement(actor: ActorContext, settlementId: string, input: { paymentRef: string }): FnfSettlement {
+    this.authorization.check(actor, "g10.fnf.settle", actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "payroll_officer" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Recording FnF payment requires the payroll_officer capability", { field: "actor" });
+    }
+    const settlement = this.repository.findFnfSettlement(actor, settlementId);
+    if (!settlement) {
+      throw new FoundationError("NOT_FOUND", "FnF settlement not found");
+    }
+    if (settlement.status !== "APPROVED") {
+      throw new FoundationError("PRECONDITION_FAILED", "Only an APPROVED FnF settlement can be paid");
+    }
+    if (!input.paymentRef?.trim()) {
+      throw new FoundationError("VALIDATION_FAILED", "A payment reference is required", { field: "paymentRef" });
+    }
+    settlement.paidBy = actor.userId;
+    settlement.paidAt = new Date().toISOString();
+    settlement.paymentRef = input.paymentRef;
+    this.repository.saveFnfSettlement(settlement);
+    this.audit.recordMutation(actor, { action: "G10_FNF_PAID", subjectRef: `g10_fnf_settlements:${settlement.id}`, metadata: { paymentRef: input.paymentRef } });
+    return { ...settlement, loanRefs: [...settlement.loanRefs], carryforwardRefs: [...settlement.carryforwardRefs] };
+  }
+
+  /**
    * FR-23 SR posting contract — PROVENANCE DISCIPLINE: G10 posts pay events exclusively
    * through the G12 ingest service (the module is a relay; it never appends to the SR
    * ledger itself). The fact_key is DERIVED deterministically from (eventType, employee,

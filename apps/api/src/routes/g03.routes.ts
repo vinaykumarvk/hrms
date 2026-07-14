@@ -3,6 +3,15 @@ import { optionalBoolean, optionalNumber, optionalString, readBodyRecord, requir
 import { RouteDefinition } from "../http/apiTypes";
 import { ph03Ids } from "../seed/ph03Seed";
 import { EncashmentContext } from "../modules/g03/leaveYearCloseService";
+import { BiometricConsentType, BiometricDataType } from "../modules/g03/biometricGovernanceService";
+import type { AttendanceRecord } from "../modules/g03/leaveService";
+
+/** capturedByUserId is an internal maker-identity used only for the FR-05 SoD (no self-approve) check;
+ *  it must never reach a wire response. */
+function toWireAttendance(record: AttendanceRecord): Omit<AttendanceRecord, "capturedByUserId"> {
+  const { capturedByUserId: _capturedByUserId, ...wire } = record;
+  return wire;
+}
 
 export const g03RouteEvidence = {
   leaveApplications: "/api/v1/atl/leave-applications",
@@ -95,6 +104,16 @@ export function registerG03Routes(kernel: ApiKernel): void {
     },
     {
       method: "POST",
+      path: "/api/v1/atl/leave-applications/{id}:sanction-special",
+      operationId: "g03.sanctionSpecialLeave",
+      protected: true,
+      permission: "g03.leave.sanction_special",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => accepted({ application: context.services.leave.sanctionSpecialLeave(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
       path: "/api/v1/atl/leave-applications/{id}:withdraw",
       operationId: "g03.withdrawLeaveApplication",
       protected: true,
@@ -148,6 +167,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
             },
             eligibility: optionalNumber(body, "minServiceMonths") !== undefined ? { minServiceMonths: optionalNumber(body, "minServiceMonths") as number } : undefined,
             entitlementCapDays: optionalNumber(body, "entitlementCapDays"),
+            requiresFinalSanction: optionalBoolean(body, "requiresFinalSanction"),
           }),
         });
       },
@@ -196,7 +216,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const employeeId = optionalString(context.request.query ?? {}, "employeeId") ?? ph03Ids.employee;
         const leaveTypeId = optionalString(context.request.query ?? {}, "leaveTypeId") ?? "EL";
-        return ok({ balance: context.services.leave.getBalance(context.scope, employeeId, leaveTypeId) });
+        return ok({ balance: context.services.leave.getBalance(context.actor, employeeId, leaveTypeId) });
       },
     },
     {
@@ -239,12 +259,14 @@ export function registerG03Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          attendance: context.services.leave.captureAttendance(context.actor, {
-            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
-            attendanceDate: requiredString(body, "attendanceDate"),
-            inTime: optionalString(body, "inTime"),
-            outTime: optionalString(body, "outTime"),
-          }),
+          attendance: toWireAttendance(
+            context.services.leave.captureAttendance(context.actor, {
+              employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+              attendanceDate: requiredString(body, "attendanceDate"),
+              inTime: optionalString(body, "inTime"),
+              outTime: optionalString(body, "outTime"),
+            })
+          ),
         });
       },
     },
@@ -258,9 +280,13 @@ export function registerG03Routes(kernel: ApiKernel): void {
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(
-          context.services.leave.regulariseAttendance(context.actor, requiredParam(context.params, "id"), requiredString(body, "reason"), optionalString(body, "asOfDate"))
+        const result = context.services.leave.regulariseAttendance(
+          context.actor,
+          requiredParam(context.params, "id"),
+          requiredString(body, "reason"),
+          optionalString(body, "asOfDate")
         );
+        return accepted({ ...result, attendance: toWireAttendance(result.attendance) });
       },
     },
     {
@@ -474,10 +500,12 @@ export function registerG03Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          attendance: context.services.attendanceOps.deriveAttendanceFromPunches(context.actor, {
-            employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
-            attendanceDate: requiredString(body, "attendanceDate"),
-          }),
+          attendance: toWireAttendance(
+            context.services.attendanceOps.deriveAttendanceFromPunches(context.actor, {
+              employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
+              attendanceDate: requiredString(body, "attendanceDate"),
+            })
+          ),
         });
       },
     },
@@ -791,7 +819,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listAttendance",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ items: context.services.leave.listAttendance(context.scope) }),
+      handler: (context) => ok({ items: context.services.leave.listAttendance(context.scope).map(toWireAttendance) }),
     },
     {
       method: "GET",
@@ -800,6 +828,72 @@ export function registerG03Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g03.leave.read",
       handler: (context) => ok(context.services.attendanceOps.getCompOffBalance(context.scope, requiredParam(context.params, "employeeId"), context.request.query?.asOfDate ?? "2026-07-02")),
+    },
+    // Post-hr_admin-goal thin build: biometric.govern capability (consent/lawful-basis/
+    // retention-purge governance).
+    {
+      method: "POST",
+      path: "/api/v1/biometric-governance/consents",
+      operationId: "g03.recordBiometricConsent",
+      protected: true,
+      permission: "g03.biometric.govern",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          consent: context.services.biometricGovernance.recordConsent(context.actor, {
+            employeeId: requiredString(body, "employeeId"),
+            consentType: requiredString(body, "consentType") as BiometricConsentType,
+            granted: Boolean(body.granted),
+            lawfulBasis: requiredString(body, "lawfulBasis"),
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/biometric-governance/employees/{employeeId}/consents",
+      operationId: "g03.listBiometricConsents",
+      protected: true,
+      permission: "g03.biometric.govern",
+      handler: (context) => ok({ items: context.services.biometricGovernance.listConsents(context.actor, requiredParam(context.params, "employeeId")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/biometric-governance/retention-policies",
+      operationId: "g03.configureBiometricRetentionPolicy",
+      protected: true,
+      permission: "g03.biometric.govern",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          policy: context.services.biometricGovernance.configureRetentionPolicy(context.actor, {
+            dataType: requiredString(body, "dataType") as BiometricDataType,
+            retentionDays: requiredNumber(body, "retentionDays"),
+          }),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/v1/biometric-governance:purge",
+      operationId: "g03.purgeBiometricData",
+      protected: true,
+      permission: "g03.biometric.govern",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          purgeLog: context.services.biometricGovernance.purgeExpiredData(context.actor, {
+            dataType: requiredString(body, "dataType") as BiometricDataType,
+            asOfDate: requiredString(body, "asOfDate"),
+          }),
+        });
+      },
     },
   ];
   routes.forEach((route) => kernel.register(route));

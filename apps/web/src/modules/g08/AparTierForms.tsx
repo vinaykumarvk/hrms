@@ -54,6 +54,8 @@ const TIER_PERMISSIONS = {
 export function AparTierForms({ client, permissions, defaultFormId = "" }: AparTierFormsProps) {
   const [formId, setFormId] = useState(defaultFormId);
 
+  const [selfNarrative, setSelfNarrative] = useState("");
+  const [selfValidation, setSelfValidation] = useState<string | null>(null);
   const [selfPhase, setSelfPhase] = useState<SubmitPhase>({ kind: "idle" });
 
   const [grade, setGrade] = useState("");
@@ -81,12 +83,18 @@ export function AparTierForms({ client, permissions, defaultFormId = "" }: AparT
   function handleSelfSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!formId.trim()) {
+      setSelfValidation(null);
       setSelfPhase({ kind: "error", errorCode: "VALIDATION_FAILED", message: "The APAR form id is required." });
       return;
     }
+    if (!selfNarrative.trim()) {
+      setSelfValidation("An achievements narrative is required.");
+      return;
+    }
+    setSelfValidation(null);
     setSelfPhase({ kind: "submitting" });
     void client
-      .submitAparSelf(formId.trim(), crypto.randomUUID())
+      .submitAparSelf(formId.trim(), { narrative: selfNarrative.trim() }, crypto.randomUUID())
       .then((result) => setSelfPhase({ kind: "success", form: result.form }))
       .catch((error: unknown) => setSelfPhase(toErrorPhase(error)));
   }
@@ -148,9 +156,18 @@ export function AparTierForms({ client, permissions, defaultFormId = "" }: AparT
         <form aria-label="APAR self-appraisal form" onSubmit={handleSelfSubmit}>
           <h3>Self-appraisal (appraisee tier)</h3>
           <p>Submitting moves the form from SELF_APPRAISAL to the reporting officer&apos;s desk.</p>
+          <label htmlFor="apar-self-narrative">Achievements narrative</label>
+          <textarea
+            id="apar-self-narrative"
+            name="narrative"
+            onChange={(event) => setSelfNarrative(event.target.value)}
+            rows={3}
+            value={selfNarrative}
+          />
           <button disabled={selfPhase.kind === "submitting"} type="submit">
             {selfPhase.kind === "submitting" ? "Submitting self-appraisal…" : "Submit self-appraisal"}
           </button>
+          {selfValidation ? <p role="alert">{selfValidation}</p> : null}
           {selfPhase.kind === "error" ? (
             <p role="alert">
               Self-appraisal failed with error code {selfPhase.errorCode}: {selfPhase.message}

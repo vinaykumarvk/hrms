@@ -29,6 +29,10 @@ export type MutualOrderStatus = "PUBLISHED" | "RELIEVED" | "JOINED" | "CANCELLED
 /** counselling_sessions.turn_timeout_seconds default (frozen DDL default, §5.2.19). */
 const DEFAULT_TURN_TIMEOUT_SECONDS = 300;
 
+/** BRD §3.2: "Submit preferences / counselling choice" is HR Src/Admin "C" (any employee) or
+ *  Employee "C (own)" — no manager row, unlike raising a transfer request. */
+const PREFERENCE_ACCESS_OVERRIDE_ROLES = new Set(["hr_admin", "hr_src_officer", "system"]);
+
 /** vacancy_positions entity (BRD G05 §5.2.7) — strength read-through cache, never authoritative. */
 export interface VacancyPosition {
   id: string;
@@ -196,6 +200,13 @@ export class TransferCounsellingService {
     this.clock = options.clock ?? (() => new Date());
   }
 
+  private assertSelfOrOverride(actor: ActorContext, employeeId: string): void {
+    if (actor.permissions?.includes("*") || actor.roles?.some((role) => PREFERENCE_ACCESS_OVERRIDE_ROLES.has(role)) || actor.userId === employeeId) {
+      return;
+    }
+    throw new FoundationError("FORBIDDEN", "You may only submit or view your own transfer preferences", { field: "employeeId" });
+  }
+
   // =====================================================================================
   // FR-G05-003 — vacancy publication (strength read-through) + ranked preferences
   // =====================================================================================
@@ -270,6 +281,7 @@ export class TransferCounsellingService {
     if (!this.employeeMaster.getById(actor, input.employeeId)) {
       throw new FoundationError("NOT_FOUND", "Employee not found");
     }
+    this.assertSelfOrOverride(actor, input.employeeId);
     if (input.preferences.length === 0) {
       throw new FoundationError("VALIDATION_FAILED", "At least one preference is required", { field: "preferences" });
     }
@@ -316,6 +328,7 @@ export class TransferCounsellingService {
 
   listPreferences(actor: ActorContext, driveId: string, employeeId: string): TransferPreference[] {
     this.authorization.check(actor, "g05.transfer.read", actor);
+    this.assertSelfOrOverride(actor, employeeId);
     return this.repository.listPreferences(actor, driveId, employeeId);
   }
 

@@ -230,6 +230,12 @@ export interface PromotionEligibilityAssessment {
   citedQslSnapshotId: string;
 }
 
+/** Post-full-review-goal fix: self-service reads (my promotion orders/probation/refusals) need
+ *  a need-to-know gate, same shape as every other module's list read. */
+/** hr_admin deliberately excluded (SoD boundary): promotion self-service data stays with the
+ *  dedicated statutory promotion chain, not the general HR-admin superset role. */
+const PROMOTION_ACCESS_OVERRIDE_ROLES = new Set(["promotion_officer", "system"]);
+
 export class PromotionService {
   private readonly seniorityLists: SeniorityList[] = [];
   private readonly promotionCases: PromotionCase[] = [];
@@ -1144,14 +1150,18 @@ export class PromotionService {
     return { order: this.clonePromotionOrder(order), refusal: { ...refusal } };
   }
 
-  listPromotionRefusals(scope: TenantScope, employeeId: string): PromotionRefusal[] {
-    requireTenantScope(scope);
-    return this.promotionDepth.listRefusals(scope, employeeId);
+  /** Post-full-review-goal fix: this took a bare employeeId with no ownership check — any actor
+   *  holding `g06.promotion.read` could read any other employee's refusal/debarment history. */
+  listPromotionRefusals(actor: ActorContext, employeeId: string): PromotionRefusal[] {
+    requireTenantScope(actor);
+    this.assertSelfOrPromotionOverride(actor, employeeId);
+    return this.promotionDepth.listRefusals(actor, employeeId);
   }
 
-  listProbationRecords(scope: TenantScope, employeeId: string): ProbationRecord[] {
-    requireTenantScope(scope);
-    return this.promotionDepth.listProbations(scope, employeeId);
+  listProbationRecords(actor: ActorContext, employeeId: string): ProbationRecord[] {
+    requireTenantScope(actor);
+    this.assertSelfOrPromotionOverride(actor, employeeId);
+    return this.promotionDepth.listProbations(actor, employeeId);
   }
 
   /** §5.6-20 sub-judice guard: an active interim stay on the order or its case blocks effecting. */
@@ -1447,9 +1457,14 @@ export class PromotionService {
     return { ...vacated };
   }
 
-  listPromotionOrders(scope: TenantScope): PromotionOrder[] {
-    requireTenantScope(scope);
-    return this.promotionOrders.filter((order) => this.inScope(order, scope)).map((order) => this.clonePromotionOrder(order));
+  /** Post-full-review-goal fix: was a tenant-wide dump with no per-employee filter at all — any
+   *  actor holding `g06.promotion.read` saw every employee's promotion orders. Non-override
+   *  actors now see only their own, matching the `listOrders`/self-scoping pattern G05 already
+   *  established for this bug class. */
+  listPromotionOrders(actor: ActorContext): PromotionOrder[] {
+    requireTenantScope(actor);
+    const inTenant = this.promotionOrders.filter((order) => this.inScope(order, actor)).map((order) => this.clonePromotionOrder(order));
+    return this.isPromotionAccessOverride(actor) ? inTenant : inTenant.filter((order) => order.employeeId === actor.userId);
   }
 
   listPayImpactSignals(scope: TenantScope): G06PayImpactSignal[] {
@@ -1507,6 +1522,16 @@ export class PromotionService {
 
   private inScope(row: { tenantId: string; entityId?: string }, scope: TenantScope): boolean {
     return row.tenantId === scope.tenantId && (!scope.entityId || row.entityId === scope.entityId);
+  }
+
+  private isPromotionAccessOverride(actor: ActorContext): boolean {
+    return Boolean(actor.permissions?.includes("*") || actor.roles?.some((role) => PROMOTION_ACCESS_OVERRIDE_ROLES.has(role)));
+  }
+
+  private assertSelfOrPromotionOverride(actor: ActorContext, employeeId: string): void {
+    if (!this.isPromotionAccessOverride(actor) && actor.userId !== employeeId) {
+      throw new FoundationError("FORBIDDEN", "You may only access your own promotion records", { field: "employeeId" });
+    }
   }
 
   private employeeInScope(employeeId: string, scope: TenantScope): boolean {

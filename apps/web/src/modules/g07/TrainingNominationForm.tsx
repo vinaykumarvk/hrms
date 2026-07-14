@@ -34,6 +34,8 @@ export interface TrainingNominationFormProps {
   defaultEmployeeId?: string;
   /** Pre-resolved phase for tests/server rendering (mirrors the workspace initialState pattern). */
   initialPhase?: NominationSubmitPhase;
+  /** Invoked after a successful submit so a sibling "My Nominations" list can refresh. */
+  onSubmitted?: () => void;
 }
 
 /**
@@ -42,7 +44,7 @@ export interface TrainingNominationFormProps {
  * client, rendering the server's capacity (WAITLISTED + position) and
  * eligibility (NOT_FOUND / PRECONDITION_FAILED) feedback honestly.
  */
-export function TrainingNominationForm({ client, defaultEmployeeId = "", initialPhase }: TrainingNominationFormProps) {
+export function TrainingNominationForm({ client, defaultEmployeeId = "", initialPhase, onSubmitted }: TrainingNominationFormProps) {
   const [sessionId, setSessionId] = useState("");
   const [employeeId, setEmployeeId] = useState(defaultEmployeeId);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -62,7 +64,10 @@ export function TrainingNominationForm({ client, defaultEmployeeId = "", initial
     setPhase({ kind: "submitting" });
     void client
       .nominateForTraining({ sessionId: sessionId.trim(), employeeId: employeeId.trim() }, crypto.randomUUID())
-      .then((result) => setPhase({ kind: "success", nomination: result.nomination }))
+      .then((result) => {
+        setPhase({ kind: "success", nomination: result.nomination });
+        onSubmitted?.();
+      })
       .catch((error: unknown) => {
         const errorCode = error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR";
         setPhase({ kind: "error", errorCode, message: describeG07Error(errorCode) });

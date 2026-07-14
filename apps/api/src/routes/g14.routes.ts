@@ -35,6 +35,14 @@ export function registerG14Routes(kernel: ApiKernel): void {
     },
     {
       method: "GET",
+      path: "/api/v1/analytics/employees/{id}/dashboard",
+      operationId: "g14.getMyDashboard",
+      protected: true,
+      permission: "g14.analytics.read.self",
+      handler: (context) => ok({ dashboard: context.services.analytics.getMyDashboard(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "GET",
       path: "/api/v1/analytics/drill-through",
       operationId: "g14.drillThrough",
       protected: true,
@@ -386,6 +394,75 @@ export function registerG14Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g14.predict.attrition",
       handler: (context) => ok({ items: context.services.predictiveAnalytics.listScores(context.scope) }),
+    },
+    // hr_admin `g14.report.build` capability — self-service report builder over existing mart cards.
+    {
+      method: "POST",
+      path: "/api/v1/analytics/reports",
+      operationId: "g14.defineReport",
+      protected: true,
+      permission: "g14.report.build",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        const format = optionalString(body, "format") ?? "JSON";
+        if (format !== "JSON" && format !== "CSV") {
+          throw new FoundationError("VALIDATION_FAILED", "format must be JSON or CSV", { field: "format" });
+        }
+        return created({
+          report: context.services.analytics.defineReport(context.actor, {
+            name: requiredString(body, "name"),
+            cardCodes: optionalStringArray(body, "cardCodes") ?? [],
+            format,
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/analytics/reports",
+      operationId: "g14.listReportDefinitions",
+      protected: true,
+      permission: "g14.report.build",
+      handler: (context) => ok({ items: context.services.analytics.listReportDefinitions(context.actor) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/analytics/reports/{id}:build",
+      operationId: "g14.buildReport",
+      protected: true,
+      permission: "g14.report.build",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => created({ output: context.services.analytics.buildReport(context.actor, requiredParam(context.params, "id")) }),
+    },
+    {
+      method: "POST",
+      path: "/api/v1/analytics/reports/{id}:schedule",
+      operationId: "g14.scheduleReport",
+      protected: true,
+      permission: "g14.report.build",
+      unsafe: true,
+      requiresIdempotencyKey: true,
+      handler: (context) => {
+        const body = readBodyRecord(context.request.body);
+        return created({
+          schedule: context.services.analytics.scheduleReport(context.actor, {
+            reportDefinitionId: requiredParam(context.params, "id"),
+            cronExpression: requiredString(body, "cronExpression"),
+            recipients: optionalStringArray(body, "recipients") ?? [],
+          }),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/api/v1/analytics/report-schedules",
+      operationId: "g14.listScheduledReports",
+      protected: true,
+      permission: "g14.report.build",
+      handler: (context) => ok({ items: context.services.analytics.listScheduledReports(context.actor) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

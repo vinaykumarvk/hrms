@@ -1,7 +1,36 @@
 import { NotificationService } from "../../notifications/notificationService";
 import { AuditService } from "../audit/auditService";
 import { AuthorityResolutionService, ResolverRule, AuthorityResolution } from "../authority-resolution/authorityResolutionService";
-import { FoundationError, TenantScope, nextId, requireTenantScope } from "../types";
+import { ActorContext, FoundationError, TenantScope, nextId, requireTenantScope } from "../types";
+
+/**
+ * Roles treated as an org-wide override for the resolved-approver check below (auth-matrix.yaml
+ * scope:entity/global tiers — hr_admin, leave_admin, hrbp, sanctioning_authority,
+ * transfer_authority — plus the seed/system actor). Holding one of these roles, or the wildcard
+ * `*` permission, lets an actor decide a task without being the individually-resolved assignee.
+ */
+const APPROVAL_OVERRIDE_ROLES = new Set(["hr_admin", "leave_admin", "hrbp", "sanctioning_authority", "transfer_authority", "system"]);
+
+/** Decision actions where auth-matrix.yaml requires "approver != applicant" / team-scoped identity, not just a permission string. */
+const IDENTITY_ENFORCED_ACTIONS = new Set<WorkflowAction["action"]>(["APPROVE", "REJECT", "SEND_BACK"]);
+
+function isOverrideActor(actor: ActorContext): boolean {
+  if (actor.permissions?.includes("*")) {
+    return true;
+  }
+  return actor.roles?.some((role) => APPROVAL_OVERRIDE_ROLES.has(role)) ?? false;
+}
+
+/** True when the resolution didn't name individual employees (ROLE/QUEUE/EXTERNAL routing), or when
+ *  the acting user is one of the named employees (matched by convention: ActorContext.userId carries
+ *  the employee id for employee-issued sessions, per apps/web/src/app/session.ts). */
+function isResolvedAssignee(actor: ActorContext, resolution: AuthorityResolution): boolean {
+  const employeeAssignees = resolution.selectedAssignees.filter((assignee) => assignee.type === "EMPLOYEE" && assignee.employeeId);
+  if (employeeAssignees.length === 0) {
+    return true;
+  }
+  return employeeAssignees.some((assignee) => assignee.employeeId === actor.userId || assignee.userId === actor.userId);
+}
 
 export interface WorkflowInstance {
   id: string;
@@ -74,6 +103,15 @@ export class HrmsWorkflowService {
     const instance = this.instances.find((item) => item.id === task.instanceId && item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId));
     if (!instance) {
       throw new FoundationError("NOT_FOUND", "Workflow instance not found");
+    }
+    if (IDENTITY_ENFORCED_ACTIONS.has(input.action)) {
+      const actor = scope as ActorContext;
+      if (!isOverrideActor(actor) && !isResolvedAssignee(actor, task.resolution)) {
+        throw new FoundationError("FORBIDDEN", "Only the resolved approver (or an authorized override role) may decide this task", {
+          field: "actor",
+          details: { action: input.action, instanceId: instance.id },
+        });
+      }
     }
     task.status = "COMPLETED";
     instance.status = this.statusForAction(input.action);

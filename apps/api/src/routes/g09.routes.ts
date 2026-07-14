@@ -1,9 +1,29 @@
 import { ApiKernel, accepted, created, ok } from "../http/apiKernel";
 import { optionalBoolean, optionalNumber, optionalString, optionalStringArray, readBodyRecord, requiredString } from "../http/body";
 import { RouteDefinition } from "../http/apiTypes";
-import { MisconductCategory, PenaltyType } from "../modules/g09/disciplinaryService";
-import { G09PenaltyType, IccRoleType, PersonalHearingStage, PreliminaryInquiryRecommendation, SlaPauseReason } from "../modules/g09/dueProcessRepository";
+import { DisciplinaryCase, MisconductCategory, PenaltyType, PenaltyOrder } from "../modules/g09/disciplinaryService";
+import { G09PenaltyType, IccRoleType, PersonalHearing, PersonalHearingStage, PreliminaryInquiryRecommendation, ShowCauseNotice, SlaPauseReason } from "../modules/g09/dueProcessRepository";
 import { ph03Ids } from "../seed/ph03Seed";
+
+function toWireDisciplinaryCase(row: DisciplinaryCase): Omit<DisciplinaryCase, "tenantId" | "entityId" | "workflowInstanceId"> {
+  const { tenantId, entityId, workflowInstanceId, ...rest } = row;
+  return rest;
+}
+
+function toWireShowCauseNotice(row: ShowCauseNotice): Omit<ShowCauseNotice, "tenantId" | "entityId"> {
+  const { tenantId, entityId, ...rest } = row;
+  return rest;
+}
+
+function toWirePersonalHearing(row: PersonalHearing): Omit<PersonalHearing, "tenantId" | "entityId"> {
+  const { tenantId, entityId, ...rest } = row;
+  return rest;
+}
+
+function toWirePenaltyOrder(row: PenaltyOrder): Omit<PenaltyOrder, "tenantId" | "entityId"> {
+  const { tenantId, entityId, ...rest } = row;
+  return rest;
+}
 
 export const g09RouteEvidence = {
   cases: "/api/v1/disciplinary/cases",
@@ -138,6 +158,25 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.case.read",
       handler: (context) => ok(context.services.disciplinary.summary(context.scope)),
     },
+    // Self-service "view my disciplinary case status" (own cases only, self-or-override).
+    {
+      method: "GET",
+      path: "/api/v1/disciplinary/employees/{id}/cases",
+      operationId: "g09.listMyCases",
+      protected: true,
+      permission: "g09.case.read",
+      handler: (context) =>
+        ok({ items: context.services.disciplinary.listMyCases(context.actor, requiredParam(context.params, "id")).map(toWireDisciplinaryCase) }),
+    },
+    {
+      method: "GET",
+      path: "/api/v1/disciplinary/cases/{id}/show-cause-notices",
+      operationId: "g09.listMyShowCauseNotices",
+      protected: true,
+      permission: "g09.case.read",
+      handler: (context) =>
+        ok({ items: context.services.disciplinary.listMyShowCauseNotices(context.actor, requiredParam(context.params, "id")).map(toWireShowCauseNotice) }),
+    },
     // PH-28B — case evidence-vault listing (consumed by the G09 evidence-vault UI, PH-27C).
     {
       method: "GET",
@@ -145,7 +184,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.listCaseEvidence",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok({ items: context.services.disciplinary.listCaseEvidence(context.scope, requiredParam(context.params, "id")), limit: 25, next_cursor: null }),
+      handler: (context) => ok({ items: context.services.disciplinary.listCaseEvidence(context.actor, requiredParam(context.params, "id")), limit: 25, next_cursor: null }),
     },
     // ---------------------------------------------------------------------------------
     // PH-08E natural-justice chain (FR-G09-002/003/018/019/027/028)
@@ -362,11 +401,13 @@ export function registerG09Routes(kernel: ApiKernel): void {
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          personalHearing: context.services.disciplinary.requestPersonalHearing(context.actor, requiredParam(context.params, "id"), {
-            stage: readHearingStage(body),
-            requestedOn: requiredString(body, "requestedOn"),
-            showCauseNoticeId: optionalString(body, "showCauseNoticeId"),
-          }),
+          personalHearing: toWirePersonalHearing(
+            context.services.disciplinary.requestPersonalHearing(context.actor, requiredParam(context.params, "id"), {
+              stage: readHearingStage(body),
+              requestedOn: requiredString(body, "requestedOn"),
+              showCauseNoticeId: optionalString(body, "showCauseNoticeId"),
+            })
+          ),
         });
       },
     },
@@ -494,16 +535,18 @@ export function registerG09Routes(kernel: ApiKernel): void {
       path: "/api/v1/disciplinary/show-cause-notices/{id}:respond",
       operationId: "g09.respondToShowCause",
       protected: true,
-      permission: "g09.showcause.issue",
+      permission: "g09.show-cause.respond",
       unsafe: true,
       requiresIdempotencyKey: true,
       handler: (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          notice: context.services.disciplinary.respondToShowCause(context.actor, requiredParam(context.params, "id"), {
-            representationText: requiredString(body, "representationText"),
-            respondedAt: requiredString(body, "respondedAt"),
-          }),
+          notice: toWireShowCauseNotice(
+            context.services.disciplinary.respondToShowCause(context.actor, requiredParam(context.params, "id"), {
+              representationText: requiredString(body, "representationText"),
+              respondedAt: requiredString(body, "respondedAt"),
+            })
+          ),
         });
       },
     },
@@ -583,7 +626,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.listPersonalHearings",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok({ items: context.services.disciplinary.listPersonalHearings(context.scope, requiredParam(context.params, "id")) }),
+      handler: (context) => ok({ items: context.services.disciplinary.listPersonalHearings(context.actor, requiredParam(context.params, "id")).map(toWirePersonalHearing) }),
     },
     {
       method: "GET",
@@ -591,7 +634,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.getPenaltyOrder",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok({ penaltyOrder: context.services.disciplinary.getPenaltyOrder(context.scope, requiredParam(context.params, "id")) }),
+      handler: (context) => ok({ penaltyOrder: toWirePenaltyOrder(context.services.disciplinary.getPenaltyOrder(context.actor, requiredParam(context.params, "id"))) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

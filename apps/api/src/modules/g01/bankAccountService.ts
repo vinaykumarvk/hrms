@@ -19,6 +19,11 @@ export type BankLifecycle = "ACTIVE" | "INACTIVE";
 
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
+/** Org-wide override roles that may approve without triggering the maker!=checker SOD gate (e.g. a
+ *  single HR admin operating in a small tenant, or the system/seed actor). Mirrors the same override
+ *  convention used for P01 workflow approver-identity enforcement. */
+const BANK_APPROVAL_OVERRIDE_ROLES = new Set(["hr_admin", "finance_admin", "system"]);
+
 /** g01_bank_accounts — one bank account line for an employee. */
 export interface BankAccount {
   id: string;
@@ -34,6 +39,8 @@ export interface BankAccount {
   pennyDropStatus: PennyDropStatus;
   lifecycle: BankLifecycle;
   rowVersion: number;
+  /** Maker of the current PENDING state (FR-EPM-008 AC3/AC7 4-eyes); the approver must be a different user. */
+  submittedByUserId?: string;
 }
 
 export interface BankAccountRepository {
@@ -135,6 +142,7 @@ export class BankAccountService {
       pennyDropStatus: "PENDING",
       lifecycle: "ACTIVE",
       rowVersion: 1,
+      submittedByUserId: actor.userId,
     };
     this.repo.save(account);
     this.audit.recordMutation(actor, {
@@ -184,6 +192,7 @@ export class BankAccountService {
       account.status = "PENDING";
       account.isVerified = false;
       account.pennyDropStatus = "PENDING";
+      account.submittedByUserId = actor.userId;
     }
     account.rowVersion += 1;
     this.repo.save(account);
@@ -191,12 +200,28 @@ export class BankAccountService {
     return { ...account };
   }
 
-  /** Maker-checker approval: PENDING -> APPROVED (a rejected/approved account cannot be re-approved). */
+  /** Maker-checker approval: PENDING -> APPROVED (a rejected/approved account cannot be re-approved).
+   *  FR-EPM-008 AC3/Failure-Handling: maker == checker is rejected as SOD_VIOLATION unless the approver
+   *  holds an org-wide override role/permission.
+   *
+   *  CAVEAT: this guarantee is only as strong as the caller's ActorContext. In this repo's current
+   *  dev-only HTTP bridge (tools/local-api-server.mjs), bearer tokens are decoded without signature
+   *  verification (documented there as "NOT for production use"), so `actor.roles`/`permissions` are
+   *  effectively self-declared by the client. This SOD gate is a real, tested control against any
+   *  server-issued ActorContext, but it is not yet a hard security boundary end-to-end until a real,
+   *  signature-verified auth layer issues actor identity/roles. */
   approveBankAccount(actor: ActorContext, accountId: string): BankAccount {
     this.authorization.check(actor, "g01.bank.approve", actor);
     const account = this.requireActive(actor, accountId);
     if (account.status !== "PENDING") {
       throw new FoundationError("PRECONDITION_FAILED", "Only a PENDING bank account can be approved", { details: { status: account.status } });
+    }
+    const isOverride = actor.permissions?.includes("*") || actor.roles?.some((role) => BANK_APPROVAL_OVERRIDE_ROLES.has(role));
+    if (!isOverride && account.submittedByUserId !== undefined && account.submittedByUserId === actor.userId) {
+      throw new FoundationError("SOD_VIOLATION", "The maker of a bank-account change may not also approve it", {
+        field: "actor",
+        details: { accountId: account.id },
+      });
     }
     account.status = "APPROVED";
     account.rowVersion += 1;

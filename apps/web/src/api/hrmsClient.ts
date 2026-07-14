@@ -10,6 +10,8 @@ export const HRMS_API_ROUTES = {
   employees: "/api/v1/employees",
   personalDetailChanges: "/api/v1/personal-details/change-requests",
   changeRequests: "/api/v1/change-requests",
+  attendanceCaptures: "/api/v1/atl/attendance-captures",
+  attendanceRecords: "/api/v1/attendance/records",
   leaveApplications: "/api/v1/atl/leave-applications",
   leaveBalances: "/api/v1/atl/leave-balances",
   leaveTypes: "/api/v1/atl/leave-types",
@@ -18,22 +20,35 @@ export const HRMS_API_ROUTES = {
   leaveSrOutbox: "/api/v1/leave-sr/outbox",
   leaveSrReconciliation: "/api/v1/leave-sr/reconciliation",
   transferOrders: "/api/v1/transfers/orders",
+  transferEmployees: "/api/v1/transfers/employees",
   promotionSummary: "/api/v1/promotions/summary",
   promotionCases: "/api/v1/promotions/cases",
+  promotionOrders: "/api/v1/promotions/orders",
+  promotionProbationRecords: "/api/v1/promotions/probation-records",
+  promotionRefusals: "/api/v1/promotions/refusals",
   trainingSummary: "/api/v1/training/summary",
+  trainingSessions: "/api/v1/training/sessions",
+  trainingEmployees: "/api/v1/training/employees",
   trainingNominations: "/api/v1/training/nominations",
   aparSummary: "/api/v1/apar/summary",
   aparForms: "/api/v1/apar/forms",
+  aparEmployees: "/api/v1/apar/employees",
   disciplinarySummary: "/api/v1/disciplinary/summary",
   disciplinaryCases: "/api/v1/disciplinary/cases",
+  disciplinaryEmployees: "/api/v1/disciplinary/employees",
+  disciplinaryShowCauseNotices: "/api/v1/disciplinary/show-cause-notices",
   payrollSummary: "/api/v1/payroll/summary",
+  payrollEmployees: "/api/v1/payroll/employees",
   // PH-09E: run-lifecycle console + payslip line source (the compute response carries the
   // per-employee component lines the payslip view renders — no separate payslip read route exists).
   payrollSalaryStructures: "/api/v1/payroll/salary-structures",
   payrollRuns: "/api/v1/payroll/runs",
   pensionSummary: "/api/v1/pension/summary",
   pensionCases: "/api/v1/pension/cases",
+  pensionEstimates: "/api/v1/pension/estimates",
+  pensionEmployees: "/api/v1/pension/employees",
   analyticsSummary: "/api/v1/analytics/summary",
+  analyticsEmployees: "/api/v1/analytics/employees",
   // PH-10E: the PH-10D analytics engine reads the dashboard binds to (live KPI values,
   // suppression-aware aggregates, and datamart_refresh_logs freshness).
   analyticsKpis: "/api/v1/analytics/kpis",
@@ -42,6 +57,7 @@ export const HRMS_API_ROUTES = {
   srIngest: "/api/v1/sr/ingest",
   srEmployees: "/api/v1/sr/employees",
   documents: "/api/v1/documents",
+  documentsByEmployee: "/api/v1/documents/employees",
 } as const;
 
 export const HRMS_API_HEADERS = {
@@ -85,6 +101,43 @@ export interface SealedCoverCase {
 
 export interface SealedCoverReleaseInput {
   reason: string;
+}
+
+/** G06 self-service: "view my promotion & posting history" (FR-003/FR-007/FR-011). */
+export interface PromotionOrderView {
+  id: string;
+  orderNo: string;
+  promotionCaseId: string;
+  employeeId: string;
+  fromDesignation: string;
+  toDesignation: string;
+  status: "ISSUED" | "EFFECTED" | "DECLINED";
+  documentId: string;
+  srEventId?: string;
+}
+
+export interface ProbationRecordView {
+  id: string;
+  promotionOrderId: string;
+  employeeId: string;
+  probationStart: string;
+  probationMonths: number;
+  scheduledEnd: string;
+  status: "ON_PROBATION" | "EXTENDED" | "DECLARED_SATISFACTORY" | "REVERTED" | "DISCHARGED";
+}
+
+export interface PromotionRefusalView {
+  id: string;
+  promotionOrderId: string;
+  employeeId: string;
+  refusalDate: string;
+  refusalReason?: string;
+  debarmentMonths: number;
+  debarmentUntil: string;
+  nextConsiderationAfter: string;
+  macpClockEffect: "NONE" | "STOP" | "FORFEIT_NEXT" | "RESET";
+  refusalEffectApplied: boolean;
+  status: "ACTIVE" | "EXPIRED" | "WAIVED";
 }
 
 /** G14 embedded-BI KPI tile (PH-10D analytics engine; PH-34A dashboard). */
@@ -193,6 +246,20 @@ export interface DocumentSummary {
   legalHold: boolean;
 }
 
+/** GET /api/v1/documents/{id}:fetch?intent=VIEW — a short-TTL, watermarked, session-bound render grant. */
+export interface DocumentViewGrant {
+  documentId: string;
+  intent: "VIEW";
+  render: { renderToken: string; expiresInSeconds: number; watermarked: boolean; sessionBound: boolean; disposition: string };
+}
+
+/** GET /api/v1/documents/{id}:fetch?intent=DOWNLOAD — the file grant, tied to the DOWNLOAD right. */
+export interface DocumentDownloadGrant {
+  documentId: string;
+  intent: "DOWNLOAD";
+  grant: { grantToken: string; right: string; versionNo: number; contentHash: string; disposition: string };
+}
+
 export interface LeaveSliceSummary {
   applicationNo: string;
   status: "SUBMITTED" | "APPROVED";
@@ -287,6 +354,43 @@ export interface PayrollSliceSummary {
   inputLockMarker: "INPUT_LOCKED";
   x3Marker: "BANK_X3_EXPORT";
   lastPayMarker: "LAST_PAY_DRAWN";
+}
+
+/** One payslip_lines row (FR-G10-13 breakdown) as GET /api/v1/payroll/employees/{id}/payslips projects it. */
+export interface PayslipLineView {
+  componentCode: string;
+  lineType: "EARNING" | "DEDUCTION" | "ROUNDING_ADJUSTMENT" | "LWP_RECOVERY" | "ARREAR";
+  amountCents: number;
+  sequenceNo: number;
+}
+
+/** One PUBLISHED payslip header from GET /api/v1/payroll/employees/{id}/payslips. */
+export interface PayslipHeaderView {
+  id: string;
+  payslipNo: string;
+  employeeId: string;
+  period: string;
+  version: number;
+  status: "DRAFT" | "PUBLISHED" | "SUPERSEDED" | "REVERSED";
+  grossCents: number;
+  deductionsCents: number;
+  netPayCents: number;
+}
+
+/** One row of GET /api/v1/payroll/employees/{id}/payslips: header + full line-item breakdown. */
+export interface PayslipRecordView {
+  payslip: PayslipHeaderView;
+  lines: PayslipLineView[];
+}
+
+/** Body of GET /api/v1/payroll/employees/{id}/ytd (FR-G10-06 own-YTD-deductions view). */
+export interface YtdStatementView {
+  employeeId: string;
+  byComponent: Record<string, number>;
+  grossCents: number;
+  deductionsCents: number;
+  netCents: number;
+  lineCount: number;
 }
 
 export interface PensionSliceSummary {
@@ -465,6 +569,35 @@ export interface PensionCaseActionResult {
   pensionCase: PensionCaseView;
 }
 
+/** Request body for POST /api/v1/pension/estimates (g11.estimateBenefits — FR-G11-15 self-service
+ *  non-binding what-if). Distinct from PensionEstimateInput above (the admin case-bound
+ *  computation) — this never touches a live case. */
+export interface PensionSelfEstimateInput {
+  employeeId: string;
+  scheme: PensionScheme;
+  asOf: string;
+  qualifyingServiceMonths?: number;
+  emolumentsBaseCents?: number;
+  upsOptedIn?: boolean;
+  npsEvent?: PensionNpsEvent;
+}
+
+/** 201 body of POST /api/v1/pension/estimates. */
+export interface PensionSelfEstimateResult {
+  estimate: {
+    isBinding: false;
+    employeeId: string;
+    scheme: PensionScheme;
+    asOf: string;
+    qualifyingServiceMonths: number;
+    emolumentsBaseCents: number;
+    benefitOutcome: string;
+    pensionCents: number;
+    formula: string;
+    ruleVersionRef: string;
+  };
+}
+
 // ---- PH-10E: G14 dashboard bound to the PH-10D analytics engine ----
 
 /** One governed E03 kpi_definitions row as GET /api/v1/analytics/kpis returns it. */
@@ -518,6 +651,13 @@ export interface MartRefreshLogView {
   rowsWritten?: number;
   status: "RUNNING" | "SUCCESS" | "PARTIAL" | "FAILED";
   errorDetail?: string;
+}
+
+/** G14 self-service "own personal dashboard" (own leave balance + own attendance summary). */
+export interface PersonalDashboardView {
+  employeeId: string;
+  leaveBalance: { leaveTypeId: string; leaveYear: number; currentBalance: number; reserved: number; debited: number; availableBalance: number };
+  attendanceSummary: { totalRecords: number; presentDays: number; regularisedDays: number };
 }
 
 export interface AnalyticsSliceSummary {
@@ -590,6 +730,128 @@ export interface EmployeeDependentAddResult {
   dependent: EmployeeDependentRecord;
 }
 
+/** One E3 employee_addresses row from GET /api/v1/employees/{id}/addresses. */
+export interface EmployeeAddressRecord {
+  id: string;
+  employeeId: string;
+  addressType: "PERMANENT" | "PRESENT" | "MAILING" | "OVERSEAS";
+  line1: string;
+  line2?: string;
+  city: string;
+  district?: string;
+  state: string;
+  country: string;
+  pincode: string;
+  isCurrent: boolean;
+  validFrom: string;
+  validTo?: string;
+  rowVersion: number;
+}
+
+/** Request body for POST /api/v1/employees/{id}/addresses (g01.addEmployeeAddress). */
+export interface EmployeeAddressAddInput {
+  addressType: EmployeeAddressRecord["addressType"];
+  line1: string;
+  line2?: string;
+  city: string;
+  district?: string;
+  state: string;
+  country?: string;
+  pincode: string;
+  validFrom: string;
+}
+
+/** 201 body of POST /api/v1/employees/{id}/addresses: the created satellite row. */
+export interface EmployeeAddressAddResult {
+  address: EmployeeAddressRecord;
+}
+
+/** One nominee row from GET /api/v1/employees/{id}/nominees (FR-EPM-004). */
+export interface NomineeRecord {
+  id: string;
+  employeeId: string;
+  name: string;
+  benefitType: string;
+  sharePct: number;
+  guardian?: string;
+  isFamilyPensionRecipient: boolean;
+  status: "ACTIVE" | "REMOVED";
+  rowVersion: number;
+}
+
+/** Request body for POST /api/v1/employees/{id}/nominees (g01.addNominee). */
+export interface NomineeAddInput {
+  name: string;
+  benefitType: string;
+  sharePct: number;
+  guardian?: string;
+  isFamilyPensionRecipient?: boolean;
+}
+
+/** 201 body of POST /api/v1/employees/{id}/nominees: the created satellite row. */
+export interface NomineeAddResult {
+  nominee: NomineeRecord;
+}
+
+/** One emergency-contact row from GET /api/v1/employees/{id}/emergency-contacts (FR-EPM-005). */
+export interface EmergencyContactRecord {
+  id: string;
+  employeeId: string;
+  name: string;
+  phone: string;
+  priority: number;
+  status: "ACTIVE" | "REMOVED";
+  rowVersion: number;
+}
+
+/** Request body for POST /api/v1/employees/{id}/emergency-contacts (g01.addEmergencyContact). */
+export interface EmergencyContactAddInput {
+  name: string;
+  phone: string;
+  priority: number;
+}
+
+/** 201 body of POST /api/v1/employees/{id}/emergency-contacts: the created satellite row. */
+export interface EmergencyContactAddResult {
+  emergencyContact: EmergencyContactRecord;
+}
+
+/**
+ * One bank-account row from GET /api/v1/employees/{id}/bank-accounts (FR-EPM-008). New rows start
+ * PENDING and need a g01.bank.approve holder to approve before the account is usable for salary.
+ */
+export interface BankAccountRecord {
+  id: string;
+  employeeId: string;
+  bankName: string;
+  ifsc: string;
+  accountNumberMasked: string;
+  isPrimarySalary: boolean;
+  isVerified: boolean;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  pennyDropStatus: "PENDING" | "VERIFIED" | "FAILED";
+  lifecycle: "ACTIVE" | "INACTIVE";
+  rowVersion: number;
+}
+
+/** Request body for POST /api/v1/employees/{id}/bank-accounts (g01.addBankAccount). */
+export interface BankAccountAddInput {
+  bankName: string;
+  ifsc: string;
+  accountNumberMasked: string;
+  isPrimarySalary?: boolean;
+}
+
+/** 201 body of POST /api/v1/employees/{id}/bank-accounts: the created satellite row. */
+export interface BankAccountAddResult {
+  bankAccount: BankAccountRecord;
+}
+
+/** 202 body of POST /api/v1/employees/{id}/bank-accounts/{id}:approve and :penny-drop. */
+export interface BankAccountActionResult {
+  bankAccount: BankAccountRecord;
+}
+
 /** One row of GET /api/v1/personal-details/change-requests as the G02 routes project it. */
 export interface PersonalDetailChangeRecord {
   id: string;
@@ -659,6 +921,36 @@ export interface LeaveBalanceView {
   reserved: number;
   debited: number;
   availableBalance: number;
+}
+
+/** One row of GET /api/v1/attendance/records (FR-04 daily attendance status). */
+export interface AttendanceRecordView {
+  id: string;
+  employeeId: string;
+  attendanceDate: string;
+  inTime?: string;
+  outTime?: string;
+  status: "PRESENT" | "ABSENT" | "ON_LEAVE" | "HOLIDAY" | "HALF_DAY" | "ANOMALY" | "REGULARISED";
+  anomalyCode?: "MISSING_IN" | "MISSING_OUT";
+  isRegularised?: boolean;
+}
+
+/** Request body for POST /api/v1/atl/attendance-captures (g03.captureAttendance) — self-service clock in/out. */
+export interface AttendanceCaptureInput {
+  employeeId: string;
+  attendanceDate: string;
+  inTime?: string;
+  outTime?: string;
+}
+
+/** 201 body of POST /api/v1/atl/attendance-captures. */
+export interface AttendanceCaptureResult {
+  attendance: AttendanceRecordView;
+}
+
+/** 202 body of POST /api/v1/atl/attendance-captures/{id}:regularise (FR-05 missed-punch correction). */
+export interface AttendanceRegulariseResult {
+  attendance: AttendanceRecordView;
 }
 
 /** One row of GET /api/v1/atl/leave-applications as the G03 routes project it to the web layer. */
@@ -743,6 +1035,25 @@ export interface TransferOrderRecord {
   clearanceItems: ClearanceSummary[];
   orderDocumentId?: string;
   joiningDocumentId?: string;
+  servedOnDate?: string;
+  acknowledgedAt?: string;
+}
+
+/** Request body for POST /api/v1/transfers/orders/{id}/acknowledge (g05.acknowledgeTransferOrder). */
+export interface TransferAcknowledgeInput {
+  acknowledgedAt: string;
+}
+
+/** 202 body of POST /api/v1/transfers/orders/{id}/acknowledge. */
+export interface TransferAcknowledgeResult {
+  acknowledgement: {
+    id: string;
+    transferOrderId: string;
+    employeeId: string;
+    servedOnDate: string;
+    acknowledgementStatus: "SERVED" | "ACKNOWLEDGED" | "DEEMED_SERVED" | "REFUSED";
+    acknowledgedAt?: string;
+  };
 }
 
 /** Request body for POST /api/v1/transfers/orders (g05.initiateTransferOrder). */
@@ -774,6 +1085,57 @@ export interface DisciplinaryCaseView {
   caseStatus: "OPEN" | "PENALTY_IMPOSED" | "ABATED" | "CLOSED";
   confidential: boolean;
   chargeMemoDocumentId?: string;
+}
+
+/** G09 self-service: "view my disciplinary case status" (GET /api/v1/disciplinary/employees/{id}/cases). */
+export interface MyDisciplinaryCaseView {
+  id: string;
+  caseNo: string;
+  chargedEmployeeId: string;
+  disciplinaryAuthorityId: string;
+  stage: "INTAKE" | "CHARGE" | "INQUIRY" | "INQUIRY_REPORT" | "ORDER" | "CLOSED" | "APPEAL";
+  caseStatus: "OPEN" | "PENALTY_IMPOSED" | "ABATED" | "CLOSED";
+  isUnderSuspension: boolean;
+  misconductCategory: string;
+  isPoshCase: boolean;
+  openedOn: string;
+  chargeMemoDocumentId?: string;
+}
+
+export interface ShowCauseNoticeView {
+  id: string;
+  caseId: string;
+  noticeNo: string;
+  proposedPenaltyJson: string[];
+  issuedDate: string;
+  servedDate?: string;
+  responseDueDate: string;
+  representationText?: string;
+  respondedAt?: string;
+  status: "ISSUED" | "SERVED" | "RESPONDED";
+}
+
+export interface RespondToShowCauseInput {
+  representationText: string;
+  respondedAt: string;
+}
+
+export interface PersonalHearingView {
+  id: string;
+  caseId: string;
+  stage: string;
+  requested: boolean;
+  requestedOn: string;
+  status: "REQUESTED" | "GRANTED" | "DENIED" | "HELD";
+  granted: boolean;
+  denialReason?: string;
+  scheduledDate?: string;
+}
+
+export interface RequestPersonalHearingInput {
+  stage: string;
+  requestedOn: string;
+  showCauseNoticeId?: string;
 }
 
 /** Request body for POST /api/v1/disciplinary/cases (g09.openCase — complaint/case intake). */
@@ -845,6 +1207,8 @@ export interface AparFormView {
   id: string;
   formNo: string;
   employeeId: string;
+  periodStart: string;
+  periodEnd: string;
   status:
     | "GOALS_PENDING"
     | "SELF_APPRAISAL"
@@ -860,6 +1224,14 @@ export interface AparFormView {
   reviewingOfficerId: string;
   grade?: string;
   sealedCover: boolean;
+  selfAppraisalNarrative?: string;
+  selfAppraisalRatings?: Record<string, number>;
+}
+
+/** Request body for POST /api/v1/apar/forms/{id}:submit-self (g08.submitSelf — appraisee tier). */
+export interface AparSelfAppraisalInput {
+  narrative: string;
+  selfRatings?: Record<string, number>;
 }
 
 /** Request body for POST /api/v1/apar/forms/{id}:report (g08.recordReporting — RO tier). */
@@ -900,6 +1272,16 @@ export interface TrainingNominationResult {
   nomination: TrainingNominationView;
 }
 
+/** One row of GET /api/v1/training/sessions (browsing available programs). */
+export interface TrainingSessionView {
+  id: string;
+  programCode: string;
+  title: string;
+  capacity: number;
+  enrolled: number;
+  status: "DRAFT" | "OPEN" | "FULL" | "COMPLETED" | "CANCELLED";
+}
+
 export interface ServiceRegisterIngestInput {
   sourceModule: string;
   sourceReferenceId: string;
@@ -931,6 +1313,16 @@ export interface HrmsClient {
   addEmployeeContact(employeeId: string, input: EmployeeContactAddInput, idempotencyKey: string): Promise<EmployeeContactAddResult>;
   listEmployeeDependents(employeeId: string): Promise<PageResult<EmployeeDependentRecord>>;
   addEmployeeDependent(employeeId: string, input: EmployeeDependentAddInput, idempotencyKey: string): Promise<EmployeeDependentAddResult>;
+  listEmployeeAddresses(employeeId: string): Promise<PageResult<EmployeeAddressRecord>>;
+  addEmployeeAddress(employeeId: string, input: EmployeeAddressAddInput, idempotencyKey: string): Promise<EmployeeAddressAddResult>;
+  listEmployeeNominees(employeeId: string): Promise<{ items: NomineeRecord[] }>;
+  addEmployeeNominee(employeeId: string, input: NomineeAddInput, idempotencyKey: string): Promise<NomineeAddResult>;
+  listEmployeeEmergencyContacts(employeeId: string): Promise<{ items: EmergencyContactRecord[] }>;
+  addEmergencyContact(employeeId: string, input: EmergencyContactAddInput, idempotencyKey: string): Promise<EmergencyContactAddResult>;
+  listEmployeeBankAccounts(employeeId: string): Promise<{ items: BankAccountRecord[] }>;
+  addBankAccount(employeeId: string, input: BankAccountAddInput, idempotencyKey: string): Promise<BankAccountAddResult>;
+  approveBankAccount(employeeId: string, accountId: string, idempotencyKey: string): Promise<BankAccountActionResult>;
+  recordBankPennyDrop(employeeId: string, accountId: string, result: "VERIFIED" | "FAILED", idempotencyKey: string): Promise<BankAccountActionResult>;
   listPersonalDetailChangeRequests(): Promise<PageResult<PersonalDetailChangeRecord>>;
   createPersonalDetailChangeRequest(input: PersonalDetailChangeCreateInput, idempotencyKey: string): Promise<PersonalDetailChangeCreateResult>;
   decidePersonalDetailChangeRequest(
@@ -943,6 +1335,8 @@ export interface HrmsClient {
   getLeaveBalance(employeeId?: string, leaveTypeId?: string): Promise<LeaveBalanceView>;
   getServiceRegisterTimeline(employeeId: string, page?: PageQuery): Promise<PageResult<SrTimelineEntry>>;
   listDocuments(): Promise<PageResult<DocumentSummary>>;
+  listMyDocuments(employeeId: string): Promise<{ items: DocumentSummary[] }>;
+  fetchDocument(documentId: string, intent: "VIEW" | "DOWNLOAD"): Promise<{ fetch: DocumentViewGrant | DocumentDownloadGrant }>;
   listMyRightsRequests(): Promise<PageResult<MyRightsRequest>>;
   raiseRightsRequest(input: RaiseRightsRequestInput, idempotencyKey: string): Promise<MyRightsRequest>;
   listSealedCovers(): Promise<PageResult<SealedCoverCase>>;
@@ -953,28 +1347,46 @@ export interface HrmsClient {
   submitCounsellingChoice(input: CounsellingChoiceInput, idempotencyKey: string): Promise<CounsellingChoiceResult>;
   listDataSubjectRequests(): Promise<PageResult<DsrRecord>>;
   adjudicateDsr(id: string, input: DsrAdjudicateInput, idempotencyKey: string): Promise<DsrRecord>;
+  listAttendance(): Promise<PageResult<AttendanceRecordView>>;
+  captureAttendance(input: AttendanceCaptureInput, idempotencyKey: string): Promise<AttendanceCaptureResult>;
+  regulariseAttendance(attendanceId: string, reason: string, idempotencyKey: string): Promise<AttendanceRegulariseResult>;
   listLeaveApplications(): Promise<PageResult<LeaveApplicationRecord>>;
   submitLeaveApplication(input: LeaveApplicationSubmitInput, idempotencyKey: string): Promise<LeaveApplicationSubmitResult>;
   decideLeaveApplication(applicationId: string, decision: LeaveDecisionVerb, idempotencyKey: string): Promise<LeaveDecisionResult>;
   listLeaveTypes(): Promise<PageResult<LeaveTypeOption>>;
   listTransferOrders(): Promise<PageResult<TransferOrderRecord>>;
+  listMyTransferOrders(employeeId: string): Promise<{ items: TransferOrderRecord[] }>;
   initiateTransferOrder(input: TransferInitiateInput, idempotencyKey: string): Promise<TransferInitiateResult>;
+  acknowledgeTransferOrder(transferOrderId: string, input: TransferAcknowledgeInput, idempotencyKey: string): Promise<TransferAcknowledgeResult>;
   getLeaveSlice(): Promise<LeaveSliceSummary>;
   getPersonalDetailsSlice(): Promise<PersonalDetailsSliceSummary>;
   getLeaveSrRelaySlice(): Promise<LeaveSrRelaySliceSummary>;
   getTransferSlice(): Promise<TransferSliceSummary>;
   getPromotionSlice(): Promise<PromotionSliceSummary>;
+  listMyPromotionOrders(): Promise<PageResult<PromotionOrderView>>;
+  listMyProbationRecords(employeeId: string): Promise<{ probationRecords: ProbationRecordView[] }>;
+  listMyPromotionRefusals(employeeId: string): Promise<{ refusals: PromotionRefusalView[] }>;
   getTrainingSlice(): Promise<TrainingSliceSummary>;
   getAparSlice(): Promise<AparSliceSummary>;
+  listMyAparForms(employeeId: string): Promise<{ items: AparFormView[] }>;
   getDisciplinarySlice(): Promise<DisciplinarySliceSummary>;
   openDisciplinaryCase(input: DisciplinaryCaseOpenInput, idempotencyKey: string): Promise<DisciplinaryCaseResult>;
   serveDisciplinaryCharge(caseId: string, input: ChargeMemoInput, idempotencyKey: string): Promise<DisciplinaryCaseResult>;
+  listMyDisciplinaryCases(employeeId: string): Promise<{ items: MyDisciplinaryCaseView[] }>;
+  listMyShowCauseNotices(caseId: string): Promise<{ items: ShowCauseNoticeView[] }>;
+  respondToShowCause(noticeId: string, input: RespondToShowCauseInput, idempotencyKey: string): Promise<{ notice: ShowCauseNoticeView }>;
+  listMyPersonalHearings(caseId: string): Promise<{ items: PersonalHearingView[] }>;
+  requestPersonalHearing(caseId: string, input: RequestPersonalHearingInput, idempotencyKey: string): Promise<{ personalHearing: PersonalHearingView }>;
   holdDpc(promotionCaseId: string, input: DpcHoldInput, idempotencyKey: string): Promise<DpcHoldResult>;
-  submitAparSelf(formId: string, idempotencyKey: string): Promise<AparFormActionResult>;
+  submitAparSelf(formId: string, input: AparSelfAppraisalInput, idempotencyKey: string): Promise<AparFormActionResult>;
   recordAparReporting(formId: string, input: AparReportingInput, idempotencyKey: string): Promise<AparFormActionResult>;
   recordAparReview(formId: string, input: AparReviewInput, idempotencyKey: string): Promise<AparFormActionResult>;
   nominateForTraining(input: TrainingNominationInput, idempotencyKey: string): Promise<TrainingNominationResult>;
+  listTrainingSessions(): Promise<{ items: TrainingSessionView[] }>;
+  listMyTrainingNominations(employeeId: string): Promise<{ items: TrainingNominationView[] }>;
   getPayrollSlice(): Promise<PayrollSliceSummary>;
+  listMyPayslips(employeeId: string): Promise<{ items: PayslipRecordView[] }>;
+  getMyYtdStatement(employeeId: string): Promise<{ ytd: YtdStatementView }>;
   // PH-09E G10: salary structure + run lifecycle (create -> lock-inputs -> compute -> reconcile
   // -> approve -> lock -> disburse); the compute response carries the payslip lines.
   createSalaryStructure(input: SalaryStructureCreateInput, idempotencyKey: string): Promise<SalaryStructureCreateResult>;
@@ -985,7 +1397,10 @@ export interface HrmsClient {
   createPensionCase(input: PensionCaseCreateInput, idempotencyKey: string): Promise<PensionCaseActionResult>;
   verifyPensionService(caseId: string, input: PensionServiceVerifyInput, idempotencyKey: string): Promise<PensionCaseActionResult>;
   estimatePensionBenefits(caseId: string, input: PensionEstimateInput, idempotencyKey: string): Promise<PensionCaseActionResult>;
+  runMyPensionEstimate(input: PensionSelfEstimateInput, idempotencyKey: string): Promise<PensionSelfEstimateResult>;
+  listMyPensionCases(employeeId: string): Promise<{ items: PensionCaseView[] }>;
   getAnalyticsSlice(): Promise<AnalyticsSliceSummary>;
+  getMyDashboard(employeeId: string): Promise<{ dashboard: PersonalDashboardView }>;
   // PH-10E G14: live dashboard reads against the PH-10D analytics engine.
   listAnalyticsKpis(kpiCode?: string): Promise<PageResult<AnalyticsKpiDefinitionView>>;
   queryKpiAggregate(martCode: string, dimension: string): Promise<AnalyticsAggregateResult>;
@@ -1098,6 +1513,68 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
         },
         body: JSON.stringify(input),
       }),
+    listEmployeeAddresses: (employeeId) =>
+      request<PageResult<EmployeeAddressRecord>>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/addresses`),
+    addEmployeeAddress: (employeeId, input, idempotencyKey) =>
+      request<EmployeeAddressAddResult>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/addresses`, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
+    listEmployeeNominees: (employeeId) =>
+      request<{ items: NomineeRecord[] }>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/nominees`),
+    addEmployeeNominee: (employeeId, input, idempotencyKey) =>
+      request<NomineeAddResult>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/nominees`, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
+    listEmployeeEmergencyContacts: (employeeId) =>
+      request<{ items: EmergencyContactRecord[] }>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/emergency-contacts`),
+    addEmergencyContact: (employeeId, input, idempotencyKey) =>
+      request<EmergencyContactAddResult>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/emergency-contacts`, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
+    listEmployeeBankAccounts: (employeeId) =>
+      request<{ items: BankAccountRecord[] }>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/bank-accounts`),
+    addBankAccount: (employeeId, input, idempotencyKey) =>
+      request<BankAccountAddResult>(`${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/bank-accounts`, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
+    approveBankAccount: (employeeId, accountId, idempotencyKey) =>
+      request<BankAccountActionResult>(
+        `${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/bank-accounts/${encodeURIComponent(accountId)}:approve`,
+        {
+          method: "POST",
+          headers: {
+            [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+          },
+          body: JSON.stringify({}),
+        }
+      ),
+    recordBankPennyDrop: (employeeId, accountId, result, idempotencyKey) =>
+      request<BankAccountActionResult>(
+        `${HRMS_API_ROUTES.employees}/${encodeURIComponent(employeeId)}/bank-accounts/${encodeURIComponent(accountId)}:penny-drop`,
+        {
+          method: "POST",
+          headers: {
+            [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+          },
+          body: JSON.stringify({ result }),
+        }
+      ),
     listPersonalDetailChangeRequests: () => request<PageResult<PersonalDetailChangeRecord>>(HRMS_API_ROUTES.personalDetailChanges),
     createPersonalDetailChangeRequest: (input, idempotencyKey) =>
       request<PersonalDetailChangeCreateResult>(HRMS_API_ROUTES.personalDetailChanges, {
@@ -1134,6 +1611,11 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
         `${HRMS_API_ROUTES.srEmployees}/${encodeURIComponent(employeeId)}/timeline${toPageQueryString(page)}`
       ),
     listDocuments: () => request<PageResult<DocumentSummary>>(HRMS_API_ROUTES.documents),
+    listMyDocuments: (employeeId) => request<{ items: DocumentSummary[] }>(`${HRMS_API_ROUTES.documentsByEmployee}/${encodeURIComponent(employeeId)}`),
+    fetchDocument: (documentId, intent) =>
+      request<{ fetch: DocumentViewGrant | DocumentDownloadGrant }>(
+        `${HRMS_API_ROUTES.documents}/${encodeURIComponent(documentId)}:fetch?intent=${encodeURIComponent(intent)}`
+      ),
     listMyRightsRequests: () => request<PageResult<MyRightsRequest>>(HRMS_API_ROUTES.myRightsRequests),
     raiseRightsRequest: (input, idempotencyKey) =>
       postWithIdempotency<MyRightsRequest>(HRMS_API_ROUTES.myRightsRequests, input, idempotencyKey),
@@ -1149,6 +1631,23 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
     listDataSubjectRequests: () => request<PageResult<DsrRecord>>(HRMS_API_ROUTES.dataSubjectRequests),
     adjudicateDsr: (id, input, idempotencyKey) =>
       postWithIdempotency<DsrRecord>(`${HRMS_API_ROUTES.dataSubjectRequests}/${encodeURIComponent(id)}:adjudicate`, input, idempotencyKey),
+    listAttendance: () => request<PageResult<AttendanceRecordView>>(HRMS_API_ROUTES.attendanceRecords),
+    captureAttendance: (input, idempotencyKey) =>
+      request<AttendanceCaptureResult>(HRMS_API_ROUTES.attendanceCaptures, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
+    regulariseAttendance: (attendanceId, reason, idempotencyKey) =>
+      request<AttendanceRegulariseResult>(`${HRMS_API_ROUTES.attendanceCaptures}/${encodeURIComponent(attendanceId)}:regularise`, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify({ reason }),
+      }),
     listLeaveApplications: () => request<PageResult<LeaveApplicationRecord>>(HRMS_API_ROUTES.leaveApplications),
     submitLeaveApplication: (input, idempotencyKey) =>
       request<LeaveApplicationSubmitResult>(HRMS_API_ROUTES.leaveApplications, {
@@ -1168,8 +1667,17 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
       }),
     listLeaveTypes: () => request<PageResult<LeaveTypeOption>>(HRMS_API_ROUTES.leaveTypes),
     listTransferOrders: () => request<PageResult<TransferOrderRecord>>(HRMS_API_ROUTES.transferOrders),
+    listMyTransferOrders: (employeeId) => request<{ items: TransferOrderRecord[] }>(`${HRMS_API_ROUTES.transferEmployees}/${encodeURIComponent(employeeId)}`),
     initiateTransferOrder: (input, idempotencyKey) =>
       request<TransferInitiateResult>(HRMS_API_ROUTES.transferOrders, {
+        method: "POST",
+        headers: {
+          [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
+        },
+        body: JSON.stringify(input),
+      }),
+    acknowledgeTransferOrder: (transferOrderId, input, idempotencyKey) =>
+      request<TransferAcknowledgeResult>(`${HRMS_API_ROUTES.transferOrders}/${encodeURIComponent(transferOrderId)}/acknowledge`, {
         method: "POST",
         headers: {
           [HRMS_API_HEADERS.idempotencyKey]: idempotencyKey,
@@ -1227,6 +1735,11 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
       const summary = await request<Omit<PromotionSliceSummary, "dpcMarker" | "recusalMarker" | "srEventType">>(HRMS_API_ROUTES.promotionSummary);
       return { ...summary, dpcMarker: "DPC_QUORUM", recusalMarker: "DPC_RECUSAL", srEventType: summary.macpEffected > 0 ? "MACP_EFFECTED" : "PROMOTION_EFFECTED" };
     },
+    listMyPromotionOrders: () => request<PageResult<PromotionOrderView>>(HRMS_API_ROUTES.promotionOrders),
+    listMyProbationRecords: (employeeId) =>
+      request<{ probationRecords: ProbationRecordView[] }>(`${HRMS_API_ROUTES.promotionProbationRecords}?employeeId=${encodeURIComponent(employeeId)}`),
+    listMyPromotionRefusals: (employeeId) =>
+      request<{ refusals: PromotionRefusalView[] }>(`${HRMS_API_ROUTES.promotionRefusals}?employeeId=${encodeURIComponent(employeeId)}`),
     getTrainingSlice: async () => {
       const summary = await request<Omit<TrainingSliceSummary, "workflowCode" | "srEventType">>(HRMS_API_ROUTES.trainingSummary);
       return { ...summary, workflowCode: "WF-G07-NOMINATION", srEventType: "TRAINING_CERTIFICATION_POSTED" };
@@ -1235,6 +1748,7 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
       const summary = await request<Omit<AparSliceSummary, "srEventType" | "sealedMarker" | "feedMarker">>(HRMS_API_ROUTES.aparSummary);
       return { ...summary, srEventType: "APAR_FINAL_GRADE", sealedMarker: "SEALED_COVER", feedMarker: "G08_G06_FEED_SUPPRESSED" };
     },
+    listMyAparForms: (employeeId) => request<{ items: AparFormView[] }>(`${HRMS_API_ROUTES.aparEmployees}/${encodeURIComponent(employeeId)}/forms`),
     getDisciplinarySlice: async () => {
       const summary = await request<Omit<DisciplinarySliceSummary, "competenceMarker" | "penaltyEventType" | "appealMarker">>(HRMS_API_ROUTES.disciplinarySummary);
       return { ...summary, competenceMarker: "G09_AUTHORITY_COMPETENCE", penaltyEventType: "MAJOR_PENALTY", appealMarker: "APPEAL_DECIDED" };
@@ -1243,6 +1757,10 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
       const summary = await request<Omit<PayrollSliceSummary, "inputLockMarker" | "lastPayMarker">>(HRMS_API_ROUTES.payrollSummary);
       return { ...summary, inputLockMarker: "INPUT_LOCKED", lastPayMarker: "LAST_PAY_DRAWN" };
     },
+    listMyPayslips: (employeeId) =>
+      request<{ items: PayslipRecordView[] }>(`${HRMS_API_ROUTES.payrollEmployees}/${encodeURIComponent(employeeId)}/payslips`),
+    getMyYtdStatement: (employeeId) =>
+      request<{ ytd: YtdStatementView }>(`${HRMS_API_ROUTES.payrollEmployees}/${encodeURIComponent(employeeId)}/ytd`),
     createSalaryStructure: (input, idempotencyKey) =>
       postWithIdempotency<SalaryStructureCreateResult>(HRMS_API_ROUTES.payrollSalaryStructures, input, idempotencyKey),
     createPayrollRun: (period, idempotencyKey) =>
@@ -1265,6 +1783,10 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
         { ruleVersion: input.ruleVersion ?? "PENSION-RULE-2026-01", asOf: input.asOf, upsOptedIn: input.upsOptedIn, npsEvent: input.npsEvent },
         idempotencyKey
       ),
+    runMyPensionEstimate: (input, idempotencyKey) =>
+      postWithIdempotency<PensionSelfEstimateResult>(HRMS_API_ROUTES.pensionEstimates, input, idempotencyKey),
+    listMyPensionCases: (employeeId) =>
+      request<{ items: PensionCaseView[] }>(`${HRMS_API_ROUTES.pensionEmployees}/${encodeURIComponent(employeeId)}/cases`),
     getPensionSlice: async () => {
       const summary = await request<Omit<PensionSliceSummary, "qualifyingServiceMarker" | "srMarker">>(HRMS_API_ROUTES.pensionSummary);
       return { ...summary, qualifyingServiceMarker: "QUALIFYING_SERVICE_LOCKED", srMarker: "G11_SR_POSTED" };
@@ -1273,6 +1795,8 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
       const summary = await request<Omit<AnalyticsSliceSummary, "migrationMarker" | "uatMarker">>(HRMS_API_ROUTES.analyticsSummary);
       return { ...summary, migrationMarker: "MIGRATION_DRY_RUN", uatMarker: "UAT_ACCEPTANCE_PACK" };
     },
+    getMyDashboard: (employeeId) =>
+      request<{ dashboard: PersonalDashboardView }>(`${HRMS_API_ROUTES.analyticsEmployees}/${encodeURIComponent(employeeId)}/dashboard`),
     listAnalyticsKpis: (kpiCode) =>
       request<PageResult<AnalyticsKpiDefinitionView>>(
         `${HRMS_API_ROUTES.analyticsKpis}${kpiCode ? `?kpiCode=${encodeURIComponent(kpiCode)}` : ""}`
@@ -1296,20 +1820,41 @@ export function createHrmsClient(options: HrmsClientOptions = {}): HrmsClient {
         input,
         idempotencyKey
       ),
+    listMyDisciplinaryCases: (employeeId) =>
+      request<{ items: MyDisciplinaryCaseView[] }>(`${HRMS_API_ROUTES.disciplinaryEmployees}/${encodeURIComponent(employeeId)}/cases`),
+    listMyShowCauseNotices: (caseId) =>
+      request<{ items: ShowCauseNoticeView[] }>(`${HRMS_API_ROUTES.disciplinaryCases}/${encodeURIComponent(caseId)}/show-cause-notices`),
+    respondToShowCause: (noticeId, input, idempotencyKey) =>
+      postWithIdempotency<{ notice: ShowCauseNoticeView }>(
+        `${HRMS_API_ROUTES.disciplinaryShowCauseNotices}/${encodeURIComponent(noticeId)}:respond`,
+        input,
+        idempotencyKey
+      ),
+    listMyPersonalHearings: (caseId) =>
+      request<{ items: PersonalHearingView[] }>(`${HRMS_API_ROUTES.disciplinaryCases}/${encodeURIComponent(caseId)}/personal-hearings`),
+    requestPersonalHearing: (caseId, input, idempotencyKey) =>
+      postWithIdempotency<{ personalHearing: PersonalHearingView }>(
+        `${HRMS_API_ROUTES.disciplinaryCases}/${encodeURIComponent(caseId)}:personal-hearing`,
+        input,
+        idempotencyKey
+      ),
     holdDpc: (promotionCaseId, input, idempotencyKey) =>
       postWithIdempotency<DpcHoldResult>(
         `${HRMS_API_ROUTES.promotionCases}/${encodeURIComponent(promotionCaseId)}:hold-dpc`,
         input,
         idempotencyKey
       ),
-    submitAparSelf: (formId, idempotencyKey) =>
-      postWithIdempotency<AparFormActionResult>(`${HRMS_API_ROUTES.aparForms}/${encodeURIComponent(formId)}:submit-self`, {}, idempotencyKey),
+    submitAparSelf: (formId, input, idempotencyKey) =>
+      postWithIdempotency<AparFormActionResult>(`${HRMS_API_ROUTES.aparForms}/${encodeURIComponent(formId)}:submit-self`, input, idempotencyKey),
     recordAparReporting: (formId, input, idempotencyKey) =>
       postWithIdempotency<AparFormActionResult>(`${HRMS_API_ROUTES.aparForms}/${encodeURIComponent(formId)}:report`, input, idempotencyKey),
     recordAparReview: (formId, input, idempotencyKey) =>
       postWithIdempotency<AparFormActionResult>(`${HRMS_API_ROUTES.aparForms}/${encodeURIComponent(formId)}:review`, input, idempotencyKey),
     nominateForTraining: (input, idempotencyKey) =>
       postWithIdempotency<TrainingNominationResult>(HRMS_API_ROUTES.trainingNominations, input, idempotencyKey),
+    listTrainingSessions: () => request<{ items: TrainingSessionView[] }>(HRMS_API_ROUTES.trainingSessions),
+    listMyTrainingNominations: (employeeId) =>
+      request<{ items: TrainingNominationView[] }>(`${HRMS_API_ROUTES.trainingEmployees}/${encodeURIComponent(employeeId)}/nominations`),
     ingestServiceRegister: (input, idempotencyKey) =>
       request<unknown>(HRMS_API_ROUTES.srIngest, {
         method: "POST",

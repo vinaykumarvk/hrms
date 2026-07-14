@@ -1,5 +1,10 @@
 import { AuditService } from "../../platform/audit/auditService";
-import { FoundationError, TenantScope, nextId, requireTenantScope, sha256Hex, stableStringify } from "../../platform/types";
+import { ActorContext, FoundationError, TenantScope, nextId, requireTenantScope, sha256Hex, stableStringify } from "../../platform/types";
+
+/** Org-wide/scoped override roles for FR-09 self-service SR timeline viewing (BR-09.1
+ *  "self/scoped/auditor visibility") — an HR admin, reporting manager, or auditor may view an
+ *  employee's timeline; an employee may otherwise view only their own. */
+const SR_TIMELINE_OVERRIDE_ROLES = new Set(["hr_admin", "manager", "auditor", "sr_custodian", "system"]);
 
 /** Explicit genesis previous-hash convention for both the content chain and the status sub-ledger chain. */
 const GENESIS_HASH = "0".repeat(64);
@@ -232,18 +237,32 @@ export class ServiceRegisterService {
     });
   }
 
-  getTimeline(scope: TenantScope, employeeId: string): SrEvent[] {
-    requireTenantScope(scope);
+  /** FR-09 self-service scope: an employee may view only their own SR timeline; hr_admin/manager/
+   *  auditor/sr_custodian/system (or wildcard `*` permission) may view any employee's. */
+  getTimeline(actor: ActorContext, employeeId: string): SrEvent[] {
+    requireTenantScope(actor);
+    const isOverride = actor.permissions?.includes("*") || actor.roles?.some((role) => SR_TIMELINE_OVERRIDE_ROLES.has(role));
+    if (!isOverride && actor.userId !== employeeId) {
+      throw new FoundationError("FORBIDDEN", "You may only view your own service register timeline", { field: "employeeId" });
+    }
     return this.events
-      .filter((event) => event.tenantId === scope.tenantId && (!scope.entityId || event.entityId === scope.entityId) && event.employeeId === employeeId)
+      .filter((event) => event.tenantId === actor.tenantId && (!actor.entityId || event.entityId === actor.entityId) && event.employeeId === employeeId)
       .sort((left, right) => left.sequenceNo - right.sequenceNo)
       .map((event) => this.toView(event));
   }
 
-  getEvent(scope: TenantScope, eventId: string): SrEvent | null {
-    requireTenantScope(scope);
-    const event = this.events.find((item) => item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId) && item.id === eventId);
-    return event ? this.toView(event) : null;
+  /** Same FR-09 self-scope guard as getTimeline(): an employee may only fetch their own event. */
+  getEvent(actor: ActorContext, eventId: string): SrEvent | null {
+    requireTenantScope(actor);
+    const event = this.events.find((item) => item.tenantId === actor.tenantId && (!actor.entityId || item.entityId === actor.entityId) && item.id === eventId);
+    if (!event) {
+      return null;
+    }
+    const isOverride = actor.permissions?.includes("*") || actor.roles?.some((role) => SR_TIMELINE_OVERRIDE_ROLES.has(role));
+    if (!isOverride && actor.userId !== event.employeeId) {
+      throw new FoundationError("FORBIDDEN", "You may only view your own service register events", { field: "eventId" });
+    }
+    return this.toView(event);
   }
 
   /** Append-only, hash-chained E19 sub-ledger rows for one employee, in chain order. */

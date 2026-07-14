@@ -360,7 +360,7 @@ function openCycleForm(services, cycle) {
 
 function finalisedForm(services, cycle) {
   const form = openCycleForm(services, cycle);
-  services.apar.submitSelf(actor(), form.id);
+  services.apar.submitSelf(actor(), form.id, { narrative: "Achievements recorded for this cycle" });
   services.apar.recordReporting(actor(), form.id, { grade: "8", narrative: "Consistently exceeds targets" });
   services.apar.recordReview(actor(), form.id, { concur: true, remarks: "Concur" });
   return services.apar.accept(actor(), form.id, { finalGrade: "8" });

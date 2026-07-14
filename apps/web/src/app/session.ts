@@ -15,9 +15,16 @@ export const SESSION_MESSAGE_STORAGE_KEY = "hrms.session.message";
 const DEMO_EMPLOYEE_USER_ID = "99999999-9999-9999-9999-999999999902";
 const DEMO_EMPLOYEE_PERMISSIONS = [
   "workspace.me", "p01.workflow.read",
-  "g01.employee.read", "g02.change.read", "g03.leave.read", "g03.leave.apply",
-  "g07.training.read", "g07.training.nominate", "g08.apar.read", "g08.apar.self.submit",
-  "g10.payroll.read", "g12.sr.read", "g13.document.read",
+  "g01.employee.read", "g01.employee.contact.write", "g01.employee.address.write", "g01.employee.dependent.write",
+  "g01.nominee.write", "g01.emergency_contact.write", "g01.bank.write",
+  "g02.change.read", "g03.leave.read", "g03.leave.submit", "g03.attendance.capture",
+  "g07.training.read", "g07.nomination.submit", "g08.apar.read", "g08.apar.self.submit",
+  "g10.payroll.read", "g12.sr.read", "g13.document.read", "g13.document.download",
+  "g05.transfer.read", "g05.transfer.initiate", "g05.transfer.acknowledge", "g05.preference.submit", "g05.counselling.read",
+  "g06.promotion.read", "g06.sealedcover.read",
+  "g09.case.read", "g09.show-cause.respond", "g09.personal-hearing.request",
+  "g14.analytics.read.self",
+  "g11.pension.self.read",
 ] as const;
 
 export interface HrmsSession {
