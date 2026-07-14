@@ -5,7 +5,7 @@ const test = require("node:test");
 const { srSemanticDedupCases } = require("../../../dist/apps/api/src/modules/g12/srSemanticDedup.test");
 
 for (const testCase of srSemanticDedupCases) {
-  test(`G12 SR semantic-dedup: ${testCase.name}`, () => {
+  test(`G12 SR semantic-dedup: ${testCase.name}`, async () => {
     testCase.run();
   });
 }

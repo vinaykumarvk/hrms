@@ -17,13 +17,13 @@ function actor(extra = {}) {
     ...extra,
   };
 }
-function call(api, request) {
-  return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph29b", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
+async function call(api, request) {
+  return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph29b", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
 }
 
-test("PH-29B POST /api/v1/pension/pdas registers a disbursing authority", () => {
+test("PH-29B POST /api/v1/pension/pdas registers a disbursing authority", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/pension/pdas",
     headers: { "Idempotency-Key": "idem-ph29b-pda" },
@@ -34,9 +34,9 @@ test("PH-29B POST /api/v1/pension/pdas registers a disbursing authority", () => 
   assert.equal(res.body.pda.sandboxCertified, false);
 });
 
-test("PH-29B POST /api/v1/pension/death-reconcile marks DECEASED and suspends", () => {
+test("PH-29B POST /api/v1/pension/death-reconcile marks DECEASED and suspends", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/pension/death-reconcile",
     headers: { "Idempotency-Key": "idem-ph29b-death" },

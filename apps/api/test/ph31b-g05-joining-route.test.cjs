@@ -5,10 +5,10 @@ const { createFoundationApi, createFoundationServices, ph03Ids } = require("../.
 function actor(extra = {}) {
   return { tenantId: ph03Ids.tenant, entityId: ph03Ids.entity, userId: "user-ph31b", actorUserId: "user-ph31b", permissions: ["*"], roles: ["establishment_officer"], fieldGrants: [], correlationId: "corr-ph31b", ...extra };
 }
-function call(api, request) { return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph31b", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request }); }
-test("PH-31B POST /api/v1/transfers/joining-sequence assigns deterministic inter-se seniority", () => {
+async function call(api, request) { return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph31b", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request }); }
+test("PH-31B POST /api/v1/transfers/joining-sequence assigns deterministic inter-se seniority", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/transfers/joining-sequence",
     headers: { "Idempotency-Key": "idem-ph31b" },

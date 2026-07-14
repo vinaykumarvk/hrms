@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G06 career_paths: an ordered path is defined; non-contiguous stages are rejected", () => {
+test("G06 career_paths: an ordered path is defined; non-contiguous stages are rejected", async () => {
   const s = createFoundationServices();
   const path = s.careerSuccession.defineCareerPath(actor(), {
     pathCode: "REV-LADDER",
@@ -42,7 +42,7 @@ test("G06 career_paths: an ordered path is defined; non-contiguous stages are re
   );
 });
 
-test("G06 succession_plans: ranked candidates; a duplicate candidate is rejected", () => {
+test("G06 succession_plans: ranked candidates; a duplicate candidate is rejected", async () => {
   const s = createFoundationServices();
   const plan = s.careerSuccession.createSuccessionPlan(actor(), { positionId: "pos-cto", incumbentEmployeeId: ph03Ids.manager });
   s.careerSuccession.addSuccessionCandidate(actor(), plan.id, { employeeId: "emp-1", rank: 2, readiness: "READY_1_2Y" });

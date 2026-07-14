@@ -17,18 +17,18 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph38a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-38A G08 calibration lifecycle: convene -> recommend -> ratify -> apply -> distribution", () => {
+test("PH-38A G08 calibration lifecycle: convene -> recommend -> ratify -> apply -> distribution", async () => {
   const api = createFoundationApi(createFoundationServices());
 
-  const session = call(api, {
+  const session = await call(api, {
     method: "POST",
     path: "/api/v1/appraisals/calibration-sessions",
     headers: { "Idempotency-Key": "cal-1" },
@@ -38,7 +38,7 @@ test("PH-38A G08 calibration lifecycle: convene -> recommend -> ratify -> apply 
   const sessionId = session.body.calibrationSession.id;
   assert.equal(session.body.calibrationSession.status, "IN_SESSION");
 
-  const rec = call(api, {
+  const rec = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/calibration-sessions/${sessionId}:recommend`,
     headers: { "Idempotency-Key": "cal-rec-1" },
@@ -49,7 +49,7 @@ test("PH-38A G08 calibration lifecycle: convene -> recommend -> ratify -> apply 
   assert.equal(rec.body.calibrationRecommendation.recommendationStatus, "PROPOSED");
 
   // Ratifier is not a committee member (SoD) -> RATIFIED.
-  const ratified = call(api, {
+  const ratified = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/calibration-sessions/${sessionId}/recommendations/${recommendationId}:ratify`,
     headers: { "Idempotency-Key": "cal-ratify-1" },
@@ -58,7 +58,7 @@ test("PH-38A G08 calibration lifecycle: convene -> recommend -> ratify -> apply 
   assert.equal(ratified.status, 202);
   assert.equal(ratified.body.calibrationRecommendation.recommendationStatus, "RATIFIED");
 
-  const applied = call(api, {
+  const applied = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/calibration-sessions/${sessionId}/recommendations/${recommendationId}:apply`,
     headers: { "Idempotency-Key": "cal-apply-1" },
@@ -68,28 +68,28 @@ test("PH-38A G08 calibration lifecycle: convene -> recommend -> ratify -> apply 
   assert.equal(applied.body.calibrationAdjustment.status, "APPLIED");
   assert.equal(applied.body.calibrationAdjustment.appliedGrade, 7);
 
-  const dist = call(api, { method: "GET", path: `/api/v1/appraisals/calibration-sessions/${sessionId}/distribution` });
+  const dist = await call(api, { method: "GET", path: `/api/v1/appraisals/calibration-sessions/${sessionId}/distribution` });
   assert.equal(dist.status, 200);
   assert.ok(dist.body.actual !== undefined);
 });
 
-test("PH-38A G08 calibration: applying a non-ratified recommendation fails closed (ERR-G08-RATIFY)", () => {
+test("PH-38A G08 calibration: applying a non-ratified recommendation fails closed (ERR-G08-RATIFY)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const session = call(api, {
+  const session = await call(api, {
     method: "POST",
     path: "/api/v1/appraisals/calibration-sessions",
     headers: { "Idempotency-Key": "cal-2" },
     body: { cycleId: "cycle-2026", orgUnitScope: "DIV-B", method: "NORMALISATION", committeeMemberIds: ["committee-member-9"] },
   });
   const sessionId = session.body.calibrationSession.id;
-  const rec = call(api, {
+  const rec = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/calibration-sessions/${sessionId}:recommend`,
     headers: { "Idempotency-Key": "cal-rec-2" },
     body: { formId: "form-2", currentGrade: "5", recommendedGrade: "8", rationale: "Proposed only." },
   });
   const recommendationId = rec.body.calibrationRecommendation.id;
-  const applied = call(api, {
+  const applied = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/calibration-sessions/${sessionId}/recommendations/${recommendationId}:apply`,
     headers: { "Idempotency-Key": "cal-apply-2" },

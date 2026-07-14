@@ -36,7 +36,7 @@ function requireMarkers(text, markers) {
   }
 }
 
-test("PH-14 drift-watch files record green seal verification and pending approvals", () => {
+test("PH-14 drift-watch files record green seal verification and pending approvals", async () => {
   const text = combined(driftFiles);
   requireMarkers(text, [
     "POST_SEAL_DRIFT_WATCH",
@@ -48,7 +48,7 @@ test("PH-14 drift-watch files record green seal verification and pending approva
   ]);
 });
 
-test("PH-14 sealed artifact hashes still match the PH-13 checksum manifest", () => {
+test("PH-14 sealed artifact hashes still match the PH-13 checksum manifest", async () => {
   const manifest = JSON.parse(read(checksumManifestPath));
   assert.equal(manifest.marker, "EVIDENCE_CHECKSUM_MANIFEST");
   assert.equal(manifest.seal, "SHA256_EVIDENCE_SEAL");
@@ -59,7 +59,7 @@ test("PH-14 sealed artifact hashes still match the PH-13 checksum manifest", () 
   }
 });
 
-test("PH-14 board-day and quarantine artifacts keep execution human-controlled", () => {
+test("PH-14 board-day and quarantine artifacts keep execution human-controlled", async () => {
   const text = combined([...driftFiles, ...boardFiles]);
   const prohibitedClaims = [
     "GO_LIVE_APPROVED",
@@ -75,7 +75,7 @@ test("PH-14 board-day and quarantine artifacts keep execution human-controlled",
   assert.equal(text.includes("GO_LIVE_HUMAN_APPROVAL_PENDING"), true);
 });
 
-test("PH-14 approval-evidence handling rejects secrets and PII in repository artifacts", () => {
+test("PH-14 approval-evidence handling rejects secrets and PII in repository artifacts", async () => {
   const text = combined(boardFiles);
   if (text.length === 0) {
     assert.equal(text.length, 0);
@@ -95,7 +95,7 @@ test("PH-14 approval-evidence handling rejects secrets and PII in repository art
   }
 });
 
-test("PH-14 drift watch stays read-only and points drift to quarantine", () => {
+test("PH-14 drift watch stays read-only and points drift to quarantine", async () => {
   const text = combined([
     "docs/release/release-candidate-drift-watch.md",
     "docs/release/post-seal-drift-report.md",

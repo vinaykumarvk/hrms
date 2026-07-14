@@ -30,11 +30,11 @@ function boot() {
   return { services, api, admin, meera };
 }
 
-function call(api, actorCtx, request) {
-  return api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-hr-admin-g02", ...(request.headers ?? {}) }, actor: actorCtx });
+async function call(api, actorCtx, request) {
+  return await api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-hr-admin-g02", ...(request.headers ?? {}) }, actor: actorCtx });
 }
 
-test("g02.fraud.review (post-hr_admin-goal fix): reviewing the fraud queue requires the fraud_reviewer capability, not just g02.risk.review", () => {
+test("g02.fraud.review (post-hr_admin-goal fix): reviewing the fraud queue requires the fraud_reviewer capability, not just g02.risk.review", async () => {
   const { services } = boot();
   const withoutFlag = actor("g02-risk-reviewer-no-flag", ["g02.risk.review"], { roles: ["hr_admin"] });
   assert.throws(
@@ -52,9 +52,9 @@ test("g02.fraud.review (post-hr_admin-goal fix): reviewing the fraud queue requi
   );
 });
 
-test("g02.grievance.handle (post-hr_admin-goal fix): adjudicating a data-subject request requires the grievance_officer capability", () => {
+test("g02.grievance.handle (post-hr_admin-goal fix): adjudicating a data-subject request requires the grievance_officer capability", async () => {
   const { api, meera } = boot();
-  const registered = call(api, actor("dsr-registrar-probe", ["g13.dsr.register"], { roles: ["hr_admin"] }), {
+  const registered = await call(api, actor("dsr-registrar-probe", ["g13.dsr.register"], { roles: ["hr_admin"] }), {
     method: "POST",
     path: "/api/v1/dsr",
     headers: { "Idempotency-Key": "idem-hr-admin-g02-dsr-001" },
@@ -63,7 +63,7 @@ test("g02.grievance.handle (post-hr_admin-goal fix): adjudicating a data-subject
   assert.equal(registered.status, 201);
   const dsrId = registered.body.dataSubjectRequest.id;
 
-  const withoutFlag = call(api, actor("dsr-adjudicator-no-flag", ["g13.dsr.adjudicate"], { roles: ["hr_admin"] }), {
+  const withoutFlag = await call(api, actor("dsr-adjudicator-no-flag", ["g13.dsr.adjudicate"], { roles: ["hr_admin"] }), {
     method: "POST",
     path: `/api/v1/dsr/${dsrId}:adjudicate`,
     headers: { "Idempotency-Key": "idem-hr-admin-g02-dsr-002" },
@@ -71,7 +71,7 @@ test("g02.grievance.handle (post-hr_admin-goal fix): adjudicating a data-subject
   });
   assert.equal(withoutFlag.status, 403);
 
-  const withFlag = call(api, actor("dsr-adjudicator-with-flag", ["g13.dsr.adjudicate"], { roles: ["hr_admin", "grievance_officer"] }), {
+  const withFlag = await call(api, actor("dsr-adjudicator-with-flag", ["g13.dsr.adjudicate"], { roles: ["hr_admin", "grievance_officer"] }), {
     method: "POST",
     path: `/api/v1/dsr/${dsrId}:adjudicate`,
     headers: { "Idempotency-Key": "idem-hr-admin-g02-dsr-003" },
@@ -80,7 +80,7 @@ test("g02.grievance.handle (post-hr_admin-goal fix): adjudicating a data-subject
   assert.equal(withFlag.status, 202);
 });
 
-test("g02.change_request.review (runtime: g02.change.approve) and g02.sr.post (runtime: g02.change.commit): the runtime permission strings work end-to-end", () => {
+test("g02.change_request.review (runtime: g02.change.approve) and g02.sr.post (runtime: g02.change.commit): the runtime permission strings work end-to-end", async () => {
   const { services, meera } = boot();
   const maker = actor("g02-change-maker-probe", ["*"], { roles: ["hr_admin"], fieldGrants: ["*"] });
   const created = services.changeGovernance.submitChange(maker, {

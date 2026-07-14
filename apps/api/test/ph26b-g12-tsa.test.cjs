@@ -22,7 +22,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G12 RFC-3161 TSA: a genuine payload verifies against its timestamp token", () => {
+test("G12 RFC-3161 TSA: a genuine payload verifies against its timestamp token", async () => {
   const s = createFoundationServices();
   const payload = { merkleRoot: "abc123", anchorSeq: 7 };
   const issued = s.timestampAuthority.issueTimestamp(actor(), { payload });
@@ -32,7 +32,7 @@ test("G12 RFC-3161 TSA: a genuine payload verifies against its timestamp token",
   assert.equal(res.valid, true);
 });
 
-test("G12 RFC-3161 TSA: a tampered payload fails verification (imprint mismatch)", () => {
+test("G12 RFC-3161 TSA: a tampered payload fails verification (imprint mismatch)", async () => {
   const s = createFoundationServices();
   const payload = { merkleRoot: "def456", anchorSeq: 8 };
   const issued = s.timestampAuthority.issueTimestamp(actor(), { payload });

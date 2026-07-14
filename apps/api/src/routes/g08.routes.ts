@@ -60,10 +60,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.form.open",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          form: toWireAparForm(context.services.apar.openForm(context.actor, {
+          form: toWireAparForm(await context.services.apar.openForm(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             periodStart: requiredString(body, "periodStart"),
             periodEnd: requiredString(body, "periodEnd"),
@@ -84,11 +84,11 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.self.submit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           form: toWireAparForm(
-            context.services.apar.submitSelf(context.actor, requiredParam(context.params, "id"), {
+            await context.services.apar.submitSelf(context.actor, requiredParam(context.params, "id"), {
               narrative: requiredString(body, "narrative"),
               selfRatings: readSelfRatings(body),
             })
@@ -104,10 +104,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.report",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          form: toWireAparForm(context.services.apar.recordReporting(context.actor, requiredParam(context.params, "id"), {
+          form: toWireAparForm(await context.services.apar.recordReporting(context.actor, requiredParam(context.params, "id"), {
             grade: requiredString(body, "grade"),
             narrative: requiredString(body, "narrative"),
           })),
@@ -122,10 +122,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.review",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          form: toWireAparForm(context.services.apar.recordReview(context.actor, requiredParam(context.params, "id"), {
+          form: toWireAparForm(await context.services.apar.recordReview(context.actor, requiredParam(context.params, "id"), {
             concur: optionalBoolean(body, "concur") ?? true,
             remarks: optionalString(body, "remarks") ?? "Reviewed",
           })),
@@ -140,9 +140,9 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.accept",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted({ form: toWireAparForm(context.services.apar.accept(context.actor, requiredParam(context.params, "id"), { finalGrade: requiredString(body, "finalGrade") })) });
+        return accepted({ form: toWireAparForm(await context.services.apar.accept(context.actor, requiredParam(context.params, "id"), { finalGrade: requiredString(body, "finalGrade") })) });
       },
     },
     {
@@ -153,9 +153,9 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.post_sr",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        const result = context.services.apar.postFinalGrade(context.actor, requiredParam(context.params, "id"), {
+        const result = await context.services.apar.postFinalGrade(context.actor, requiredParam(context.params, "id"), {
           eventDate: requiredString(body, "eventDate"),
           idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
         });
@@ -170,9 +170,9 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.sealed.release",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted({ form: toWireAparForm(context.services.apar.releaseSealedCover(context.actor, requiredParam(context.params, "id"), { reason: requiredString(body, "reason") })) });
+        return accepted({ form: toWireAparForm(await context.services.apar.releaseSealedCover(context.actor, requiredParam(context.params, "id"), { reason: requiredString(body, "reason") })) });
       },
     },
     {
@@ -181,7 +181,7 @@ export function registerG08Routes(kernel: ApiKernel): void {
       operationId: "g08.summary",
       protected: true,
       permission: "g08.apar.read",
-      handler: (context) => ok(context.services.apar.summary(context.scope)),
+      handler: async (context) => ok(await context.services.apar.summary(context.scope)),
     },
     {
       method: "GET",
@@ -189,7 +189,7 @@ export function registerG08Routes(kernel: ApiKernel): void {
       operationId: "g08.listMyForms",
       protected: true,
       permission: "g08.apar.read",
-      handler: (context) => ok({ items: context.services.apar.listMyForms(context.actor, requiredParam(context.params, "id")).map(toWireAparForm) }),
+      handler: async (context) => ok({ items: await context.services.apar.listMyForms(context.actor, requiredParam(context.params, "id")).map(toWireAparForm) }),
     },
     // ---------------------------------------------------------------------------------
     // PH-08D: masters — appraisal_cycles (E1), appraisal_templates (E2), rating_scales (E3)
@@ -202,10 +202,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.masters.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          ratingScale: context.services.apar.defineRatingScale(context.actor, {
+          ratingScale: await context.services.apar.defineRatingScale(context.actor, {
             scaleCode: requiredString(body, "scaleCode"),
             name: requiredString(body, "name"),
             minValue: optionalNumber(body, "minValue") ?? 1,
@@ -224,10 +224,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.masters.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          template: context.services.apar.defineAppraisalTemplate(context.actor, {
+          template: await context.services.apar.defineAppraisalTemplate(context.actor, {
             templateCode: requiredString(body, "templateCode"),
             name: requiredString(body, "name"),
             goalSplitPct: optionalNumber(body, "goalSplitPct"),
@@ -244,10 +244,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.masters.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          cycle: context.services.apar.defineAppraisalCycle(context.actor, {
+          cycle: await context.services.apar.defineAppraisalCycle(context.actor, {
             cycleCode: requiredString(body, "cycleCode"),
             name: requiredString(body, "name"),
             fiscalYear: requiredString(body, "fiscalYear"),
@@ -272,10 +272,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.goal.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          goal: context.services.apar.addGoal(context.actor, requiredParam(context.params, "id"), {
+          goal: await context.services.apar.addGoal(context.actor, requiredParam(context.params, "id"), {
             title: requiredString(body, "title"),
             goalType: (optionalString(body, "goalType") ?? "PERFORMANCE") as "PERFORMANCE" | "DEVELOPMENT",
             weightage: optionalNumber(body, "weightage") ?? 0,
@@ -291,9 +291,9 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.goal.lock",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        const result = context.services.apar.lockGoals(context.actor, requiredParam(context.params, "id"), {
+        const result = await context.services.apar.lockGoals(context.actor, requiredParam(context.params, "id"), {
           lockedAt: requiredString(body, "lockedAt"),
         });
         return accepted({ form: toWireAparForm(result.form), snapshots: result.snapshots.map(toWireGoalSnapshot) });
@@ -310,9 +310,9 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.disclose",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        const result = context.services.apar.discloseToEmployee(context.actor, requiredParam(context.params, "id"), {
+        const result = await context.services.apar.discloseToEmployee(context.actor, requiredParam(context.params, "id"), {
           dispatchedOn: requiredString(body, "dispatchedOn"),
         });
         return accepted({ form: toWireAparForm(result.form), disclosure: toWireDisclosure(result.disclosure) });
@@ -326,11 +326,11 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.representation.file",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
           representation: toWireRepresentation(
-            context.services.apar.fileRepresentation(context.actor, requiredParam(context.params, "id"), {
+            await context.services.apar.fileRepresentation(context.actor, requiredParam(context.params, "id"), {
               filedOn: requiredString(body, "filedOn"),
               grounds: requiredString(body, "grounds"),
               condoned: optionalBoolean(body, "condoned"),
@@ -350,10 +350,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.report_period.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          reportPeriod: context.services.apar.addReportPeriod(context.actor, requiredParam(context.params, "id"), {
+          reportPeriod: await context.services.apar.addReportPeriod(context.actor, requiredParam(context.params, "id"), {
             sequenceNo: optionalNumber(body, "sequenceNo") ?? 1,
             periodStart: requiredString(body, "periodStart"),
             periodEnd: requiredString(body, "periodEnd"),
@@ -372,8 +372,8 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.report_period.aggregate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
-        const result = context.services.apar.aggregateProvisionalGrade(context.actor, requiredParam(context.params, "id"));
+      handler: async (context) => {
+        const result = await context.services.apar.aggregateProvisionalGrade(context.actor, requiredParam(context.params, "id"));
         return accepted({ ...result, form: toWireAparForm(result.form), periods: result.periods.map(toWireReportPeriod) });
       },
     },
@@ -385,10 +385,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.apar.sla.escalate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          reportPeriod: context.services.apar.escalateReportPeriodAuthor(context.actor, requiredParam(context.params, "id"), {
+          reportPeriod: await context.services.apar.escalateReportPeriodAuthor(context.actor, requiredParam(context.params, "id"), {
             sequenceNo: optionalNumber(body, "sequenceNo") ?? 1,
             escalatedToEmployeeId: requiredString(body, "escalatedToEmployeeId"),
             reason: optionalString(body, "reason") ?? "Tier SLA missed",
@@ -405,10 +405,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.signature.sign",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          signature: context.services.digitalSignature.sign(context.actor, {
+          signature: await context.services.digitalSignature.sign(context.actor, {
             formId: requiredParam(context.params, "id"),
             actionType: requiredString(body, "actionType") as "CERTIFY" | "RATIFY" | "EXPUNGE",
             method: requiredString(body, "method") as "DSC" | "AADHAAR_ESIGN" | "HSM",
@@ -427,10 +427,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.feedback.record",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          feedback: context.services.continuousFeedback.recordFeedback(context.actor, {
+          feedback: await context.services.continuousFeedback.recordFeedback(context.actor, {
             cycleId: requiredString(body, "cycleId"),
             appraiseeId: requiredString(body, "appraiseeId"),
             direction: requiredString(body, "direction") as "UPWARD" | "DOWNWARD" | "PEER",
@@ -448,10 +448,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.360.open",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          feedback360: context.services.feedback360.open360(context.actor, {
+          feedback360: await context.services.feedback360.open360(context.actor, {
             cycleId: requiredString(body, "cycleId"),
             appraiseeId: requiredString(body, "appraiseeId"),
             minRaters: optionalNumber(body, "minRaters"),
@@ -469,10 +469,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.calibration.convene",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          calibrationSession: context.services.apar.createCalibrationSession(context.actor, {
+          calibrationSession: await context.services.apar.createCalibrationSession(context.actor, {
             cycleId: requiredString(body, "cycleId"),
             orgUnitScope: requiredString(body, "orgUnitScope"),
             method: requiredString(body, "method") as CalibrationMethod,
@@ -491,10 +491,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.calibration.recommend",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          calibrationRecommendation: context.services.apar.proposeCalibrationRecommendation(context.actor, requiredParam(context.params, "id"), {
+          calibrationRecommendation: await context.services.apar.proposeCalibrationRecommendation(context.actor, requiredParam(context.params, "id"), {
             formId: requiredString(body, "formId"),
             currentGrade: requiredNumber(body, "currentGrade"),
             recommendedGrade: requiredNumber(body, "recommendedGrade"),
@@ -511,9 +511,9 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.calibration.ratify",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) =>
+      handler: async (context) =>
         accepted({
-          calibrationRecommendation: context.services.apar.ratifyCalibrationRecommendation(
+          calibrationRecommendation: await context.services.apar.ratifyCalibrationRecommendation(
             context.actor,
             requiredParam(context.params, "id"),
             requiredParam(context.params, "recommendationId")
@@ -528,9 +528,9 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.calibration.apply",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) =>
+      handler: async (context) =>
         accepted({
-          calibrationAdjustment: context.services.apar.applyCalibrationAdjustment(
+          calibrationAdjustment: await context.services.apar.applyCalibrationAdjustment(
             context.actor,
             requiredParam(context.params, "id"),
             requiredParam(context.params, "recommendationId")
@@ -543,7 +543,7 @@ export function registerG08Routes(kernel: ApiKernel): void {
       operationId: "g08.calibrationDistributionDiagnostic",
       protected: true,
       permission: "g08.calibration.convene",
-      handler: (context) => ok(context.services.apar.calibrationDistributionDiagnostic(context.actor, requiredParam(context.params, "id"))),
+      handler: async (context) => ok(await context.services.apar.calibrationDistributionDiagnostic(context.actor, requiredParam(context.params, "id"))),
     },
     // PH-39A — APAR PIP lifecycle + probation-confirmation + report-period/goal-snapshot reads.
     // All backed by already-tested aparService methods (ph16e-g07-g08-depth).
@@ -555,10 +555,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.pip.initiate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created(
-          context.services.apar.createPip(context.actor, {
+          await context.services.apar.createPip(context.actor, {
             appraiseeId: requiredString(body, "appraiseeId"),
             reason: requiredString(body, "reason"),
             successCriteria: requiredString(body, "successCriteria"),
@@ -577,10 +577,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.pip.update",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          milestone: context.services.apar.updatePipMilestone(context.actor, requiredParam(context.params, "id"), requiredParam(context.params, "milestoneId"), {
+          milestone: await context.services.apar.updatePipMilestone(context.actor, requiredParam(context.params, "id"), requiredParam(context.params, "milestoneId"), {
             status: requiredString(body, "status") as PipMilestoneStatus,
             progressNote: optionalString(body, "progressNote"),
           }),
@@ -595,10 +595,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.pip.close",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          pip: context.services.apar.closePip(context.actor, requiredParam(context.params, "id"), {
+          pip: await context.services.apar.closePip(context.actor, requiredParam(context.params, "id"), {
             outcome: requiredString(body, "outcome") as PipOutcome,
             outcomeSummary: requiredString(body, "outcomeSummary"),
           }),
@@ -613,10 +613,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.probation.open",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          probationConfirmation: context.services.apar.openProbationConfirmation(context.actor, {
+          probationConfirmation: await context.services.apar.openProbationConfirmation(context.actor, {
             appraiseeId: requiredString(body, "appraiseeId"),
             cycleId: optionalString(body, "cycleId"),
             probationEndDate: requiredString(body, "probationEndDate"),
@@ -634,10 +634,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.probation.decide",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          probationConfirmation: context.services.apar.decideProbation(context.actor, requiredParam(context.params, "id"), {
+          probationConfirmation: await context.services.apar.decideProbation(context.actor, requiredParam(context.params, "id"), {
             outcome: requiredString(body, "outcome") as ProbationOutcome,
             extensionMonths: optionalNumber(body, "extensionMonths"),
             effectiveDate: optionalString(body, "effectiveDate"),
@@ -651,7 +651,7 @@ export function registerG08Routes(kernel: ApiKernel): void {
       operationId: "g08.listReportPeriods",
       protected: true,
       permission: "g08.apar.read",
-      handler: (context) => ok({ items: context.services.apar.listReportPeriods(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ items: await context.services.apar.listReportPeriods(context.scope, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -659,7 +659,7 @@ export function registerG08Routes(kernel: ApiKernel): void {
       operationId: "g08.listGoalSnapshots",
       protected: true,
       permission: "g08.apar.read",
-      handler: (context) => ok({ items: context.services.apar.listGoalSnapshots(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ items: await context.services.apar.listGoalSnapshots(context.scope, requiredParam(context.params, "id")) }),
     },
     // PH-40A — continuous-feedback check-ins/reads, 360-feedback rate/release/read, signature reads.
     // All backed by already-tested G08 services (continuousFeedback, feedback360, digitalSignature).
@@ -671,10 +671,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.checkin.record",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          checkIn: context.services.continuousFeedback.recordCheckIn(context.actor, {
+          checkIn: await context.services.continuousFeedback.recordCheckIn(context.actor, {
             cycleId: requiredString(body, "cycleId"),
             appraiseeId: requiredString(body, "appraiseeId"),
             note: requiredString(body, "note"),
@@ -689,8 +689,8 @@ export function registerG08Routes(kernel: ApiKernel): void {
       operationId: "g08.listContinuousFeedback",
       protected: true,
       permission: "g08.apar.read",
-      handler: (context) =>
-        ok({ items: context.services.continuousFeedback.listFeedback(context.scope, requiredQuery(context, "cycleId"), requiredQuery(context, "appraiseeId")) }),
+      handler: async (context) =>
+        ok({ items: await context.services.continuousFeedback.listFeedback(context.scope, requiredQuery(context, "cycleId"), requiredQuery(context, "appraiseeId")) }),
     },
     {
       method: "GET",
@@ -698,8 +698,8 @@ export function registerG08Routes(kernel: ApiKernel): void {
       operationId: "g08.listCheckIns",
       protected: true,
       permission: "g08.apar.read",
-      handler: (context) =>
-        ok({ items: context.services.continuousFeedback.listCheckIns(context.scope, requiredQuery(context, "cycleId"), requiredQuery(context, "appraiseeId")) }),
+      handler: async (context) =>
+        ok({ items: await context.services.continuousFeedback.listCheckIns(context.scope, requiredQuery(context, "cycleId"), requiredQuery(context, "appraiseeId")) }),
     },
     {
       method: "POST",
@@ -709,10 +709,10 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.360.submit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          feedback360: context.services.feedback360.submitRating(context.actor, requiredParam(context.params, "id"), {
+          feedback360: await context.services.feedback360.submitRating(context.actor, requiredParam(context.params, "id"), {
             raterId: requiredString(body, "raterId"),
             raterType: requiredString(body, "raterType") as RaterType,
             score: requiredNumber(body, "score"),
@@ -728,7 +728,7 @@ export function registerG08Routes(kernel: ApiKernel): void {
       permission: "g08.360.release",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ release: context.services.feedback360.release360(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ release: await context.services.feedback360.release360(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -736,8 +736,8 @@ export function registerG08Routes(kernel: ApiKernel): void {
       operationId: "g08.get360",
       protected: true,
       permission: "g08.apar.read",
-      handler: (context) => {
-        const row = context.services.feedback360.get360(context.scope, requiredParam(context.params, "id"));
+      handler: async (context) => {
+        const row = await context.services.feedback360.get360(context.scope, requiredParam(context.params, "id"));
         if (!row) {
           throw new FoundationError("NOT_FOUND", "360 feedback not found");
         }
@@ -750,7 +750,7 @@ export function registerG08Routes(kernel: ApiKernel): void {
       operationId: "g08.listSignatures",
       protected: true,
       permission: "g08.apar.read",
-      handler: (context) => ok({ items: context.services.digitalSignature.listSignatures(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ items: await context.services.digitalSignature.listSignatures(context.scope, requiredParam(context.params, "id")) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

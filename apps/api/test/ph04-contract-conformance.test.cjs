@@ -23,15 +23,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph04-conformance", ...(request.headers ?? {}) },
     actor: request.includeActor === false ? undefined : actor(request.actor ?? {}),
   });
 }
 
-test("PH-04D route registry covers the frozen minimum contract set", () => {
+test("PH-04D route registry covers the frozen minimum contract set", async () => {
   const routes = createFoundationApi(createFoundationServices()).listRoutes();
   const actual = new Set(routes.map((route) => `${route.method} ${route.path}`));
   for (const expected of minimumRouteSet) {
@@ -44,7 +44,7 @@ test("PH-04D route registry covers the frozen minimum contract set", () => {
   assert.equal(apiContractSnapshot.pagination.next_cursor, null);
 });
 
-test("PH-04D route metadata is protected, permissioned, idempotent, and paginated where needed", () => {
+test("PH-04D route metadata is protected, permissioned, idempotent, and paginated where needed", async () => {
   const routes = createFoundationApi(createFoundationServices()).listRoutes();
   assert.equal(routes.every((route) => route.protected === true), true);
   assert.equal(routes.every((route) => route.permission.length > 0), true);
@@ -57,18 +57,18 @@ test("PH-04D route metadata is protected, permissioned, idempotent, and paginate
   );
 });
 
-test("PH-04D canonical error, auth, idempotency, pagination, and correlation behavior is stable", () => {
+test("PH-04D canonical error, auth, idempotency, pagination, and correlation behavior is stable", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const noActor = call(api, { method: "GET", path: "/api/v1/employees", includeActor: false });
+  const noActor = await call(api, { method: "GET", path: "/api/v1/employees", includeActor: false });
   assert.equal(noActor.status, 401);
   assert.equal(noActor.body.error.code, "UNAUTHENTICATED");
   assert.equal(noActor.headers["X-Correlation-Id"], "corr-ph04-conformance");
 
-  const forbidden = call(api, { method: "GET", path: "/api/v1/employees", actor: { permissions: [] } });
+  const forbidden = await call(api, { method: "GET", path: "/api/v1/employees", actor: { permissions: [] } });
   assert.equal(forbidden.status, 403);
   assert.equal(forbidden.body.error.code, "FORBIDDEN");
 
-  const missingIdem = call(api, {
+  const missingIdem = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     body: { title: "Missing key", classification: "INTERNAL", contentHash: "dddd1111dddd2222dddd3333dddd4444dddd5555dddd6666dddd7777dddd8888" },
@@ -76,7 +76,7 @@ test("PH-04D canonical error, auth, idempotency, pagination, and correlation beh
   assert.equal(missingIdem.status, 400);
   assert.equal(missingIdem.body.error.code, "VALIDATION_FAILED");
 
-  const list = call(api, { method: "GET", path: "/api/v1/employees", query: { limit: "250" } });
+  const list = await call(api, { method: "GET", path: "/api/v1/employees", query: { limit: "250" } });
   assert.equal(list.status, 200);
   assert.equal(list.body.limit, 100);
   assert.equal(list.body.next_cursor, null);

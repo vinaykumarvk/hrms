@@ -17,16 +17,16 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph47a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-function registerPda(api) {
-  const res = call(api, {
+async function registerPda(api) {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/pension/pdas",
     headers: { "Idempotency-Key": "pda-1" },
@@ -36,30 +36,30 @@ function registerPda(api) {
   return res.body.pda.id;
 }
 
-test("PH-47A G11 PDA go-live: activate requires sandbox certification (fail closed)", () => {
+test("PH-47A G11 PDA go-live: activate requires sandbox certification (fail closed)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const id = registerPda(api);
+  const id = await registerPda(api);
 
   // Go-live gate: an uncertified PDA cannot be activated.
-  const early = call(api, { method: "POST", path: `/api/v1/pension/pdas/${id}:activate`, headers: { "Idempotency-Key": "pda-ea" }, body: {} });
+  const early = await call(api, { method: "POST", path: `/api/v1/pension/pdas/${id}:activate`, headers: { "Idempotency-Key": "pda-ea" }, body: {} });
   assert.equal(early.status, 412);
 
-  const certified = call(api, { method: "POST", path: `/api/v1/pension/pdas/${id}:certify-sandbox`, headers: { "Idempotency-Key": "pda-c" }, body: {} });
+  const certified = await call(api, { method: "POST", path: `/api/v1/pension/pdas/${id}:certify-sandbox`, headers: { "Idempotency-Key": "pda-c" }, body: {} });
   assert.equal(certified.status, 202);
   assert.equal(certified.body.pda.status, "SANDBOX");
 
-  const activated = call(api, { method: "POST", path: `/api/v1/pension/pdas/${id}:activate`, headers: { "Idempotency-Key": "pda-a" }, body: {} });
+  const activated = await call(api, { method: "POST", path: `/api/v1/pension/pdas/${id}:activate`, headers: { "Idempotency-Key": "pda-a" }, body: {} });
   assert.equal(activated.status, 202);
   assert.equal(activated.body.pda.status, "ACTIVE");
 
-  const read = call(api, { method: "GET", path: `/api/v1/pension/pdas/${id}` });
+  const read = await call(api, { method: "GET", path: `/api/v1/pension/pdas/${id}` });
   assert.equal(read.status, 200);
   assert.equal(read.body.pda.status, "ACTIVE");
 });
 
-test("PH-47A G11 grievance close via the kernel", () => {
+test("PH-47A G11 grievance close via the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const raised = call(api, {
+  const raised = await call(api, {
     method: "POST",
     path: "/api/v1/pension/grievances",
     headers: { "Idempotency-Key": "gr-1" },
@@ -67,16 +67,16 @@ test("PH-47A G11 grievance close via the kernel", () => {
   });
   assert.equal(raised.status, 201);
   const id = raised.body.grievance.id;
-  const closed = call(api, { method: "POST", path: `/api/v1/pension/grievances/${id}:close`, headers: { "Idempotency-Key": "gr-c" }, body: { resolutionComment: "PPO reissued and delivered" } });
+  const closed = await call(api, { method: "POST", path: `/api/v1/pension/grievances/${id}:close`, headers: { "Idempotency-Key": "gr-c" }, body: { resolutionComment: "PPO reissued and delivered" } });
   assert.equal(closed.status, 202);
 });
 
-test("PH-47A G11 pensioner bank-account verification via the kernel", () => {
+test("PH-47A G11 pensioner bank-account verification via the kernel", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const pensionCase = services.pension.createCase(actor(), { employeeId: ph03Ids.employee, separationDate: "2026-06-30", scheme: "NPS" });
 
-  const verified = call(api, {
+  const verified = await call(api, {
     method: "POST",
     path: "/api/v1/pension/account-verifications",
     headers: { "Idempotency-Key": "av-1" },
@@ -85,7 +85,7 @@ test("PH-47A G11 pensioner bank-account verification via the kernel", () => {
   assert.equal(verified.status, 201);
   assert.equal(verified.body.verification.result, "PASSED");
 
-  const list = call(api, { method: "GET", path: `/api/v1/pension/cases/${pensionCase.id}/account-verifications` });
+  const list = await call(api, { method: "GET", path: `/api/v1/pension/cases/${pensionCase.id}/account-verifications` });
   assert.equal(list.status, 200);
   assert.equal(list.body.items.length, 1);
 });

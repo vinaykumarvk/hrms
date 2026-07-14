@@ -21,15 +21,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph06b-g03", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-06B FR-10 leave-type catalog drives validation, opening balances, and policy-driven accrual", () => {
+test("PH-06B FR-10 leave-type catalog drives validation, opening balances, and policy-driven accrual", async () => {
   const services = createFoundationServices();
 
   assert.throws(
@@ -48,7 +48,7 @@ test("PH-06B FR-10 leave-type catalog drives validation, opening balances, and p
   assert.equal(accrued.currentBalance, 45, "accrual without explicit units follows the leave_accrual_policies quantity (30 + 15)");
 });
 
-test("PH-06B LEAVE_OVERLAP blocks date-overlapping spells for the same employee", () => {
+test("PH-06B LEAVE_OVERLAP blocks date-overlapping spells for the same employee", async () => {
   const services = createFoundationServices();
   services.leave.submit(actor(), { employeeId: ph03Ids.employee, leaveTypeId: "EL", fromDate: "2026-07-13", toDate: "2026-07-15" });
 
@@ -61,7 +61,7 @@ test("PH-06B LEAVE_OVERLAP blocks date-overlapping spells for the same employee"
   assert.equal(nonOverlapping.application.status, "SUBMITTED");
 });
 
-test("PH-06B INSUFFICIENT_BALANCE is the named code on the wire (generic CONFLICT is gone)", () => {
+test("PH-06B INSUFFICIENT_BALANCE is the named code on the wire (generic CONFLICT is gone)", async () => {
   const services = createFoundationServices();
 
   assert.throws(
@@ -71,7 +71,7 @@ test("PH-06B INSUFFICIENT_BALANCE is the named code on the wire (generic CONFLIC
   );
 
   const api = createFoundationApi(createFoundationServices());
-  const response = call(api, {
+  const response = await call(api, {
     method: "POST",
     path: "/api/v1/atl/leave-applications",
     headers: { "Idempotency-Key": "idem-ph06b-insufficient-001" },
@@ -81,7 +81,7 @@ test("PH-06B INSUFFICIENT_BALANCE is the named code on the wire (generic CONFLIC
   assert.equal(response.body.error.code, "INSUFFICIENT_BALANCE");
 });
 
-test("PH-06B ELIGIBILITY_FAILED and ENTITLEMENT_EXCEEDED gate submission per leave type", () => {
+test("PH-06B ELIGIBILITY_FAILED and ENTITLEMENT_EXCEEDED gate submission per leave type", async () => {
   const services = createFoundationServices();
 
   assert.throws(
@@ -97,7 +97,7 @@ test("PH-06B ELIGIBILITY_FAILED and ENTITLEMENT_EXCEEDED gate submission per lea
   );
 });
 
-test("PH-06B OPTIMISTIC_LOCK_CONFLICT fires on a stale leave_balances version and clears on the current one", () => {
+test("PH-06B OPTIMISTIC_LOCK_CONFLICT fires on a stale leave_balances version and clears on the current one", async () => {
   const services = createFoundationServices();
   const submitted = services.leave.submit(actor(), { employeeId: ph03Ids.employee, leaveTypeId: "EL", fromDate: "2026-07-13", toDate: "2026-07-15" });
   assert.equal(submitted.balance.version, 2, "reservation bumps the balance version");
@@ -111,7 +111,7 @@ test("PH-06B OPTIMISTIC_LOCK_CONFLICT fires on a stale leave_balances version an
   assert.equal(approved.application.status, "APPROVED");
 });
 
-test("PH-06B FR-13 withdraw of a SUBMITTED spell releases the reservation and is routed", () => {
+test("PH-06B FR-13 withdraw of a SUBMITTED spell releases the reservation and is routed", async () => {
   const services = createFoundationServices();
   const submitted = services.leave.submit(actor(), { employeeId: ph03Ids.employee, leaveTypeId: "EL", fromDate: "2026-07-13", toDate: "2026-07-15" });
   assert.equal(submitted.balance.reserved, 3);
@@ -130,13 +130,13 @@ test("PH-06B FR-13 withdraw of a SUBMITTED spell releases the reservation and is
   );
 
   const api = createFoundationApi(createFoundationServices());
-  const routed = call(api, {
+  const routed = await call(api, {
     method: "POST",
     path: "/api/v1/atl/leave-applications",
     headers: { "Idempotency-Key": "idem-ph06b-withdraw-submit-001" },
     body: { employeeId: ph03Ids.employee, leaveTypeId: "EL", fromDate: "2026-07-13", toDate: "2026-07-15" },
   });
-  const routedWithdraw = call(api, {
+  const routedWithdraw = await call(api, {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${routed.body.application.id}:withdraw`,
     headers: { "Idempotency-Key": "idem-ph06b-withdraw-route-001" },
@@ -146,7 +146,7 @@ test("PH-06B FR-13 withdraw of a SUBMITTED spell releases the reservation and is
   assert.equal(routedWithdraw.body.application.status, "WITHDRAWN");
 });
 
-test("PH-06B FR-13 partial cancel of an APPROVED spell credits remaining days and relays a corrected G04 fact", () => {
+test("PH-06B FR-13 partial cancel of an APPROVED spell credits remaining days and relays a corrected G04 fact", async () => {
   const services = createFoundationServices();
   const submitted = services.leave.submit(actor(), { employeeId: ph03Ids.employee, leaveTypeId: "EL", fromDate: "2026-08-10", toDate: "2026-08-14" });
   services.leave.approve(actor(), submitted.application.id, "idem-ph06b-partial-approve-001");
@@ -165,19 +165,19 @@ test("PH-06B FR-13 partial cancel of an APPROVED spell credits remaining days an
   assert.ok(services.leave.listPayrollSignals(actor()).some((signal) => signal.signalType === "LEAVE_REVERSAL" && signal.units === 2));
 
   const api = createFoundationApi(createFoundationServices());
-  const routedSubmit = call(api, {
+  const routedSubmit = await call(api, {
     method: "POST",
     path: "/api/v1/atl/leave-applications",
     headers: { "Idempotency-Key": "idem-ph06b-partial-submit-001" },
     body: { employeeId: ph03Ids.employee, leaveTypeId: "EL", fromDate: "2026-08-10", toDate: "2026-08-14" },
   });
-  call(api, {
+  await call(api, {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${routedSubmit.body.application.id}/decision`,
     headers: { "Idempotency-Key": "idem-ph06b-partial-approve-route-001" },
     body: { decision: "APPROVE" },
   });
-  const routedPartial = call(api, {
+  const routedPartial = await call(api, {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${routedSubmit.body.application.id}:cancel-partial`,
     headers: { "Idempotency-Key": "idem-ph06b-partial-cancel-route-001" },
@@ -187,7 +187,7 @@ test("PH-06B FR-13 partial cancel of an APPROVED spell credits remaining days an
   assert.equal(routedPartial.body.cancelledDays, 2);
 });
 
-test("PH-06B FR-02 holiday calendar excludes holidays from totalDays for non-holiday-counting leave types", () => {
+test("PH-06B FR-02 holiday calendar excludes holidays from totalDays for non-holiday-counting leave types", async () => {
   const services = createFoundationServices();
   const holiday = services.leave.addHoliday(actor(), { holidayDate: "2026-09-14", name: "Onam" });
   assert.equal(holiday.calendarId, "default");
@@ -200,24 +200,24 @@ test("PH-06B FR-02 holiday calendar excludes holidays from totalDays for non-hol
   assert.equal(el.application.totalDays, 2, "Earned Leave counts holidays (sandwich rule)");
 
   const api = createFoundationApi(createFoundationServices());
-  const routedHoliday = call(api, {
+  const routedHoliday = await call(api, {
     method: "POST",
     path: "/api/v1/atl/holidays",
     headers: { "Idempotency-Key": "idem-ph06b-holiday-001" },
     body: { holidayDate: "2026-10-02", name: "Gandhi Jayanti" },
   });
   assert.equal(routedHoliday.status, 201);
-  const listed = call(api, { method: "GET", path: "/api/v1/atl/holidays" });
+  const listed = await call(api, { method: "GET", path: "/api/v1/atl/holidays" });
   assert.equal(listed.status, 200);
   assert.ok(listed.body.items.some((item) => item.holidayDate === "2026-10-02"));
 
-  const routedType = call(api, {
+  const routedType = await call(api, {
     method: "POST",
     path: "/api/v1/atl/leave-types",
     headers: { "Idempotency-Key": "idem-ph06b-leave-type-001" },
     body: { leaveTypeId: "RH", name: "Restricted Holiday", countsHolidays: false, openingBalance: 2, accrualFrequency: "YEARLY", accrualUnitsPerPeriod: 2 },
   });
   assert.equal(routedType.status, 201);
-  const types = call(api, { method: "GET", path: "/api/v1/atl/leave-types" });
+  const types = await call(api, { method: "GET", path: "/api/v1/atl/leave-types" });
   assert.ok(types.body.items.some((item) => item.leaveTypeId === "RH" && item.openingBalance === 2));
 });

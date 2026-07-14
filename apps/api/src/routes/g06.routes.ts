@@ -66,10 +66,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.seniority.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          seniorityList: context.services.promotion.createSeniorityList(context.actor, {
+          seniorityList: await context.services.promotion.createSeniorityList(context.actor, {
             cadreId: optionalString(body, "cadreId") ?? ph03Ids.cadreRevenue,
             effectiveDate: requiredString(body, "effectiveDate"),
             entries: readSeniorityEntries(body),
@@ -85,7 +85,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.seniority.publish",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ seniorityList: context.services.promotion.publishSeniorityList(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ seniorityList: await context.services.promotion.publishSeniorityList(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -95,7 +95,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.seniority.finalise",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ seniorityList: context.services.promotion.finaliseSeniorityList(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ seniorityList: await context.services.promotion.finaliseSeniorityList(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -105,10 +105,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.promotion.case.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          promotionCase: context.services.promotion.createPromotionCase(context.actor, {
+          promotionCase: await context.services.promotion.createPromotionCase(context.actor, {
             seniorityListId: requiredString(body, "seniorityListId"),
             vacancies: optionalNumber(body, "vacancies") ?? 1,
             fromDesignation: optionalString(body, "fromDesignation") ?? "Assistant Section Officer",
@@ -125,10 +125,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.dpc.hold",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          promotionCase: context.services.promotion.holdDpc(context.actor, requiredParam(context.params, "id"), {
+          promotionCase: await context.services.promotion.holdDpc(context.actor, requiredParam(context.params, "id"), {
             panelMembers: readPanelMembers(body),
             recusedEmployeeIds: optionalStringArray(body, "recusedEmployeeIds"),
             quorumRequired: optionalNumber(body, "quorumRequired"),
@@ -144,7 +144,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.promotion.order.issue",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ orders: context.services.promotion.issuePromotionOrders(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ orders: await context.services.promotion.issuePromotionOrders(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -154,10 +154,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.promotion.order.effect",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.promotion.effectPromotionOrder(context.actor, requiredParam(context.params, "id"), {
+          await context.services.promotion.effectPromotionOrder(context.actor, requiredParam(context.params, "id"), {
             effectDate: requiredString(body, "effectDate"),
             idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
           })
@@ -172,10 +172,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.macp.effect",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.promotion.effectMacp(context.actor, {
+          await context.services.promotion.effectMacp(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             level: requiredString(body, "level"),
             dueDate: requiredString(body, "dueDate"),
@@ -193,10 +193,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.promotion.order.effect",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.promotion.declinePromotionOrder(context.actor, requiredParam(context.params, "id"), {
+          await context.services.promotion.declinePromotionOrder(context.actor, requiredParam(context.params, "id"), {
             refusalDate: requiredString(body, "refusalDate"),
             refusalReason: optionalString(body, "refusalReason"),
             debarmentMonths: optionalNumber(body, "debarmentMonths"),
@@ -213,10 +213,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.roster.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created(
-          context.services.promotion.createReservationRoster(context.actor, {
+          await context.services.promotion.createReservationRoster(context.actor, {
             rosterNo: requiredString(body, "rosterNo"),
             cadreId: optionalString(body, "cadreId") ?? ph03Ids.cadreRevenue,
             gradeDesignationId: requiredString(body, "gradeDesignationId"),
@@ -236,10 +236,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.roster.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          rosterPoint: context.services.promotion.fillRosterPoint(context.actor, requiredParam(context.params, "id"), {
+          rosterPoint: await context.services.promotion.fillRosterPoint(context.actor, requiredParam(context.params, "id"), {
             pointNumber: Number.parseInt(requiredParam(context.params, "pointNumber"), 10),
             employeeId: requiredString(body, "employeeId"),
             candidateCategory: requiredString(body, "candidateCategory") as ReservationCategory,
@@ -255,7 +255,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.getRosterCompliance",
       protected: true,
       permission: "g06.promotion.read",
-      handler: (context) => ok(context.services.promotion.getRosterCompliance(context.scope, requiredParam(context.params, "id"))),
+      handler: async (context) => ok(await context.services.promotion.getRosterCompliance(context.scope, requiredParam(context.params, "id"))),
     },
     {
       method: "GET",
@@ -263,9 +263,9 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.listProbationRecords",
       protected: true,
       permission: "g06.promotion.read",
-      handler: (context) =>
+      handler: async (context) =>
         ok({
-          probationRecords: context.services.promotion
+          probationRecords: await context.services.promotion
             .listProbationRecords(context.actor, optionalString(context.request.query ?? {}, "employeeId") ?? ph03Ids.employee)
             .map(toWireProbationRecord),
         }),
@@ -276,9 +276,9 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.listPromotionRefusals",
       protected: true,
       permission: "g06.promotion.read",
-      handler: (context) =>
+      handler: async (context) =>
         ok({
-          refusals: context.services.promotion
+          refusals: await context.services.promotion
             .listPromotionRefusals(context.actor, optionalString(context.request.query ?? {}, "employeeId") ?? ph03Ids.employee)
             .map(toWirePromotionRefusal),
         }),
@@ -291,10 +291,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.legal.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          legalCaseLink: context.services.promotion.attachLegalCaseLink(context.actor, {
+          legalCaseLink: await context.services.promotion.attachLegalCaseLink(context.actor, {
             linkedEntityType: requiredString(body, "linkedEntityType") as LegalLinkedEntityType,
             linkedEntityRefId: requiredString(body, "linkedEntityRefId"),
             forum: requiredString(body, "forum") as LegalForum,
@@ -315,10 +315,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.legal.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          legalCaseLink: context.services.promotion.vacateInterimStay(context.actor, requiredParam(context.params, "id"), {
+          legalCaseLink: await context.services.promotion.vacateInterimStay(context.actor, requiredParam(context.params, "id"), {
             stayToDate: requiredString(body, "stayToDate"),
           }),
         });
@@ -330,7 +330,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.summary",
       protected: true,
       permission: "g06.promotion.read",
-      handler: (context) => ok(context.services.promotion.summary(context.scope)),
+      handler: async (context) => ok(await context.services.promotion.summary(context.scope)),
     },
     // ---------------------------------------------------------------------------------
     // PH-15F FR-PPP-020: seniority_quota_rules + multi-stream rota-quota construction.
@@ -343,10 +343,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.seniority.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          seniorityQuotaRule: context.services.promotion.defineSeniorityQuotaRule(context.actor, {
+          seniorityQuotaRule: await context.services.promotion.defineSeniorityQuotaRule(context.actor, {
             ruleCode: requiredString(body, "ruleCode"),
             cadreId: optionalString(body, "cadreId") ?? ph03Ids.cadreRevenue,
             gradeDesignationId: requiredString(body, "gradeDesignationId"),
@@ -369,10 +369,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.seniority.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          construction: context.services.promotion.constructCombinedSeniority(context.actor, {
+          construction: await context.services.promotion.constructCombinedSeniority(context.actor, {
             quotaRuleId: requiredString(body, "quotaRuleId"),
             cadreId: optionalString(body, "cadreId"),
             population: readQuotaPopulation(body),
@@ -386,7 +386,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.getRotationTrace",
       protected: true,
       permission: "g06.promotion.read",
-      handler: (context) => ok(context.services.promotion.getRotationTrace(context.scope, requiredParam(context.params, "id"))),
+      handler: async (context) => ok(await context.services.promotion.getRotationTrace(context.scope, requiredParam(context.params, "id"))),
     },
     // PH-32A — G06 career-path/succession + correction cascade (route exposure).
     {
@@ -397,10 +397,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.careerpath.define",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          careerPath: context.services.careerSuccession.defineCareerPath(context.actor, {
+          careerPath: await context.services.careerSuccession.defineCareerPath(context.actor, {
             pathCode: requiredString(body, "pathCode"),
             name: requiredString(body, "name"),
             stages: Array.isArray(body.stages) ? (body.stages as Array<{ stageNo: number; gradeDesignationId: string; typicalYears: number }>) : [],
@@ -416,10 +416,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.seniority.finalise",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          list: context.services.correctionCascade.finaliseList(context.actor, {
+          list: await context.services.correctionCascade.finaliseList(context.actor, {
             listCode: requiredString(body, "listCode"),
             entries: Array.isArray(body.entries) ? (body.entries as Array<{ employeeId: string; appointmentDate: string; serviceNo: string }>) : [],
           }),
@@ -433,8 +433,8 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.listSealedCovers",
       protected: true,
       permission: "g06.sealedcover.read",
-      handler: (context) =>
-        ok({ items: context.services.sealedCover.listSealedCovers(context.actor).map(toWireSealedCover) }),
+      handler: async (context) =>
+        ok({ items: await context.services.sealedCover.listSealedCovers(context.actor).map(toWireSealedCover) }),
     },
     {
       method: "POST",
@@ -444,10 +444,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.sealedcover.place",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          sealedCover: context.services.sealedCover.placeSealedCover(context.actor, {
+          sealedCover: await context.services.sealedCover.placeSealedCover(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             reason: requiredString(body, "reason"),
           }),
@@ -462,10 +462,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.sealedcover.release",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return ok({
-          sealedCover: context.services.sealedCover.releaseSealedCover(
+          sealedCover: await context.services.sealedCover.releaseSealedCover(
             context.actor,
             requiredParam(context.params, "id"),
             { reason: requiredString(body, "reason") }
@@ -483,9 +483,9 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.establishment.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return created({ sanctionedPost: context.services.promotion.registerSanctionedPost(context.actor, readSanctionedPostInput(body)) });
+        return created({ sanctionedPost: await context.services.promotion.registerSanctionedPost(context.actor, readSanctionedPostInput(body)) });
       },
     },
     {
@@ -496,10 +496,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.establishment.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          sanctionedPost: context.services.promotion.reviseSanctionedPost(context.actor, requiredParam(context.params, "id"), {
+          sanctionedPost: await context.services.promotion.reviseSanctionedPost(context.actor, requiredParam(context.params, "id"), {
             approverActorId: requiredString(body, "approverActorId"),
             sanctionedStrength: optionalNumber(body, "sanctionedStrength"),
             filledCount: optionalNumber(body, "filledCount"),
@@ -520,9 +520,9 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.establishment.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted({ sanctionedPost: context.services.promotion.reconcileSanctionedPost(context.actor, requiredParam(context.params, "id"), { filledCount: readRequiredNumber(body, "filledCount") }) });
+        return accepted({ sanctionedPost: await context.services.promotion.reconcileSanctionedPost(context.actor, requiredParam(context.params, "id"), { filledCount: readRequiredNumber(body, "filledCount") }) });
       },
     },
     {
@@ -531,7 +531,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.getSanctionedPost",
       protected: true,
       permission: "g06.establishment.read",
-      handler: (context) => ok({ sanctionedPost: context.services.promotion.getSanctionedPost(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ sanctionedPost: await context.services.promotion.getSanctionedPost(context.scope, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -539,7 +539,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.listSanctionedPosts",
       protected: true,
       permission: "g06.establishment.read",
-      handler: (context) => ok({ items: context.services.promotion.listSanctionedPosts(context.scope) }),
+      handler: async (context) => ok({ items: await context.services.promotion.listSanctionedPosts(context.scope) }),
     },
     {
       method: "GET",
@@ -547,7 +547,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.getVacancyComputation",
       protected: true,
       permission: "g06.establishment.read",
-      handler: (context) => ok(context.services.promotion.getVacancyComputation(context.scope, requiredParam(context.params, "id"))),
+      handler: async (context) => ok(await context.services.promotion.getVacancyComputation(context.scope, requiredParam(context.params, "id"))),
     },
     // PH-59A — G06 succession-planning + qualifying-service route exposure (tested careerSuccession /
     // promotion backing).
@@ -559,9 +559,9 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.succession.plan",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return created({ plan: context.services.careerSuccession.createSuccessionPlan(context.actor, { positionId: requiredString(body, "positionId"), incumbentEmployeeId: optionalString(body, "incumbentEmployeeId") }) });
+        return created({ plan: await context.services.careerSuccession.createSuccessionPlan(context.actor, { positionId: requiredString(body, "positionId"), incumbentEmployeeId: optionalString(body, "incumbentEmployeeId") }) });
       },
     },
     {
@@ -572,10 +572,10 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.succession.candidate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          plan: context.services.careerSuccession.addSuccessionCandidate(context.actor, requiredParam(context.params, "id"), {
+          plan: await context.services.careerSuccession.addSuccessionCandidate(context.actor, requiredParam(context.params, "id"), {
             employeeId: requiredString(body, "employeeId"),
             rank: optionalNumber(body, "rank") ?? 1,
             readiness: requiredString(body, "readiness") as SuccessionReadiness,
@@ -589,7 +589,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.getSuccessionPlan",
       protected: true,
       permission: "g06.succession.read",
-      handler: (context) => ok({ plan: context.services.careerSuccession.getSuccessionPlan(context.scope, requiredParam(context.params, "id")) ?? null }),
+      handler: async (context) => ok({ plan: await context.services.careerSuccession.getSuccessionPlan(context.scope, requiredParam(context.params, "id")) ?? null }),
     },
     {
       method: "GET",
@@ -597,7 +597,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.getCareerPath",
       protected: true,
       permission: "g06.succession.read",
-      handler: (context) => ok({ careerPath: context.services.careerSuccession.getCareerPath(context.scope, requiredParam(context.params, "id")) ?? null }),
+      handler: async (context) => ok({ careerPath: await context.services.careerSuccession.getCareerPath(context.scope, requiredParam(context.params, "id")) ?? null }),
     },
     {
       method: "GET",
@@ -605,7 +605,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.listPromotionOrders",
       protected: true,
       permission: "g06.promotion.read",
-      handler: (context) => ok({ items: context.services.promotion.listPromotionOrders(context.actor).map(toWirePromotionOrder) }),
+      handler: async (context) => ok({ items: await context.services.promotion.listPromotionOrders(context.actor).map(toWirePromotionOrder) }),
     },
     {
       method: "POST",
@@ -615,7 +615,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       permission: "g06.qsl.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         const input: QualifyingServiceComputeInput = {
           employeeId: requiredString(body, "employeeId"),
@@ -625,7 +625,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
           periods: Array.isArray(body.periods) ? (body.periods as QualifyingServiceComputeInput["periods"]) : [],
           serviceExclusionRuleId: requiredString(body, "serviceExclusionRuleId"),
         };
-        return created(context.services.promotion.computeQualifyingService(context.actor, input));
+        return created(await context.services.promotion.computeQualifyingService(context.actor, input));
       },
     },
     {
@@ -634,7 +634,7 @@ export function registerG06Routes(kernel: ApiKernel): void {
       operationId: "g06.getQualifyingServiceSnapshot",
       protected: true,
       permission: "g06.establishment.read",
-      handler: (context) => ok({ snapshot: context.services.promotion.getQualifyingServiceSnapshot(context.scope, requiredParam(context.params, "snapshotId")) }),
+      handler: async (context) => ok({ snapshot: await context.services.promotion.getQualifyingServiceSnapshot(context.scope, requiredParam(context.params, "snapshotId")) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

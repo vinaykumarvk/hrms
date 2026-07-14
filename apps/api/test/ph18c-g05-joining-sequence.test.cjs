@@ -28,7 +28,7 @@ const joiners = [
   { employeeId: "emp-b", orderDate: "2026-07-01", serviceNo: "SR-0003" }, // same date, smaller service_no => ahead of emp-a
 ];
 
-test("G05 joining_sequence: deterministic inter-se ordering by order date then service_no", () => {
+test("G05 joining_sequence: deterministic inter-se ordering by order date then service_no", async () => {
   const s = createFoundationServices();
   const seq = s.joiningSequence.assignJoiningSequence(actor(), { batchId: "batch-ph18c-1", joiners });
   const order = seq.map((r) => `${r.sequenceNo}:${r.employeeId}`);
@@ -41,7 +41,7 @@ test("G05 joining_sequence: deterministic inter-se ordering by order date then s
   assert.equal(s.joiningSequence.interSeSeniority(actor(), "batch-ph18c-1").length, 3);
 });
 
-test("G05 joining_sequence: a duplicate joiner in a batch is rejected", () => {
+test("G05 joining_sequence: a duplicate joiner in a batch is rejected", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.joiningSequence.assignJoiningSequence(actor(), {

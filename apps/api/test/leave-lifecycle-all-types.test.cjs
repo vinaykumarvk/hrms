@@ -58,7 +58,7 @@ function actorFor(userId) {
   };
 }
 
-test("EL: countsHolidays=true includes the seeded 2026-08-15 holiday in the day count; approved by the real resolved manager", () => {
+test("EL: countsHolidays=true includes the seeded 2026-08-15 holiday in the day count; approved by the real resolved manager", async () => {
   const { services, employees } = boot();
   const submitted = services.leave.submit(employees.devika.actor, {
     employeeId: employees.devika.id,
@@ -75,7 +75,7 @@ test("EL: countsHolidays=true includes the seeded 2026-08-15 holiday in the day 
   assert.equal(balance.debited, 3);
 });
 
-test("CL: countsHolidays=false excludes the seeded 2026-08-15 holiday from the day count; approved by the real resolved manager", () => {
+test("CL: countsHolidays=false excludes the seeded 2026-08-15 holiday from the day count; approved by the real resolved manager", async () => {
   const { services, employees } = boot();
   const submitted = services.leave.submit(employees.sunita.actor, {
     employeeId: employees.sunita.id,
@@ -92,7 +92,7 @@ test("CL: countsHolidays=false excludes the seeded 2026-08-15 holiday from the d
   assert.equal(balance.debited, 2);
 });
 
-test("CL: rejected by the real resolved manager releases the reservation without debiting the balance", () => {
+test("CL: rejected by the real resolved manager releases the reservation without debiting the balance", async () => {
   const { services, employees } = boot();
   const before = services.leave.getBalance(employees.manager.actor, employees.kiran.id, "CL", 2026);
   const submitted = services.leave.submit(employees.kiran.actor, {
@@ -111,7 +111,7 @@ test("CL: rejected by the real resolved manager releases the reservation without
   assert.equal(after.debited, before.debited, "a rejected application never debits the balance");
 });
 
-test("HPL: submit and approve by the real resolved manager", () => {
+test("HPL: submit and approve by the real resolved manager", async () => {
   const { services, employees } = boot();
   const submitted = services.leave.submit(employees.arjun.actor, {
     employeeId: employees.arjun.id,
@@ -126,7 +126,7 @@ test("HPL: submit and approve by the real resolved manager", () => {
   assert.equal(approved.application.status, "APPROVED");
 });
 
-test("SL: the seeded eligibility-cleared application (Priya, ~9yr tenure) can be approved by the real resolved manager", () => {
+test("SL: the seeded eligibility-cleared application (Priya, ~9yr tenure) can be approved by the real resolved manager", async () => {
   const { services, employees } = boot();
   const seeded = services.leave
     .listApplications(employees.manager.actor)
@@ -138,7 +138,7 @@ test("SL: the seeded eligibility-cleared application (Priya, ~9yr tenure) can be
   assert.equal(approved.application.status, "APPROVED");
 });
 
-test("CCL: entitlement cap (15 days) is enforced across successive applications even though the opening balance (60) is far larger", () => {
+test("CCL: entitlement cap (15 days) is enforced across successive applications even though the opening balance (60) is far larger", async () => {
   const { services, employees } = boot();
   const first = services.leave.submit(employees.meera.actor, {
     employeeId: employees.meera.id,

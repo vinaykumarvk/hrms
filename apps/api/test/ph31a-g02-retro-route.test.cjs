@@ -5,10 +5,10 @@ const { createFoundationApi, createFoundationServices, ph03Ids } = require("../.
 function actor(extra = {}) {
   return { tenantId: ph03Ids.tenant, entityId: ph03Ids.entity, userId: "user-ph31a", actorUserId: "user-ph31a", permissions: ["*"], roles: ["hr_admin"], fieldGrants: [], correlationId: "corr-ph31a", ...extra };
 }
-function call(api, request) { return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph31a", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request }); }
-test("PH-31A POST /api/v1/change-requests/{id}/retro-impact:fan-out fans out per target", () => {
+async function call(api, request) { return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph31a", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request }); }
+test("PH-31A POST /api/v1/change-requests/{id}/retro-impact:fan-out fans out per target", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/change-requests/cr-31a/retro-impact:fan-out",
     headers: { "Idempotency-Key": "idem-ph31a" },

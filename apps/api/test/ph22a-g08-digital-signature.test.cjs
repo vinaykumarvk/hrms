@@ -22,7 +22,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G08 digital_signatures: certify is signed with a SHA-256 payload hash and gates the action", () => {
+test("G08 digital_signatures: certify is signed with a SHA-256 payload hash and gates the action", async () => {
   const s = createFoundationServices();
   const form = "apar-form-ph22a";
   // Unsigned certify action is blocked.
@@ -38,7 +38,7 @@ test("G08 digital_signatures: certify is signed with a SHA-256 payload hash and 
   assert.equal(gate.method, "DSC");
 });
 
-test("G08 digital_signatures: a disallowed method and a DSC without a certificate serial are rejected", () => {
+test("G08 digital_signatures: a disallowed method and a DSC without a certificate serial are rejected", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.digitalSignature.sign(actor(), { formId: "f", actionType: "RATIFY", method: "SMS_OTP", payload: {}, signedAt: "2026-07-03" }),

@@ -6,7 +6,7 @@ const test = require("node:test");
 const { rlsTenantIsolationCases } = require("../../../dist/apps/api/src/security/rlsTenantIsolation.test");
 
 for (const testCase of rlsTenantIsolationCases) {
-  test(`rls tenant-isolation: ${testCase.name}`, () => {
+  test(`rls tenant-isolation: ${testCase.name}`, async () => {
     testCase.run();
   });
 }

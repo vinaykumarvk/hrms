@@ -17,8 +17,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph42a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -28,9 +28,9 @@ function call(api, request) {
 const submitter = { userId: "cred-submitter", actorUserId: "cred-submitter" };
 const reviewer = { userId: "cred-reviewer", actorUserId: "cred-reviewer" };
 
-test("PH-42A G07 external credential: capture -> review-evidence -> verify (SoD enforced)", () => {
+test("PH-42A G07 external credential: capture -> review-evidence -> verify (SoD enforced)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const captured = call(api, {
+  const captured = await call(api, {
     method: "POST",
     path: "/api/v1/training/external-credentials",
     headers: { "Idempotency-Key": "cred-1" },
@@ -42,7 +42,7 @@ test("PH-42A G07 external credential: capture -> review-evidence -> verify (SoD 
   assert.equal(captured.body.credential.verificationStatus, "PENDING");
 
   // SoD: the submitter cannot review their own credential.
-  const selfReview = call(api, {
+  const selfReview = await call(api, {
     method: "POST",
     path: `/api/v1/training/external-credentials/${id}:review-evidence`,
     headers: { "Idempotency-Key": "cred-self" },
@@ -51,7 +51,7 @@ test("PH-42A G07 external credential: capture -> review-evidence -> verify (SoD 
   });
   assert.equal(selfReview.status, 403);
 
-  const reviewed = call(api, {
+  const reviewed = await call(api, {
     method: "POST",
     path: `/api/v1/training/external-credentials/${id}:review-evidence`,
     headers: { "Idempotency-Key": "cred-rev" },
@@ -60,7 +60,7 @@ test("PH-42A G07 external credential: capture -> review-evidence -> verify (SoD 
   });
   assert.equal(reviewed.status, 202);
 
-  const verified = call(api, {
+  const verified = await call(api, {
     method: "POST",
     path: `/api/v1/training/external-credentials/${id}:verify`,
     headers: { "Idempotency-Key": "cred-ver" },
@@ -70,27 +70,27 @@ test("PH-42A G07 external credential: capture -> review-evidence -> verify (SoD 
   assert.equal(verified.status, 202);
   assert.equal(verified.body.credential.verificationStatus, "VERIFIED");
 
-  const trail = call(api, { method: "GET", path: `/api/v1/training/external-credentials/${id}/verifications` });
+  const trail = await call(api, { method: "GET", path: `/api/v1/training/external-credentials/${id}/verifications` });
   assert.equal(trail.status, 200);
   assert.ok(trail.body.items.length >= 3); // SUBMITTED, EVIDENCE_REVIEWED, VERIFIED
 });
 
-test("PH-42A G07 external credential: duplicate external reference is rejected (VAL-G07-CREDREF)", () => {
+test("PH-42A G07 external credential: duplicate external reference is rejected (VAL-G07-CREDREF)", async () => {
   const api = createFoundationApi(createFoundationServices());
   const body = { employeeId: ph03Ids.employee, title: "AWS SA", issuingBody: "AWS", externalReferenceNo: "AWS-DUP", issueDate: "2025-01-01" };
-  const first = call(api, { method: "POST", path: "/api/v1/training/external-credentials", headers: { "Idempotency-Key": "dup-1" }, actor: submitter, body });
+  const first = await call(api, { method: "POST", path: "/api/v1/training/external-credentials", headers: { "Idempotency-Key": "dup-1" }, actor: submitter, body });
   assert.equal(first.status, 201);
-  const dup = call(api, { method: "POST", path: "/api/v1/training/external-credentials", headers: { "Idempotency-Key": "dup-2" }, actor: submitter, body });
+  const dup = await call(api, { method: "POST", path: "/api/v1/training/external-credentials", headers: { "Idempotency-Key": "dup-2" }, actor: submitter, body });
   assert.equal(dup.status, 409);
   assert.equal(dup.body.error.code, "VAL-G07-CREDREF");
 });
 
-test("PH-42A G07 vendor empanelment: apply -> review -> decide (4-eyes enforced)", () => {
+test("PH-42A G07 vendor empanelment: apply -> review -> decide (4-eyes enforced)", async () => {
   const api = createFoundationApi(createFoundationServices());
   const requester = { userId: "emp-requester", actorUserId: "emp-requester" };
   const approver = { userId: "emp-approver", actorUserId: "emp-approver" };
 
-  const applied = call(api, {
+  const applied = await call(api, {
     method: "POST",
     path: "/api/v1/training/vendor-empanelments",
     headers: { "Idempotency-Key": "emp-1" },
@@ -100,10 +100,10 @@ test("PH-42A G07 vendor empanelment: apply -> review -> decide (4-eyes enforced)
   assert.equal(applied.status, 201);
   const id = applied.body.empanelment.id;
 
-  assert.equal(call(api, { method: "POST", path: `/api/v1/training/vendor-empanelments/${id}:review`, headers: { "Idempotency-Key": "emp-r" }, actor: approver, body: {} }).status, 202);
+  assert.equal((await call(api, { method: "POST", path: `/api/v1/training/vendor-empanelments/${id}:review`, headers: { "Idempotency-Key": "emp-r" }, actor: approver, body: {} })).status, 202);
 
   // 4-eyes: the requester cannot approve their own empanelment.
-  const selfApprove = call(api, {
+  const selfApprove = await call(api, {
     method: "POST",
     path: `/api/v1/training/vendor-empanelments/${id}:decide`,
     headers: { "Idempotency-Key": "emp-self" },
@@ -112,7 +112,7 @@ test("PH-42A G07 vendor empanelment: apply -> review -> decide (4-eyes enforced)
   });
   assert.equal(selfApprove.status, 403);
 
-  const decided = call(api, {
+  const decided = await call(api, {
     method: "POST",
     path: `/api/v1/training/vendor-empanelments/${id}:decide`,
     headers: { "Idempotency-Key": "emp-d" },
@@ -122,7 +122,7 @@ test("PH-42A G07 vendor empanelment: apply -> review -> decide (4-eyes enforced)
   assert.equal(decided.status, 202);
   assert.equal(decided.body.empanelment.status, "EMPANELLED");
 
-  const read = call(api, { method: "GET", path: `/api/v1/training/vendor-empanelments/${id}` });
+  const read = await call(api, { method: "GET", path: `/api/v1/training/vendor-empanelments/${id}` });
   assert.equal(read.status, 200);
   assert.equal(read.body.empanelment.id, id);
 });

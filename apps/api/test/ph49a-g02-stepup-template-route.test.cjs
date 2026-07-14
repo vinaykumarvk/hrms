@@ -17,19 +17,19 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph49a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-49A G02 step-up MFA: challenge -> verify; expired verify fails closed", () => {
+test("PH-49A G02 step-up MFA: challenge -> verify; expired verify fails closed", async () => {
   const api = createFoundationApi(createFoundationServices());
   const crId = "cr-ph49a-1";
 
-  const challenge = call(api, {
+  const challenge = await call(api, {
     method: "POST",
     path: `/api/v1/change-requests/${crId}:challenge-stepup`,
     headers: { "Idempotency-Key": "su-1" },
@@ -39,7 +39,7 @@ test("PH-49A G02 step-up MFA: challenge -> verify; expired verify fails closed",
   const stepUpId = challenge.body.stepUp.id;
   assert.equal(challenge.body.stepUp.status, "CHALLENGED");
 
-  const verified = call(api, {
+  const verified = await call(api, {
     method: "POST",
     path: `/api/v1/change-requests/stepups/${stepUpId}:verify`,
     headers: { "Idempotency-Key": "su-v1" },
@@ -49,13 +49,13 @@ test("PH-49A G02 step-up MFA: challenge -> verify; expired verify fails closed",
   assert.equal(verified.body.stepUp.status, "VERIFIED");
 
   // A fresh challenge verified after expiry fails closed.
-  const c2 = call(api, {
+  const c2 = await call(api, {
     method: "POST",
     path: `/api/v1/change-requests/${crId}:challenge-stepup`,
     headers: { "Idempotency-Key": "su-2" },
     body: { issuedAt: "2026-07-02T11:00:00.000Z", expiresAt: "2026-07-02T11:05:00.000Z" },
   });
-  const expired = call(api, {
+  const expired = await call(api, {
     method: "POST",
     path: `/api/v1/change-requests/stepups/${c2.body.stepUp.id}:verify`,
     headers: { "Idempotency-Key": "su-v2" },
@@ -64,14 +64,14 @@ test("PH-49A G02 step-up MFA: challenge -> verify; expired verify fails closed",
   assert.equal(expired.status, 403);
   assert.equal(expired.body.error.code, "ERR-G02-STEPUP");
 
-  const esigs = call(api, { method: "GET", path: `/api/v1/change-requests/${crId}/esignatures` });
+  const esigs = await call(api, { method: "GET", path: `/api/v1/change-requests/${crId}/esignatures` });
   assert.equal(esigs.status, 200);
   assert.ok(Array.isArray(esigs.body.items));
 });
 
-test("PH-49A G02 change-request template: create -> list -> start -> deactivate", () => {
+test("PH-49A G02 change-request template: create -> list -> start -> deactivate", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/change-request-templates",
     headers: { "Idempotency-Key": "tpl-1" },
@@ -80,11 +80,11 @@ test("PH-49A G02 change-request template: create -> list -> start -> deactivate"
   assert.equal(created.status, 201);
   const templateId = created.body.template.id;
 
-  const list = call(api, { method: "GET", path: "/api/v1/change-request-templates" });
+  const list = await call(api, { method: "GET", path: "/api/v1/change-request-templates" });
   assert.equal(list.status, 200);
   assert.ok(list.body.items.some((t) => t.id === templateId));
 
-  const started = call(api, {
+  const started = await call(api, {
     method: "POST",
     path: `/api/v1/change-request-templates/${templateId}:start`,
     headers: { "Idempotency-Key": "tpl-s" },
@@ -93,6 +93,6 @@ test("PH-49A G02 change-request template: create -> list -> start -> deactivate"
   assert.equal(started.status, 201);
   assert.ok(started.body.prefill);
 
-  const deactivated = call(api, { method: "POST", path: `/api/v1/change-request-templates/${templateId}:deactivate`, headers: { "Idempotency-Key": "tpl-d" }, body: {} });
+  const deactivated = await call(api, { method: "POST", path: `/api/v1/change-request-templates/${templateId}:deactivate`, headers: { "Idempotency-Key": "tpl-d" }, body: {} });
   assert.equal(deactivated.status, 202);
 });

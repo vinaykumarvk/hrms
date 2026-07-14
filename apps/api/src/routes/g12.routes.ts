@@ -41,10 +41,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.ingest",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created(
-        context.services.serviceRegister.ingest(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
+        await context.services.serviceRegister.ingest(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
           sourceModule: readSourceModule(body),
           sourceReferenceId: requiredString(body, "sourceReferenceId"),
           sourceEventVersion: optionalNumber(body, "sourceEventVersion") ?? 1,
@@ -68,7 +68,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.ingest.reversal",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       const idempotencyKey = requiredString({ key: context.idempotencyKey }, "key");
       const reason = requiredString(body, "reason");
@@ -76,7 +76,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
       // reversed ledger entry by its source_reference_id; unknown targets raise SR_REVERSAL_TARGET_NOT_FOUND.
       if (optionalBoolean(body, "is_reversal")) {
         return created(
-          context.services.serviceRegister.reverseBySourceReference(
+          await context.services.serviceRegister.reverseBySourceReference(
             context.scope,
             idempotencyKey,
             requiredString(body, "reverses_source_reference_id"),
@@ -85,7 +85,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
         );
       }
       return created(
-        context.services.serviceRegister.reverseFromSource(context.scope, idempotencyKey, requiredString(body, "originalEventId"), reason)
+        await context.services.serviceRegister.reverseFromSource(context.scope, idempotencyKey, requiredString(body, "originalEventId"), reason)
       );
     },
   });
@@ -95,7 +95,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.getIngestResult",
     protected: true,
     permission: "g12.sr.read",
-    handler: (context) => ok({ event: requireSrEvent(context, requiredParam(context.params, "ingestion_request_id")) }),
+    handler: async (context) => ok({ event: await requireSrEvent(context, requiredParam(context.params, "ingestion_request_id")) }),
   });
   kernel.register({
     method: "GET",
@@ -104,10 +104,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g12.sr.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) => {
+    handler: async (context) => {
       // Cursor paging via the kernel helper: stable sequenceNo ordering from getTimeline,
       // limit clamped to 100 by parsePagination, next_cursor computed from the window end.
-      const timeline = context.services.serviceRegister.getTimeline(context.actor, requiredParam(context.params, "id"));
+      const timeline = await context.services.serviceRegister.getTimeline(context.actor, requiredParam(context.params, "id"));
       return ok(pageItems(timeline, context.pagination ?? { limit: 25 }));
     },
   });
@@ -117,7 +117,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.getServiceRegisterEvent",
     protected: true,
     permission: "g12.sr.read",
-    handler: (context) => ok({ event: requireSrEvent(context, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ event: await requireSrEvent(context, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "POST",
@@ -127,7 +127,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.corrigendum",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => appendAnnotation(context, requiredParam(context.params, "id"), "CORRIGENDUM"),
+    handler: async (context) => appendAnnotation(context, requiredParam(context.params, "id"), "CORRIGENDUM"),
   });
   kernel.register({
     method: "POST",
@@ -137,7 +137,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.dispute",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => appendAnnotation(context, requiredParam(context.params, "id"), "DISPUTE"),
+    handler: async (context) => appendAnnotation(context, requiredParam(context.params, "id"), "DISPUTE"),
   });
   kernel.register({
     method: "POST",
@@ -147,7 +147,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.dispute.resolve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => appendAnnotation(context, requiredParam(context.params, "id"), "DISPUTE_RESOLUTION"),
+    handler: async (context) => appendAnnotation(context, requiredParam(context.params, "id"), "DISPUTE_RESOLUTION"),
   });
 
   // `g12.correction.approve` — the two-custodian SoD corrigendum flow: an sr_custodian proposes, an
@@ -162,10 +162,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.correction.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        corrigendum: context.services.serviceRegister.proposeCorrigendum(context.actor, {
+        corrigendum: await context.services.serviceRegister.proposeCorrigendum(context.actor, {
           targetEventId: requiredString(body, "targetEventId"),
           correctionNote: requiredString(body, "correctionNote"),
         }),
@@ -180,8 +180,8 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.correction.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
-      accepted({ corrigendum: context.services.serviceRegister.approveCorrigendum(context.actor, requiredParam(context.params, "id")) }),
+    handler: async (context) =>
+      accepted({ corrigendum: await context.services.serviceRegister.approveCorrigendum(context.actor, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "GET",
@@ -189,7 +189,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.listCorrigenda",
     protected: true,
     permission: "g12.correction.approve",
-    handler: (context) => ok({ items: context.services.serviceRegister.listCorrigenda(context.scope) }),
+    handler: async (context) => ok({ items: await context.services.serviceRegister.listCorrigenda(context.scope) }),
   });
 
   // ------------------------------------------------------------------------------------
@@ -201,10 +201,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.verifyServiceRegisterIntegrity",
     protected: true,
     permission: "g12.sr.integrity.verify",
-    handler: (context) =>
+    handler: async (context) =>
       // FR-04: recompute the content chain + status sub-chain from stored content and
       // report OK/FAIL with the first broken link.
-      ok(context.services.srIntegrity.verifyEmployee(context.scope, requiredParam(context.params, "id"))),
+      ok(await context.services.srIntegrity.verifyEmployee(context.scope, requiredParam(context.params, "id"))),
   });
   kernel.register({
     method: "POST",
@@ -214,9 +214,9 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.integrity.run",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
+    handler: async (context) =>
       // JOB-G12-INTEGRITY: the scheduled recompute drives the same verify code path.
-      accepted(context.services.srIntegrity.runIntegrityJob(context.scope, requiredString({ key: context.idempotencyKey }, "key"))),
+      accepted(await context.services.srIntegrity.runIntegrityJob(context.scope, requiredString({ key: context.idempotencyKey }, "key"))),
   });
   kernel.register({
     method: "POST",
@@ -226,10 +226,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.anchor.run",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created(
-        context.services.srIntegrity.runAnchorJob(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
+        await context.services.srIntegrity.runAnchorJob(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
           periodFrom: optionalString(body, "periodFrom"),
           periodTo: optionalString(body, "periodTo"),
         })
@@ -243,7 +243,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g12.sr.anchor.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) => ok(pageItems(context.services.srIntegrity.listAnchors(context.scope), context.pagination ?? { limit: 25 })),
+    handler: async (context) => ok(pageItems(await context.services.srIntegrity.listAnchors(context.scope), context.pagination ?? { limit: 25 })),
   });
   kernel.register({
     method: "POST",
@@ -253,10 +253,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.gap.rule.manage",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created(
-        context.services.srIntegrity.createExpectedEventRule(context.scope, {
+        await context.services.srIntegrity.createExpectedEventRule(context.scope, {
           ruleCode: requiredString(body, "ruleCode"),
           expectedEventCategory: requiredString(body, "expectedEventCategory"),
           cadence: optionalRecord(body, "cadence"),
@@ -279,11 +279,11 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.gap.scan",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       // JOB-G12-GAPSCAN: expected-vs-recorded reconciliation appends GAP_FLAGGED rows.
       return accepted(
-        context.services.srIntegrity.runGapScan(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
+        await context.services.srIntegrity.runGapScan(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
           periodFrom: requiredString(body, "periodFrom"),
           periodTo: requiredString(body, "periodTo"),
         })
@@ -297,8 +297,8 @@ export function registerG12Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g12.sr.gap.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) =>
-      ok(pageItems(context.services.srIntegrity.listGaps(context.scope, requiredParam(context.params, "id")), context.pagination ?? { limit: 25 })),
+    handler: async (context) =>
+      ok(pageItems(await context.services.srIntegrity.listGaps(context.scope, requiredParam(context.params, "id")), context.pagination ?? { limit: 25 })),
   });
   kernel.register({
     method: "POST",
@@ -308,10 +308,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.gap.resolve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return ok(
-        context.services.srIntegrity.resolveGap(context.scope, requiredParam(context.params, "id"), {
+        await context.services.srIntegrity.resolveGap(context.scope, requiredParam(context.params, "id"), {
           gapStatus: requiredString(body, "gapStatus") as SrGapStatus,
           explanationCode: optionalString(body, "explanationCode"),
           resolvedEventId: optionalString(body, "resolvedEventId"),
@@ -328,10 +328,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.attest",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created(
-        context.services.srIntegrity.attestChainHead(context.scope, {
+        await context.services.srIntegrity.attestChainHead(context.scope, {
           employeeId: requiredString(body, "employeeId"),
           attestationKind: requiredString(body, "attestationKind") as SrAttestationKind,
           attestedRole: requiredString(body, "attestedRole"),
@@ -349,11 +349,11 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.extract.issue",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       // FR-10: certified extract with purpose-driven redaction via the P02 field mask.
       return created(
-        context.services.srIntegrity.issueCertifiedExtract(context.actor, context.scope, {
+        await context.services.srIntegrity.issueCertifiedExtract(context.actor, context.scope, {
           employeeId: requiredString(body, "employeeId"),
           scope: optionalString(body, "scope") as SrExtractScope | undefined,
           redactionPolicy: optionalString(body, "redactionPolicy") as SrRedactionPolicy | undefined,
@@ -371,8 +371,8 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.getSrCertifiedExtract",
     protected: true,
     permission: "g12.sr.extract.read",
-    handler: (context) => {
-      const extract = context.services.srIntegrity.getExtract(context.scope, requiredParam(context.params, "id"));
+    handler: async (context) => {
+      const extract = await context.services.srIntegrity.getExtract(context.scope, requiredParam(context.params, "id"));
       if (!extract) {
         throw new FoundationError("NOT_FOUND", "Certified extract not found");
       }
@@ -391,10 +391,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.cert.generate",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
+    handler: async (context) =>
       // FR-18: §65B/BSA certificate over the VERIFIED chain; the handler passes no custody
       // narrative — the chain-of-custody block is generated from stored data (BR-18.2).
-      created(context.services.srAdmissibility.issueAuthenticityCertificate(context.scope, requiredParam(context.params, "id"))),
+      created(await context.services.srAdmissibility.issueAuthenticityCertificate(context.scope, requiredParam(context.params, "id"))),
   });
   kernel.register({
     method: "GET",
@@ -402,8 +402,8 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.getSrAuthenticityCertificate",
     protected: true,
     permission: "g12.sr.cert.read",
-    handler: (context) => {
-      const certificate = context.services.srAdmissibility.getCertificate(context.scope, requiredParam(context.params, "id"));
+    handler: async (context) => {
+      const certificate = await context.services.srAdmissibility.getCertificate(context.scope, requiredParam(context.params, "id"));
       if (!certificate) {
         throw new FoundationError("NOT_FOUND", "Authenticity certificate not found");
       }
@@ -418,11 +418,11 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.subscription.manage",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       // FR-13: PULL_FEED only at launch — WEBHOOK/MESSAGE_BUS rejected (SR_DELIVERY_MODE_DEFERRED).
       return created(
-        context.services.srAdmissibility.registerSubscription(context.scope, {
+        await context.services.srAdmissibility.registerSubscription(context.scope, {
           subscriberModule: requiredString(body, "subscriberModule"),
           eventCategories: optionalStringArray(body, "eventCategories") ?? [],
           deliveryMode: optionalString(body, "deliveryMode") as SrSubscriptionMode | undefined,
@@ -439,7 +439,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.subscription.activate",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => ok(context.services.srAdmissibility.activateSubscription(context.scope, requiredParam(context.params, "id"))),
+    handler: async (context) => ok(await context.services.srAdmissibility.activateSubscription(context.scope, requiredParam(context.params, "id"))),
   });
   kernel.register({
     method: "GET",
@@ -447,7 +447,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.pullSrFeed",
     protected: true,
     permission: "g12.sr.feed.read",
-    handler: (context) => {
+    handler: async (context) => {
       // FR-13: authenticated pull feed resumable by ?since_seq=; cursor state lives on the
       // subscription (last_delivered_seq) and the read is scoped to the caller's tenant.
       const query = context.request.query ?? {};
@@ -460,7 +460,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
       if (sinceSeq !== undefined && !Number.isInteger(sinceSeq)) {
         throw new FoundationError("VALIDATION_FAILED", "since_seq must be an integer", { field: "since_seq" });
       }
-      return ok(context.services.srAdmissibility.pullFeed(context.scope, subscriptionId, sinceSeq));
+      return ok(await context.services.srAdmissibility.pullFeed(context.scope, subscriptionId, sinceSeq));
     },
   });
   kernel.register({
@@ -471,12 +471,12 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.sr.ltv.renew",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       // FR-19: additive renewal evidence — RE_ANCHOR/ALGORITHM_MIGRATION re-anchor over
       // existing chain heads; stored hashes are never recomputed or overwritten.
       return created(
-        context.services.srAdmissibility.recordLtvRenewal(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
+        await context.services.srAdmissibility.recordLtvRenewal(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
           subjectType: requiredString(body, "subjectType") as SrLtvSubject,
           subjectId: requiredString(body, "subjectId"),
           renewalKind: requiredString(body, "renewalKind") as SrLtvRenewalKind,
@@ -494,10 +494,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g12.sr.ltv.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) =>
+    handler: async (context) =>
       ok(
         pageItems(
-          context.services.srAdmissibility.listLtvRenewals(context.scope, context.request.query?.subject_id),
+          await context.services.srAdmissibility.listLtvRenewals(context.scope, context.request.query?.subject_id),
           context.pagination ?? { limit: 25 }
         )
       ),
@@ -512,9 +512,9 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.tsa.issue",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      return created(context.services.timestampAuthority.issueTimestamp(context.actor, { payload: body.payload ?? {} }));
+      return created(await context.services.timestampAuthority.issueTimestamp(context.actor, { payload: body.payload ?? {} }));
     },
   });
   kernel.register({
@@ -525,10 +525,10 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.qr.issue",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        bundle: context.services.offlineVerification.issueBundle(context.actor, {
+        bundle: await context.services.offlineVerification.issueBundle(context.actor, {
           subjectRef: requiredString(body, "subjectRef"),
           entryHash: requiredString(body, "entryHash"),
           anchorRef: requiredString(body, "anchorRef"),
@@ -545,7 +545,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.getEntryChain",
     protected: true,
     permission: "g12.sr.read",
-    handler: (context) => ok({ items: context.services.serviceRegister.getEntryChain(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ items: await context.services.serviceRegister.getEntryChain(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "GET",
@@ -553,7 +553,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.getStatusChain",
     protected: true,
     permission: "g12.sr.read",
-    handler: (context) => ok({ items: context.services.serviceRegister.getStatusChain(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ items: await context.services.serviceRegister.getStatusChain(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "GET",
@@ -561,7 +561,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.getStatusEvents",
     protected: true,
     permission: "g12.sr.read",
-    handler: (context) => ok({ items: context.services.serviceRegister.getStatusEvents(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ items: await context.services.serviceRegister.getStatusEvents(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "GET",
@@ -569,7 +569,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.listChainEmployees",
     protected: true,
     permission: "g12.sr.read",
-    handler: (context) => ok({ items: context.services.serviceRegister.listChainEmployees(context.scope) }),
+    handler: async (context) => ok({ items: await context.services.serviceRegister.listChainEmployees(context.scope) }),
   });
   kernel.register({
     method: "GET",
@@ -577,7 +577,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.listFeedEvents",
     protected: true,
     permission: "g12.sr.read",
-    handler: (context) => ok({ items: context.services.serviceRegister.listFeedEvents(context.scope) }),
+    handler: async (context) => ok({ items: await context.services.serviceRegister.listFeedEvents(context.scope) }),
   });
   kernel.register({
     method: "POST",
@@ -587,9 +587,9 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.tsa.issue",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      return ok(context.services.timestampAuthority.verifyTimestamp(context.actor, { payload: body.payload ?? {}, token: requiredString(body, "token") }));
+      return ok(await context.services.timestampAuthority.verifyTimestamp(context.actor, { payload: body.payload ?? {}, token: requiredString(body, "token") }));
     },
   });
   kernel.register({
@@ -600,7 +600,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     permission: "g12.qr.issue",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => ok(context.services.offlineVerification.verifyBundle(readBodyRecord(context.request.body) as unknown as VerificationBundle)),
+    handler: async (context) => ok(await context.services.offlineVerification.verifyBundle(readBodyRecord(context.request.body) as unknown as VerificationBundle)),
   });
 
   // PH-61A — G12 SR admissibility/integrity reads (subscriptions, attestations). Route exposure for tested
@@ -611,7 +611,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.listSubscriptions",
     protected: true,
     permission: "g12.sr.read",
-    handler: (context) => ok({ items: context.services.srAdmissibility.listSubscriptions(context.scope) }),
+    handler: async (context) => ok({ items: await context.services.srAdmissibility.listSubscriptions(context.scope) }),
   });
   kernel.register({
     method: "GET",
@@ -619,7 +619,7 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.listAttestations",
     protected: true,
     permission: "g12.sr.read",
-    handler: (context) => ok({ items: context.services.srIntegrity.listAttestations(context.scope, requiredParam(context.params, "employeeId")) }),
+    handler: async (context) => ok({ items: await context.services.srIntegrity.listAttestations(context.scope, requiredParam(context.params, "employeeId")) }),
   });
   kernel.register({
     method: "GET",
@@ -627,16 +627,16 @@ export function registerG12Routes(kernel: ApiKernel): void {
     operationId: "g12.getAttestation",
     protected: true,
     permission: "g12.sr.read",
-    handler: (context) => ok({ attestation: context.services.srIntegrity.getAttestation(context.scope, requiredParam(context.params, "attestationId")) ?? null }),
+    handler: async (context) => ok({ attestation: await context.services.srIntegrity.getAttestation(context.scope, requiredParam(context.params, "attestationId")) ?? null }),
   });
 }
 
-function appendAnnotation(context: ApiContext, eventId: string, eventTypeCode: string): ApiResponse {
-  const original = requireSrEvent(context, eventId);
+async function appendAnnotation(context: ApiContext, eventId: string, eventTypeCode: string): Promise<ApiResponse> {
+  const original = await await requireSrEvent(context, eventId);
   const body = readBodyRecord(context.request.body);
   const reason = requiredString(body, "reason");
   return created(
-    context.services.serviceRegister.ingest(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
+    await context.services.serviceRegister.ingest(context.scope, requiredString({ key: context.idempotencyKey }, "key"), {
       sourceModule: "G12_MANUAL",
       sourceReferenceId: `sr:${original.id}:${eventTypeCode}`,
       sourceEventVersion: original.sourceEventVersion + 1,
@@ -668,8 +668,8 @@ function readSourceModule(body: Record<string, unknown>): SrSourceModule {
   }
 }
 
-function requireSrEvent(context: ApiContext, eventId: string): SrEvent {
-  const event = context.services.serviceRegister.getEvent(context.actor, eventId);
+async function requireSrEvent(context: ApiContext, eventId: string): Promise<SrEvent> {
+  const event = await context.services.serviceRegister.getEvent(context.actor, eventId);
   if (!event) {
     throw new FoundationError("NOT_FOUND", "SR event not found");
   }

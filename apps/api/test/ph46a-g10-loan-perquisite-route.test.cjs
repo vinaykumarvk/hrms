@@ -17,16 +17,16 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph46a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-function sanction(api, key, instalmentPaise) {
-  const res = call(api, {
+async function sanction(api, key, instalmentPaise) {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/payroll/loans:sanction",
     headers: { "Idempotency-Key": key },
@@ -36,41 +36,41 @@ function sanction(api, key, instalmentPaise) {
   return res.body.loan.id;
 }
 
-test("PH-46A G10 loan instalment recovery with net-floor carryforward via the kernel", () => {
+test("PH-46A G10 loan instalment recovery with net-floor carryforward via the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const id = sanction(api, "loan-1", 25000);
+  const id = await sanction(api, "loan-1", 25000);
 
-  const paid = call(api, { method: "POST", path: `/api/v1/payroll/loans/${id}:instalment`, headers: { "Idempotency-Key": "inst-1" }, body: { netAvailablePaise: 25000, recordedAt: "2026-07-02" } });
+  const paid = await call(api, { method: "POST", path: `/api/v1/payroll/loans/${id}:instalment`, headers: { "Idempotency-Key": "inst-1" }, body: { netAvailablePaise: 25000, recordedAt: "2026-07-02" } });
   assert.equal(paid.status, 201);
   assert.equal(paid.body.repayment.recoveredPaise, 25000);
   assert.equal(paid.body.repayment.outstandingAfterPaise, 75000);
 
   // Zero net headroom: nothing recovered, whole instalment carries forward, fail closed.
-  const blocked = call(api, { method: "POST", path: `/api/v1/payroll/loans/${id}:instalment`, headers: { "Idempotency-Key": "inst-2" }, body: { netAvailablePaise: 0, recordedAt: "2026-08-02" } });
+  const blocked = await call(api, { method: "POST", path: `/api/v1/payroll/loans/${id}:instalment`, headers: { "Idempotency-Key": "inst-2" }, body: { netAvailablePaise: 0, recordedAt: "2026-08-02" } });
   assert.equal(blocked.status, 409);
   assert.equal(blocked.body.error.code, "ERR-G10-RECOVERY-NET");
 
-  const repayments = call(api, { method: "GET", path: `/api/v1/payroll/loans/${id}/repayments` });
+  const repayments = await call(api, { method: "GET", path: `/api/v1/payroll/loans/${id}/repayments` });
   assert.equal(repayments.status, 200);
   assert.equal(repayments.body.items.length, 1);
 
-  const carryforwards = call(api, { method: "GET", path: `/api/v1/payroll/employees/${ph03Ids.employee}/carryforwards` });
+  const carryforwards = await call(api, { method: "GET", path: `/api/v1/payroll/employees/${ph03Ids.employee}/carryforwards` });
   assert.equal(carryforwards.status, 200);
   assert.ok(carryforwards.body.items.length >= 1);
 });
 
-test("PH-46A G10 loan foreclosure settles the outstanding in one row", () => {
+test("PH-46A G10 loan foreclosure settles the outstanding in one row", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const id = sanction(api, "loan-fc", 25000);
-  const foreclosed = call(api, { method: "POST", path: `/api/v1/payroll/loans/${id}:foreclose`, headers: { "Idempotency-Key": "fc-1" }, body: { recordedAt: "2026-07-10" } });
+  const id = await sanction(api, "loan-fc", 25000);
+  const foreclosed = await call(api, { method: "POST", path: `/api/v1/payroll/loans/${id}:foreclose`, headers: { "Idempotency-Key": "fc-1" }, body: { recordedAt: "2026-07-10" } });
   assert.equal(foreclosed.status, 202);
   assert.equal(foreclosed.body.repayment.kind, "FORECLOSURE");
   assert.equal(foreclosed.body.repayment.outstandingAfterPaise, 0);
 });
 
-test("PH-46A G10 Rule-3 concessional perquisite valuation; missing reference rate fails closed", () => {
+test("PH-46A G10 Rule-3 concessional perquisite valuation; missing reference rate fails closed", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const valued = call(api, {
+  const valued = await call(api, {
     method: "POST",
     path: "/api/v1/payroll/perquisites:value",
     headers: { "Idempotency-Key": "perq-1" },
@@ -79,7 +79,7 @@ test("PH-46A G10 Rule-3 concessional perquisite valuation; missing reference rat
   assert.equal(valued.status, 201);
   assert.ok(valued.body.perquisite && valued.body.perquisite.id);
 
-  const noRate = call(api, {
+  const noRate = await call(api, {
     method: "POST",
     path: "/api/v1/payroll/perquisites:value",
     headers: { "Idempotency-Key": "perq-2" },

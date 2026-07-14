@@ -57,10 +57,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.salary.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          salaryStructure: context.services.payroll.createSalaryStructure(context.actor, {
+          salaryStructure: await context.services.payroll.createSalaryStructure(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             basicPayCents: optionalNumber(body, "basicPayCents") ?? 10000000,
             daRateBps: optionalNumber(body, "daRateBps") ?? 4200,
@@ -81,10 +81,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.adjustment.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          adjustment: context.services.payroll.addAdjustment(context.actor, {
+          adjustment: await context.services.payroll.addAdjustment(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             period: requiredString(body, "period"),
             sourceModule: readAdjustmentSource(body),
@@ -104,9 +104,9 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.run.create",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return created({ payrollRun: context.services.payroll.createRun(context.actor, { period: requiredString(body, "period") }) });
+        return created({ payrollRun: await context.services.payroll.createRun(context.actor, { period: requiredString(body, "period") }) });
       },
     },
     {
@@ -117,7 +117,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.input.lock",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ payrollRun: context.services.payroll.lockInputs(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ payrollRun: await context.services.payroll.lockInputs(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -127,7 +127,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ payrollRun: context.services.payroll.computeRun(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ payrollRun: await context.services.payroll.computeRun(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -137,7 +137,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.reconcile",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ payrollRun: context.services.payroll.reconcileRun(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ payrollRun: await context.services.payroll.reconcileRun(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -147,7 +147,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ payrollRun: context.services.payroll.approveRun(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ payrollRun: await context.services.payroll.approveRun(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -157,7 +157,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.lock",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ payrollRun: context.services.payroll.lockRun(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ payrollRun: await context.services.payroll.lockRun(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -167,7 +167,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.disburse",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ payrollRun: context.services.payroll.disburseRun(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ payrollRun: await context.services.payroll.disburseRun(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -175,7 +175,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.summary",
       protected: true,
       permission: "g10.payroll.read",
-      handler: (context) => ok(context.services.payroll.summary(context.scope)),
+      handler: async (context) => ok(await context.services.payroll.summary(context.scope)),
     },
     // Engine enrolment (route exposure for the already-tested PayrollEngineService.enrolEmployee;
     // a prerequisite admin setup step before any engine run can produce a payslip for an employee).
@@ -187,7 +187,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.salary.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         const rawAmounts = body.componentAmountsCents;
         const componentAmountsCents: Record<string, number> = {};
@@ -197,7 +197,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
           }
         }
         return created({
-          enrolment: context.services.payrollEngine.enrolEmployee(context.actor, {
+          enrolment: await context.services.payrollEngine.enrolEmployee(context.actor, {
             employeeId: requiredParam(context.params, "id"),
             stateOfPosting: optionalString(body, "stateOfPosting"),
             componentAmountsCents,
@@ -214,8 +214,8 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.listMyPayslips",
       protected: true,
       permission: "g10.payroll.read",
-      handler: (context) =>
-        ok({ items: context.services.payrollEngine.listMyPayslips(context.actor, requiredParam(context.params, "id")).map(toWirePayslipRecord) }),
+      handler: async (context) =>
+        ok({ items: await context.services.payrollEngine.listMyPayslips(context.actor, requiredParam(context.params, "id")).map(toWirePayslipRecord) }),
     },
     {
       method: "GET",
@@ -223,7 +223,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.getMyYtdStatement",
       protected: true,
       permission: "g10.payroll.read",
-      handler: (context) => ok({ ytd: context.services.payrollEngine.getYtdStatement(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ ytd: await context.services.payrollEngine.getYtdStatement(context.actor, requiredParam(context.params, "id")) }),
     },
     // ---- PH-09A rule substrate: E05 pay_components / E06 pay_rules / E07 rate_tables ----
     {
@@ -234,10 +234,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payrule.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          payComponent: context.services.payRules.createPayComponent(context.actor, {
+          payComponent: await context.services.payRules.createPayComponent(context.actor, {
             componentCode: requiredString(body, "componentCode"),
             name: requiredString(body, "name"),
             category: readComponentCategory(body),
@@ -259,10 +259,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payrule.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          payRule: context.services.payRules.createPayRule(context.actor, {
+          payRule: await context.services.payRules.createPayRule(context.actor, {
             componentCode: requiredString(body, "componentCode"),
             calcMethod: readCalcMethod(body),
             formulaExpression: optionalString(body, "formulaExpression"),
@@ -283,10 +283,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payrule.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          rateRow: context.services.payRules.addRateRow(context.actor, {
+          rateRow: await context.services.payRules.addRateRow(context.actor, {
             tableType: readRateTableType(requiredString(body, "tableType")),
             state: optionalString(body, "state"),
             cityClass: optionalString(body, "cityClass"),
@@ -312,10 +312,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.tax.declare",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          taxDeclaration: context.services.taxEngine.upsertDeclaration(context.actor, {
+          taxDeclaration: await context.services.taxEngine.upsertDeclaration(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             financialYear: requiredString(body, "financialYear"),
             regime: readRegime(optionalString(body, "regime")),
@@ -339,10 +339,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.tax.declare",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          taxDeclaration: context.services.taxEngine.switchRegime(context.actor, {
+          taxDeclaration: await context.services.taxEngine.switchRegime(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             financialYear: requiredString(body, "financialYear"),
             regime: readRegime(optionalString(body, "regime")),
@@ -359,10 +359,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.tax.cutoff",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          taxDeclaration: context.services.taxEngine.setProofCutoff(context.actor, {
+          taxDeclaration: await context.services.taxEngine.setProofCutoff(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             financialYear: requiredString(body, "financialYear"),
             cutoffDate: requiredString(body, "cutoffDate"),
@@ -376,10 +376,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.getTaxDeclaration",
       protected: true,
       permission: "g10.tax.read",
-      handler: (context) => {
+      handler: async (context) => {
         const query = context.request.query ?? {};
         return ok({
-          taxDeclaration: context.services.taxEngine.getDeclaration(
+          taxDeclaration: await context.services.taxEngine.getDeclaration(
             context.scope,
             query.employeeId ?? ph03Ids.employee,
             requiredQuery(query, "financialYear")
@@ -395,10 +395,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.statutory.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          remittance: context.services.taxEngine.accrueRemittance(context.actor, {
+          remittance: await context.services.taxEngine.accrueRemittance(context.actor, {
             scheme: readRemittanceScheme(requiredString(body, "scheme")),
             period: requiredString(body, "period"),
             statutoryDueDate: requiredString(body, "statutoryDueDate"),
@@ -416,10 +416,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.statutory.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          remittance: context.services.taxEngine.captureDeposit(context.actor, requiredParam(context.params, "id"), {
+          remittance: await context.services.taxEngine.captureDeposit(context.actor, requiredParam(context.params, "id"), {
             challanNo: requiredString(body, "challanNo"),
             cin: optionalString(body, "cin"),
             depositDate: requiredString(body, "depositDate"),
@@ -436,10 +436,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.statutory.certify",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          remittance: context.services.taxEngine.matchRemittance(context.actor, requiredParam(context.params, "id"), {
+          remittance: await context.services.taxEngine.matchRemittance(context.actor, requiredParam(context.params, "id"), {
             tolerancePaise: optionalNumber(body, "tolerancePaise"),
           }),
         });
@@ -453,10 +453,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.statutory.certify",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          form16: context.services.taxEngine.generateForm16(context.actor, {
+          form16: await context.services.taxEngine.generateForm16(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             financialYear: requiredString(body, "financialYear"),
           }),
@@ -471,10 +471,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.statutory.certify",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          form24q: context.services.taxEngine.generateForm24Q(context.actor, {
+          form24q: await context.services.taxEngine.generateForm24Q(context.actor, {
             financialYear: requiredString(body, "financialYear"),
             quarter: readQuarter(requiredString(body, "quarter")),
           }),
@@ -487,10 +487,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.resolveRate",
       protected: true,
       permission: "g10.payroll.read",
-      handler: (context) => {
+      handler: async (context) => {
         const query = context.request.query ?? {};
         return ok({
-          rateRow: context.services.payRules.resolveRate(context.scope, {
+          rateRow: await context.services.payRules.resolveRate(context.scope, {
             tableType: readRateTableType(requiredQuery(query, "tableType")),
             asOf: requiredQuery(query, "asOf"),
             state: query.state,
@@ -512,10 +512,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.loan.sanction",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          loan: context.services.loanPerquisiteGl.sanctionLoan(context.actor, {
+          loan: await context.services.loanPerquisiteGl.sanctionLoan(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             loanType: requiredString(body, "loanType"),
             principalPaise: optionalNumber(body, "principalPaise") ?? 0,
@@ -533,10 +533,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.glexport.post",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created(
-          context.services.glErpPosting.postToErp(context.actor, {
+          await context.services.glErpPosting.postToErp(context.actor, {
             exportKey: requiredString(body, "exportKey"),
             totalDebitPaise: optionalNumber(body, "totalDebitPaise") ?? 0,
             totalCreditPaise: optionalNumber(body, "totalCreditPaise") ?? 0,
@@ -555,10 +555,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.loan.recover",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          repayment: context.services.loanPerquisiteGl.recordLoanInstalment(context.actor, requiredParam(context.params, "id"), {
+          repayment: await context.services.loanPerquisiteGl.recordLoanInstalment(context.actor, requiredParam(context.params, "id"), {
             netAvailablePaise: requiredNumber(body, "netAvailablePaise"),
             recordedAt: requiredString(body, "recordedAt"),
           }),
@@ -573,9 +573,9 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.loan.foreclose",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted({ repayment: context.services.loanPerquisiteGl.forecloseLoan(context.actor, requiredParam(context.params, "id"), { recordedAt: requiredString(body, "recordedAt") }) });
+        return accepted({ repayment: await context.services.loanPerquisiteGl.forecloseLoan(context.actor, requiredParam(context.params, "id"), { recordedAt: requiredString(body, "recordedAt") }) });
       },
     },
     {
@@ -584,7 +584,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.listLoanRepayments",
       protected: true,
       permission: "g10.loan.read",
-      handler: (context) => ok({ items: context.services.loanPerquisiteGl.listLoanRepayments(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ items: await context.services.loanPerquisiteGl.listLoanRepayments(context.scope, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -592,7 +592,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.listCarryforwards",
       protected: true,
       permission: "g10.loan.read",
-      handler: (context) => ok({ items: context.services.loanPerquisiteGl.listCarryforwards(context.scope, requiredParam(context.params, "employeeId")) }),
+      handler: async (context) => ok({ items: await context.services.loanPerquisiteGl.listCarryforwards(context.scope, requiredParam(context.params, "employeeId")) }),
     },
     {
       method: "POST",
@@ -602,10 +602,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.perquisite.value",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          perquisite: context.services.loanPerquisiteGl.valuePerquisite(context.actor, {
+          perquisite: await context.services.loanPerquisiteGl.valuePerquisite(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             perquisiteType: requiredString(body, "perquisiteType") as PerquisiteType,
             isConcessional: optionalBoolean(body, "isConcessional") ?? false,
@@ -626,9 +626,9 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return created({ run: context.services.payrollEngine.createEngineRun(context.actor, { period: requiredString(body, "period"), runMode: optionalString(body, "runMode") as EngineRunMode | undefined }) });
+        return created({ run: await context.services.payrollEngine.createEngineRun(context.actor, { period: requiredString(body, "period"), runMode: optionalString(body, "runMode") as EngineRunMode | undefined }) });
       },
     },
     {
@@ -639,7 +639,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.input.lock",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ run: context.services.payrollEngine.snapshotRunInputs(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ run: await context.services.payrollEngine.snapshotRunInputs(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -649,7 +649,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted(context.services.payrollEngine.computeEngineRun(context.actor, requiredParam(context.params, "id"))),
+      handler: async (context) => accepted(await context.services.payrollEngine.computeEngineRun(context.actor, requiredParam(context.params, "id"))),
     },
     {
       method: "POST",
@@ -659,7 +659,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ run: context.services.payrollEngine.approveEngineRun(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ run: await context.services.payrollEngine.approveEngineRun(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -669,7 +669,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.payroll.lock",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ run: context.services.payrollEngine.lockEngineRun(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ run: await context.services.payrollEngine.lockEngineRun(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -677,7 +677,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.getEngineRun",
       protected: true,
       permission: "g10.payroll.read",
-      handler: (context) => ok({ run: context.services.payrollEngine.getEngineRun(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ run: await context.services.payrollEngine.getEngineRun(context.scope, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -685,7 +685,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.listRunPayslips",
       protected: true,
       permission: "g10.payroll.read",
-      handler: (context) => ok({ items: context.services.payrollEngine.listRunPayslips(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ items: await context.services.payrollEngine.listRunPayslips(context.scope, requiredParam(context.params, "id")) }),
     },
     // PH-57A — FR-20 full-and-final settlement (settle -> approve with SoD) + recovery/loan/hold reads.
     // Route exposure for already-tested compensationIntegration backing.
@@ -697,10 +697,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.fnf.settle",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          settlement: context.services.compensationIntegration.settleFnf(context.actor, {
+          settlement: await context.services.compensationIntegration.settleFnf(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             separationDate: requiredString(body, "separationDate"),
             finalMonthPayPaise: requiredNumber(body, "finalMonthPayPaise"),
@@ -720,7 +720,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.fnf.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ settlement: context.services.compensationIntegration.approveFnfSettlement(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ settlement: await context.services.compensationIntegration.approveFnfSettlement(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -730,7 +730,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.fnf.settle",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ settlement: context.services.compensationIntegration.sanctionFnfSettlement(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ settlement: await context.services.compensationIntegration.sanctionFnfSettlement(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -740,10 +740,10 @@ export function registerG10Routes(kernel: ApiKernel): void {
       permission: "g10.fnf.settle",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          settlement: context.services.compensationIntegration.payFnfSettlement(context.actor, requiredParam(context.params, "id"), {
+          settlement: await context.services.compensationIntegration.payFnfSettlement(context.actor, requiredParam(context.params, "id"), {
             paymentRef: requiredString(body, "paymentRef"),
           }),
         });
@@ -755,7 +755,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.listFnfSettlements",
       protected: true,
       permission: "g10.payroll.read",
-      handler: (context) => ok({ items: context.services.compensationIntegration.listFnfSettlements(context.scope, context.request.query?.employeeId) }),
+      handler: async (context) => ok({ items: await context.services.compensationIntegration.listFnfSettlements(context.scope, context.request.query?.employeeId) }),
     },
     {
       method: "GET",
@@ -763,7 +763,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.listRecoverySchedules",
       protected: true,
       permission: "g10.payroll.read",
-      handler: (context) => ok({ items: context.services.compensationIntegration.listRecoverySchedules(context.scope, requiredParam(context.params, "employeeId")) }),
+      handler: async (context) => ok({ items: await context.services.compensationIntegration.listRecoverySchedules(context.scope, requiredParam(context.params, "employeeId")) }),
     },
     {
       method: "GET",
@@ -771,7 +771,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.listLoans",
       protected: true,
       permission: "g10.payroll.read",
-      handler: (context) => ok({ items: context.services.compensationIntegration.listLoans(context.scope, requiredParam(context.params, "employeeId")) }),
+      handler: async (context) => ok({ items: await context.services.compensationIntegration.listLoans(context.scope, requiredParam(context.params, "employeeId")) }),
     },
     {
       method: "GET",
@@ -779,7 +779,7 @@ export function registerG10Routes(kernel: ApiKernel): void {
       operationId: "g10.listHolds",
       protected: true,
       permission: "g10.payroll.read",
-      handler: (context) => ok({ items: context.services.compensationIntegration.listHolds(context.scope, requiredParam(context.params, "runId")) }),
+      handler: async (context) => ok({ items: await context.services.compensationIntegration.listHolds(context.scope, requiredParam(context.params, "runId")) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

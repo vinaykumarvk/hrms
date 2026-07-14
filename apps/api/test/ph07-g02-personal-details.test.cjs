@@ -21,15 +21,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph07-g02", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-07 G02 routes sensitive fields differently and creates G13 evidence", () => {
+test("PH-07 G02 routes sensitive fields differently and creates G13 evidence", async () => {
   const services = createFoundationServices();
   const sensitive = services.personalDetails.createRequest(actor(), {
     employeeId: ph03Ids.employee,
@@ -44,7 +44,7 @@ test("PH-07 G02 routes sensitive fields differently and creates G13 evidence", (
   assert.equal(services.documentVault.listByModuleRef(actor(), "G02", sensitive.request.id).length, 1);
 });
 
-test("PH-07 G02 approved display-name change commits through G01-owned SR posting and can reverse through G01", () => {
+test("PH-07 G02 approved display-name change commits through G01-owned SR posting and can reverse through G01", async () => {
   const services = createFoundationServices();
   const request = services.personalDetails.createRequest(actor(), {
     employeeId: ph03Ids.employee,
@@ -73,10 +73,10 @@ test("PH-07 G02 approved display-name change commits through G01-owned SR postin
   assert.equal(services.serviceRegister.getTimeline(actor(), ph03Ids.employee).length, 2);
 });
 
-test("PH-07 G02 API flow creates, approves, commits, and lists change requests", () => {
+test("PH-07 G02 API flow creates, approves, commits, and lists change requests", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/personal-details/change-requests",
     headers: { "Idempotency-Key": "idem-ph07-g02-create-route-001" },
@@ -91,7 +91,7 @@ test("PH-07 G02 API flow creates, approves, commits, and lists change requests",
   assert.equal(created.status, 201);
   assert.equal(created.body.request.sensitivity, "LOW");
 
-  const approved = call(api, {
+  const approved = await call(api, {
     method: "POST",
     path: `/api/v1/personal-details/change-requests/${created.body.request.id}:approve`,
     headers: { "Idempotency-Key": "idem-ph07-g02-approve-route-001" },
@@ -101,7 +101,7 @@ test("PH-07 G02 API flow creates, approves, commits, and lists change requests",
   });
   assert.equal(approved.status, 202);
 
-  const committed = call(api, {
+  const committed = await call(api, {
     method: "POST",
     path: `/api/v1/personal-details/change-requests/${created.body.request.id}:commit`,
     headers: { "Idempotency-Key": "idem-ph07-g02-commit-route-001" },
@@ -111,7 +111,7 @@ test("PH-07 G02 API flow creates, approves, commits, and lists change requests",
   assert.equal(committed.body.request.status, "COMMITTED");
   assert.equal(services.serviceRegister.getTimeline(actor(), ph03Ids.employee)[0].sourceModule, "G01");
 
-  const list = call(api, { method: "GET", path: "/api/v1/personal-details/change-requests" });
+  const list = await call(api, { method: "GET", path: "/api/v1/personal-details/change-requests" });
   assert.equal(list.status, 200);
   assert.equal(list.body.items.length, 1);
 });

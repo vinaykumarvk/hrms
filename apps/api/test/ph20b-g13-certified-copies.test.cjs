@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G13 certified_copies: an ACTIVE source is certified with a watermark + issuing authority", () => {
+test("G13 certified_copies: an ACTIVE source is certified with a watermark + issuing authority", async () => {
   const s = createFoundationServices();
   const copy = s.certifiedCopy.issueCertifiedCopy(actor(), {
     sourceDocumentId: "doc-service-book-1",
@@ -36,7 +36,7 @@ test("G13 certified_copies: an ACTIVE source is certified with a watermark + iss
   assert.equal(s.certifiedCopy.listBySource(actor(), "doc-service-book-1").length, 1);
 });
 
-test("G13 certified_copies: a non-ACTIVE source cannot be certified", () => {
+test("G13 certified_copies: a non-ACTIVE source cannot be certified", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.certifiedCopy.issueCertifiedCopy(actor(), {

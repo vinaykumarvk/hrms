@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G09 jurisdiction transfer: re-resolves the authority and records the chain", () => {
+test("G09 jurisdiction transfer: re-resolves the authority and records the chain", async () => {
   const s = createFoundationServices();
   s.jurisdictionRetiree.setInitialJurisdiction(actor(), { caseId: "case-1", authorityId: "auth-A" });
   const moved = s.jurisdictionRetiree.transferJurisdiction(actor(), { caseId: "case-1", toAuthorityId: "auth-B", reason: "Officer transferred to a new circle." });
@@ -30,7 +30,7 @@ test("G09 jurisdiction transfer: re-resolves the authority and records the chain
   assert.equal(moved.transferChain[0].fromAuthorityId, "auth-A");
 });
 
-test("G09 retiree Rule-9: a proceeding beyond four years without sanction is barred", () => {
+test("G09 retiree Rule-9: a proceeding beyond four years without sanction is barred", async () => {
   const s = createFoundationServices();
   // Event 2019, institution 2026 => >4 years, retiree, no sanction -> barred.
   assert.throws(

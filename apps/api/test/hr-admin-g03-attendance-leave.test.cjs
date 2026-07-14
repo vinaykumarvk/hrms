@@ -31,11 +31,11 @@ function boot() {
   return { services, api, admin, meera };
 }
 
-function call(api, actorCtx, request) {
-  return api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-hr-admin-g03", ...(request.headers ?? {}) }, actor: actorCtx });
+async function call(api, actorCtx, request) {
+  return await api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-hr-admin-g03", ...(request.headers ?? {}) }, actor: actorCtx });
 }
 
-test("g03.leave.sanction_special: a special leave type requires final sanction beyond ordinary approval; only sanctioning_authority (or override) may grant it", () => {
+test("g03.leave.sanction_special: a special leave type requires final sanction beyond ordinary approval; only sanctioning_authority (or override) may grant it", async () => {
   const { services, api, meera } = boot();
   const admin = actor("test-admin-2", ["*"]);
   services.leave.configureLeaveType(admin, {
@@ -47,7 +47,7 @@ test("g03.leave.sanction_special: a special leave type requires final sanction b
     requiresFinalSanction: true,
   });
 
-  const submitted = call(api, actor(meera.id, ["g03.leave.submit"], { roles: ["employee"] }), {
+  const submitted = await call(api, actor(meera.id, ["g03.leave.submit"], { roles: ["employee"] }), {
     method: "POST",
     path: "/api/v1/atl/leave-applications",
     headers: { "Idempotency-Key": "idem-hr-admin-g03-special-submit-001" },
@@ -57,7 +57,7 @@ test("g03.leave.sanction_special: a special leave type requires final sanction b
   const applicationId = submitted.body.application.id;
 
   // Cannot sanction before ordinary approval.
-  const beforeApproval = call(api, actor("sanctioning-authority-probe-1", ["g03.leave.sanction_special"], { roles: ["sanctioning_authority"] }), {
+  const beforeApproval = await call(api, actor("sanctioning-authority-probe-1", ["g03.leave.sanction_special"], { roles: ["sanctioning_authority"] }), {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${applicationId}:sanction-special`,
     headers: { "Idempotency-Key": "idem-hr-admin-g03-sanction-001" },
@@ -65,7 +65,7 @@ test("g03.leave.sanction_special: a special leave type requires final sanction b
   });
   assert.equal(beforeApproval.status, 412);
 
-  const approved = call(api, actor(ph03Ids.manager, ["g03.leave.approve", "g04.relay.write"], { roles: ["l1_manager"] }), {
+  const approved = await call(api, actor(ph03Ids.manager, ["g03.leave.approve", "g04.relay.write"], { roles: ["l1_manager"] }), {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${applicationId}/decision`,
     headers: { "Idempotency-Key": "idem-hr-admin-g03-special-approve-001" },
@@ -74,7 +74,7 @@ test("g03.leave.sanction_special: a special leave type requires final sanction b
   assert.equal(approved.status, 202);
 
   // A plain g03.leave.sanction_special holder without the sanctioning_authority role cannot sanction.
-  const withoutRole = call(api, actor("hr-admin-no-role-probe", ["g03.leave.sanction_special"], { roles: ["hr_admin"] }), {
+  const withoutRole = await call(api, actor("hr-admin-no-role-probe", ["g03.leave.sanction_special"], { roles: ["hr_admin"] }), {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${applicationId}:sanction-special`,
     headers: { "Idempotency-Key": "idem-hr-admin-g03-sanction-002" },
@@ -82,7 +82,7 @@ test("g03.leave.sanction_special: a special leave type requires final sanction b
   });
   assert.equal(withoutRole.status, 403);
 
-  const sanctioned = call(api, actor("sanctioning-authority-probe-2", ["g03.leave.sanction_special"], { roles: ["sanctioning_authority"] }), {
+  const sanctioned = await call(api, actor("sanctioning-authority-probe-2", ["g03.leave.sanction_special"], { roles: ["sanctioning_authority"] }), {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${applicationId}:sanction-special`,
     headers: { "Idempotency-Key": "idem-hr-admin-g03-sanction-003" },
@@ -92,20 +92,20 @@ test("g03.leave.sanction_special: a special leave type requires final sanction b
   assert.ok(sanctioned.body.application.finalSanctionedByUserId);
 
   // A standard (non-special) leave type cannot be sanctioned — nothing to sanction.
-  const standardSubmitted = call(api, actor(meera.id, ["g03.leave.submit"], { roles: ["employee"] }), {
+  const standardSubmitted = await call(api, actor(meera.id, ["g03.leave.submit"], { roles: ["employee"] }), {
     method: "POST",
     path: "/api/v1/atl/leave-applications",
     headers: { "Idempotency-Key": "idem-hr-admin-g03-standard-submit-001" },
     body: { employeeId: meera.id, leaveTypeId: "CL", fromDate: "2026-08-10", toDate: "2026-08-10", reason: "Personal work" },
   });
-  const standardApproved = call(api, actor(ph03Ids.manager, ["g03.leave.approve", "g04.relay.write"], { roles: ["l1_manager"] }), {
+  const standardApproved = await call(api, actor(ph03Ids.manager, ["g03.leave.approve", "g04.relay.write"], { roles: ["l1_manager"] }), {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${standardSubmitted.body.application.id}/decision`,
     headers: { "Idempotency-Key": "idem-hr-admin-g03-standard-approve-001" },
     body: { decision: "APPROVE" },
   });
   assert.equal(standardApproved.status, 202);
-  const standardSanction = call(api, actor("sanctioning-authority-probe-3", ["g03.leave.sanction_special"], { roles: ["sanctioning_authority"] }), {
+  const standardSanction = await call(api, actor("sanctioning-authority-probe-3", ["g03.leave.sanction_special"], { roles: ["sanctioning_authority"] }), {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${standardSubmitted.body.application.id}:sanction-special`,
     headers: { "Idempotency-Key": "idem-hr-admin-g03-sanction-004" },
@@ -114,7 +114,7 @@ test("g03.leave.sanction_special: a special leave type requires final sanction b
   assert.equal(standardSanction.status, 400);
 });
 
-test("g03.punch.review_anomaly (post-hr_admin-goal fix): reviewing a flagged punch anomaly requires the anomaly_reviewer capability", () => {
+test("g03.punch.review_anomaly (post-hr_admin-goal fix): reviewing a flagged punch anomaly requires the anomaly_reviewer capability", async () => {
   const { services } = boot();
   const admin = actor("test-admin-3", ["*"]);
   const employee = services.employeeMaster.getByServiceNo(admin, "GOV-100303");
@@ -137,9 +137,9 @@ test("g03.punch.review_anomaly (post-hr_admin-goal fix): reviewing a flagged pun
   assert.equal(resolved.status, "VALID");
 });
 
-test("g03.biometric.govern: recording consent, configuring retention, and purging requires the dpo_governance capability", () => {
+test("g03.biometric.govern: recording consent, configuring retention, and purging requires the dpo_governance capability", async () => {
   const { api, meera } = boot();
-  const withoutFlag = call(api, actor("hr-admin-no-dpo-probe", ["g03.biometric.govern"], { roles: ["hr_admin"] }), {
+  const withoutFlag = await call(api, actor("hr-admin-no-dpo-probe", ["g03.biometric.govern"], { roles: ["hr_admin"] }), {
     method: "POST",
     path: "/api/v1/biometric-governance/consents",
     headers: { "Idempotency-Key": "idem-hr-admin-g03-consent-001" },
@@ -147,7 +147,7 @@ test("g03.biometric.govern: recording consent, configuring retention, and purgin
   });
   assert.equal(withoutFlag.status, 403);
 
-  const recorded = call(api, actor("hr-admin-with-dpo-probe", ["g03.biometric.govern"], { roles: ["hr_admin", "dpo_governance"] }), {
+  const recorded = await call(api, actor("hr-admin-with-dpo-probe", ["g03.biometric.govern"], { roles: ["hr_admin", "dpo_governance"] }), {
     method: "POST",
     path: "/api/v1/biometric-governance/consents",
     headers: { "Idempotency-Key": "idem-hr-admin-g03-consent-002" },
@@ -156,7 +156,7 @@ test("g03.biometric.govern: recording consent, configuring retention, and purgin
   assert.equal(recorded.status, 201);
   assert.equal(recorded.body.consent.employeeId, meera.id);
 
-  const missingLawfulBasis = call(api, actor("hr-admin-with-dpo-probe-2", ["g03.biometric.govern"], { roles: ["hr_admin", "dpo_governance"] }), {
+  const missingLawfulBasis = await call(api, actor("hr-admin-with-dpo-probe-2", ["g03.biometric.govern"], { roles: ["hr_admin", "dpo_governance"] }), {
     method: "POST",
     path: "/api/v1/biometric-governance/consents",
     headers: { "Idempotency-Key": "idem-hr-admin-g03-consent-003" },
@@ -164,14 +164,14 @@ test("g03.biometric.govern: recording consent, configuring retention, and purgin
   });
   assert.equal(missingLawfulBasis.status, 400);
 
-  const listed = call(api, actor("hr-admin-with-dpo-probe-3", ["g03.biometric.govern"], { roles: ["hr_admin", "dpo_governance"] }), {
+  const listed = await call(api, actor("hr-admin-with-dpo-probe-3", ["g03.biometric.govern"], { roles: ["hr_admin", "dpo_governance"] }), {
     method: "GET",
     path: `/api/v1/biometric-governance/employees/${meera.id}/consents`,
   });
   assert.equal(listed.status, 200);
   assert.equal(listed.body.items.length, 1);
 
-  const policy = call(api, actor("hr-admin-with-dpo-probe-4", ["g03.biometric.govern"], { roles: ["hr_admin", "dpo_governance"] }), {
+  const policy = await call(api, actor("hr-admin-with-dpo-probe-4", ["g03.biometric.govern"], { roles: ["hr_admin", "dpo_governance"] }), {
     method: "POST",
     path: "/api/v1/biometric-governance/retention-policies",
     headers: { "Idempotency-Key": "idem-hr-admin-g03-retention-001" },
@@ -180,7 +180,7 @@ test("g03.biometric.govern: recording consent, configuring retention, and purgin
   assert.equal(policy.status, 201);
   assert.equal(policy.body.policy.retentionDays, 30);
 
-  const purge = call(api, actor("hr-admin-with-dpo-probe-5", ["g03.biometric.govern"], { roles: ["hr_admin", "dpo_governance"] }), {
+  const purge = await call(api, actor("hr-admin-with-dpo-probe-5", ["g03.biometric.govern"], { roles: ["hr_admin", "dpo_governance"] }), {
     method: "POST",
     path: "/api/v1/biometric-governance:purge",
     headers: { "Idempotency-Key": "idem-hr-admin-g03-purge-001" },

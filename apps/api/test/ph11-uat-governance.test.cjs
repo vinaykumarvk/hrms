@@ -35,7 +35,7 @@ function requireMarkers(text, markers) {
   }
 }
 
-test("PH-11 UAT evidence records rehearsal without business sign-off", () => {
+test("PH-11 UAT evidence records rehearsal without business sign-off", async () => {
   const combined = readRequired(requiredUatFiles);
   requireMarkers(combined, [
     "UAT_EXECUTION_REHEARSAL",
@@ -48,7 +48,7 @@ test("PH-11 UAT evidence records rehearsal without business sign-off", () => {
   assert.equal(combined.includes("They are not UAT sign-off"), true);
 });
 
-test("PH-11 defect triage keeps severity, owner, date, and decision path", () => {
+test("PH-11 defect triage keeps severity, owner, date, and decision path", async () => {
   const triage = read("docs/release/uat-defect-triage.md");
   for (const id of ["UAT-001", "UAT-002", "UAT-003", "UAT-004"]) {
     assert.equal(triage.includes(id), true, id);
@@ -61,7 +61,7 @@ test("PH-11 defect triage keeps severity, owner, date, and decision path", () =>
   assert.equal(triage.includes("Decision path"), true);
 });
 
-test("PH-11 governance documents do not claim UAT or go-live approval", () => {
+test("PH-11 governance documents do not claim UAT or go-live approval", async () => {
   const combined = [
     ...requiredUatFiles,
     ...optionalOperationalFiles,
@@ -79,7 +79,7 @@ test("PH-11 governance documents do not claim UAT or go-live approval", () => {
   assert.equal(combined.includes("GO_LIVE_HUMAN_APPROVAL_PENDING"), true);
 });
 
-test("PH-11 operational files retain support and cutover markers when present", () => {
+test("PH-11 operational files retain support and cutover markers when present", async () => {
   const combined = optionalOperationalFiles.map((file) => readIfPresent(file)).join("\n");
   if (combined.length === 0) {
     assert.equal(combined.length, 0);

@@ -31,8 +31,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph09-g11", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -119,7 +119,7 @@ function verifiedCase(services, scheme, totalServiceMonths, penaltyExclusionMont
   return pensionCase;
 }
 
-test("PH-09 G11 blocks incomplete SR verification before QUALIFYING_SERVICE_LOCKED", () => {
+test("PH-09 G11 blocks incomplete SR verification before QUALIFYING_SERVICE_LOCKED", async () => {
   const services = createFoundationServices();
   const pensionCase = services.pension.createCase(actor(), {
     employeeId: ph03Ids.employee,
@@ -136,7 +136,7 @@ test("PH-09 G11 blocks incomplete SR verification before QUALIFYING_SERVICE_LOCK
   );
 });
 
-test("PH-09C G11 FR-05 scheme DIVERGENCE: identical inputs under OPS vs NPS produce different outputs", () => {
+test("PH-09C G11 FR-05 scheme DIVERGENCE: identical inputs under OPS vs NPS produce different outputs", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -167,7 +167,7 @@ test("PH-09C G11 FR-05 scheme DIVERGENCE: identical inputs under OPS vs NPS prod
   assert.equal(opsAgain.calculation.trace.ruleVersionRef, ops.calculation.trace.ruleVersionRef);
 });
 
-test("PH-09C G11 FR-05 UPS assured payout with E35 guarantee; wrong-scheme requests fail (ERR-G11-SCHEME-MISMATCH)", () => {
+test("PH-09C G11 FR-05 UPS assured payout with E35 guarantee; wrong-scheme requests fail (ERR-G11-SCHEME-MISMATCH)", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -190,7 +190,7 @@ test("PH-09C G11 FR-05 UPS assured payout with E35 guarantee; wrong-scheme reque
   );
 });
 
-test("PH-09C G11 FR-05 sub-10yr qualifying service routes to SERVICE_GRATUITY (no pension)", () => {
+test("PH-09C G11 FR-05 sub-10yr qualifying service routes to SERVICE_GRATUITY (no pension)", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -216,7 +216,7 @@ test("PH-09C G11 FR-05 sub-10yr qualifying service routes to SERVICE_GRATUITY (n
   );
 });
 
-test("PH-09C G11 FR-06 commutation: pen_commutation_factors lookup, fraction cap, restoration = reduction + 15y", () => {
+test("PH-09C G11 FR-06 commutation: pen_commutation_factors lookup, fraction cap, restoration = reduction + 15y", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -267,7 +267,7 @@ test("PH-09C G11 FR-06 commutation: pen_commutation_factors lookup, fraction cap
   );
 });
 
-test("PH-09C G11 FR-07 gratuity types: RETIREMENT_GRATUITY clamped by pen_gratuity_ceilings, DEATH_GRATUITY slab", () => {
+test("PH-09C G11 FR-07 gratuity types: RETIREMENT_GRATUITY clamped by pen_gratuity_ceilings, DEATH_GRATUITY slab", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -296,7 +296,7 @@ test("PH-09C G11 FR-07 gratuity types: RETIREMENT_GRATUITY clamped by pen_gratui
   );
 });
 
-test("PH-09C G11 FR-08 family pension: normal + ENHANCED window rates from pen_family_pension_rates", () => {
+test("PH-09C G11 FR-08 family pension: normal + ENHANCED window rates from pen_family_pension_rates", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -329,7 +329,7 @@ test("PH-09C G11 FR-08 family pension: normal + ENHANCED window rates from pen_f
   assert.ok(inService.fpRateRef); // E32 rate row FK — rates are never literals
 });
 
-test("PH-09C G11 FR-22 Rule 9: provisional pension with DCRG fully withheld until the G09 proceeding concludes", () => {
+test("PH-09C G11 FR-22 Rule 9: provisional pension with DCRG fully withheld until the G09 proceeding concludes", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -404,7 +404,7 @@ test("PH-09C G11 FR-22 Rule 9: provisional pension with DCRG fully withheld unti
   assert.ok(services.audit.listAudit(maker).some((entry) => entry.action === "G11_PROVISIONAL_PENSION_CONCLUDED"));
 });
 
-test("PH-09 G11 computes PENSION_CALC_TRACE, enforces PENSION_SOD, issues PPO, and posts G11_SR_POSTED events", () => {
+test("PH-09 G11 computes PENSION_CALC_TRACE, enforces PENSION_SOD, issues PPO, and posts G11_SR_POSTED events", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -442,19 +442,19 @@ test("PH-09 G11 computes PENSION_CALC_TRACE, enforces PENSION_SOD, issues PPO, a
   assert.ok(services.audit.listAudit(actor()).some((entry) => entry.action === "G11_PPO_ISSUED" && entry.metadata.srMarker === "G11_SR_POSTED"));
 });
 
-test("PH-09 G11 routes expose pension case verification, benefit engines, and summary", () => {
+test("PH-09 G11 routes expose pension case verification, benefit engines, and summary", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
   const api = createFoundationApi(services);
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/pension/cases",
     headers: { "Idempotency-Key": "idem-ph09-g11-case-001" },
     body: { separationDate: "2026-11-30", scheme: "OPS" },
   });
   assert.equal(created.status, 201);
-  const verified = call(api, {
+  const verified = await call(api, {
     method: "POST",
     path: `/api/v1/pension/cases/${created.body.pensionCase.id}:verify-service`,
     headers: { "Idempotency-Key": "idem-ph09-g11-verify-001" },
@@ -463,7 +463,7 @@ test("PH-09 G11 routes expose pension case verification, benefit engines, and su
   assert.equal(verified.status, 202);
   assert.equal(verified.body.pensionCase.serviceVerification.marker, "SR_VERIFICATION_GATE");
   // PH-09C: the FR-07 gratuity engine over the kernel — E33 ceiling clamp visible on the wire.
-  const gratuity = call(api, {
+  const gratuity = await call(api, {
     method: "POST",
     path: `/api/v1/pension/cases/${created.body.pensionCase.id}/gratuity:compute`,
     headers: { "Idempotency-Key": "idem-ph09-g11-gratuity-001" },
@@ -472,7 +472,7 @@ test("PH-09 G11 routes expose pension case verification, benefit engines, and su
   assert.equal(gratuity.status, 201);
   assert.equal(gratuity.body.gratuity.ceilingApplied, true);
   assert.equal(gratuity.body.gratuity.payableAmountCents, 200000000);
-  const summary = call(api, { method: "GET", path: "/api/v1/pension/summary" });
+  const summary = await call(api, { method: "GET", path: "/api/v1/pension/summary" });
   assert.equal(summary.status, 200);
   assert.equal(summary.body.serviceGateMarker, "SR_VERIFICATION_GATE");
 });

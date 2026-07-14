@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G13 ocr_index: permission-aware search excludes over-classified documents", () => {
+test("G13 ocr_index: permission-aware search excludes over-classified documents", async () => {
   const s = createFoundationServices();
   s.ocrSearch.indexDocument(actor(), { documentId: "doc-pub", classification: "INTERNAL", text: "Annual transfer policy circular" });
   s.ocrSearch.indexDocument(actor(), { documentId: "doc-secret", classification: "SECRET", text: "Confidential transfer of the vigilance officer" });

@@ -57,16 +57,16 @@ function kernelWithProbeRoutes() {
   return kernel;
 }
 
-test("PH-04A kernel rejects missing actor with canonical envelope", () => {
-  const response = kernelWithProbeRoutes().dispatch({ method: "GET", path: "/api/v1/kernel/items" });
+test("PH-04A kernel rejects missing actor with canonical envelope", async () => {
+  const response = await kernelWithProbeRoutes().dispatch({ method: "GET", path: "/api/v1/kernel/items" });
   assert.equal(response.status, 401);
   assert.equal(response.body.error.code, "UNAUTHENTICATED");
   assert.equal(response.headers["X-Correlation-Id"].startsWith("corr-"), true);
 });
 
-test("PH-04A kernel echoes correlation header and enforces permission", () => {
+test("PH-04A kernel echoes correlation header and enforces permission", async () => {
   const kernel = kernelWithProbeRoutes();
-  const allowed = kernel.dispatch({
+  const allowed = await kernel.dispatch({
     method: "GET",
     path: "/api/v1/kernel/items",
     query: { limit: "250" },
@@ -78,7 +78,7 @@ test("PH-04A kernel echoes correlation header and enforces permission", () => {
   assert.equal(allowed.body.limit, 100);
   assert.equal(allowed.body.next_cursor, null);
 
-  const denied = kernel.dispatch({
+  const denied = await kernel.dispatch({
     method: "GET",
     path: "/api/v1/kernel/items",
     actor: actor({ permissions: [] }),
@@ -87,9 +87,9 @@ test("PH-04A kernel echoes correlation header and enforces permission", () => {
   assert.equal(denied.body.error.code, "FORBIDDEN");
 });
 
-test("PH-04A kernel requires idempotency key for unsafe routes", () => {
+test("PH-04A kernel requires idempotency key for unsafe routes", async () => {
   const kernel = kernelWithProbeRoutes();
-  const missing = kernel.dispatch({
+  const missing = await kernel.dispatch({
     method: "POST",
     path: "/api/v1/kernel/items",
     actor: actor(),
@@ -98,7 +98,7 @@ test("PH-04A kernel requires idempotency key for unsafe routes", () => {
   assert.equal(missing.body.error.code, "VALIDATION_FAILED");
   assert.equal(missing.body.error.field, "Idempotency-Key");
 
-  const createdResponse = kernel.dispatch({
+  const createdResponse = await kernel.dispatch({
     method: "POST",
     path: "/api/v1/kernel/items",
     headers: { "Idempotency-Key": "idem-kernel-001" },
@@ -108,7 +108,7 @@ test("PH-04A kernel requires idempotency key for unsafe routes", () => {
   assert.equal(createdResponse.body.idempotencyKey, "idem-kernel-001");
 });
 
-test("PH-04A kernel replays stored response for repeated Idempotency-Key without re-executing", () => {
+test("PH-04A kernel replays stored response for repeated Idempotency-Key without re-executing", async () => {
   const kernel = createApiKernel(createFoundationServices());
   let executions = 0;
   kernel.register({
@@ -131,20 +131,20 @@ test("PH-04A kernel replays stored response for repeated Idempotency-Key without
     headers: { "Idempotency-Key": "idem-replay-001" },
     body: { amount: 10 },
   };
-  const first = kernel.dispatch({ ...requestShape, actor: actor() });
-  const second = kernel.dispatch({ ...requestShape, actor: actor() });
+  const first = await kernel.dispatch({ ...requestShape, actor: actor() });
+  const second = await kernel.dispatch({ ...requestShape, actor: actor() });
 
   assert.equal(first.status, 201);
   assert.equal(second.status, first.status);
   assert.deepEqual(second.body, first.body);
   assert.equal(executions, 1, "handler side-effect must execute exactly once for a replayed key");
 
-  const conflicting = kernel.dispatch({ ...requestShape, body: { amount: 999 }, actor: actor() });
+  const conflicting = await kernel.dispatch({ ...requestShape, body: { amount: 999 }, actor: actor() });
   assert.equal(conflicting.status, 409);
   assert.equal(conflicting.body.error.code, "CONFLICT");
   assert.equal(executions, 1);
 
-  const freshKey = kernel.dispatch({
+  const freshKey = await kernel.dispatch({
     ...requestShape,
     headers: { "Idempotency-Key": "idem-replay-002" },
     actor: actor(),
@@ -153,8 +153,8 @@ test("PH-04A kernel replays stored response for repeated Idempotency-Key without
   assert.equal(executions, 2);
 });
 
-test("PH-04A kernel sanitizes internal failure output", () => {
-  const response = kernelWithProbeRoutes().dispatch({
+test("PH-04A kernel sanitizes internal failure output", async () => {
+  const response = await kernelWithProbeRoutes().dispatch({
     method: "GET",
     path: "/api/v1/kernel/failure",
     actor: actor(),

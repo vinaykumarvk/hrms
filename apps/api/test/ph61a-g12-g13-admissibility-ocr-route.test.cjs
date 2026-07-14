@@ -17,33 +17,33 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph61a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-61A G12 SR admissibility/integrity reads respond through the kernel", () => {
+test("PH-61A G12 SR admissibility/integrity reads respond through the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
 
-  const subs = call(api, { method: "GET", path: "/api/v1/sr/subscriptions" });
+  const subs = await call(api, { method: "GET", path: "/api/v1/sr/subscriptions" });
   assert.equal(subs.status, 200);
   assert.ok(Array.isArray(subs.body.items));
 
-  const attestations = call(api, { method: "GET", path: `/api/v1/sr/employees/${ph03Ids.employee}/attestations` });
+  const attestations = await call(api, { method: "GET", path: `/api/v1/sr/employees/${ph03Ids.employee}/attestations` });
   assert.equal(attestations.status, 200);
   assert.ok(Array.isArray(attestations.body.items));
 
-  const getA = call(api, { method: "GET", path: "/api/v1/sr/attestations/unknown" });
+  const getA = await call(api, { method: "GET", path: "/api/v1/sr/attestations/unknown" });
   assert.equal(getA.status, 200);
   assert.equal(getA.body.attestation, null);
 });
 
-test("PH-61A G13 OCR index-from-payload + list through the kernel", () => {
+test("PH-61A G13 OCR index-from-payload + list through the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const indexed = call(api, {
+  const indexed = await call(api, {
     method: "POST",
     path: "/api/v1/documents:ocr-index",
     headers: { "Idempotency-Key": "ocr-1" },
@@ -52,7 +52,7 @@ test("PH-61A G13 OCR index-from-payload + list through the kernel", () => {
   assert.equal(indexed.status, 201);
   assert.equal(indexed.body.entry.documentId, "DOC-1");
 
-  const list = call(api, { method: "GET", path: "/api/v1/documents:ocr-index-list" });
+  const list = await call(api, { method: "GET", path: "/api/v1/documents:ocr-index-list" });
   assert.equal(list.status, 200);
   assert.ok(list.body.items.some((e) => e.documentId === "DOC-1"));
 });

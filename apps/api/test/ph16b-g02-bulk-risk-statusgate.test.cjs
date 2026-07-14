@@ -43,8 +43,8 @@ function reviewer(extra = {}) {
   return actor({ userId: FRAUD_REVIEWER, actorUserId: FRAUD_REVIEWER, ...extra });
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph16b", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -91,7 +91,7 @@ function submitHrChange(services, employeeId, fieldKey, newValue, extra = {}) {
 // FR-G02-009 — bulk corrections
 // =======================================================================================
 
-test("PH-16B bulk dry-run reports total/valid/invalid with row-level reasons (bulk_correction_batches VALIDATED)", () => {
+test("PH-16B bulk dry-run reports total/valid/invalid with row-level reasons (bulk_correction_batches VALIDATED)", async () => {
   const services = createFoundationServices();
   const empA = createEmployee(services, "BulkA");
   const empB = createEmployee(services, "BulkB");
@@ -117,7 +117,7 @@ test("PH-16B bulk dry-run reports total/valid/invalid with row-level reasons (bu
   assert.deepEqual(report.rows.find((row) => row.rowNo === 4).reasons, ["DUPLICATE_FIELD_FOR_EMPLOYEE"]);
 });
 
-test("PH-16B bulk aggregate approval commits per-row idempotently; a seeded failing row ends the batch PARTIAL_FAILED", () => {
+test("PH-16B bulk aggregate approval commits per-row idempotently; a seeded failing row ends the batch PARTIAL_FAILED", async () => {
   const services = createFoundationServices();
   const empMule = createEmployee(services, "MuleSeed");
   const empA = createEmployee(services, "RowA");
@@ -187,7 +187,7 @@ test("PH-16B bulk aggregate approval commits per-row idempotently; a seeded fail
 // FR-G02-019 — detectors over the append-only cr_risk_signals ledger
 // =======================================================================================
 
-test("PH-16B mule detector: the same new bank account across two employees fires DUPLICATE_BANK_ACCOUNT into cr_risk_signals", () => {
+test("PH-16B mule detector: the same new bank account across two employees fires DUPLICATE_BANK_ACCOUNT into cr_risk_signals", async () => {
   const services = createFoundationServices();
   const empOne = createEmployee(services, "MuleOne");
   const empTwo = createEmployee(services, "MuleTwo");
@@ -211,7 +211,7 @@ test("PH-16B mule detector: the same new bank account across two employees fires
   );
 });
 
-test("PH-16B velocity chain: an auth-channel change followed by a financial change fires AUTH_CHANNEL_THEN_FINANCIAL", () => {
+test("PH-16B velocity chain: an auth-channel change followed by a financial change fires AUTH_CHANNEL_THEN_FINANCIAL", async () => {
   const services = createFoundationServices();
   const emp = createEmployee(services, "AuthChain");
   submitHrChange(services, emp.id, "mobileNumber", "+91-99999-11111");
@@ -226,7 +226,7 @@ test("PH-16B velocity chain: an auth-channel change followed by a financial chan
   assert.equal(risk.fraudReviewRequired, true);
 });
 
-test("PH-16B NEGATIVE: commit while risk_band=BLOCKED fails closed with ERR-G02-RISKBLOCK (412) until a reviewer clears", () => {
+test("PH-16B NEGATIVE: commit while risk_band=BLOCKED fails closed with ERR-G02-RISKBLOCK (412) until a reviewer clears", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const empOne = createEmployee(services, "BlockOne");
@@ -243,7 +243,7 @@ test("PH-16B NEGATIVE: commit while risk_band=BLOCKED fails closed with ERR-G02-
     (error) => error.code === "ERR-G02-RISKBLOCK"
   );
   // Wire contract: the registered code maps to 412 PRECONDITION on the API surface.
-  const response = call(api, {
+  const response = await call(api, {
     method: "POST",
     path: `/api/v1/change-requests/${blocked.id}:commit`,
     headers: { "Idempotency-Key": idem() },
@@ -271,7 +271,7 @@ test("PH-16B NEGATIVE: commit while risk_band=BLOCKED fails closed with ERR-G02-
   assert.equal(committed.status, "COMMITTED");
 });
 
-test("PH-16B confirmed fraud keeps the block: CONFIRMED_FRAUD rejects the request and commit still throws ERR-G02-RISKBLOCK", () => {
+test("PH-16B confirmed fraud keeps the block: CONFIRMED_FRAUD rejects the request and commit still throws ERR-G02-RISKBLOCK", async () => {
   const services = createFoundationServices();
   const empOne = createEmployee(services, "FraudOne");
   const empTwo = createEmployee(services, "FraudTwo");
@@ -296,7 +296,7 @@ test("PH-16B confirmed fraud keeps the block: CONFIRMED_FRAUD rejects the reques
 // FR-G02-018 — employment-status gate + DECEASED elevation
 // =======================================================================================
 
-test("PH-16B NEGATIVE: self-service on a non-ACTIVE target fails closed with ERR-G02-STATUSGATE (403)", () => {
+test("PH-16B NEGATIVE: self-service on a non-ACTIVE target fails closed with ERR-G02-STATUSGATE (403)", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const emp = createEmployee(services, "RetiredSelf");
@@ -314,7 +314,7 @@ test("PH-16B NEGATIVE: self-service on a non-ACTIVE target fails closed with ERR
     (error) => error.code === "ERR-G02-STATUSGATE"
   );
   // Wire contract: 403 FORBIDDEN with the registered code.
-  const response = call(api, {
+  const response = await call(api, {
     method: "POST",
     path: "/api/v1/change-requests",
     headers: { "Idempotency-Key": idem() },
@@ -330,7 +330,7 @@ test("PH-16B NEGATIVE: self-service on a non-ACTIVE target fails closed with ERR
   assert.equal(hrRoute.requiredApprovals, 2);
 });
 
-test("PH-16B DECEASED elevation: bank change routes to the family-pension controlled path with dual control, never auto-applied", () => {
+test("PH-16B DECEASED elevation: bank change routes to the family-pension controlled path with dual control, never auto-applied", async () => {
   const services = createFoundationServices();
   const emp = createEmployee(services, "FamilyPension");
   separateEmployee(services, emp.id, "DECEASED");
@@ -382,7 +382,7 @@ test("PH-16B DECEASED elevation: bank change routes to the family-pension contro
   assert.equal(committed.status, "COMMITTED");
 });
 
-test("PH-16B bulk rows on non-ACTIVE employees are flagged for the elevated path in the dry-run report (BR5)", () => {
+test("PH-16B bulk rows on non-ACTIVE employees are flagged for the elevated path in the dry-run report (BR5)", async () => {
   const services = createFoundationServices();
   const active = createEmployee(services, "ActiveRow");
   const deceased = createEmployee(services, "DeceasedRow");

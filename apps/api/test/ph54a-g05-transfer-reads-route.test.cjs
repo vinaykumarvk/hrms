@@ -17,15 +17,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph54a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-54A G05 transfer/counselling list reads respond through the kernel", () => {
+test("PH-54A G05 transfer/counselling list reads respond through the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
   const listPaths = [
     "/api/v1/transfers/reservations",
@@ -36,20 +36,20 @@ test("PH-54A G05 transfer/counselling list reads respond through the kernel", ()
     "/api/v1/transfers/drives/DRIVE-1/employees/EMP-1/preferences",
   ];
   for (const path of listPaths) {
-    const res = call(api, { method: "GET", path });
+    const res = await call(api, { method: "GET", path });
     assert.equal(res.status, 200, path);
     assert.ok(Array.isArray(res.body.items), path);
   }
 });
 
-test("PH-54A G05 get-by-id reads fail closed on unknown subjects (NOT_FOUND)", () => {
+test("PH-54A G05 get-by-id reads fail closed on unknown subjects (NOT_FOUND)", async () => {
   const api = createFoundationApi(createFoundationServices());
   for (const path of [
     "/api/v1/transfers/vacancy-positions/nope",
     "/api/v1/transfers/reservations/nope",
     "/api/v1/transfers/mutual-orders/nope",
   ]) {
-    const res = call(api, { method: "GET", path });
+    const res = await call(api, { method: "GET", path });
     assert.equal(res.status, 404, path);
   }
 });

@@ -22,15 +22,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph08-g07-g08", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-08 G07 nomination completion issues significant certification and posts TRAINING_CERTIFICATION_POSTED", () => {
+test("PH-08 G07 nomination completion issues significant certification and posts TRAINING_CERTIFICATION_POSTED", async () => {
   const services = createFoundationServices();
   const session = services.training.createSession(actor(), { programCode: "REV-LAW", title: "Revenue Law Certification", capacity: 1 });
   const nomination = services.training.nominate(actor(), { sessionId: session.id, employeeId: ph03Ids.employee });
@@ -50,7 +50,7 @@ test("PH-08 G07 nomination completion issues significant certification and posts
   assert.equal(timeline[0].eventTypeCode, "TRAINING_CERTIFICATION_POSTED");
 });
 
-test("PH-08 G08 APAR chain posts final grade and sealed-cover suppresses G06 feed", () => {
+test("PH-08 G08 APAR chain posts final grade and sealed-cover suppresses G06 feed", async () => {
   const services = createFoundationServices();
   const form = services.apar.openForm(actor(), {
     employeeId: ph03Ids.employee,
@@ -89,23 +89,23 @@ test("PH-08 G08 APAR chain posts final grade and sealed-cover suppresses G06 fee
   assert.equal(services.apar.summary(actor()).g06FeedSuppressed, 1);
 });
 
-test("PH-08 G07/G08 routes expose training and APAR summaries", () => {
+test("PH-08 G07/G08 routes expose training and APAR summaries", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const session = call(api, {
+  const session = await call(api, {
     method: "POST",
     path: "/api/v1/training/sessions",
     headers: { "Idempotency-Key": "idem-ph08-g07-route-session-001" },
     body: { programCode: "ETHICS", title: "Ethics", capacity: 1 },
   });
   assert.equal(session.status, 201);
-  const form = call(api, {
+  const form = await call(api, {
     method: "POST",
     path: "/api/v1/apar/forms",
     headers: { "Idempotency-Key": "idem-ph08-g08-route-form-001" },
     body: { periodStart: "2026-04-01", periodEnd: "2027-03-31" },
   });
   assert.equal(form.status, 201);
-  assert.equal(call(api, { method: "GET", path: "/api/v1/training/summary" }).status, 200);
-  assert.equal(call(api, { method: "GET", path: "/api/v1/apar/summary" }).status, 200);
+  assert.equal((await call(api, { method: "GET", path: "/api/v1/training/summary" })).status, 200);
+  assert.equal((await call(api, { method: "GET", path: "/api/v1/apar/summary" })).status, 200);
 });

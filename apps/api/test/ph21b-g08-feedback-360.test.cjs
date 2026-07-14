@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G08 feedback_360: release is blocked below MIN_RATERS and succeeds once met (anonymised)", () => {
+test("G08 feedback_360: release is blocked below MIN_RATERS and succeeds once met (anonymised)", async () => {
   const s = createFoundationServices();
   const f = s.feedback360.open360(actor(), { cycleId: "cycle-2026", appraiseeId: ph03Ids.employee, minRaters: 3 });
   s.feedback360.submitRating(actor(), f.id, { raterId: "r1", raterType: "PEER", score: 4 });
@@ -40,7 +40,7 @@ test("G08 feedback_360: release is blocked below MIN_RATERS and succeeds once me
   assert.equal(rel.byRaterType.PEER.count, 1);
 });
 
-test("G08 feedback_360: an appraisee cannot rate themselves and duplicate raters are rejected", () => {
+test("G08 feedback_360: an appraisee cannot rate themselves and duplicate raters are rejected", async () => {
   const s = createFoundationServices();
   const f = s.feedback360.open360(actor(), { cycleId: "cycle-2026", appraiseeId: ph03Ids.employee, minRaters: 2 });
   assert.throws(

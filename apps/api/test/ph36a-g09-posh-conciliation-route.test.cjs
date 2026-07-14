@@ -17,16 +17,16 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph36a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-function openPoshCase(api) {
-  const opened = call(api, {
+async function openPoshCase(api) {
+  const opened = await call(api, {
     method: "POST",
     path: "/api/v1/disciplinary/cases",
     headers: { "Idempotency-Key": "open-posh-case" },
@@ -41,11 +41,11 @@ function openPoshCase(api) {
   return opened.body.disciplinaryCase.id;
 }
 
-test("PH-36A FR-G09-023 BR-2: POSH conciliation recorded before inquiry via the kernel", () => {
+test("PH-36A FR-G09-023 BR-2: POSH conciliation recorded before inquiry via the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const caseId = openPoshCase(api);
+  const caseId = await openPoshCase(api);
 
-  const recorded = call(api, {
+  const recorded = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:conciliation`,
     headers: { "Idempotency-Key": "concil-1" },
@@ -55,15 +55,15 @@ test("PH-36A FR-G09-023 BR-2: POSH conciliation recorded before inquiry via the 
   assert.equal(recorded.body.conciliation.outcome, "SETTLED");
   assert.equal(recorded.body.disciplinaryCase.conciliationOutcome, "SETTLED");
 
-  const listed = call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/conciliations` });
+  const listed = await call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/conciliations` });
   assert.equal(listed.status, 200);
   assert.equal(listed.body.items.length, 1);
 });
 
-test("PH-36A BR-2: a monetary settlement basis is rejected (ERR-G09-CONCILIATION-MONETARY, 422)", () => {
+test("PH-36A BR-2: a monetary settlement basis is rejected (ERR-G09-CONCILIATION-MONETARY, 422)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const caseId = openPoshCase(api);
-  const bad = call(api, {
+  const caseId = await openPoshCase(api);
+  const bad = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:conciliation`,
     headers: { "Idempotency-Key": "concil-money" },
@@ -73,10 +73,10 @@ test("PH-36A BR-2: a monetary settlement basis is rejected (ERR-G09-CONCILIATION
   assert.equal(bad.body.error.code, "ERR-G09-CONCILIATION-MONETARY");
 });
 
-test("PH-36A BR-2: a SETTLED conciliation blocks the inquiry report (no inquiry proceeds)", () => {
+test("PH-36A BR-2: a SETTLED conciliation blocks the inquiry report (no inquiry proceeds)", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const caseId = openPoshCase(api);
+  const caseId = await openPoshCase(api);
   services.disciplinary.serveChargeMemo(actor(), caseId, { articles: ["Art-3(1)"], servedOn: "2026-07-05" });
   services.disciplinary.recordConciliation(actor(), caseId, {
     opted: true,

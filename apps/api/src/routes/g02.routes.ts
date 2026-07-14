@@ -26,10 +26,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.change.submit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created(
-          context.services.personalDetails.createRequest(context.actor, {
+          await context.services.personalDetails.createRequest(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             fieldCode: readFieldCode(body),
             newValue: requiredString(body, "newValue"),
@@ -46,19 +46,19 @@ export function registerG02Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g02.change.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const items = context.services.personalDetails.list(context.scope);
+        const items = await context.services.personalDetails.list(context.scope);
         return ok({ items: items.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
-    actionRoute("approve", "g02.change.approve", (context, requestId) => accepted({ request: context.services.personalDetails.approve(context.actor, requestId) })),
-    actionRoute("reject", "g02.change.reject", (context, requestId) =>
-      accepted({ request: context.services.personalDetails.reject(context.actor, requestId, optionalString(readBodyRecord(context.request.body), "comment")) })
+    actionRoute("approve", "g02.change.approve", async (context, requestId) => accepted({ request: await context.services.personalDetails.approve(context.actor, requestId) })),
+    actionRoute("reject", "g02.change.reject", async (context, requestId) =>
+      accepted({ request: await context.services.personalDetails.reject(context.actor, requestId, optionalString(readBodyRecord(context.request.body), "comment")) })
     ),
     // FR-G02-006 return-for-correction: P01 sendBack -> RETURNED with a mandatory comment (ERR-REASON-REQ).
-    actionRoute("send-back", "g02.change.reject", (context, requestId) =>
-      accepted({ request: context.services.personalDetails.sendBack(context.actor, requestId, optionalString(readBodyRecord(context.request.body), "comment")) })
+    actionRoute("send-back", "g02.change.reject", async (context, requestId) =>
+      accepted({ request: await context.services.personalDetails.sendBack(context.actor, requestId, optionalString(readBodyRecord(context.request.body), "comment")) })
     ),
     {
       method: "POST",
@@ -68,10 +68,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.change.submit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          request: context.services.personalDetails.resubmit(context.actor, requiredParam(context.params, "id"), {
+          request: await context.services.personalDetails.resubmit(context.actor, requiredParam(context.params, "id"), {
             newValue: optionalString(body, "newValue"),
             reason: requiredString(body, "reason"),
           }),
@@ -86,10 +86,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.change.submit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          request: context.services.personalDetails.withdraw(context.actor, requiredParam(context.params, "id"), optionalString(body, "reason")),
+          request: await context.services.personalDetails.withdraw(context.actor, requiredParam(context.params, "id"), optionalString(body, "reason")),
         });
       },
     },
@@ -100,7 +100,7 @@ export function registerG02Routes(kernel: ApiKernel): void {
       operationId: "g02.getPersonalDetailChangeRequestDiff",
       protected: true,
       permission: "g02.change.read",
-      handler: (context) => ok(context.services.personalDetails.getDiff(context.actor, requiredParam(context.params, "id"))),
+      handler: async (context) => ok(await context.services.personalDetails.getDiff(context.actor, requiredParam(context.params, "id"))),
     },
     {
       method: "POST",
@@ -110,10 +110,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.change.commit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          request: context.services.personalDetails.commit(
+          request: await context.services.personalDetails.commit(
             context.actor,
             requiredParam(context.params, "id"),
             requiredString({ key: context.idempotencyKey }, "key"),
@@ -130,10 +130,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.change.reverse",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          request: context.services.personalDetails.reverse(
+          request: await context.services.personalDetails.reverse(
             context.actor,
             requiredParam(context.params, "id"),
             requiredString({ key: context.idempotencyKey }, "key"),
@@ -153,10 +153,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.change.submit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          request: context.services.changeGovernance.submitChange(context.actor, {
+          request: await context.services.changeGovernance.submitChange(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             fieldKey: requiredString(body, "fieldKey"),
             newValue: requiredString(body, "newValue"),
@@ -175,8 +175,8 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.change.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) =>
-        accepted({ request: context.services.changeGovernance.approveChange(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) =>
+        accepted({ request: await context.services.changeGovernance.approveChange(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -186,9 +186,9 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.change.commit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) =>
+      handler: async (context) =>
         accepted({
-          request: context.services.changeGovernance.commitChange(
+          request: await context.services.changeGovernance.commitChange(
             context.actor,
             requiredParam(context.params, "id"),
             requiredString({ key: context.idempotencyKey }, "key")
@@ -202,7 +202,7 @@ export function registerG02Routes(kernel: ApiKernel): void {
       operationId: "g02.getChangeRequestRisk",
       protected: true,
       permission: "g02.change.read",
-      handler: (context) => ok(context.services.changeGovernance.getRisk(context.scope, requiredParam(context.params, "id"))),
+      handler: async (context) => ok(await context.services.changeGovernance.getRisk(context.scope, requiredParam(context.params, "id"))),
     },
     {
       // FR-G02-019 AC6: Fraud Reviewer clear/confirm/escalate (capability-flag permission).
@@ -213,10 +213,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.risk.review",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.changeGovernance.reviewRiskSignal(
+          await context.services.changeGovernance.reviewRiskSignal(
             context.actor,
             requiredParam(context.params, "id"),
             requiredParam(context.params, "signalId"),
@@ -233,9 +233,9 @@ export function registerG02Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g02.risk.review",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const items = context.services.changeGovernance.listFraudQueue(context.scope);
+        const items = await context.services.changeGovernance.listFraudQueue(context.scope);
         return ok({ items: items.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -250,27 +250,27 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.bulk.manage",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          batch: context.services.changeGovernance.createBatch(context.actor, {
+          batch: await context.services.changeGovernance.createBatch(context.actor, {
             rows: readBulkRows(body),
             reason: optionalString(body, "reason"),
           }),
         });
       },
     },
-    bulkActionRoute("validate", "g02.bulk.manage", (context, batchId) =>
-      ok(context.services.changeGovernance.validateBatch(context.actor, batchId))
+    bulkActionRoute("validate", "g02.bulk.manage", async (context, batchId) =>
+      ok(await context.services.changeGovernance.validateBatch(context.actor, batchId))
     ),
-    bulkActionRoute("submit", "g02.bulk.manage", (context, batchId) =>
-      accepted({ batch: context.services.changeGovernance.submitBatch(context.actor, batchId) })
+    bulkActionRoute("submit", "g02.bulk.manage", async (context, batchId) =>
+      accepted({ batch: await context.services.changeGovernance.submitBatch(context.actor, batchId) })
     ),
-    bulkActionRoute("approve", "g02.change.approve", (context, batchId) =>
-      accepted({ batch: context.services.changeGovernance.approveBatch(context.actor, batchId) })
+    bulkActionRoute("approve", "g02.change.approve", async (context, batchId) =>
+      accepted({ batch: await context.services.changeGovernance.approveBatch(context.actor, batchId) })
     ),
-    bulkActionRoute("commit", "g02.change.commit", (context, batchId) =>
-      accepted({ batch: context.services.changeGovernance.commitBatch(context.actor, batchId) })
+    bulkActionRoute("commit", "g02.change.commit", async (context, batchId) =>
+      accepted({ batch: await context.services.changeGovernance.commitBatch(context.actor, batchId) })
     ),
     {
       // FR-G02-009 AC1: validation/commit report with row-level reasons.
@@ -279,7 +279,7 @@ export function registerG02Routes(kernel: ApiKernel): void {
       operationId: "g02.getBulkCorrectionBatchReport",
       protected: true,
       permission: "g02.change.read",
-      handler: (context) => ok({ batch: context.services.changeGovernance.getBatchReport(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ batch: await context.services.changeGovernance.getBatchReport(context.scope, requiredParam(context.params, "id")) }),
     },
     // PH-31A — G02 retro-impact downstream fan-out (route exposure for the PH-25B engine).
     {
@@ -290,10 +290,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.retro.fanout",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          events: context.services.retroImpact.fanOut(context.actor, {
+          events: await context.services.retroImpact.fanOut(context.actor, {
             changeRequestId: requiredParam(context.params, "id"),
             effectiveDate: requiredString(body, "effectiveDate"),
             targets: Array.isArray(body.targets) ? (body.targets as Array<"G10" | "G11" | "G06">) : [],
@@ -310,10 +310,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.esign.sign",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          signature: context.services.changeEsignStepUp.signChange(context.actor, {
+          signature: await context.services.changeEsignStepUp.signChange(context.actor, {
             changeRequestId: requiredParam(context.params, "id"),
             method: requiredString(body, "method") as "AADHAAR_OTP" | "DSC" | "HSM",
             payload: body.payload ?? {},
@@ -330,10 +330,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.template.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          template: context.services.changeRequestTemplate.createTemplate(context.actor, {
+          template: await context.services.changeRequestTemplate.createTemplate(context.actor, {
             templateCode: requiredString(body, "templateCode"),
             name: requiredString(body, "name"),
             fields: Array.isArray(body.fields) ? (body.fields as Array<{ fieldCode: string; defaultValue?: string }>) : [],
@@ -351,10 +351,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.stepup.challenge",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          stepUp: context.services.changeEsignStepUp.challengeStepUp(context.actor, {
+          stepUp: await context.services.changeEsignStepUp.challengeStepUp(context.actor, {
             changeRequestId: requiredParam(context.params, "id"),
             issuedAt: requiredString(body, "issuedAt"),
             expiresAt: requiredString(body, "expiresAt"),
@@ -370,9 +370,9 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.stepup.verify",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted({ stepUp: context.services.changeEsignStepUp.verifyStepUp(context.actor, requiredParam(context.params, "stepUpId"), { verifiedAt: requiredString(body, "verifiedAt") }) });
+        return accepted({ stepUp: await context.services.changeEsignStepUp.verifyStepUp(context.actor, requiredParam(context.params, "stepUpId"), { verifiedAt: requiredString(body, "verifiedAt") }) });
       },
     },
     {
@@ -381,7 +381,7 @@ export function registerG02Routes(kernel: ApiKernel): void {
       operationId: "g02.listEsignatures",
       protected: true,
       permission: "g02.change.read",
-      handler: (context) => ok({ items: context.services.changeEsignStepUp.listEsignatures(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ items: await context.services.changeEsignStepUp.listEsignatures(context.scope, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -389,7 +389,7 @@ export function registerG02Routes(kernel: ApiKernel): void {
       operationId: "g02.listChangeRequestTemplates",
       protected: true,
       permission: "g02.change.read",
-      handler: (context) => ok({ items: context.services.changeRequestTemplate.listTemplates(context.scope) }),
+      handler: async (context) => ok({ items: await context.services.changeRequestTemplate.listTemplates(context.scope) }),
     },
     {
       method: "POST",
@@ -399,7 +399,7 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.template.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ template: context.services.changeRequestTemplate.deactivateTemplate(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ template: await context.services.changeRequestTemplate.deactivateTemplate(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -409,10 +409,10 @@ export function registerG02Routes(kernel: ApiKernel): void {
       permission: "g02.change.submit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          prefill: context.services.changeRequestTemplate.startFromTemplate(context.actor, requiredParam(context.params, "id"), {
+          prefill: await context.services.changeRequestTemplate.startFromTemplate(context.actor, requiredParam(context.params, "id"), {
             allowedFields: Array.isArray(body.allowedFields) ? body.allowedFields.map((f) => String(f)) : [],
           }),
         });
@@ -435,7 +435,7 @@ function bulkActionRoute(
     permission,
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => handler(context, requiredParam(context.params, "id")),
+    handler: async (context) => handler(context, requiredParam(context.params, "id")),
   };
 }
 
@@ -494,7 +494,7 @@ function actionRoute(
     permission,
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => handler(context, requiredParam(context.params, "id")),
+    handler: async (context) => handler(context, requiredParam(context.params, "id")),
   };
 }
 

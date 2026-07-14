@@ -23,7 +23,7 @@ function forbidden(error) {
 
 // ---- G02: statutory personal-detail change — maker!=checker SoD + P01 resolved-assignee identity ----
 
-test("ENFORCED G02: the change-request maker cannot approve (ERR-G02-SOD) and only the resolved reporting authority can", () => {
+test("ENFORCED G02: the change-request maker cannot approve (ERR-G02-SOD) and only the resolved reporting authority can", async () => {
   const services = createFoundationServices();
   const maker = actor("g02-maker", ["hr_officer"], ["g02.change.submit", "g02.change.approve"]);
   const request = services.personalDetails.createRequest(maker, {
@@ -53,7 +53,7 @@ test("ENFORCED G02: the change-request maker cannot approve (ERR-G02-SOD) and on
 
 // ---- G05: transfer sanction — only the resolved transfer authority (POSITION_AUTHORITY) can approve --
 
-test("ENFORCED G05: a transfer order can only be approved by the resolved transfer authority, not any holder of the permission", () => {
+test("ENFORCED G05: a transfer order can only be approved by the resolved transfer authority, not any holder of the permission", async () => {
   // seedTestEmployees seeds Devika in orgRevenue; the seeded G05_TRANSFER_REVENUE POSITION_AUTHORITY
   // (scope orgRevenue, authorityEmployeeId = ph03.manager) resolves her transfer's approver.
   const services = createFoundationServices({ seedTestEmployees: true });
@@ -88,7 +88,7 @@ test("ENFORCED G05: a transfer order can only be approved by the resolved transf
 
 // ---- G09: disciplinary due process — actor-conflict SoD (DI-2) -------------------------------------
 
-test("ENFORCED G09 ERR-G09-ACTOR-CONFLICT: the preliminary-inquiry officer must be distinct from the charged officer and the disciplinary authority", () => {
+test("ENFORCED G09 ERR-G09-ACTOR-CONFLICT: the preliminary-inquiry officer must be distinct from the charged officer and the disciplinary authority", async () => {
   const services = createFoundationServices();
   const da = actor("g09-da", ["disciplinary_authority"], ["g09.case.open", "g09.preliminary-inquiry.order"]);
   const opened = services.disciplinary.openCase(da, {
@@ -119,7 +119,7 @@ test("ENFORCED G09 ERR-G09-ACTOR-CONFLICT: the preliminary-inquiry officer must 
 
 // ---- G12: SR custodian — sr_custodian override for cross-employee timeline access -------------------
 
-test("ENFORCED G12: an sr_custodian can view any employee's service-register timeline; a non-override actor cannot view another's", () => {
+test("ENFORCED G12: an sr_custodian can view any employee's service-register timeline; a non-override actor cannot view another's", async () => {
   const services = createFoundationServices();
   const custodian = actor("g12-custodian", ["sr_custodian"], []);
   // Override: sr_custodian reads another employee's timeline without error.
@@ -137,7 +137,7 @@ test("ENFORCED G12: an sr_custodian can view any employee's service-register tim
 
 // ---- DRIFT: sr_second_custodian second-custodian SoD is an unbuilt capability ----------------------
 
-test("ENFORCED G12: sr_second_custodian corrigendum SoD — sr_custodian proposes, an independent sr_second_custodian approves (proposer!=approver), and the correction commits to the chain only on approval", () => {
+test("ENFORCED G12: sr_second_custodian corrigendum SoD — sr_custodian proposes, an independent sr_second_custodian approves (proposer!=approver), and the correction commits to the chain only on approval", async () => {
   const services = createFoundationServices();
   const sys = actor("g12-sys", ["system"], ["*"]);
   const target = services.serviceRegister.ingest(sys, "idem-g12-corr-target-001", {

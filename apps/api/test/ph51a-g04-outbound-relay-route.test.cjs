@@ -17,17 +17,17 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph51a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-51A G04 outbound connector: register -> send -> conformance -> read", () => {
+test("PH-51A G04 outbound connector: register -> send -> conformance -> read", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const registered = call(api, {
+  const registered = await call(api, {
     method: "POST",
     path: "/api/v1/integration/connectors",
     headers: { "Idempotency-Key": "conn-1" },
@@ -37,23 +37,23 @@ test("PH-51A G04 outbound connector: register -> send -> conformance -> read", (
   const id = registered.body.connector.id;
   assert.equal(registered.body.connector.breakerState, "CLOSED");
 
-  const sent = call(api, { method: "POST", path: `/api/v1/integration/connectors/${id}:send`, headers: { "Idempotency-Key": "send-1" }, body: { payload: { amount: 100 } } });
+  const sent = await call(api, { method: "POST", path: `/api/v1/integration/connectors/${id}:send`, headers: { "Idempotency-Key": "send-1" }, body: { payload: { amount: 100 } } });
   assert.equal(sent.status, 202);
   assert.equal(sent.body.send.outcome, "DELIVERED");
 
-  const conformance = call(api, { method: "POST", path: `/api/v1/integration/connectors/${id}:conformance`, headers: { "Idempotency-Key": "conf-1" }, body: {} });
+  const conformance = await call(api, { method: "POST", path: `/api/v1/integration/connectors/${id}:conformance`, headers: { "Idempotency-Key": "conf-1" }, body: {} });
   assert.equal(conformance.status, 200);
   assert.equal(conformance.body.passed, true);
 
-  const read = call(api, { method: "GET", path: `/api/v1/integration/connectors/${id}` });
+  const read = await call(api, { method: "GET", path: `/api/v1/integration/connectors/${id}` });
   assert.equal(read.status, 200);
   assert.equal(read.body.connector.id, id);
 });
 
-test("PH-51A G04 leave->SR relay enqueue (approved + cancellation) + dead-letter read", () => {
+test("PH-51A G04 leave->SR relay enqueue (approved + cancellation) + dead-letter read", async () => {
   const api = createFoundationApi(createFoundationServices());
 
-  const approved = call(api, {
+  const approved = await call(api, {
     method: "POST",
     path: "/api/v1/leave-sr/enqueue-approved",
     headers: { "Idempotency-Key": "enq-a" },
@@ -62,7 +62,7 @@ test("PH-51A G04 leave->SR relay enqueue (approved + cancellation) + dead-letter
   assert.equal(approved.status, 201);
   assert.ok(approved.body.event.id);
 
-  const cancelled = call(api, {
+  const cancelled = await call(api, {
     method: "POST",
     path: "/api/v1/leave-sr/enqueue-cancellation",
     headers: { "Idempotency-Key": "enq-c" },
@@ -71,7 +71,7 @@ test("PH-51A G04 leave->SR relay enqueue (approved + cancellation) + dead-letter
   assert.equal(cancelled.status, 201);
   assert.ok(cancelled.body.event.id);
 
-  const deadLetters = call(api, { method: "GET", path: "/api/v1/leave-sr/dead-letters" });
+  const deadLetters = await call(api, { method: "GET", path: "/api/v1/leave-sr/dead-letters" });
   assert.equal(deadLetters.status, 200);
   assert.ok(Array.isArray(deadLetters.body.items));
 });

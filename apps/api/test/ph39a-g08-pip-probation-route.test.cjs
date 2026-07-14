@@ -17,17 +17,17 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph39a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-39A G08 PIP lifecycle: create -> update milestone -> close via the kernel", () => {
+test("PH-39A G08 PIP lifecycle: create -> update milestone -> close via the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/appraisals/pips",
     headers: { "Idempotency-Key": "pip-1" },
@@ -45,7 +45,7 @@ test("PH-39A G08 PIP lifecycle: create -> update milestone -> close via the kern
   const milestoneId = created.body.milestones[0].id;
   assert.equal(created.body.pip.status, "ACTIVE");
 
-  const updated = call(api, {
+  const updated = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/pips/${pipId}/milestones/${milestoneId}:update`,
     headers: { "Idempotency-Key": "pip-ms-1" },
@@ -54,7 +54,7 @@ test("PH-39A G08 PIP lifecycle: create -> update milestone -> close via the kern
   assert.equal(updated.status, 202);
   assert.equal(updated.body.milestone.status, "MET");
 
-  const closed = call(api, {
+  const closed = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/pips/${pipId}:close`,
     headers: { "Idempotency-Key": "pip-close-1" },
@@ -65,9 +65,9 @@ test("PH-39A G08 PIP lifecycle: create -> update milestone -> close via the kern
   assert.equal(closed.body.pip.outcome, "SUCCESSFUL");
 });
 
-test("PH-39A G08 probation confirmation: open -> extend (cap enforced) -> decide", () => {
+test("PH-39A G08 probation confirmation: open -> extend (cap enforced) -> decide", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const opened = call(api, {
+  const opened = await call(api, {
     method: "POST",
     path: "/api/v1/appraisals/probation-confirmations",
     headers: { "Idempotency-Key": "prob-1" },
@@ -77,7 +77,7 @@ test("PH-39A G08 probation confirmation: open -> extend (cap enforced) -> decide
   const id = opened.body.probationConfirmation.id;
   assert.equal(opened.body.probationConfirmation.status, "IN_PROBATION");
 
-  const extended = call(api, {
+  const extended = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/probation-confirmations/${id}:decide`,
     headers: { "Idempotency-Key": "prob-ext-1" },
@@ -87,7 +87,7 @@ test("PH-39A G08 probation confirmation: open -> extend (cap enforced) -> decide
   assert.equal(extended.body.probationConfirmation.status, "EXTENDED");
 
   // Cumulative extension beyond the 6-month cap is rejected (VALIDATION_FAILED -> 400).
-  const overCap = call(api, {
+  const overCap = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/probation-confirmations/${id}:decide`,
     headers: { "Idempotency-Key": "prob-ext-2" },
@@ -96,7 +96,7 @@ test("PH-39A G08 probation confirmation: open -> extend (cap enforced) -> decide
   assert.equal(overCap.status, 400);
   assert.equal(overCap.body.error.code, "VALIDATION_FAILED");
 
-  const confirmed = call(api, {
+  const confirmed = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/probation-confirmations/${id}:decide`,
     headers: { "Idempotency-Key": "prob-confirm-1" },
@@ -106,12 +106,12 @@ test("PH-39A G08 probation confirmation: open -> extend (cap enforced) -> decide
   assert.equal(confirmed.body.probationConfirmation.status, "CONFIRMED");
 });
 
-test("PH-39A G08 APAR read endpoints respond through the kernel", () => {
+test("PH-39A G08 APAR read endpoints respond through the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const rp = call(api, { method: "GET", path: "/api/v1/apar/forms/form-unknown/report-periods" });
+  const rp = await call(api, { method: "GET", path: "/api/v1/apar/forms/form-unknown/report-periods" });
   assert.equal(rp.status, 200);
   assert.ok(Array.isArray(rp.body.items));
-  const gs = call(api, { method: "GET", path: "/api/v1/apar/forms/form-unknown/goal-snapshots" });
+  const gs = await call(api, { method: "GET", path: "/api/v1/apar/forms/form-unknown/goal-snapshots" });
   assert.equal(gs.status, 200);
   assert.ok(Array.isArray(gs.body.items));
 });

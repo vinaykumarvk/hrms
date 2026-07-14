@@ -34,8 +34,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph15f", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -59,7 +59,7 @@ const VALID_ICC_MEMBERS = [
 // FR-G09-023: POSH route resolution + ICC composition validation
 // -----------------------------------------------------------------------------------------
 
-test("PH-15F FR-G09-023: HARASSMENT resolves the ICC template and sets inquiry_route=ICC_POSH", () => {
+test("PH-15F FR-G09-023: HARASSMENT resolves the ICC template and sets inquiry_route=ICC_POSH", async () => {
   const services = createFoundationServices();
   const opened = services.disciplinary.openCase(actor(), {
     chargedEmployeeId: ph03Ids.employee,
@@ -86,7 +86,7 @@ test("PH-15F FR-G09-023: HARASSMENT resolves the ICC template and sets inquiry_r
   assert.equal(ordinary.inquiryRoute, "ORDINARY_IO");
 });
 
-test("PH-15F FR-G09-023 NEGATIVE: ICC constitution without an external member throws ERR-G09-ICC-PROCEDURE-REQUIRED", () => {
+test("PH-15F FR-G09-023 NEGATIVE: ICC constitution without an external member throws ERR-G09-ICC-PROCEDURE-REQUIRED", async () => {
   const services = createFoundationServices();
   const opened = services.disciplinary.openCase(actor(), {
     chargedEmployeeId: ph03Ids.employee,
@@ -141,7 +141,7 @@ test("PH-15F FR-G09-023 NEGATIVE: ICC constitution without an external member th
   assert.equal(services.disciplinary.listIccAppointments(actor(), opened.id).length, 0);
 });
 
-test("PH-15F FR-G09-023: a POSH case cannot proceed to inquiry without a valid ICC; a valid ICC unblocks it", () => {
+test("PH-15F FR-G09-023: a POSH case cannot proceed to inquiry without a valid ICC; a valid ICC unblocks it", async () => {
   const services = createFoundationServices();
   const opened = services.disciplinary.openCase(actor(), {
     chargedEmployeeId: ph03Ids.employee,
@@ -170,7 +170,7 @@ test("PH-15F FR-G09-023: a POSH case cannot proceed to inquiry without a valid I
 // FR-G09-025: personal_hearings — grant / deny-with-recorded-reason (DI-29)
 // -----------------------------------------------------------------------------------------
 
-test("PH-15F FR-G09-025 NEGATIVE: reasonless denial of a requested hearing throws ERR-G09-PERSONAL-HEARING-DENIED", () => {
+test("PH-15F FR-G09-025 NEGATIVE: reasonless denial of a requested hearing throws ERR-G09-PERSONAL-HEARING-DENIED", async () => {
   const repository = new InMemoryG09DueProcessRepository();
   const services = createFoundationServices({ g09DueProcessRepository: repository });
   const opened = services.disciplinary.openCase(actor(), {
@@ -240,7 +240,7 @@ test("PH-15F FR-G09-025 NEGATIVE: reasonless denial of a requested hearing throw
 // FR-G09-024: sla_pause_events pause/resume with recompute (DI-18)
 // -----------------------------------------------------------------------------------------
 
-test("PH-15F FR-G09-024: sla_pause_events pause suppresses breach, resume recomputes targets by the paused duration", () => {
+test("PH-15F FR-G09-024: sla_pause_events pause suppresses breach, resume recomputes targets by the paused duration", async () => {
   const services = createFoundationServices();
   const opened = services.disciplinary.openCase(actor(), {
     chargedEmployeeId: ph03Ids.employee,
@@ -293,7 +293,7 @@ test("PH-15F FR-G09-024: sla_pause_events pause suppresses breach, resume recomp
   assert.equal(services.disciplinary.verifyCaseTimeline(actor(), opened.id).verified, true);
 });
 
-test("PH-15F FR-G09-024 NEGATIVE: resume without an open pause throws ERR-G09-SLA-PAUSE-INVALID", () => {
+test("PH-15F FR-G09-024 NEGATIVE: resume without an open pause throws ERR-G09-SLA-PAUSE-INVALID", async () => {
   const services = createFoundationServices();
   const opened = services.disciplinary.openCase(actor(), {
     chargedEmployeeId: ph03Ids.employee,
@@ -314,11 +314,11 @@ test("PH-15F FR-G09-024 NEGATIVE: resume without an open pause throws ERR-G09-SL
   );
 });
 
-test("PH-15F routes surface the FR-G09-023/024/025 codes on the wire", () => {
+test("PH-15F routes surface the FR-G09-023/024/025 codes on the wire", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
 
-  const opened = call(api, {
+  const opened = await call(api, {
     method: "POST",
     path: "/api/v1/disciplinary/cases",
     headers: { "Idempotency-Key": "idem-ph15f-open-001" },
@@ -329,7 +329,7 @@ test("PH-15F routes surface the FR-G09-023/024/025 codes on the wire", () => {
   const caseId = opened.body.disciplinaryCase.id;
 
   // FR-023 over the wire: missing external member is a 409 with the BRD code.
-  const badIcc = call(api, {
+  const badIcc = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:constitute-icc`,
     headers: { "Idempotency-Key": "idem-ph15f-icc-001" },
@@ -342,14 +342,14 @@ test("PH-15F routes surface the FR-G09-023/024/025 codes on the wire", () => {
   assert.equal(badIcc.body.error.code, "ERR-G09-ICC-PROCEDURE-REQUIRED");
 
   // FR-025 over the wire: reasonless denial is a 422 with the BRD code.
-  const hearing = call(api, {
+  const hearing = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:personal-hearing`,
     headers: { "Idempotency-Key": "idem-ph15f-ph-001" },
     body: { stage: "SHOW_CAUSE", requestedOn: "2026-08-27" },
   });
   assert.equal(hearing.status, 201);
-  const reasonlessDenial = call(api, {
+  const reasonlessDenial = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/personal-hearings/${hearing.body.personalHearing.id}:decision`,
     headers: { "Idempotency-Key": "idem-ph15f-ph-002" },
@@ -359,7 +359,7 @@ test("PH-15F routes surface the FR-G09-023/024/025 codes on the wire", () => {
   assert.equal(reasonlessDenial.body.error.code, "ERR-G09-PERSONAL-HEARING-DENIED");
 
   // FR-024 over the wire: resume without an open pause is a 409 with the BRD code.
-  const badResume = call(api, {
+  const badResume = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}/sla:resume`,
     headers: { "Idempotency-Key": "idem-ph15f-sla-001" },
@@ -368,14 +368,14 @@ test("PH-15F routes surface the FR-G09-023/024/025 codes on the wire", () => {
   assert.equal(badResume.status, 409);
   assert.equal(badResume.body.error.code, "ERR-G09-SLA-PAUSE-INVALID");
 
-  const paused = call(api, {
+  const paused = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}/sla:pause`,
     headers: { "Idempotency-Key": "idem-ph15f-sla-002" },
     body: { stage: "INQUIRY", reason: "STAY", pausedFrom: "2026-08-01" },
   });
   assert.equal(paused.status, 201);
-  const pauses = call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/sla/pauses` });
+  const pauses = await call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/sla/pauses` });
   assert.equal(pauses.status, 200);
   assert.equal(pauses.body.slaPauses.length, 1);
 });
@@ -405,7 +405,7 @@ const D4_POPULATION = [
   { employeeId: "P3", recruitmentStream: "PROMOTEE", streamSeniorityNo: 3 },
 ];
 
-test("PH-15F FR-PPP-020: seniority_quota_rules drive the Appendix D.4 interleave with quota_slot_label + rotation_cycle_no, deterministically", () => {
+test("PH-15F FR-PPP-020: seniority_quota_rules drive the Appendix D.4 interleave with quota_slot_label + rotation_cycle_no, deterministically", async () => {
   const services = createFoundationServices();
   const rule = rotaQuotaRule(services);
   assert.equal(rule.rotationMethod, "ROTA_QUOTA");
@@ -446,7 +446,7 @@ test("PH-15F FR-PPP-020: seniority_quota_rules drive the Appendix D.4 interleave
   );
 });
 
-test("PH-15F FR-PPP-020 AC-3: an exhausted stream's quota slot carries forward — never silently lost", () => {
+test("PH-15F FR-PPP-020 AC-3: an exhausted stream's quota slot carries forward — never silently lost", async () => {
   const services = createFoundationServices();
   const rule = rotaQuotaRule(services);
   // Appendix D.4 carry-forward vector: PR has only [P1]; slot PR-2 carries forward and D3 takes rank 4.
@@ -469,7 +469,7 @@ test("PH-15F FR-PPP-020 AC-3: an exhausted stream's quota slot carries forward �
   assert.equal(carried.filledByEmployeeId, undefined);
 });
 
-test("PH-15F FR-PPP-020 NEGATIVE: a population entry missing its stream tag fails with STREAM_TAG_MISSING", () => {
+test("PH-15F FR-PPP-020 NEGATIVE: a population entry missing its stream tag fails with STREAM_TAG_MISSING", async () => {
   const services = createFoundationServices();
   const rule = rotaQuotaRule(services);
   assert.throws(
@@ -486,7 +486,7 @@ test("PH-15F FR-PPP-020 NEGATIVE: a population entry missing its stream tag fail
   );
 });
 
-test("PH-15F FR-PPP-020 NEGATIVE: an invalid ratio or rotation method fails with QUOTA_RULE_INVALID", () => {
+test("PH-15F FR-PPP-020 NEGATIVE: an invalid ratio or rotation method fails with QUOTA_RULE_INVALID", async () => {
   const services = createFoundationServices();
   // Negative ratio.
   assert.throws(
@@ -505,7 +505,7 @@ test("PH-15F FR-PPP-020 NEGATIVE: an invalid ratio or rotation method fails with
   );
 });
 
-test("PH-15F FR-PPP-020: RUNNING_ACCOUNT and SEPARATE_STREAM methods are supported per policy", () => {
+test("PH-15F FR-PPP-020: RUNNING_ACCOUNT and SEPARATE_STREAM methods are supported per policy", async () => {
   const services = createFoundationServices();
   const runningAccount = rotaQuotaRule(services, { rotationMethod: "RUNNING_ACCOUNT" });
   const ra = services.promotion.constructCombinedSeniority(actor(), { quotaRuleId: runningAccount.id, population: D4_POPULATION });
@@ -521,10 +521,10 @@ test("PH-15F FR-PPP-020: RUNNING_ACCOUNT and SEPARATE_STREAM methods are support
   );
 });
 
-test("PH-15F FR-PPP-020 routes: quota rules and construction over the wire", () => {
+test("PH-15F FR-PPP-020 routes: quota rules and construction over the wire", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const rule = call(api, {
+  const rule = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/seniority-quota-rules",
     headers: { "Idempotency-Key": "idem-ph15f-sqr-001" },
@@ -533,7 +533,7 @@ test("PH-15F FR-PPP-020 routes: quota rules and construction over the wire", () 
   assert.equal(rule.status, 201);
 
   // NEGATIVE over the wire: the invalid ratio surfaces QUOTA_RULE_INVALID (422, fail closed).
-  const badRule = call(api, {
+  const badRule = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/seniority-quota-rules",
     headers: { "Idempotency-Key": "idem-ph15f-sqr-002" },
@@ -542,7 +542,7 @@ test("PH-15F FR-PPP-020 routes: quota rules and construction over the wire", () 
   assert.equal(badRule.status, 422);
   assert.equal(badRule.body.error.code, "QUOTA_RULE_INVALID");
 
-  const constructed = call(api, {
+  const constructed = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/combined-seniority:construct",
     headers: { "Idempotency-Key": "idem-ph15f-csc-001" },
@@ -551,7 +551,7 @@ test("PH-15F FR-PPP-020 routes: quota rules and construction over the wire", () 
   assert.equal(constructed.status, 201);
   assert.equal(constructed.body.construction.entries.length, 6);
 
-  const trace = call(api, {
+  const trace = await call(api, {
     method: "GET",
     path: `/api/v1/promotions/combined-seniority/${constructed.body.construction.id}/rotation-trace`,
   });
@@ -559,7 +559,7 @@ test("PH-15F FR-PPP-020 routes: quota rules and construction over the wire", () 
   assert.equal(trace.body.trace.length, 6);
 
   // NEGATIVE over the wire: the missing stream tag surfaces STREAM_TAG_MISSING (422).
-  const untagged = call(api, {
+  const untagged = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/combined-seniority:construct",
     headers: { "Idempotency-Key": "idem-ph15f-csc-002" },

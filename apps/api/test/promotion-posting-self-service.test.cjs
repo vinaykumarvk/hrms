@@ -31,19 +31,19 @@ function boot() {
   return { services, api, admin, sunita, meera, devika };
 }
 
-function call(api, actorCtx, request) {
-  return api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-g06-promotion-self-service", ...(request.headers ?? {}) }, actor: actorCtx });
+async function call(api, actorCtx, request) {
+  return await api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-g06-promotion-self-service", ...(request.headers ?? {}) }, actor: actorCtx });
 }
 
-test("G06 promotions: the seed produces a real EFFECTED promotion order and probation record for Sunita", () => {
+test("G06 promotions: the seed produces a real EFFECTED promotion order and probation record for Sunita", async () => {
   const { api, sunita } = boot();
-  const orders = call(api, actor(sunita.id, ["g06.promotion.read"]), { method: "GET", path: "/api/v1/promotions/orders" });
+  const orders = await call(api, actor(sunita.id, ["g06.promotion.read"]), { method: "GET", path: "/api/v1/promotions/orders" });
   assert.equal(orders.status, 200);
   assert.equal(orders.body.items.length, 1);
   assert.equal(orders.body.items[0].status, "EFFECTED");
   assert.equal(orders.body.items[0].toDesignation, "Section Officer");
 
-  const probation = call(api, actor(sunita.id, ["g06.promotion.read"]), {
+  const probation = await call(api, actor(sunita.id, ["g06.promotion.read"]), {
     method: "GET",
     path: "/api/v1/promotions/probation-records",
     query: { employeeId: sunita.id },
@@ -53,47 +53,47 @@ test("G06 promotions: the seed produces a real EFFECTED promotion order and prob
   assert.equal(probation.body.probationRecords[0].status, "ON_PROBATION");
 });
 
-test("G06 promotions: wire responses never leak internal tenantId/entityId fields", () => {
+test("G06 promotions: wire responses never leak internal tenantId/entityId fields", async () => {
   const { api, sunita } = boot();
-  const orders = call(api, actor(sunita.id, ["g06.promotion.read"]), { method: "GET", path: "/api/v1/promotions/orders" }).body.items;
+  const orders = (await call(api, actor(sunita.id, ["g06.promotion.read"]), { method: "GET", path: "/api/v1/promotions/orders" })).body.items;
   for (const order of orders) {
     assert.equal("tenantId" in order, false);
     assert.equal("entityId" in order, false);
   }
-  const probation = call(api, actor(sunita.id, ["g06.promotion.read"]), {
+  const probation = (await call(api, actor(sunita.id, ["g06.promotion.read"]), {
     method: "GET",
     path: "/api/v1/promotions/probation-records",
     query: { employeeId: sunita.id },
-  }).body.probationRecords;
+  })).body.probationRecords;
   for (const record of probation) {
     assert.equal("tenantId" in record, false);
     assert.equal("entityId" in record, false);
   }
 });
 
-test("G06 promotions: post-full-review-goal fix — an employee can view their own promotion orders, but not another employee's", () => {
+test("G06 promotions: post-full-review-goal fix — an employee can view their own promotion orders, but not another employee's", async () => {
   const { api, sunita, meera } = boot();
-  const own = call(api, actor(sunita.id, ["g06.promotion.read"]), { method: "GET", path: "/api/v1/promotions/orders" });
+  const own = await call(api, actor(sunita.id, ["g06.promotion.read"]), { method: "GET", path: "/api/v1/promotions/orders" });
   assert.equal(own.status, 200);
   assert.equal(own.body.items.length, 1);
 
   // Meera holds the same ordinary `g06.promotion.read` permission but has no orders of her own —
   // before the fix, this would have returned every employee's orders tenant-wide, including Sunita's.
-  const stranger = call(api, actor(meera.id, ["g06.promotion.read"]), { method: "GET", path: "/api/v1/promotions/orders" });
+  const stranger = await call(api, actor(meera.id, ["g06.promotion.read"]), { method: "GET", path: "/api/v1/promotions/orders" });
   assert.equal(stranger.status, 200);
   assert.equal(stranger.body.items.length, 0);
 });
 
-test("G06 promotions: post-full-review-goal fix — probation/refusal reads are ownership-gated, not any g06.promotion.read holder", () => {
+test("G06 promotions: post-full-review-goal fix — probation/refusal reads are ownership-gated, not any g06.promotion.read holder", async () => {
   const { api, sunita, meera } = boot();
-  const strangerProbation = call(api, actor(meera.id, ["g06.promotion.read"]), {
+  const strangerProbation = await call(api, actor(meera.id, ["g06.promotion.read"]), {
     method: "GET",
     path: "/api/v1/promotions/probation-records",
     query: { employeeId: sunita.id },
   });
   assert.equal(strangerProbation.status, 403);
 
-  const strangerRefusals = call(api, actor(meera.id, ["g06.promotion.read"]), {
+  const strangerRefusals = await call(api, actor(meera.id, ["g06.promotion.read"]), {
     method: "GET",
     path: "/api/v1/promotions/refusals",
     query: { employeeId: sunita.id },
@@ -102,14 +102,14 @@ test("G06 promotions: post-full-review-goal fix — probation/refusal reads are 
 
   // hr_admin is deliberately NOT an override role for G06 (separation-of-duties boundary) — only
   // the dedicated promotion_officer chain (or self) may read.
-  const hrAdminProbation = call(api, actor("hr-admin-probe", ["g06.promotion.read"], { roles: ["hr_admin"] }), {
+  const hrAdminProbation = await call(api, actor("hr-admin-probe", ["g06.promotion.read"], { roles: ["hr_admin"] }), {
     method: "GET",
     path: "/api/v1/promotions/probation-records",
     query: { employeeId: sunita.id },
   });
   assert.equal(hrAdminProbation.status, 403);
 
-  const promotionOfficerProbation = call(api, actor("promotion-officer-probe", ["g06.promotion.read"], { roles: ["promotion_officer"] }), {
+  const promotionOfficerProbation = await call(api, actor("promotion-officer-probe", ["g06.promotion.read"], { roles: ["promotion_officer"] }), {
     method: "GET",
     path: "/api/v1/promotions/probation-records",
     query: { employeeId: sunita.id },
@@ -118,9 +118,9 @@ test("G06 promotions: post-full-review-goal fix — probation/refusal reads are 
   assert.equal(promotionOfficerProbation.body.probationRecords.length, 1);
 });
 
-test("G06 sealed covers: the seed produces a real SEALED cover for Devika; the employee sees status but not the confidential reason", () => {
+test("G06 sealed covers: the seed produces a real SEALED cover for Devika; the employee sees status but not the confidential reason", async () => {
   const { api, devika } = boot();
-  const own = call(api, actor(devika.id, ["g06.sealedcover.read"]), { method: "GET", path: "/api/v1/promotions/sealed-covers" });
+  const own = await call(api, actor(devika.id, ["g06.sealedcover.read"]), { method: "GET", path: "/api/v1/promotions/sealed-covers" });
   assert.equal(own.status, 200);
   assert.equal(own.body.items.length, 1);
   assert.equal(own.body.items[0].status, "SEALED");
@@ -128,23 +128,23 @@ test("G06 sealed covers: the seed produces a real SEALED cover for Devika; the e
   assert.equal("tenantId" in own.body.items[0], false);
 });
 
-test("G06 sealed covers: post-full-review-goal fix — an unrelated employee cannot see another employee's sealed-cover row at all", () => {
+test("G06 sealed covers: post-full-review-goal fix — an unrelated employee cannot see another employee's sealed-cover row at all", async () => {
   const { api, meera } = boot();
-  const stranger = call(api, actor(meera.id, ["g06.sealedcover.read"]), { method: "GET", path: "/api/v1/promotions/sealed-covers" });
+  const stranger = await call(api, actor(meera.id, ["g06.sealedcover.read"]), { method: "GET", path: "/api/v1/promotions/sealed-covers" });
   assert.equal(stranger.status, 200);
   assert.equal(stranger.body.items.length, 0);
 });
 
-test("G06 sealed covers: the promotion_officer override role sees the confidential reason; hr_admin does not (SoD boundary)", () => {
+test("G06 sealed covers: the promotion_officer override role sees the confidential reason; hr_admin does not (SoD boundary)", async () => {
   const { api, devika } = boot();
-  const hrAdmin = call(api, actor("hr-admin-sealed-cover-probe", ["g06.sealedcover.read"], { roles: ["hr_admin"] }), {
+  const hrAdmin = await call(api, actor("hr-admin-sealed-cover-probe", ["g06.sealedcover.read"], { roles: ["hr_admin"] }), {
     method: "GET",
     path: "/api/v1/promotions/sealed-covers",
   });
   assert.equal(hrAdmin.status, 200);
   assert.equal(hrAdmin.body.items.length, 0, "hr_admin is not an override role for G06, so this sees only its own (nonexistent) sealed covers");
 
-  const promotionOfficer = call(api, actor("promotion-officer-sealed-cover-probe", ["g06.sealedcover.read"], { roles: ["promotion_officer"] }), {
+  const promotionOfficer = await call(api, actor("promotion-officer-sealed-cover-probe", ["g06.sealedcover.read"], { roles: ["promotion_officer"] }), {
     method: "GET",
     path: "/api/v1/promotions/sealed-covers",
   });

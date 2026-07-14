@@ -28,11 +28,11 @@ function boot() {
   return { services, api, admin, rohan };
 }
 
-function call(api, actorCtx, request) {
-  return api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-g01-self-service", ...(request.headers ?? {}) }, actor: actorCtx });
+async function call(api, actorCtx, request) {
+  return await api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-g01-self-service", ...(request.headers ?? {}) }, actor: actorCtx });
 }
 
-test("G01 self-service: seeded employee already has contact/address/dependent/nominee/emergency-contact/bank-account rows from the seed", () => {
+test("G01 self-service: seeded employee already has contact/address/dependent/nominee/emergency-contact/bank-account rows from the seed", async () => {
   const { services, admin, rohan } = boot();
   assert.ok(services.employeeMaster.listContacts(admin, rohan.id).length >= 1, "seed provides at least one contact");
   assert.ok(services.employeeMaster.listAddresses(admin, rohan.id).length >= 1, "seed provides at least one address");
@@ -44,11 +44,11 @@ test("G01 self-service: seeded employee already has contact/address/dependent/no
   assert.equal(seededBank[0].status, "PENDING", "a freshly seeded bank account starts PENDING, exactly like a real add");
 });
 
-test("G01 self-service: the seeded employee can add a second address and a second contact over HTTP", () => {
+test("G01 self-service: the seeded employee can add a second address and a second contact over HTTP", async () => {
   const { api, admin, rohan } = boot();
-  const beforeAddresses = call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/addresses` }).body.items.length;
+  const beforeAddresses = (await call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/addresses` })).body.items.length;
 
-  const added = call(api, actor(rohan.id, ["g01.employee.address.write"]), {
+  const added = await call(api, actor(rohan.id, ["g01.employee.address.write"]), {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/addresses`,
     headers: { "Idempotency-Key": "idem-g01-address-001" },
@@ -57,10 +57,10 @@ test("G01 self-service: the seeded employee can add a second address and a secon
   assert.equal(added.status, 201);
   assert.equal(added.body.address.addressType, "MAILING");
 
-  const afterAddresses = call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/addresses` }).body.items.length;
+  const afterAddresses = (await call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/addresses` })).body.items.length;
   assert.equal(afterAddresses, beforeAddresses + 1);
 
-  const addedContact = call(api, actor(rohan.id, ["g01.employee.contact.write"]), {
+  const addedContact = await call(api, actor(rohan.id, ["g01.employee.contact.write"]), {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/contacts`,
     headers: { "Idempotency-Key": "idem-g01-contact-001" },
@@ -69,14 +69,14 @@ test("G01 self-service: the seeded employee can add a second address and a secon
   assert.equal(addedContact.status, 201);
 });
 
-test("G01 self-service: nominee share-percent cap is enforced across successive nominees for the same employee", () => {
+test("G01 self-service: nominee share-percent cap is enforced across successive nominees for the same employee", async () => {
   const { api, admin, rohan } = boot();
   // The seed already gives Rohan one 100%-share nominee (see seedTestEmployeeSatellites); a second
   // nominee at any positive share must be rejected by the server, not silently accepted.
-  const existing = call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/nominees` }).body.items;
+  const existing = (await call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/nominees` })).body.items;
   assert.equal(existing[0].sharePct, 100);
 
-  const rejected = call(api, actor(rohan.id, ["g01.nominee.write"]), {
+  const rejected = await call(api, actor(rohan.id, ["g01.nominee.write"]), {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/nominees`,
     headers: { "Idempotency-Key": "idem-g01-nominee-001" },
@@ -85,12 +85,12 @@ test("G01 self-service: nominee share-percent cap is enforced across successive 
   assert.equal(rejected.status, 422);
 });
 
-test("G01 self-service: emergency-contact priority uniqueness is enforced for the same employee", () => {
+test("G01 self-service: emergency-contact priority uniqueness is enforced for the same employee", async () => {
   const { api, admin, rohan } = boot();
-  const existing = call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/emergency-contacts` }).body.items;
+  const existing = (await call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/emergency-contacts` })).body.items;
   assert.equal(existing[0].priority, 1);
 
-  const conflict = call(api, actor(rohan.id, ["g01.emergency_contact.write"]), {
+  const conflict = await call(api, actor(rohan.id, ["g01.emergency_contact.write"]), {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/emergency-contacts`,
     headers: { "Idempotency-Key": "idem-g01-ec-001" },
@@ -98,7 +98,7 @@ test("G01 self-service: emergency-contact priority uniqueness is enforced for th
   });
   assert.equal(conflict.status, 409);
 
-  const ok = call(api, actor(rohan.id, ["g01.emergency_contact.write"]), {
+  const ok = await call(api, actor(rohan.id, ["g01.emergency_contact.write"]), {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/emergency-contacts`,
     headers: { "Idempotency-Key": "idem-g01-ec-002" },
@@ -107,13 +107,13 @@ test("G01 self-service: emergency-contact priority uniqueness is enforced for th
   assert.equal(ok.status, 201);
 });
 
-test("G01 self-service: a bank account seeded PENDING is approved then penny-drop verified over HTTP", () => {
+test("G01 self-service: a bank account seeded PENDING is approved then penny-drop verified over HTTP", async () => {
   const { api, admin, rohan } = boot();
-  const seeded = call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/bank-accounts` }).body.items[0];
+  const seeded = (await call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/bank-accounts` })).body.items[0];
   assert.equal(seeded.status, "PENDING");
 
   const financeActor = actor("finance-officer", ["g01.bank.approve", "g01.bank.write"]);
-  const approved = call(api, financeActor, {
+  const approved = await call(api, financeActor, {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/bank-accounts/${seeded.id}:approve`,
     headers: { "Idempotency-Key": "idem-g01-bank-approve-001" },
@@ -123,7 +123,7 @@ test("G01 self-service: a bank account seeded PENDING is approved then penny-dro
   assert.equal(approved.body.bankAccount.status, "APPROVED");
   assert.equal(approved.body.bankAccount.pennyDropStatus, "PENDING", "approval alone does not mark penny-drop verified");
 
-  const pennyDropped = call(api, financeActor, {
+  const pennyDropped = await call(api, financeActor, {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/bank-accounts/${seeded.id}:penny-drop`,
     headers: { "Idempotency-Key": "idem-g01-bank-pennydrop-001" },
@@ -133,7 +133,7 @@ test("G01 self-service: a bank account seeded PENDING is approved then penny-dro
   assert.equal(pennyDropped.body.bankAccount.isVerified, true);
 
   const withoutApprovePermission = actor("random-employee", ["g01.bank.write"]);
-  const forbidden = call(api, withoutApprovePermission, {
+  const forbidden = await call(api, withoutApprovePermission, {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/bank-accounts/${seeded.id}:approve`,
     headers: { "Idempotency-Key": "idem-g01-bank-approve-002" },
@@ -142,10 +142,10 @@ test("G01 self-service: a bank account seeded PENDING is approved then penny-dro
   assert.equal(forbidden.status, 403);
 });
 
-test("G01 self-service: the maker of a bank-account submission cannot also approve it (SOD_VIOLATION)", () => {
+test("G01 self-service: the maker of a bank-account submission cannot also approve it (SOD_VIOLATION)", async () => {
   const { api, rohan } = boot();
   const maker = actor("bank-maker", ["g01.bank.write", "g01.bank.approve"]);
-  const added = call(api, maker, {
+  const added = await call(api, maker, {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/bank-accounts`,
     headers: { "Idempotency-Key": "idem-g01-bank-sod-001" },
@@ -153,7 +153,7 @@ test("G01 self-service: the maker of a bank-account submission cannot also appro
   });
   assert.equal(added.status, 201);
 
-  const selfApprove = call(api, maker, {
+  const selfApprove = await call(api, maker, {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/bank-accounts/${added.body.bankAccount.id}:approve`,
     headers: { "Idempotency-Key": "idem-g01-bank-sod-002" },
@@ -163,7 +163,7 @@ test("G01 self-service: the maker of a bank-account submission cannot also appro
   assert.equal(selfApprove.body.error.code, "SOD_VIOLATION");
 
   const differentChecker = actor("bank-checker", ["g01.bank.approve"]);
-  const approved = call(api, differentChecker, {
+  const approved = await call(api, differentChecker, {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/bank-accounts/${added.body.bankAccount.id}:approve`,
     headers: { "Idempotency-Key": "idem-g01-bank-sod-003" },
@@ -173,9 +173,9 @@ test("G01 self-service: the maker of a bank-account submission cannot also appro
   assert.equal(approved.body.bankAccount.status, "APPROVED");
 });
 
-test("G01 self-service: bank-account wire responses never leak the internal submittedByUserId maker field", () => {
+test("G01 self-service: bank-account wire responses never leak the internal submittedByUserId maker field", async () => {
   const { api, admin, rohan } = boot();
-  const added = call(api, actor("bank-maker-wire-check", ["g01.bank.write"]), {
+  const added = await call(api, actor("bank-maker-wire-check", ["g01.bank.write"]), {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/bank-accounts`,
     headers: { "Idempotency-Key": "idem-g01-bank-wire-001" },
@@ -184,12 +184,12 @@ test("G01 self-service: bank-account wire responses never leak the internal subm
   assert.equal(added.status, 201);
   assert.equal("submittedByUserId" in added.body.bankAccount, false, "add response must not leak the maker id");
 
-  const listed = call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/bank-accounts` });
+  const listed = await call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/bank-accounts` });
   for (const account of listed.body.items) {
     assert.equal("submittedByUserId" in account, false, "list response must not leak the maker id");
   }
 
-  const approved = call(api, actor("bank-checker-wire-check", ["g01.bank.approve"]), {
+  const approved = await call(api, actor("bank-checker-wire-check", ["g01.bank.approve"]), {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/bank-accounts/${added.body.bankAccount.id}:approve`,
     headers: { "Idempotency-Key": "idem-g01-bank-wire-002" },
@@ -198,18 +198,18 @@ test("G01 self-service: bank-account wire responses never leak the internal subm
   assert.equal("submittedByUserId" in approved.body.bankAccount, false, "approve response must not leak the maker id");
 });
 
-test("G01 self-service: updating an approved bank account's IFSC re-enters PENDING for a fresh approval", () => {
+test("G01 self-service: updating an approved bank account's IFSC re-enters PENDING for a fresh approval", async () => {
   const { api, admin, rohan } = boot();
   const financeActor = actor("finance-officer", ["g01.bank.approve", "g01.bank.write"]);
-  const seeded = call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/bank-accounts` }).body.items[0];
-  call(api, financeActor, {
+  const seeded = (await call(api, admin, { method: "GET", path: `/api/v1/employees/${rohan.id}/bank-accounts` })).body.items[0];
+  await call(api, financeActor, {
     method: "POST",
     path: `/api/v1/employees/${rohan.id}/bank-accounts/${seeded.id}:approve`,
     headers: { "Idempotency-Key": "idem-g01-bank-approve-003" },
     body: {},
   });
 
-  const updated = call(api, actor(rohan.id, ["g01.bank.write"]), {
+  const updated = await call(api, actor(rohan.id, ["g01.bank.write"]), {
     method: "PATCH",
     path: `/api/v1/employees/${rohan.id}/bank-accounts/${seeded.id}`,
     headers: { "Idempotency-Key": "idem-g01-bank-update-001" },

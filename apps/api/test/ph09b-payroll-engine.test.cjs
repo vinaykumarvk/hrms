@@ -94,7 +94,7 @@ function runPeriodToLock(services, period) {
   return run.id;
 }
 
-test("PH-09B G10 engine: DSL-ordered compute with G03-fed LWP proration, statutory cap, and state-wise PT", () => {
+test("PH-09B G10 engine: DSL-ordered compute with G03-fed LWP proration, statutory cap, and state-wise PT", async () => {
   const services = createFoundationServices();
   seedRules(services);
   const maker = actor();
@@ -145,7 +145,7 @@ test("PH-09B G10 engine: DSL-ordered compute with G03-fed LWP proration, statuto
   assert.equal(payslip.lwpDaysHundredths, 200);
 });
 
-test("PH-09B G10 determinism: recompute of the same frozen snapshot yields deep-equal payslips and payslip_lines", () => {
+test("PH-09B G10 determinism: recompute of the same frozen snapshot yields deep-equal payslips and payslip_lines", async () => {
   const services = createFoundationServices();
   seedRules(services);
   const maker = actor();
@@ -171,7 +171,7 @@ test("PH-09B G10 determinism: recompute of the same frozen snapshot yields deep-
   );
 });
 
-test("PH-09B NEGATIVE: every mutation path after lock throws ERR-G10-RUN-IMMUTABLE", () => {
+test("PH-09B NEGATIVE: every mutation path after lock throws ERR-G10-RUN-IMMUTABLE", async () => {
   const services = createFoundationServices();
   seedRules(services);
   const maker = actor();
@@ -183,7 +183,7 @@ test("PH-09B NEGATIVE: every mutation path after lock throws ERR-G10-RUN-IMMUTAB
   assert.equal(codeOf(() => services.payrollEngine.approveEngineRun(approver(), runId)), "ERR-G10-RUN-IMMUTABLE");
 });
 
-test("PH-09B NEGATIVE: a second concurrent FINAL run for the period throws ERR-G10-RUN-INFLIGHT", () => {
+test("PH-09B NEGATIVE: a second concurrent FINAL run for the period throws ERR-G10-RUN-INFLIGHT", async () => {
   const services = createFoundationServices();
   seedRules(services);
   const maker = actor();
@@ -202,7 +202,7 @@ test("PH-09B NEGATIVE: a second concurrent FINAL run for the period throws ERR-G
   assert.equal(next.status, "QUEUED");
 });
 
-test("PH-09B arrears engine: month-wise breakup persists old/new/delta rows and total = Σ months (new − old)", () => {
+test("PH-09B arrears engine: month-wise breakup persists old/new/delta rows and total = Σ months (new − old)", async () => {
   const services = createFoundationServices();
   seedRules(services);
   const maker = actor();
@@ -249,7 +249,7 @@ test("PH-09B arrears engine: month-wise breakup persists old/new/delta rows and 
   assert.equal(paid.paidInRunId, october.id);
 });
 
-test("PH-09B net-pay floor: excess recovery is held (ERR-G10-RECOVERY-NET) and booked into deduction_carryforwards", () => {
+test("PH-09B net-pay floor: excess recovery is held (ERR-G10-RECOVERY-NET) and booked into deduction_carryforwards", async () => {
   const services = createFoundationServices();
   seedRules(services);
   const maker = actor();
@@ -288,7 +288,7 @@ test("PH-09B net-pay floor: excess recovery is held (ERR-G10-RECOVERY-NET) and b
   assert.ok(services.audit.listAudit(maker).some((entry) => entry.subjectRef.startsWith("g10_deduction_carryforwards:")));
 });
 
-test("PH-09B reopen supersedes: originals REVERSED, successor recomputes v2, and YTD (VAL-G10-YTD-DERIVE) self-heals", () => {
+test("PH-09B reopen supersedes: originals REVERSED, successor recomputes v2, and YTD (VAL-G10-YTD-DERIVE) self-heals", async () => {
   const services = createFoundationServices();
   seedRules(services);
   const maker = actor();

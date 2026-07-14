@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G03 blackout_periods: leave inside an active blackout window is rejected (BLACKOUT_PERIOD)", () => {
+test("G03 blackout_periods: leave inside an active blackout window is rejected (BLACKOUT_PERIOD)", async () => {
   const s = createFoundationServices();
   s.leaveBlackoutMass.declareBlackout(actor(), { orgUnitId: ph03Ids.orgRevenue, fromDate: "2026-03-25", toDate: "2026-03-31", reason: "Financial year close." });
   assert.throws(
@@ -32,7 +32,7 @@ test("G03 blackout_periods: leave inside an active blackout window is rejected (
   assert.doesNotThrow(() => s.leaveBlackoutMass.assertNotInBlackout(actor(), { orgUnitId: ph03Ids.orgRevenue, fromDate: "2026-04-02", toDate: "2026-04-03" }));
 });
 
-test("G03 mass_leave: applies to a cohort and gates return-to-work (RETURN_TO_WORK_PENDING)", () => {
+test("G03 mass_leave: applies to a cohort and gates return-to-work (RETURN_TO_WORK_PENDING)", async () => {
   const s = createFoundationServices();
   const batch = s.leaveBlackoutMass.applyMassLeave(actor(), {
     orgUnitId: ph03Ids.orgRevenue,
@@ -54,7 +54,7 @@ test("G03 mass_leave: applies to a cohort and gates return-to-work (RETURN_TO_WO
   assert.equal(closed.status, "CLOSED");
 });
 
-test("G03 mass_leave: cannot be applied over an active blackout", () => {
+test("G03 mass_leave: cannot be applied over an active blackout", async () => {
   const s = createFoundationServices();
   s.leaveBlackoutMass.declareBlackout(actor(), { orgUnitId: ph03Ids.orgAssessment, fromDate: "2026-06-01", toDate: "2026-06-10", reason: "Audit." });
   assert.throws(

@@ -34,7 +34,7 @@ export class ApiKernel {
     this.routes.push(route);
   }
 
-  dispatch(request: ApiRequest): ApiResponse {
+  async dispatch(request: ApiRequest): Promise<ApiResponse> {
     const matched = this.match(request.method, request.path);
     const routeKey = `${request.method} ${request.path}`;
     const normalizedHeaders = normalizeHeaders(request.headers);
@@ -59,7 +59,7 @@ export class ApiKernel {
       this.services.authorization.check(actor, matched.route.permission, scope);
       const idempotencyKey = matched.route.unsafe && matched.route.requiresIdempotencyKey ? requireIdempotencyKey(normalizedHeaders) : undefined;
       const pagination = matched.route.list ? parsePagination(request.query) : undefined;
-      const invokeHandler = (): ApiResponse =>
+      const invokeHandler = (): Promise<ApiResponse> =>
         matched.route.handler({
           request,
           params: matched.params,
@@ -81,11 +81,11 @@ export class ApiKernel {
         if (replayed) {
           response = replayed;
         } else {
-          response = invokeHandler();
+          response = await invokeHandler();
           this.replayStore.record(replayKey, fingerprint, response);
         }
       } else {
-        response = invokeHandler();
+        response = await invokeHandler();
       }
       return this.withCorrelation(response, correlationId);
     } catch (error) {

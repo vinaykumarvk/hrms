@@ -10,7 +10,7 @@ const {
 
 const EXPECTED_SERVICE_NOS = ["GOV-100301", "GOV-100302", "GOV-100303", "GOV-100304", "GOV-100305", "GOV-100306"];
 
-test("seed-test-employees: default createFoundationServices() is unaffected (opt-in only)", () => {
+test("seed-test-employees: default createFoundationServices() is unaffected (opt-in only)", async () => {
   const services = createFoundationServices();
   const actor = testEmployeeSeedActor();
   const employees = services.employeeMaster.list(actor);
@@ -20,7 +20,7 @@ test("seed-test-employees: default createFoundationServices() is unaffected (opt
   }
 });
 
-test("seed-test-employees: creates 6 realistic employees with expected variation", () => {
+test("seed-test-employees: creates 6 realistic employees with expected variation", async () => {
   const services = createFoundationServices({ seedTestEmployees: true });
   const actor = testEmployeeSeedActor();
 
@@ -174,7 +174,7 @@ test("seed-test-employees: creates 6 realistic employees with expected variation
   assert.ok(meeraDocuments.some((doc) => /Synthetic Test Data/.test(doc.title)));
 });
 
-test("seed-test-employees: re-running the satellite seed on the same services is idempotent (zero duplicates)", () => {
+test("seed-test-employees: re-running the satellite seed on the same services is idempotent (zero duplicates)", async () => {
   const services = createFoundationServices({ seedTestEmployees: true });
   const actor = testEmployeeSeedActor();
   const rohan = services.employeeMaster.getByServiceNo(actor, "GOV-100301");
@@ -217,7 +217,7 @@ test("seed-test-employees: re-running the satellite seed on the same services is
   assert.equal(services.attendanceOps.listShifts(actor).length, shiftsBefore, "shared shift is not redefined on re-run");
 });
 
-test("seed-test-employees: re-running employee-master creation across a fresh boot is idempotent by service_no", () => {
+test("seed-test-employees: re-running employee-master creation across a fresh boot is idempotent by service_no", async () => {
   const { seedTestEmployeeMasters } = require("../../../dist/apps/api/src");
   const services = createFoundationServices({ seedTestEmployees: true });
   const actor = testEmployeeSeedActor();

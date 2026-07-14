@@ -17,22 +17,22 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph35c-g06", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-35C G06 sealed-cover register: place, list, release through the kernel", () => {
+test("PH-35C G06 sealed-cover register: place, list, release through the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
 
-  const empty = call(api, { method: "GET", path: "/api/v1/promotions/sealed-covers" });
+  const empty = await call(api, { method: "GET", path: "/api/v1/promotions/sealed-covers" });
   assert.equal(empty.status, 200);
   assert.deepEqual(empty.body.items, []);
 
-  const placed = call(api, {
+  const placed = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/sealed-covers",
     headers: { "Idempotency-Key": "sc-place-1" },
@@ -42,11 +42,11 @@ test("PH-35C G06 sealed-cover register: place, list, release through the kernel"
   assert.equal(placed.body.sealedCover.status, "SEALED");
   const id = placed.body.sealedCover.id;
 
-  const listed = call(api, { method: "GET", path: "/api/v1/promotions/sealed-covers" });
+  const listed = await call(api, { method: "GET", path: "/api/v1/promotions/sealed-covers" });
   assert.equal(listed.status, 200);
   assert.equal(listed.body.items.length, 1);
 
-  const released = call(api, {
+  const released = await call(api, {
     method: "POST",
     path: `/api/v1/promotions/sealed-covers/${id}:release`,
     headers: { "Idempotency-Key": "sc-release-1" },
@@ -57,16 +57,16 @@ test("PH-35C G06 sealed-cover register: place, list, release through the kernel"
   assert.equal(released.body.sealedCover.releaseReason, "Inquiry concluded — exonerated");
 });
 
-test("PH-35C G06 sealed-cover release requires a reason", () => {
+test("PH-35C G06 sealed-cover release requires a reason", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const placed = call(api, {
+  const placed = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/sealed-covers",
     headers: { "Idempotency-Key": "sc-place-2" },
     body: { employeeId: ph03Ids.employee, reason: "Pending disciplinary proceeding" },
   });
   const id = placed.body.sealedCover.id;
-  const bad = call(api, {
+  const bad = await call(api, {
     method: "POST",
     path: `/api/v1/promotions/sealed-covers/${id}:release`,
     headers: { "Idempotency-Key": "sc-release-2" },

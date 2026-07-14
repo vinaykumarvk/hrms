@@ -36,7 +36,7 @@ function deadLetteredEvent(services, suffix) {
   return event;
 }
 
-test("g04.relay.monitor (runtime: g04.relay.read): the relay dashboard/reconciliation summary works", () => {
+test("g04.relay.monitor (runtime: g04.relay.read): the relay dashboard/reconciliation summary works", async () => {
   const services = boot();
   const event = services.leaveSrRelay.enqueueApprovedLeave(actor("hr-admin-monitor-probe", ["g04.relay.write"]), {
     leaveApplicationId: "leave-app-hr-admin-g04-monitor-001",
@@ -50,7 +50,7 @@ test("g04.relay.monitor (runtime: g04.relay.read): the relay dashboard/reconcili
   assert.equal(report.posted, 1);
 });
 
-test("g04.dlq.triage_replay (post-hr_admin-goal fix): replaying/discarding a dead-lettered event requires the g04_dlq_ops capability", () => {
+test("g04.dlq.triage_replay (post-hr_admin-goal fix): replaying/discarding a dead-lettered event requires the g04_dlq_ops capability", async () => {
   const services = boot();
   const replayTarget = deadLetteredEvent(services, "1");
   const discardTarget = deadLetteredEvent(services, "2");
@@ -76,7 +76,7 @@ test("g04.dlq.triage_replay (post-hr_admin-goal fix): replaying/discarding a dea
   assert.equal(discarded.status, "DISCARDED");
 });
 
-test("g04.dlq.triage_replay (post-hr_admin-goal fix): triggering a statutory reconciliation run requires the g04_dlq_ops capability", () => {
+test("g04.dlq.triage_replay (post-hr_admin-goal fix): triggering a statutory reconciliation run requires the g04_dlq_ops capability", async () => {
   const services = boot();
   const withoutFlag = actor("hr-admin-no-dlq-flag-3", ["g04.relay.reconcile"], { roles: ["hr_admin"] });
   assert.throws(

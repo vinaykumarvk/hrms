@@ -21,8 +21,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph08-g05", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -55,7 +55,7 @@ function clearAll(services, order, completedOn, deemedOn) {
   services.transfer.deemClearance(actor(), order.id, codes[0], deemedOn);
 }
 
-test("PH-08 G05 representation retention rescinds the TRANSFER fact through the SR reversal envelope", () => {
+test("PH-08 G05 representation retention rescinds the TRANSFER fact through the SR reversal envelope", async () => {
   const services = createFoundationServices();
   const order = approvedOrder(services);
   const representation = services.transfer.fileRepresentation(actor(), order.id, {
@@ -80,7 +80,7 @@ test("PH-08 G05 representation retention rescinds the TRANSFER fact through the 
   assert.ok(services.audit.listAudit(actor()).some((entry) => entry.action === "G05_REPRESENTATION_FILED"));
 });
 
-test("PH-08 G05 cancellation reverses the ledger fact and deemed relief posts catalog RELIEVING", () => {
+test("PH-08 G05 cancellation reverses the ledger fact and deemed relief posts catalog RELIEVING", async () => {
   const services = createFoundationServices();
   const cancellable = approvedOrder(services, "cancel");
   const cancelled = services.transfer.cancel(actor(), cancellable.id, {
@@ -112,17 +112,17 @@ test("PH-08 G05 cancellation reverses the ledger fact and deemed relief posts ca
   assert.equal(timeline[3].payload.forced_action, "DEEMED_RELIEF");
 });
 
-test("PH-08 G05 routes expose representation and retention", () => {
+test("PH-08 G05 routes expose representation and retention", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const initiated = call(api, {
+  const initiated = await call(api, {
     method: "POST",
     path: "/api/v1/transfers/orders",
     headers: { "Idempotency-Key": "idem-ph08-g05-route-init-001" },
     body: transferInput(),
   });
   assert.equal(initiated.status, 201);
-  const approved = call(api, {
+  const approved = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/orders/${initiated.body.order.id}/approve`,
     headers: { "Idempotency-Key": "idem-ph08-g05-route-approve-001" },
@@ -130,7 +130,7 @@ test("PH-08 G05 routes expose representation and retention", () => {
   });
   assert.equal(approved.status, 202);
 
-  const represented = call(api, {
+  const represented = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/orders/${initiated.body.order.id}/representations`,
     headers: { "Idempotency-Key": "idem-ph08-g05-route-rep-001" },
@@ -138,7 +138,7 @@ test("PH-08 G05 routes expose representation and retention", () => {
   });
   assert.equal(represented.status, 201);
 
-  const retained = call(api, {
+  const retained = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/representations/${represented.body.representation.id}:retain`,
     headers: { "Idempotency-Key": "idem-ph08-g05-route-retain-001" },

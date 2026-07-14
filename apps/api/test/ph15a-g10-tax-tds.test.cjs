@@ -116,7 +116,7 @@ function seedUniverse() {
   return services;
 }
 
-test("PH-15A FR-07 AC1: switching regime recomputes EVERY persisted tax_declarations pipeline stage and the per-month TDS", () => {
+test("PH-15A FR-07 AC1: switching regime recomputes EVERY persisted tax_declarations pipeline stage and the per-month TDS", async () => {
   const services = seedUniverse();
   const maker = actor();
   // NEW regime declaration. Projected annual salary derives from the payslip_lines ledger:
@@ -181,7 +181,7 @@ test("PH-15A FR-07 AC1: switching regime recomputes EVERY persisted tax_declarat
   assert.equal(persisted.monthlyTdsPaise, 1049200);
 });
 
-test("PH-15A FR-07 BR4 + AC6: surcharge applies with marginal relief, and Form-12B previous-employer income joins the pipeline", () => {
+test("PH-15A FR-07 BR4 + AC6: surcharge applies with marginal relief, and Form-12B previous-employer income joins the pipeline", async () => {
   const services = seedUniverse();
   const maker = actor();
   // Form-12B pushes taxable just past the ₹50L surcharge threshold row: taxable ₹50.25L.
@@ -203,7 +203,7 @@ test("PH-15A FR-07 BR4 + AC6: surcharge applies with marginal relief, and Form-1
   assert.equal(declaration.projectedAnnualTaxPaise, 94120000);
 });
 
-test("PH-15A NEGATIVE FR-07: missing TAX_SLAB rows for the regime/FY fail closed with ERR-G10-TAXSLAB-NOTFOUND", () => {
+test("PH-15A NEGATIVE FR-07: missing TAX_SLAB rows for the regime/FY fail closed with ERR-G10-TAXSLAB-NOTFOUND", async () => {
   const services = createFoundationServices();
   seedPayrollRules(services);
   runPeriodToLock(services, "2026-04");
@@ -216,7 +216,7 @@ test("PH-15A NEGATIVE FR-07: missing TAX_SLAB rows for the regime/FY fail closed
   );
 });
 
-test("PH-15A NEGATIVE FR-07 AC3: tax_declaration mutation after the FY proof cutoff throws ERR-G10-SNAPSHOT-FROZEN", () => {
+test("PH-15A NEGATIVE FR-07 AC3: tax_declaration mutation after the FY proof cutoff throws ERR-G10-SNAPSHOT-FROZEN", async () => {
   const services = seedUniverse();
   const maker = actor();
   services.taxEngine.upsertDeclaration(maker, { employeeId: ph03Ids.employee, financialYear: FY, regime: "NEW", asOf: "2026-06-15" });
@@ -250,7 +250,7 @@ test("PH-15A NEGATIVE FR-07 AC3: tax_declaration mutation after the FY proof cut
   assert.equal(services.taxEngine.getDeclaration(maker, ph03Ids.employee, FY).regime, "OLD");
 });
 
-test("PH-15A FR-17 AC1: Form-16 TDS totals tie to Σ TDS payslip_lines for the FY and Part A derives from MATCHED statutory_remittances", () => {
+test("PH-15A FR-17 AC1: Form-16 TDS totals tie to Σ TDS payslip_lines for the FY and Part A derives from MATCHED statutory_remittances", async () => {
   const services = seedUniverse();
   const maker = actor();
   services.taxEngine.upsertDeclaration(maker, { employeeId: ph03Ids.employee, financialYear: FY, regime: "NEW", asOf: "2026-06-15" });
@@ -288,7 +288,7 @@ test("PH-15A FR-17 AC1: Form-16 TDS totals tie to Σ TDS payslip_lines for the F
   assert.equal(form16.partB.projectedAnnualTaxPaise, 10920000);
 });
 
-test("PH-15A NEGATIVE FR-17 AC5: Form-16 Part A is blocked while any FY TDS remittance is not MATCHED", () => {
+test("PH-15A NEGATIVE FR-17 AC5: Form-16 Part A is blocked while any FY TDS remittance is not MATCHED", async () => {
   const services = seedUniverse();
   const maker = actor();
   services.taxEngine.upsertDeclaration(maker, { employeeId: ph03Ids.employee, financialYear: FY, regime: "NEW", asOf: "2026-06-15" });
@@ -318,7 +318,7 @@ test("PH-15A NEGATIVE FR-17 AC5: Form-16 Part A is blocked while any FY TDS remi
   assert.equal(form16.partA.totalPaise, 1000000);
 });
 
-test("PH-15A FR-17 AC2: Form-24Q quarterly totals reconcile to the monthly TDS payslip_lines in the quarter", () => {
+test("PH-15A FR-17 AC2: Form-24Q quarterly totals reconcile to the monthly TDS payslip_lines in the quarter", async () => {
   const services = seedUniverse();
   const maker = actor();
   const form24q = services.taxEngine.generateForm24Q(maker, { financialYear: FY, quarter: "Q1" });

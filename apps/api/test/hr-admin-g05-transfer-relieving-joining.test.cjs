@@ -38,7 +38,7 @@ function approvedOrder(services, suffix) {
   return services.transfer.approve(admin, initiated.order.id, { idempotencyKey: `idem-hr-admin-g05-approve-${suffix}` });
 }
 
-test("g05.transfer.initiate: the runtime permission string matches exactly and works end-to-end", () => {
+test("g05.transfer.initiate: the runtime permission string matches exactly and works end-to-end", async () => {
   const services = boot();
   const initiator = actor("hr-admin-initiate-probe", ["g05.transfer.initiate"], { roles: ["hr_admin"] });
   const initiated = services.transfer.initiate(initiator, {
@@ -53,7 +53,7 @@ test("g05.transfer.initiate: the runtime permission string matches exactly and w
   assert.equal(initiated.order.status, "PENDING_APPROVAL");
 });
 
-test("g05.clearance.grant (post-hr_admin-goal fix): completing/deeming a departmental clearance requires the g05_clearance_officer capability", () => {
+test("g05.clearance.grant (post-hr_admin-goal fix): completing/deeming a departmental clearance requires the g05_clearance_officer capability", async () => {
   const services = boot();
   const order = approvedOrder(services, "clearance");
   const code = order.order.clearanceItems[0].code;
@@ -69,7 +69,7 @@ test("g05.clearance.grant (post-hr_admin-goal fix): completing/deeming a departm
   assert.ok(cleared.id);
 });
 
-test("g05.estate.record (post-hr_admin-goal fix): approving/flagging-overstay/recording-vacation of accommodation requires the g05_estate_officer capability", () => {
+test("g05.estate.record (post-hr_admin-goal fix): approving/flagging-overstay/recording-vacation of accommodation requires the g05_estate_officer capability", async () => {
   const services = boot();
   const order = approvedOrder(services, "estate");
   const requester = actor("hr-admin-quarter-requester", ["g05.quarter.request"], { roles: ["hr_admin"] });

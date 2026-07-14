@@ -23,7 +23,7 @@ function actor(extra = {}) {
   };
 }
 
-test("authority resolver covers hierarchy, delegation precedence, SoD block, committees, and ambiguous authority fail-closed", () => {
+test("authority resolver covers hierarchy, delegation precedence, SoD block, committees, and ambiguous authority fail-closed", async () => {
   const services = createFoundationServices();
   const scope = actor();
 
@@ -79,7 +79,7 @@ test("authority resolver covers hierarchy, delegation precedence, SoD block, com
   );
 });
 
-test("G12 SR ingest is idempotent, semantically deduplicated, source-reversible, and append-only by API shape", () => {
+test("G12 SR ingest is idempotent, semantically deduplicated, source-reversible, and append-only by API shape", async () => {
   const services = createFoundationServices();
   const scope = actor();
   const request = {
@@ -117,7 +117,7 @@ test("G12 SR ingest is idempotent, semantically deduplicated, source-reversible,
   assert.equal(typeof services.serviceRegister.updateEvent, "undefined");
 });
 
-test("G13 document vault supports module attachment and legal hold blocks disposal", () => {
+test("G13 document vault supports module attachment and legal hold blocks disposal", async () => {
   const services = createFoundationServices();
   const scope = actor();
   const document = services.documentVault.createDocument(scope, {
@@ -139,7 +139,7 @@ test("G13 document vault supports module attachment and legal hold blocks dispos
   assert.throws(() => services.documentVault.dispose(scope, document.id), /Legal hold or WORM retention blocks disposal/);
 });
 
-test("G01 read masking and governed identity change post an SR event with audit evidence", () => {
+test("G01 read masking and governed identity change post an SR event with audit evidence", async () => {
   const services = createFoundationServices();
   const masked = services.employeeMaster.readProfile(actor({ fieldGrants: [] }), ph03Ids.manager);
   assert.equal(masked.pan, "[HIDDEN]");
@@ -161,7 +161,7 @@ test("G01 read masking and governed identity change post an SR event with audit 
   assert.ok(services.audit.listAudit(actor()).some((entry) => entry.action === "G01_GOVERNED_IDENTITY_CHANGE"));
 });
 
-test("synthetic P01 HRMS workflow writes task, action, resolution evidence, audit, and notification", () => {
+test("synthetic P01 HRMS workflow writes task, action, resolution evidence, audit, and notification", async () => {
   const services = createFoundationServices();
   const result = services.workflow.runSyntheticHrmsFlow(actor(), ph03Ids.employee);
   assert.equal(result.instance.status, "RUNNING");
@@ -172,7 +172,7 @@ test("synthetic P01 HRMS workflow writes task, action, resolution evidence, audi
   assert.equal(services.notifications.list(actor()).filter((message) => message.messageId === "WF_APPROVE").length, 1);
 });
 
-test("foundation services enforce tenant isolation", () => {
+test("foundation services enforce tenant isolation", async () => {
   const services = createFoundationServices();
   const otherTenant = actor({ tenantId: "tenant-other", entityId: "entity-other" });
   assert.equal(services.employeeMaster.getById(otherTenant, ph03Ids.manager), null);
@@ -180,7 +180,7 @@ test("foundation services enforce tenant isolation", () => {
   assert.equal(services.serviceRegister.count(otherTenant), 0);
 });
 
-test("migration staging reconciliation does not mutate production employee records", () => {
+test("migration staging reconciliation does not mutate production employee records", async () => {
   const services = createFoundationServices();
   const scope = actor();
   services.migrationStaging.stageEmployeeIdentity(scope, { serviceNo: "GOV-100245", displayName: "Ananya Rao", sourceSystem: "legacy" });
@@ -194,7 +194,7 @@ test("migration staging reconciliation does not mutate production employee recor
   assert.equal(report.productionEmployeeCountBefore, report.productionEmployeeCountAfter);
 });
 
-test("PH-03 service registry is protected and error sanitization hides internal failures", () => {
+test("PH-03 service registry is protected and error sanitization hides internal failures", async () => {
   assert.equal(foundationServiceRegistry.every((entry) => entry.protected && entry.permission.length > 0), true);
   assert.deepEqual(toPublicError(new FoundationError("FORBIDDEN", "Permission denied")).error.code, "FORBIDDEN");
   const publicError = toPublicError(new Error("database stack trace /tmp/secret"));

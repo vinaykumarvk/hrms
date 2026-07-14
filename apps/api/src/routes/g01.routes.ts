@@ -46,7 +46,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.employee.change.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) => ok(pageItems(context.services.employeeMaster.listChanges(context.scope), context.pagination ?? { limit: 25 })),
+    handler: async (context) => ok(pageItems(await context.services.employeeMaster.listChanges(context.scope), context.pagination ?? { limit: 25 })),
   });
   kernel.register({
     method: "POST",
@@ -56,9 +56,9 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.create",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      const result = context.services.employeeMaster.create(context.actor, {
+      const result = await context.services.employeeMaster.create(context.actor, {
         firstName: requiredString(body, "firstName"),
         lastName: optionalString(body, "lastName"),
         displayName: optionalString(body, "displayName"),
@@ -81,7 +81,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.employee.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) => ok(pageItems(context.services.employeeMaster.list(context.scope), context.pagination ?? { limit: 25 })),
+    handler: async (context) => ok(pageItems(await context.services.employeeMaster.list(context.scope), context.pagination ?? { limit: 25 })),
   });
   kernel.register({
     method: "GET",
@@ -89,8 +89,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.getEmployee",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => {
-      const employee = context.services.employeeMaster.getById(context.scope, requiredParam(context.params, "id"));
+    handler: async (context) => {
+      const employee = await context.services.employeeMaster.getById(context.scope, requiredParam(context.params, "id"));
       if (!employee) {
         throw new FoundationError("NOT_FOUND", "Employee not found");
       }
@@ -103,7 +103,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.getEmployeeProfile360",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => ok({ profile: context.services.employeeMaster.readProfile(context.actor, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ profile: await context.services.employeeMaster.readProfile(context.actor, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "GET",
@@ -112,11 +112,11 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.employee.change.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) => {
+    handler: async (context) => {
       const employeeId = requiredParam(context.params, "id");
       return ok({
         employeeId,
-        ...pageItems(context.services.employeeMaster.listGovernedChanges(context.scope, employeeId), context.pagination ?? { limit: 25 }),
+        ...pageItems(await context.services.employeeMaster.listGovernedChanges(context.scope, employeeId), context.pagination ?? { limit: 25 }),
       });
     },
   });
@@ -128,9 +128,9 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.governed_change",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      const result = context.services.employeeMaster.requestGovernedChange(context.actor, {
+      const result = await context.services.employeeMaster.requestGovernedChange(context.actor, {
         employeeId: requiredParam(context.params, "id"),
         newDisplayName: requiredString(body, "newDisplayName"),
         reason: requiredString(body, "reason"),
@@ -147,9 +147,9 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.pii.correct",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      const profile = context.services.employeeMaster.correctPii(context.actor, requiredParam(context.params, "id"), {
+      const profile = await context.services.employeeMaster.correctPii(context.actor, requiredParam(context.params, "id"), {
         pan: optionalString(body, "pan"),
         dob: optionalString(body, "dob"),
         reason: requiredString(body, "reason"),
@@ -164,8 +164,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.employee.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) =>
-      ok(pageItems(context.services.employeeMaster.listContacts(context.actor, requiredParam(context.params, "id")), context.pagination ?? { limit: 25 })),
+    handler: async (context) =>
+      ok(pageItems(await context.services.employeeMaster.listContacts(context.actor, requiredParam(context.params, "id")), context.pagination ?? { limit: 25 })),
   });
   kernel.register({
     method: "POST",
@@ -175,9 +175,9 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.contact.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      const result = context.services.employeeMaster.addContact(context.actor, {
+      const result = await context.services.employeeMaster.addContact(context.actor, {
         employeeId: requiredParam(context.params, "id"),
         contactType: requiredString(body, "contactType") as ContactType,
         contactValue: requiredString(body, "contactValue"),
@@ -196,13 +196,13 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.contact.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       const expectedRowVersion = optionalNumber(body, "expectedRowVersion");
       if (expectedRowVersion === undefined || !Number.isInteger(expectedRowVersion) || expectedRowVersion < 1) {
         throw new FoundationError("VALIDATION_FAILED", "expectedRowVersion is required", { field: "expectedRowVersion" });
       }
-      const result = context.services.employeeMaster.updateContact(context.actor, {
+      const result = await context.services.employeeMaster.updateContact(context.actor, {
         employeeId: requiredParam(context.params, "id"),
         contactId: requiredParam(context.params, "contactId"),
         contactValue: optionalString(body, "contactValue"),
@@ -220,8 +220,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.employee.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) =>
-      ok(pageItems(context.services.employeeMaster.listAddresses(context.actor, requiredParam(context.params, "id")), context.pagination ?? { limit: 25 })),
+    handler: async (context) =>
+      ok(pageItems(await context.services.employeeMaster.listAddresses(context.actor, requiredParam(context.params, "id")), context.pagination ?? { limit: 25 })),
   });
   kernel.register({
     method: "POST",
@@ -231,9 +231,9 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.address.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      const result = context.services.employeeMaster.addAddress(context.actor, {
+      const result = await context.services.employeeMaster.addAddress(context.actor, {
         employeeId: requiredParam(context.params, "id"),
         addressType: requiredString(body, "addressType") as AddressType,
         line1: requiredString(body, "line1"),
@@ -255,8 +255,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.employee.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) =>
-      ok(pageItems(context.services.employeeMaster.listDependents(context.actor, requiredParam(context.params, "id")), context.pagination ?? { limit: 25 })),
+    handler: async (context) =>
+      ok(pageItems(await context.services.employeeMaster.listDependents(context.actor, requiredParam(context.params, "id")), context.pagination ?? { limit: 25 })),
   });
   kernel.register({
     method: "POST",
@@ -266,9 +266,9 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.dependent.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      const result = context.services.employeeMaster.addDependent(context.actor, {
+      const result = await context.services.employeeMaster.addDependent(context.actor, {
         employeeId: requiredParam(context.params, "id"),
         fullName: requiredString(body, "fullName"),
         relationship: requiredString(body, "relationship") as DependentRelationship,
@@ -288,11 +288,11 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.employee.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) => {
+    handler: async (context) => {
       const employeeId = requiredParam(context.params, "id");
       return ok({
         employeeId,
-        ...pageItems(context.services.employeeMaster.listAttributeHistory(context.actor, employeeId), context.pagination ?? { limit: 25 }),
+        ...pageItems(await context.services.employeeMaster.listAttributeHistory(context.actor, employeeId), context.pagination ?? { limit: 25 }),
       });
     },
   });
@@ -304,8 +304,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.change.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
-      const result = context.services.employeeMaster.approveGovernedChange(context.actor, {
+    handler: async (context) => {
+      const result = await context.services.employeeMaster.approveGovernedChange(context.actor, {
         changeId: requiredParam(context.params, "id"),
         idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
       });
@@ -320,9 +320,9 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.change.reject",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      const result = context.services.employeeMaster.rejectGovernedChange(context.actor, {
+      const result = await context.services.employeeMaster.rejectGovernedChange(context.actor, {
         changeId: requiredParam(context.params, "id"),
         reason: requiredString(body, "reason"),
       });
@@ -341,7 +341,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.dedup.scan",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => created(context.services.employeeIdentityOps.scanForDuplicates(context.actor)),
+    handler: async (context) => created(await context.services.employeeIdentityOps.scanForDuplicates(context.actor)),
   });
   kernel.register({
     method: "GET",
@@ -350,10 +350,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.dedup.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) =>
+    handler: async (context) =>
       ok(
         pageItems(
-          context.services.employeeIdentityOps.listDedupCandidates(
+          await context.services.employeeIdentityOps.listDedupCandidates(
             context.scope,
             context.request.query?.status as "OPEN" | "MERGED" | "DISMISSED" | undefined
           ),
@@ -369,10 +369,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.dedup.merge",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted(
-        context.services.employeeIdentityOps.requestMerge(context.actor, {
+        await context.services.employeeIdentityOps.requestMerge(context.actor, {
           candidateId: requiredParam(context.params, "id"),
           survivorId: requiredString(body, "survivorId"),
           override: optionalBoolean(body, "override"),
@@ -388,8 +388,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.dedup.merge.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
-      accepted(context.services.employeeIdentityOps.approveMerge(context.actor, { candidateId: requiredParam(context.params, "id") })),
+    handler: async (context) =>
+      accepted(await context.services.employeeIdentityOps.approveMerge(context.actor, { candidateId: requiredParam(context.params, "id") })),
   });
   kernel.register({
     method: "POST",
@@ -399,8 +399,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.dedup.dismiss",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
-      accepted(context.services.employeeIdentityOps.dismissCandidate(context.actor, { candidateId: requiredParam(context.params, "id") })),
+    handler: async (context) =>
+      accepted(await context.services.employeeIdentityOps.dismissCandidate(context.actor, { candidateId: requiredParam(context.params, "id") })),
   });
   kernel.register({
     method: "POST",
@@ -410,8 +410,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.dedup.undo",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
-      accepted(context.services.employeeIdentityOps.undoMerge(context.actor, { aliasId: requiredParam(context.params, "aliasId") })),
+    handler: async (context) =>
+      accepted(await context.services.employeeIdentityOps.undoMerge(context.actor, { aliasId: requiredParam(context.params, "aliasId") })),
   });
   kernel.register({
     method: "GET",
@@ -419,7 +419,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.resolveEmployeeId",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => ok(context.services.employeeIdentityOps.resolveEmployeeId(context.scope, requiredParam(context.params, "id"))),
+    handler: async (context) => ok(await context.services.employeeIdentityOps.resolveEmployeeId(context.scope, requiredParam(context.params, "id"))),
   });
 
   // ===================================================================================
@@ -433,10 +433,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.import.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created(
-        context.services.employeeIdentityOps.createImportBatch(context.actor, {
+        await context.services.employeeIdentityOps.createImportBatch(context.actor, {
           templateVersion: requiredString(body, "templateVersion"),
           validationProfile: (optionalString(body, "validationProfile") ?? "STRICT") as "STRICT" | "MIGRATION",
           rows: (body.rows ?? []) as Record<string, unknown>[],
@@ -452,8 +452,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.import.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
-      accepted(context.services.employeeIdentityOps.validateImportBatch(context.actor, { batchId: requiredParam(context.params, "batchId") })),
+    handler: async (context) =>
+      accepted(await context.services.employeeIdentityOps.validateImportBatch(context.actor, { batchId: requiredParam(context.params, "batchId") })),
   });
   kernel.register({
     method: "GET",
@@ -461,7 +461,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.getImportBatchReport",
     protected: true,
     permission: "g01.import.read",
-    handler: (context) => ok(context.services.employeeIdentityOps.getImportReport(context.scope, requiredParam(context.params, "batchId"))),
+    handler: async (context) => ok(await context.services.employeeIdentityOps.getImportReport(context.scope, requiredParam(context.params, "batchId"))),
   });
   kernel.register({
     method: "POST",
@@ -471,8 +471,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.import.commit",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
-      accepted(context.services.employeeIdentityOps.commitImportBatch(context.actor, { batchId: requiredParam(context.params, "batchId") })),
+    handler: async (context) =>
+      accepted(await context.services.employeeIdentityOps.commitImportBatch(context.actor, { batchId: requiredParam(context.params, "batchId") })),
   });
   kernel.register({
     method: "GET",
@@ -481,10 +481,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g01.import.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) =>
+    handler: async (context) =>
       ok(
         pageItems(
-          context.services.employeeIdentityOps.listRemediationQueue(
+          await context.services.employeeIdentityOps.listRemediationQueue(
             context.scope,
             (context.request.query?.state as "QUEUED" | "RESOLVED" | undefined) ?? "QUEUED"
           ),
@@ -500,10 +500,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.import.commit",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted(
-        context.services.employeeIdentityOps.promoteActive(context.actor, {
+        await context.services.employeeIdentityOps.promoteActive(context.actor, {
           employeeId: requiredParam(context.params, "id"),
           fixes: {
             dob: optionalString(body, "dob"),
@@ -526,10 +526,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.lifecycle",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted(
-        context.services.employeeIdentityOps.initiateSeparation(context.actor, {
+        await context.services.employeeIdentityOps.initiateSeparation(context.actor, {
           employeeId: requiredParam(context.params, "id"),
           targetStatus: requiredString(body, "targetStatus") as "RETIRED" | "RESIGNED" | "TERMINATED" | "DECEASED",
           separationDate: requiredString(body, "separationDate"),
@@ -547,8 +547,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.lifecycle.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
-      accepted(context.services.employeeIdentityOps.approveSeparation(context.actor, { employeeId: requiredParam(context.params, "id") })),
+    handler: async (context) =>
+      accepted(await context.services.employeeIdentityOps.approveSeparation(context.actor, { employeeId: requiredParam(context.params, "id") })),
   });
   kernel.register({
     method: "POST",
@@ -558,10 +558,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.lifecycle",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted(
-        context.services.employeeIdentityOps.reactivate(context.actor, {
+        await context.services.employeeIdentityOps.reactivate(context.actor, {
           employeeId: requiredParam(context.params, "id"),
           effectiveDate: requiredString(body, "effectiveDate"),
         })
@@ -576,8 +576,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.lifecycle",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
-      accepted(context.services.employeeIdentityOps.archive(context.actor, { employeeId: requiredParam(context.params, "id") })),
+    handler: async (context) =>
+      accepted(await context.services.employeeIdentityOps.archive(context.actor, { employeeId: requiredParam(context.params, "id") })),
   });
 
   // PH-30A — G01 Aadhaar vault capture (Verhoeff + tokenise) and phonetic search (route exposure).
@@ -589,10 +589,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.aadhaar.capture",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        vaultEntry: context.services.aadhaarVault.captureAadhaar(context.actor, {
+        vaultEntry: await context.services.aadhaarVault.captureAadhaar(context.actor, {
           employeeId: requiredParam(context.params, "id"),
           rawAadhaar: requiredString(body, "rawAadhaar"),
           verifiedAt: optionalString(body, "verifiedAt"),
@@ -607,7 +607,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.phoneticSearch",
     protected: true,
     permission: "g01.phonetic.search",
-    handler: (context) => ok(context.services.phoneticSearch.searchPhonetic(context.actor, { query: String(context.request.query?.q ?? "") })),
+    handler: async (context) => ok(await context.services.phoneticSearch.searchPhonetic(context.actor, { query: String(context.request.query?.q ?? "") })),
   });
 
   // PH-45A — G01 Aadhaar reveal (4-eyes break-glass) + employee legal-hold/blocking-obligation lifecycle +
@@ -620,9 +620,9 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.aadhaar.reveal.request",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      return created({ reveal: context.services.aadhaarVault.requestReveal(context.actor, requiredParam(context.params, "vaultId"), { purpose: requiredString(body, "purpose") }) });
+      return created({ reveal: await context.services.aadhaarVault.requestReveal(context.actor, requiredParam(context.params, "vaultId"), { purpose: requiredString(body, "purpose") }) });
     },
   });
   kernel.register({
@@ -633,7 +633,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.aadhaar.reveal.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted(context.services.aadhaarVault.approveReveal(context.actor, requiredParam(context.params, "revealId"))),
+    handler: async (context) => accepted(await context.services.aadhaarVault.approveReveal(context.actor, requiredParam(context.params, "revealId"))),
   });
   kernel.register({
     method: "GET",
@@ -641,7 +641,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.getAadhaarVault",
     protected: true,
     permission: "g01.aadhaar.reveal.request",
-    handler: (context) => ok({ vault: context.services.aadhaarVault.getVaultByEmployee(context.scope, requiredParam(context.params, "id")) ?? null }),
+    handler: async (context) => ok({ vault: await context.services.aadhaarVault.getVaultByEmployee(context.scope, requiredParam(context.params, "id")) ?? null }),
   });
   kernel.register({
     method: "POST",
@@ -651,10 +651,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.legal_hold.place",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created(
-        context.services.employeeIdentityOps.placeLegalHold(context.actor, {
+        await context.services.employeeIdentityOps.placeLegalHold(context.actor, {
           employeeId: requiredParam(context.params, "id"),
           holdType: requiredString(body, "holdType") as "DISCIPLINARY" | "LITIGATION" | "PENSION" | "AUDIT" | "RTI",
           reason: requiredString(body, "reason"),
@@ -670,7 +670,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.legal_hold.release",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted(context.services.employeeIdentityOps.releaseLegalHold(context.actor, { holdId: requiredParam(context.params, "holdId") })),
+    handler: async (context) => accepted(await context.services.employeeIdentityOps.releaseLegalHold(context.actor, { holdId: requiredParam(context.params, "holdId") })),
   });
   kernel.register({
     method: "POST",
@@ -680,10 +680,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.lifecycle",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created(
-        context.services.employeeIdentityOps.registerBlockingObligation(context.actor, {
+        await context.services.employeeIdentityOps.registerBlockingObligation(context.actor, {
           employeeId: requiredParam(context.params, "id"),
           description: requiredString(body, "description"),
         })
@@ -698,7 +698,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.lifecycle",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted(context.services.employeeIdentityOps.clearBlockingObligation(context.actor, { obligationId: requiredParam(context.params, "obligationId") })),
+    handler: async (context) => accepted(await context.services.employeeIdentityOps.clearBlockingObligation(context.actor, { obligationId: requiredParam(context.params, "obligationId") })),
   });
   kernel.register({
     method: "GET",
@@ -706,12 +706,12 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.getByServiceNo",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => {
+    handler: async (context) => {
       const serviceNo = context.request.query?.serviceNo;
       if (!serviceNo) {
         throw new FoundationError("VALIDATION_FAILED", "serviceNo query parameter is required", { field: "serviceNo" });
       }
-      return ok({ employee: context.services.employeeMaster.getByServiceNo(context.scope, serviceNo) });
+      return ok({ employee: await context.services.employeeMaster.getByServiceNo(context.scope, serviceNo) });
     },
   });
 
@@ -725,10 +725,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.governed_change",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted(
-        context.services.employeeMaster.governedIdentityChange(context.actor, {
+        await context.services.employeeMaster.governedIdentityChange(context.actor, {
           employeeId: requiredParam(context.params, "id"),
           newDisplayName: requiredString(body, "newDisplayName"),
           reason: requiredString(body, "reason"),
@@ -746,10 +746,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.posting.update",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted(
-        context.services.employeeMaster.applyTransferPosting(context.actor, {
+        await context.services.employeeMaster.applyTransferPosting(context.actor, {
           employeeId: requiredParam(context.params, "id"),
           toOrgUnitId: requiredString(body, "toOrgUnitId"),
           transferOrderId: requiredString(body, "transferOrderId"),
@@ -767,10 +767,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.employee.confirmation.update",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted(
-        context.services.employeeMaster.applyProbationConfirmation(context.actor, {
+        await context.services.employeeMaster.applyProbationConfirmation(context.actor, {
           employeeId: requiredParam(context.params, "id"),
           confirmationEffectiveDate: requiredString(body, "confirmationEffectiveDate"),
           confirmationRef: requiredString(body, "confirmationRef"),
@@ -784,7 +784,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.getLiveRecordForIdentityOps",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => ok({ employee: context.services.employeeMaster.getLiveRecordForIdentityOps(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ employee: await context.services.employeeMaster.getLiveRecordForIdentityOps(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "GET",
@@ -792,7 +792,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.listLiveRecordsForIdentityOps",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => ok({ items: context.services.employeeMaster.listLiveRecordsForIdentityOps(context.scope) }),
+    handler: async (context) => ok({ items: await context.services.employeeMaster.listLiveRecordsForIdentityOps(context.scope) }),
   });
   kernel.register({
     method: "GET",
@@ -800,7 +800,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.countEmployees",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => ok({ count: context.services.employeeMaster.count(context.scope) }),
+    handler: async (context) => ok({ count: await context.services.employeeMaster.count(context.scope) }),
   });
 
   // PH-62A — FR-EPM-004 nominee register (NET-NEW backing): list / add / update / soft-delete with the
@@ -811,7 +811,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.listNominees",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => ok({ items: context.services.nominee.listNominees(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ items: await context.services.nominee.listNominees(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "POST",
@@ -821,10 +821,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.nominee.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        nominee: context.services.nominee.addNominee(context.actor, requiredParam(context.params, "id"), {
+        nominee: await context.services.nominee.addNominee(context.actor, requiredParam(context.params, "id"), {
           name: requiredString(body, "name"),
           benefitType: requiredString(body, "benefitType"),
           sharePct: readNomineeNumber(body, "sharePct"),
@@ -842,10 +842,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.nominee.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return ok({
-        nominee: context.services.nominee.updateNominee(context.actor, requiredParam(context.params, "nomineeId"), {
+        nominee: await context.services.nominee.updateNominee(context.actor, requiredParam(context.params, "nomineeId"), {
           rowVersion: readNomineeNumber(body, "rowVersion"),
           sharePct: optionalNumber(body, "sharePct"),
           guardian: optionalString(body, "guardian"),
@@ -862,8 +862,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.nominee.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
-      context.services.nominee.removeNominee(context.actor, requiredParam(context.params, "nomineeId"));
+    handler: async (context) => {
+      await context.services.nominee.removeNominee(context.actor, requiredParam(context.params, "nomineeId"));
       return ok({ removed: true });
     },
   });
@@ -876,7 +876,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.listEmergencyContacts",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => ok({ items: context.services.emergencyContact.listEmergencyContacts(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ items: await context.services.emergencyContact.listEmergencyContacts(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "POST",
@@ -886,10 +886,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.emergency_contact.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        emergencyContact: context.services.emergencyContact.addEmergencyContact(context.actor, requiredParam(context.params, "id"), {
+        emergencyContact: await context.services.emergencyContact.addEmergencyContact(context.actor, requiredParam(context.params, "id"), {
           name: requiredString(body, "name"),
           phone: requiredString(body, "phone"),
           priority: readNomineeNumber(body, "priority"),
@@ -905,10 +905,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.emergency_contact.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return ok({
-        emergencyContact: context.services.emergencyContact.updateEmergencyContact(context.actor, requiredParam(context.params, "contactId"), {
+        emergencyContact: await context.services.emergencyContact.updateEmergencyContact(context.actor, requiredParam(context.params, "contactId"), {
           rowVersion: readNomineeNumber(body, "rowVersion"),
           name: optionalString(body, "name"),
           phone: optionalString(body, "phone"),
@@ -925,8 +925,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.emergency_contact.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
-      context.services.emergencyContact.removeEmergencyContact(context.actor, requiredParam(context.params, "contactId"));
+    handler: async (context) => {
+      await context.services.emergencyContact.removeEmergencyContact(context.actor, requiredParam(context.params, "contactId"));
       return ok({ removed: true });
     },
   });
@@ -939,7 +939,7 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.listEducation",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) => ok({ items: context.services.education.listEducation(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ items: await context.services.education.listEducation(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "POST",
@@ -949,10 +949,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.education.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        education: context.services.education.addEducation(context.actor, requiredParam(context.params, "id"), {
+        education: await context.services.education.addEducation(context.actor, requiredParam(context.params, "id"), {
           level: requiredString(body, "level"),
           institution: optionalString(body, "institution"),
           isHighest: optionalBoolean(body, "isHighest"),
@@ -971,10 +971,10 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.education.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return ok({
-        education: context.services.education.updateEducation(context.actor, requiredParam(context.params, "educationId"), {
+        education: await context.services.education.updateEducation(context.actor, requiredParam(context.params, "educationId"), {
           rowVersion: readNomineeNumber(body, "rowVersion"),
           level: optionalString(body, "level"),
           institution: optionalString(body, "institution"),
@@ -994,8 +994,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.education.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
-      context.services.education.removeEducation(context.actor, requiredParam(context.params, "educationId"));
+    handler: async (context) => {
+      await context.services.education.removeEducation(context.actor, requiredParam(context.params, "educationId"));
       return ok({ removed: true });
     },
   });
@@ -1008,8 +1008,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.listBankAccounts",
     protected: true,
     permission: "g01.employee.read",
-    handler: (context) =>
-      ok({ items: context.services.bankAccount.listBankAccounts(context.scope, requiredParam(context.params, "id")).map(toWireBankAccount) }),
+    handler: async (context) =>
+      ok({ items: await context.services.bankAccount.listBankAccounts(context.scope, requiredParam(context.params, "id")).map(toWireBankAccount) }),
   });
   kernel.register({
     method: "POST",
@@ -1019,11 +1019,11 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.bank.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
         bankAccount: toWireBankAccount(
-          context.services.bankAccount.addBankAccount(context.actor, requiredParam(context.params, "id"), {
+          await context.services.bankAccount.addBankAccount(context.actor, requiredParam(context.params, "id"), {
             bankName: requiredString(body, "bankName"),
             ifsc: requiredString(body, "ifsc"),
             accountNumberMasked: requiredString(body, "accountNumberMasked"),
@@ -1041,11 +1041,11 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.bank.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return ok({
         bankAccount: toWireBankAccount(
-          context.services.bankAccount.updateBankAccount(context.actor, requiredParam(context.params, "accountId"), {
+          await context.services.bankAccount.updateBankAccount(context.actor, requiredParam(context.params, "accountId"), {
             rowVersion: readNomineeNumber(body, "rowVersion"),
             bankName: optionalString(body, "bankName"),
             ifsc: optionalString(body, "ifsc"),
@@ -1064,8 +1064,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.bank.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) =>
-      accepted({ bankAccount: toWireBankAccount(context.services.bankAccount.approveBankAccount(context.actor, requiredParam(context.params, "accountId"))) }),
+    handler: async (context) =>
+      accepted({ bankAccount: toWireBankAccount(await context.services.bankAccount.approveBankAccount(context.actor, requiredParam(context.params, "accountId"))) }),
   });
   kernel.register({
     method: "POST",
@@ -1075,11 +1075,11 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.bank.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted({
         bankAccount: toWireBankAccount(
-          context.services.bankAccount.recordPennyDrop(context.actor, requiredParam(context.params, "accountId"), {
+          await context.services.bankAccount.recordPennyDrop(context.actor, requiredParam(context.params, "accountId"), {
             result: requiredString(body, "result") as "VERIFIED" | "FAILED",
           })
         ),
@@ -1094,8 +1094,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.bank.write",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
-      context.services.bankAccount.removeBankAccount(context.actor, requiredParam(context.params, "accountId"));
+    handler: async (context) => {
+      await context.services.bankAccount.removeBankAccount(context.actor, requiredParam(context.params, "accountId"));
       return ok({ removed: true });
     },
   });
@@ -1109,11 +1109,11 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.bgv.record",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
         bgvRecord: toWireBgvRecord(
-          context.services.backgroundVerification.recordBgvResult(context.actor, {
+          await context.services.backgroundVerification.recordBgvResult(context.actor, {
             employeeId: requiredParam(context.params, "id"),
             vendorName: requiredString(body, "vendorName"),
             verificationType: requiredString(body, "verificationType") as BgvVerificationType,
@@ -1133,11 +1133,11 @@ export function registerG01Routes(kernel: ApiKernel): void {
     permission: "g01.bgv.review",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return ok({
         bgvRecord: toWireBgvRecord(
-          context.services.backgroundVerification.reviewBgvResult(context.actor, requiredParam(context.params, "id"), {
+          await context.services.backgroundVerification.reviewBgvResult(context.actor, requiredParam(context.params, "id"), {
             outcome: requiredString(body, "outcome") as BgvReviewOutcome,
             notes: requiredString(body, "notes"),
           })
@@ -1151,8 +1151,8 @@ export function registerG01Routes(kernel: ApiKernel): void {
     operationId: "g01.listBgvRecords",
     protected: true,
     permission: "g01.bgv.read",
-    handler: (context) =>
-      ok({ items: context.services.backgroundVerification.listBgvRecords(context.actor, requiredParam(context.params, "id")).map(toWireBgvRecord) }),
+    handler: async (context) =>
+      ok({ items: await context.services.backgroundVerification.listBgvRecords(context.actor, requiredParam(context.params, "id")).map(toWireBgvRecord) }),
   });
 }
 

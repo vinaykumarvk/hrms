@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G01 phonetic search: near-homophone spellings match the same phonetic code", () => {
+test("G01 phonetic search: near-homophone spellings match the same phonetic code", async () => {
   const s = createFoundationServices();
   s.phoneticSearch.indexName(actor(), { employeeId: "emp-1", name: "Krishnan" });
   s.phoneticSearch.indexName(actor(), { employeeId: "emp-2", name: "Krishnnan" }); // doubled n
@@ -33,7 +33,7 @@ test("G01 phonetic search: near-homophone spellings match the same phonetic code
   assert.ok(!ids.includes("emp-3"));
 });
 
-test("G01 phonetic search: Smith and Smyth collapse to one phonetic code", () => {
+test("G01 phonetic search: Smith and Smyth collapse to one phonetic code", async () => {
   const s = createFoundationServices();
   s.phoneticSearch.indexName(actor(), { employeeId: "e-smith", name: "Smith" });
   s.phoneticSearch.indexName(actor(), { employeeId: "e-smyth", name: "Smyth" });

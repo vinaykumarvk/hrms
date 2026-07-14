@@ -17,17 +17,17 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph58a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-58A G11 disbursement rejects non-positive paise (VALIDATION_FAILED)", () => {
+test("PH-58A G11 disbursement rejects non-positive paise (VALIDATION_FAILED)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const bad = call(api, {
+  const bad = await call(api, {
     method: "POST",
     path: "/api/v1/pension/disbursements",
     headers: { "Idempotency-Key": "dis-bad" },
@@ -37,18 +37,18 @@ test("PH-58A G11 disbursement rejects non-positive paise (VALIDATION_FAILED)", (
   assert.equal(bad.body.error.code, "VALIDATION_FAILED");
 });
 
-test("PH-58A G11 pension disbursement/lifecycle reads respond through the kernel", () => {
+test("PH-58A G11 pension disbursement/lifecycle reads respond through the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
 
-  const disbursements = call(api, { method: "GET", path: "/api/v1/pension/cases/any-case/disbursements" });
+  const disbursements = await call(api, { method: "GET", path: "/api/v1/pension/cases/any-case/disbursements" });
   assert.equal(disbursements.status, 200);
   assert.ok(Array.isArray(disbursements.body.items));
 
   // life certificates require an existing pensioner — an unknown pensioner fails closed (NOT_FOUND).
-  const lifeCerts = call(api, { method: "GET", path: "/api/v1/pension/pensioners/any-pensioner/life-certificates" });
+  const lifeCerts = await call(api, { method: "GET", path: "/api/v1/pension/pensioners/any-pensioner/life-certificates" });
   assert.equal(lifeCerts.status, 404);
 
-  const pensioner = call(api, { method: "GET", path: "/api/v1/pension/cases/any-case/pensioner" });
+  const pensioner = await call(api, { method: "GET", path: "/api/v1/pension/cases/any-case/pensioner" });
   assert.equal(pensioner.status, 200);
   assert.equal(pensioner.body.pensioner, null);
 });

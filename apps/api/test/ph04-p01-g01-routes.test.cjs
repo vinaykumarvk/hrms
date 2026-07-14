@@ -21,17 +21,17 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph04-p01-g01", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-04B P01 starts workflow, lists task, and approves instance", () => {
+test("PH-04B P01 starts workflow, lists task, and approves instance", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const started = call(api, {
+  const started = await call(api, {
     method: "POST",
     path: "/api/v1/workflow/instances",
     headers: { "Idempotency-Key": "idem-p01-start-001" },
@@ -46,12 +46,12 @@ test("PH-04B P01 starts workflow, lists task, and approves instance", () => {
   assert.equal(started.body.instance.status, "RUNNING");
   assert.equal(started.body.task.resolution.resolverType, "REPORTING_CHAIN");
 
-  const tasks = call(api, { method: "GET", path: "/api/v1/workflow/tasks", query: { limit: "250" } });
+  const tasks = await call(api, { method: "GET", path: "/api/v1/workflow/tasks", query: { limit: "250" } });
   assert.equal(tasks.status, 200);
   assert.equal(tasks.body.limit, 100);
   assert.equal(tasks.body.items.length, 1);
 
-  const approved = call(api, {
+  const approved = await call(api, {
     method: "POST",
     path: `/api/v1/workflow/instances/${started.body.instance.id}/approve`,
     headers: { "Idempotency-Key": "idem-p01-approve-001" },
@@ -61,23 +61,23 @@ test("PH-04B P01 starts workflow, lists task, and approves instance", () => {
   assert.equal(approved.body.action.action, "APPROVE");
 });
 
-test("PH-04B G01 list, detail, and profile routes enforce pagination and P02 masking", () => {
+test("PH-04B G01 list, detail, and profile routes enforce pagination and P02 masking", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const list = call(api, { method: "GET", path: "/api/v1/employees", query: { limit: "250" } });
+  const list = await call(api, { method: "GET", path: "/api/v1/employees", query: { limit: "250" } });
   assert.equal(list.status, 200);
   assert.equal(list.body.limit, 100);
   assert.equal(list.body.items.length, 2);
   assert.equal(list.body.next_cursor, null);
 
-  const detail = call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.manager}` });
+  const detail = await call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.manager}` });
   assert.equal(detail.status, 200);
   assert.equal(detail.body.employee.serviceNo, "GOV-100245");
 
-  const masked = call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.manager}/profile-360` });
+  const masked = await call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.manager}/profile-360` });
   assert.equal(masked.status, 200);
   assert.equal(masked.body.profile.pan, "[HIDDEN]");
 
-  const visible = call(api, {
+  const visible = await call(api, {
     method: "GET",
     path: `/api/v1/employees/${ph03Ids.manager}/profile-360`,
     actor: { fieldGrants: ["employee.pan", "employee.aadhaar", "employee.category"] },
@@ -85,9 +85,9 @@ test("PH-04B G01 list, detail, and profile routes enforce pagination and P02 mas
   assert.equal(visible.body.profile.pan, "ABCDE1234F");
 });
 
-test("PH-04B P01 task-grain claim, delegate, and approve mutate workflow state", () => {
+test("PH-04B P01 task-grain claim, delegate, and approve mutate workflow state", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const started = call(api, {
+  const started = await call(api, {
     method: "POST",
     path: "/api/v1/workflow/instances",
     headers: { "Idempotency-Key": "idem-p01-task-start-001" },
@@ -96,7 +96,7 @@ test("PH-04B P01 task-grain claim, delegate, and approve mutate workflow state",
   assert.equal(started.status, 201);
   const taskId = started.body.task.id;
 
-  const claimed = call(api, {
+  const claimed = await call(api, {
     method: "POST",
     path: `/api/v1/workflow/tasks/${taskId}/claim`,
     headers: { "Idempotency-Key": "idem-p01-task-claim-001" },
@@ -106,7 +106,7 @@ test("PH-04B P01 task-grain claim, delegate, and approve mutate workflow state",
   assert.equal(claimed.body.task.status, "CLAIMED");
   assert.equal(claimed.body.task.claimedByUserId, "user-ph04-p01-g01");
 
-  const delegated = call(api, {
+  const delegated = await call(api, {
     method: "POST",
     path: `/api/v1/workflow/tasks/${taskId}/delegate`,
     headers: { "Idempotency-Key": "idem-p01-task-delegate-001" },
@@ -116,7 +116,7 @@ test("PH-04B P01 task-grain claim, delegate, and approve mutate workflow state",
   assert.equal(delegated.body.task.claimedByUserId, "user-ph04-delegate-target");
   assert.equal(delegated.body.action.action, "DELEGATE");
 
-  const missingDelegate = call(api, {
+  const missingDelegate = await call(api, {
     method: "POST",
     path: `/api/v1/workflow/tasks/${taskId}/delegate`,
     headers: { "Idempotency-Key": "idem-p01-task-delegate-002" },
@@ -125,7 +125,7 @@ test("PH-04B P01 task-grain claim, delegate, and approve mutate workflow state",
   assert.equal(missingDelegate.status, 400);
   assert.equal(missingDelegate.body.error.code, "VALIDATION_FAILED");
 
-  const approved = call(api, {
+  const approved = await call(api, {
     method: "POST",
     path: `/api/v1/workflow/tasks/${taskId}/approve`,
     headers: { "Idempotency-Key": "idem-p01-task-approve-001" },
@@ -134,10 +134,10 @@ test("PH-04B P01 task-grain claim, delegate, and approve mutate workflow state",
   assert.equal(approved.status, 202);
   assert.equal(approved.body.action.action, "APPROVE");
 
-  const instance = call(api, { method: "GET", path: `/api/v1/workflow/instances/${started.body.instance.id}` });
+  const instance = await call(api, { method: "GET", path: `/api/v1/workflow/instances/${started.body.instance.id}` });
   assert.equal(instance.body.instance.status, "APPROVED");
 
-  const reclaim = call(api, {
+  const reclaim = await call(api, {
     method: "POST",
     path: `/api/v1/workflow/tasks/${taskId}/claim`,
     headers: { "Idempotency-Key": "idem-p01-task-claim-002" },
@@ -146,9 +146,9 @@ test("PH-04B P01 task-grain claim, delegate, and approve mutate workflow state",
   assert.equal(reclaim.status, 409);
 });
 
-test("PH-04B G01 employee CREATE validates, generates service_no, and feeds PROFILE_CREATED to /changes", () => {
+test("PH-04B G01 employee CREATE validates, generates service_no, and feeds PROFILE_CREATED to /changes", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const createdEmployee = call(api, {
+  const createdEmployee = await call(api, {
     method: "POST",
     path: "/api/v1/employees",
     headers: { "Idempotency-Key": "idem-g01-create-001" },
@@ -166,7 +166,7 @@ test("PH-04B G01 employee CREATE validates, generates service_no, and feeds PROF
   assert.match(createdEmployee.body.employee.serviceNo, /^GOV-\d+$/);
   assert.equal(createdEmployee.body.outboxEvent.eventType, "PROFILE_CREATED");
 
-  const missingField = call(api, {
+  const missingField = await call(api, {
     method: "POST",
     path: "/api/v1/employees",
     headers: { "Idempotency-Key": "idem-g01-create-002" },
@@ -175,7 +175,7 @@ test("PH-04B G01 employee CREATE validates, generates service_no, and feeds PROF
   assert.equal(missingField.status, 400);
   assert.equal(missingField.body.error.code, "VALIDATION_FAILED");
 
-  const badPan = call(api, {
+  const badPan = await call(api, {
     method: "POST",
     path: "/api/v1/employees",
     headers: { "Idempotency-Key": "idem-g01-create-003" },
@@ -184,7 +184,7 @@ test("PH-04B G01 employee CREATE validates, generates service_no, and feeds PROF
   assert.equal(badPan.status, 400);
   assert.equal(badPan.body.error.details.messageId, "ERR-G01-IDFMT");
 
-  const dupServiceNo = call(api, {
+  const dupServiceNo = await call(api, {
     method: "POST",
     path: "/api/v1/employees",
     headers: { "Idempotency-Key": "idem-g01-create-004" },
@@ -192,21 +192,21 @@ test("PH-04B G01 employee CREATE validates, generates service_no, and feeds PROF
   });
   assert.equal(dupServiceNo.status, 409);
 
-  const feed = call(api, { method: "GET", path: "/api/v1/employees/changes", query: { limit: "10" } });
+  const feed = await call(api, { method: "GET", path: "/api/v1/employees/changes", query: { limit: "10" } });
   assert.equal(feed.status, 200);
   assert.equal(feed.body.items.length, 1);
   assert.equal(feed.body.items[0].eventType, "PROFILE_CREATED");
   assert.equal(feed.body.items[0].employeeId, createdEmployee.body.employee.id);
   assert.equal(feed.body.next_cursor, null);
 
-  const pagedFeed = call(api, { method: "GET", path: "/api/v1/employees/changes", query: { limit: "1" } });
+  const pagedFeed = await call(api, { method: "GET", path: "/api/v1/employees/changes", query: { limit: "1" } });
   assert.equal(pagedFeed.body.items.length, 1);
 });
 
-test("PH-04B G01 governed change request is decided via :approve and posts to the Service Register", () => {
+test("PH-04B G01 governed change request is decided via :approve and posts to the Service Register", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const requested = call(api, {
+  const requested = await call(api, {
     method: "POST",
     path: `/api/v1/employees/${ph03Ids.employee}/governed-changes`,
     headers: { "Idempotency-Key": "idem-g01-api-change-001" },
@@ -220,13 +220,13 @@ test("PH-04B G01 governed change request is decided via :approve and posts to th
   assert.equal(requested.body.request.status, "PENDING");
   assert.equal(services.serviceRegister.getTimeline(actor(), ph03Ids.employee).length, 0);
 
-  const pending = call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.employee}/governed-changes` });
+  const pending = await call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.employee}/governed-changes` });
   assert.equal(pending.status, 200);
   assert.equal(pending.body.employeeId, ph03Ids.employee);
   assert.equal(pending.body.items.length, 1);
   assert.equal(pending.body.items[0].status, "PENDING");
 
-  const approved = call(api, {
+  const approved = await call(api, {
     method: "POST",
     path: `/api/v1/governed-changes/${requested.body.request.id}:approve`,
     headers: { "Idempotency-Key": "idem-g01-api-approve-001" },
@@ -238,7 +238,7 @@ test("PH-04B G01 governed change request is decided via :approve and posts to th
   assert.equal(approved.body.employee.displayName, "Kiran Patel API");
   assert.equal(services.serviceRegister.getTimeline(actor(), ph03Ids.employee).length, 1);
 
-  const again = call(api, {
+  const again = await call(api, {
     method: "POST",
     path: `/api/v1/governed-changes/${requested.body.request.id}:approve`,
     headers: { "Idempotency-Key": "idem-g01-api-approve-002" },
@@ -247,16 +247,16 @@ test("PH-04B G01 governed change request is decided via :approve and posts to th
   assert.equal(again.status, 409);
   assert.equal(again.body.error.details.messageId, "ERR-G01-STATE");
 
-  const feed = call(api, { method: "GET", path: "/api/v1/employees/changes", query: { limit: "100" } });
+  const feed = await call(api, { method: "GET", path: "/api/v1/employees/changes", query: { limit: "100" } });
   const eventTypes = feed.body.items.map((item) => item.eventType);
   assert.equal(eventTypes.includes("GOVERNED_CHANGE_REQUESTED"), true);
   assert.equal(eventTypes.includes("GOVERNED_CHANGE_APPROVED"), true);
 });
 
-test("PH-04B G01 governed change :reject records the decision reason without mutating the master", () => {
+test("PH-04B G01 governed change :reject records the decision reason without mutating the master", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const requested = call(api, {
+  const requested = await call(api, {
     method: "POST",
     path: `/api/v1/employees/${ph03Ids.employee}/governed-changes`,
     headers: { "Idempotency-Key": "idem-g01-api-change-002" },
@@ -264,7 +264,7 @@ test("PH-04B G01 governed change :reject records the decision reason without mut
   });
   assert.equal(requested.status, 201);
 
-  const missingReason = call(api, {
+  const missingReason = await call(api, {
     method: "POST",
     path: `/api/v1/governed-changes/${requested.body.request.id}:reject`,
     headers: { "Idempotency-Key": "idem-g01-api-reject-001" },
@@ -273,7 +273,7 @@ test("PH-04B G01 governed change :reject records the decision reason without mut
   assert.equal(missingReason.status, 400);
   assert.equal(missingReason.body.error.code, "VALIDATION_FAILED");
 
-  const rejected = call(api, {
+  const rejected = await call(api, {
     method: "POST",
     path: `/api/v1/governed-changes/${requested.body.request.id}:reject`,
     headers: { "Idempotency-Key": "idem-g01-api-reject-002" },
@@ -284,6 +284,6 @@ test("PH-04B G01 governed change :reject records the decision reason without mut
   assert.equal(rejected.body.request.decisionReason, "Supporting gazette copy missing");
   assert.equal(services.serviceRegister.getTimeline(actor(), ph03Ids.employee).length, 0);
 
-  const detail = call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.employee}` });
+  const detail = await call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.employee}` });
   assert.equal(detail.body.employee.displayName, "Kiran Patel");
 });

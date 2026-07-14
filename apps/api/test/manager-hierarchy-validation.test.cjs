@@ -50,7 +50,7 @@ function forbidden(error) {
 
 // ---- G03 leave: the one surface where manager identity IS enforced (via workflow.act) -----------
 
-test("ENFORCED+DRIFT leave: only the DIRECT manager (L1) is the resolved approver; L2..L5 are FORBIDDEN even with the leave-approve permission", () => {
+test("ENFORCED+DRIFT leave: only the DIRECT manager (L1) is the resolved approver; L2..L5 are FORBIDDEN even with the leave-approve permission", async () => {
   const services = boot();
   const ids = chainIds(services);
   const leaf = actor(ids.leaf, ["employee"], ["g03.leave.submit", "g03.leave.read"]);
@@ -74,7 +74,7 @@ test("ENFORCED+DRIFT leave: only the DIRECT manager (L1) is the resolved approve
   assert.equal(approved.application.status, "APPROVED");
 });
 
-test("ENFORCED self-approve SoD: a manager is never their own resolved approver and cannot approve their own leave", () => {
+test("ENFORCED self-approve SoD: a manager is never their own resolved approver and cannot approve their own leave", async () => {
   const services = boot();
   const ids = chainIds(services);
   // L1 submits their own leave; the resolver returns L1's reportingManagerId (L2), not L1.
@@ -88,7 +88,7 @@ test("ENFORCED self-approve SoD: a manager is never their own resolved approver 
   assert.equal(approved.application.status, "APPROVED");
 });
 
-test("ENFORCED override regression: hr_admin (an APPROVAL_OVERRIDE_ROLE) can still decide a manager-routed task over the resolved chain", () => {
+test("ENFORCED override regression: hr_admin (an APPROVAL_OVERRIDE_ROLE) can still decide a manager-routed task over the resolved chain", async () => {
   const services = boot();
   const ids = chainIds(services);
   const leaf = actor(ids.leaf, ["employee"], ["g03.leave.submit", "g03.leave.read"]);
@@ -99,7 +99,7 @@ test("ENFORCED override regression: hr_admin (an APPROVAL_OVERRIDE_ROLE) can sti
   assert.equal(approved.application.status, "APPROVED");
 });
 
-test("DRIFT non-override roles: hod, uag_head, skip_level_manager and dotted_line_manager hold NO override power and are FORBIDDEN on another team's task", () => {
+test("DRIFT non-override roles: hod, uag_head, skip_level_manager and dotted_line_manager hold NO override power and are FORBIDDEN on another team's task", async () => {
   const services = boot();
   const ids = chainIds(services);
   const leaf = actor(ids.leaf, ["employee"], ["g03.leave.submit", "g03.leave.read"]);
@@ -124,7 +124,7 @@ test("DRIFT non-override roles: hod, uag_head, skip_level_manager and dotted_lin
 
 // ---- G08 APAR: the surface where manager level/identity is NOT enforced --------------------------
 
-test("DRIFT apar: the reporting-officer assessment is permission-only — no g08_appraiser_roles level check and no RO-identity check", () => {
+test("DRIFT apar: the reporting-officer assessment is permission-only — no g08_appraiser_roles level check and no RO-identity check", async () => {
   const services = boot();
   const ids = chainIds(services);
   // Open a non-sealed APAR for the leaf, naming L1 as reporting officer and L2 as reviewing officer.
@@ -156,7 +156,7 @@ test("DRIFT apar: the reporting-officer assessment is permission-only — no g08
 
 // ---- G10: a HOD-only capability that IS role-gated ------------------------------------------------
 
-test("ENFORCED g10 FnF sanction: requires hod/sanctioning_authority; l1_manager and uag_head are FORBIDDEN; maker cannot self-sanction (SoD)", () => {
+test("ENFORCED g10 FnF sanction: requires hod/sanctioning_authority; l1_manager and uag_head are FORBIDDEN; maker cannot self-sanction (SoD)", async () => {
   const services = boot();
   const ids = chainIds(services);
   const maker = actor("mh-fnf-maker", ["hr_admin"], ["g10.fnf.settle"]);
@@ -187,7 +187,7 @@ test("ENFORCED g10 FnF sanction: requires hod/sanctioning_authority; l1_manager 
 
 // ---- Manager hierarchy platform capabilities: subtree, dotted-line, skip-level (CC-007) ----------
 
-test("ENFORCED manager hierarchy: reporting subtree (transitive + dotted-line), dotted-line manager, and skip-level resolution", () => {
+test("ENFORCED manager hierarchy: reporting subtree (transitive + dotted-line), dotted-line manager, and skip-level resolution", async () => {
   const services = createFoundationServices({ seedManagerHierarchy: true });
   const ids = chainIds(services);
   const resolver = services.authorityResolution;

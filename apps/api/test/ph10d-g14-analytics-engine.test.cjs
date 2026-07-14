@@ -54,7 +54,7 @@ function defineAttendanceKpi(services, kpiCode) {
   });
 }
 
-test("PH-10D KPI definitions are versioned with an explicit governed activation; only the ACTIVE version computes", () => {
+test("PH-10D KPI definitions are versioned with an explicit governed activation; only the ACTIVE version computes", async () => {
   const services = createFoundationServices();
   const v1 = defineAttendanceKpi(services, "ATT_DAYS");
   assert.equal(v1.status, "DRAFT");
@@ -104,7 +104,7 @@ test("PH-10D KPI definitions are versioned with an explicit governed activation;
   assert.equal(snapshot.value, 2);
 });
 
-test("PH-10D bitemporal snapshots: restatement appends a superseding knowledge-version and the as-of-knowledge query reproduces the pre-restatement value", () => {
+test("PH-10D bitemporal snapshots: restatement appends a superseding knowledge-version and the as-of-knowledge query reproduces the pre-restatement value", async () => {
   const services = createFoundationServices();
   captureAttendanceDays(services, ph03Ids.employee, ["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05"]);
   defineAttendanceKpi(services, "ATT_DAYS");
@@ -158,7 +158,7 @@ test("PH-10D bitemporal snapshots: restatement appends a superseding knowledge-v
   );
 });
 
-test("PH-10D cross-version aggregation is blocked with ERR-G14-XVER-AGG unless acknowledged", () => {
+test("PH-10D cross-version aggregation is blocked with ERR-G14-XVER-AGG unless acknowledged", async () => {
   const services = createFoundationServices();
   captureAttendanceDays(services, ph03Ids.employee, ["2026-05-04", "2026-05-05"]);
   defineAttendanceKpi(services, "ATT_DAYS");
@@ -183,7 +183,7 @@ test("PH-10D cross-version aggregation is blocked with ERR-G14-XVER-AGG unless a
   assert.equal(acknowledged.points.length, 2);
 });
 
-test("PH-10D NEGATIVE: a 4-member cohort is suppressed under min_cell_size_k=5 (ERR-G14-SMALL-CELL) with complementary suppression so totals cannot recover it", () => {
+test("PH-10D NEGATIVE: a 4-member cohort is suppressed under min_cell_size_k=5 (ERR-G14-SMALL-CELL) with complementary suppression so totals cannot recover it", async () => {
   const services = createFoundationServices();
   // Employee A: a 4-member cohort (below k=5). Employee B: 6 records (at/above k).
   captureAttendanceDays(services, ph03Ids.employee, ["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04"]);
@@ -212,7 +212,7 @@ test("PH-10D NEGATIVE: a 4-member cohort is suppressed under min_cell_size_k=5 (
   );
 });
 
-test("PH-10D NEGATIVE: maker==checker scope-policy activation is rejected with ERR-G14-SCOPE-CHECKER; a distinct checker activates", () => {
+test("PH-10D NEGATIVE: maker==checker scope-policy activation is rejected with ERR-G14-SCOPE-CHECKER; a distinct checker activates", async () => {
   const services = createFoundationServices();
   const policy = services.analyticsEngine.createScopePolicy(actor(), {
     role: "hr_admin",
@@ -247,7 +247,7 @@ test("PH-10D NEGATIVE: maker==checker scope-policy activation is rejected with E
   assert.equal(policies.filter((row) => row.role === "hr_admin" && row.isActive).length, 1);
 });
 
-test("PH-10D JOB-G14-MART-* refresh populates the seeded marts from module sources and appends datamart_refresh_logs", () => {
+test("PH-10D JOB-G14-MART-* refresh populates the seeded marts from module sources and appends datamart_refresh_logs", async () => {
   const services = createFoundationServices();
   captureAttendanceDays(services, ph03Ids.employee, ["2026-06-01", "2026-06-02", "2026-06-03"]);
 

@@ -20,7 +20,7 @@ function scope(extra = {}) {
   };
 }
 
-test("PH-10 migration dry run certifies reconciliation without production mutation", () => {
+test("PH-10 migration dry run certifies reconciliation without production mutation", async () => {
   const services = createFoundationServices();
   services.migrationStaging.stageEmployeeIdentity(scope(), {
     serviceNo: "GOV-100245",
@@ -45,7 +45,7 @@ test("PH-10 migration dry run certifies reconciliation without production mutati
   assert.equal(dryRun.readinessSummary.legalAcceptanceRequiredForExceptions, true);
 });
 
-test("PH-10 hardening evidence documents required NFR, security, backup, and accessibility markers", () => {
+test("PH-10 hardening evidence documents required NFR, security, backup, and accessibility markers", async () => {
   const security = fs.readFileSync("docs/release/security-hardening-evidence.md", "utf8");
   const nfr = fs.readFileSync("docs/release/nfr-validation.md", "utf8");
   const backup = fs.readFileSync("ops/backup-restore-drill.md", "utf8");

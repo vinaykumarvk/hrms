@@ -27,22 +27,22 @@ function boot() {
   return { services, api, admin, sunita, rohan };
 }
 
-function call(api, actorCtx, request) {
-  return api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-g03-attendance-self-service", ...(request.headers ?? {}) }, actor: actorCtx });
+async function call(api, actorCtx, request) {
+  return await api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-g03-attendance-self-service", ...(request.headers ?? {}) }, actor: actorCtx });
 }
 
-test("G03 attendance: the seed already has a real missed-punch anomaly (MISSING_OUT) for Sunita on 2026-07-13", () => {
+test("G03 attendance: the seed already has a real missed-punch anomaly (MISSING_OUT) for Sunita on 2026-07-13", async () => {
   const { api, admin, sunita } = boot();
-  const records = call(api, admin, { method: "GET", path: "/api/v1/attendance/records" }).body.items.filter((r) => r.employeeId === sunita.id);
+  const records = (await call(api, admin, { method: "GET", path: "/api/v1/attendance/records" })).body.items.filter((r) => r.employeeId === sunita.id);
   const anomaly = records.find((r) => r.attendanceDate === "2026-07-13");
   assert.ok(anomaly, "the seed must include the missed-punch day");
   assert.equal(anomaly.status, "ANOMALY");
   assert.equal(anomaly.anomalyCode, "MISSING_OUT");
 });
 
-test("G03 attendance: an employee clocks in and out for themselves over HTTP", () => {
+test("G03 attendance: an employee clocks in and out for themselves over HTTP", async () => {
   const { api, rohan } = boot();
-  const captured = call(api, actor(rohan.id, ["g03.attendance.capture"]), {
+  const captured = await call(api, actor(rohan.id, ["g03.attendance.capture"]), {
     method: "POST",
     path: "/api/v1/atl/attendance-captures",
     headers: { "Idempotency-Key": "idem-g03-capture-001" },
@@ -52,9 +52,9 @@ test("G03 attendance: an employee clocks in and out for themselves over HTTP", (
   assert.equal(captured.body.attendance.status, "PRESENT");
 });
 
-test("G03 attendance: an employee who clocks in without clocking out gets a MISSING_OUT anomaly", () => {
+test("G03 attendance: an employee who clocks in without clocking out gets a MISSING_OUT anomaly", async () => {
   const { api, rohan } = boot();
-  const captured = call(api, actor(rohan.id, ["g03.attendance.capture"]), {
+  const captured = await call(api, actor(rohan.id, ["g03.attendance.capture"]), {
     method: "POST",
     path: "/api/v1/atl/attendance-captures",
     headers: { "Idempotency-Key": "idem-g03-capture-002" },
@@ -65,13 +65,13 @@ test("G03 attendance: an employee who clocks in without clocking out gets a MISS
   assert.equal(captured.body.attendance.anomalyCode, "MISSING_OUT");
 });
 
-test("G03 attendance: a plain employee cannot regularise their own attendance (FORBIDDEN); an attendance admin can", () => {
+test("G03 attendance: a plain employee cannot regularise their own attendance (FORBIDDEN); an attendance admin can", async () => {
   const { api, sunita } = boot();
-  const anomalyId = call(api, actor("probe", ["*"]), { method: "GET", path: "/api/v1/attendance/records" }).body.items.find(
+  const anomalyId = (await call(api, actor("probe", ["*"]), { method: "GET", path: "/api/v1/attendance/records" })).body.items.find(
     (record) => record.employeeId === sunita.id && record.attendanceDate === "2026-07-13"
   ).id;
 
-  const selfAttempt = call(api, actor(sunita.id, ["g03.leave.read"]), {
+  const selfAttempt = await call(api, actor(sunita.id, ["g03.leave.read"]), {
     method: "POST",
     path: `/api/v1/atl/attendance-captures/${anomalyId}:regularise`,
     headers: { "Idempotency-Key": "idem-g03-regularise-001" },
@@ -80,7 +80,7 @@ test("G03 attendance: a plain employee cannot regularise their own attendance (F
   assert.equal(selfAttempt.status, 403);
 
   const admin = actor("attendance-admin", ["g03.attendance.regularise"]);
-  const regularised = call(api, admin, {
+  const regularised = await call(api, admin, {
     method: "POST",
     path: `/api/v1/atl/attendance-captures/${anomalyId}:regularise`,
     headers: { "Idempotency-Key": "idem-g03-regularise-002" },
@@ -91,11 +91,11 @@ test("G03 attendance: a plain employee cannot regularise their own attendance (F
   assert.equal(regularised.body.attendance.isRegularised, true);
 });
 
-test("G03 attendance: the maker of an attendance capture cannot also regularise it, even when they hold the regularise permission (SOD_VIOLATION)", () => {
+test("G03 attendance: the maker of an attendance capture cannot also regularise it, even when they hold the regularise permission (SOD_VIOLATION)", async () => {
   const { api, rohan } = boot();
   const maker = actor("attendance-self-approver", ["g03.attendance.capture", "g03.attendance.regularise"]);
 
-  const captured = call(api, maker, {
+  const captured = await call(api, maker, {
     method: "POST",
     path: "/api/v1/atl/attendance-captures",
     headers: { "Idempotency-Key": "idem-g03-sod-capture-001" },
@@ -104,7 +104,7 @@ test("G03 attendance: the maker of an attendance capture cannot also regularise 
   assert.equal(captured.status, 201);
   assert.equal("capturedByUserId" in captured.body.attendance, false, "capture response must not leak the maker id");
 
-  const selfRegularise = call(api, maker, {
+  const selfRegularise = await call(api, maker, {
     method: "POST",
     path: `/api/v1/atl/attendance-captures/${captured.body.attendance.id}:regularise`,
     headers: { "Idempotency-Key": "idem-g03-sod-regularise-001" },
@@ -114,7 +114,7 @@ test("G03 attendance: the maker of an attendance capture cannot also regularise 
   assert.equal(selfRegularise.body.error.code, "SOD_VIOLATION");
 
   const differentChecker = actor("attendance-different-checker", ["g03.attendance.regularise"]);
-  const regularised = call(api, differentChecker, {
+  const regularised = await call(api, differentChecker, {
     method: "POST",
     path: `/api/v1/atl/attendance-captures/${captured.body.attendance.id}:regularise`,
     headers: { "Idempotency-Key": "idem-g03-sod-regularise-002" },
@@ -123,20 +123,20 @@ test("G03 attendance: the maker of an attendance capture cannot also regularise 
   assert.equal(regularised.status, 202);
   assert.equal("capturedByUserId" in regularised.body.attendance, false, "regularise response must not leak the maker id");
 
-  const listed = call(api, actor("probe", ["*"]), { method: "GET", path: "/api/v1/attendance/records" });
+  const listed = await call(api, actor("probe", ["*"]), { method: "GET", path: "/api/v1/attendance/records" });
   for (const record of listed.body.items) {
     assert.equal("capturedByUserId" in record, false, "list response must not leak the maker id");
   }
 });
 
-test("G03 attendance: the regularisation backdate window and per-period cap are enforced (pre-existing engine, proven against seeded data)", () => {
+test("G03 attendance: the regularisation backdate window and per-period cap are enforced (pre-existing engine, proven against seeded data)", async () => {
   const { api, rohan } = boot();
   // Capture and regularise as two different actors so this test isolates WINDOW_EXPIRED from the
   // (separately tested) SOD_VIOLATION self-approve gate.
   const maker = actor("attendance-maker", ["g03.attendance.capture"]);
   const checker = actor("attendance-admin", ["g03.attendance.regularise"]);
 
-  const farInThePast = call(api, maker, {
+  const farInThePast = await call(api, maker, {
     method: "POST",
     path: "/api/v1/atl/attendance-captures",
     headers: { "Idempotency-Key": "idem-g03-old-capture-001" },
@@ -144,7 +144,7 @@ test("G03 attendance: the regularisation backdate window and per-period cap are 
   });
   assert.equal(farInThePast.status, 201);
 
-  const expired = call(api, checker, {
+  const expired = await call(api, checker, {
     method: "POST",
     path: `/api/v1/atl/attendance-captures/${farInThePast.body.attendance.id}:regularise`,
     headers: { "Idempotency-Key": "idem-g03-old-regularise-001" },

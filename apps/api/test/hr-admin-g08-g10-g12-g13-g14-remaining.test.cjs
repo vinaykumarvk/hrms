@@ -31,7 +31,7 @@ function boot() {
 
 // ---- G08 g08.apar.sealed.release / g08_dual_control -----------------------------------------
 
-test("g08.apar.sealed.release (post-hr_admin-goal fix): releasing a sealed cover requires the g08_dual_control capability", () => {
+test("g08.apar.sealed.release (post-hr_admin-goal fix): releasing a sealed cover requires the g08_dual_control capability", async () => {
   const services = boot();
   const opener = actor("hr-admin-g08-opener", ["*"], { roles: ["hr_admin"] });
   const sealed = services.apar.openForm(opener, {
@@ -59,7 +59,7 @@ test("g08.apar.sealed.release (post-hr_admin-goal fix): releasing a sealed cover
 
 // ---- G10 g10.fnf.settle (sanction/pay stages) ------------------------------------------------
 
-test("g10.fnf.settle sanction stage: requires the sanctioning_authority/hod capability and blocks creator self-sanction (SoD)", () => {
+test("g10.fnf.settle sanction stage: requires the sanctioning_authority/hod capability and blocks creator self-sanction (SoD)", async () => {
   const services = boot();
   const maker = actor("hr-admin-g10-maker", ["g10.fnf.settle"], { roles: ["hr_admin"] });
   const settlement = services.compensationIntegration.settleFnf(maker, {
@@ -86,7 +86,7 @@ test("g10.fnf.settle sanction stage: requires the sanctioning_authority/hod capa
   assert.ok(sanctioned.sanctionedAt);
 });
 
-test("g10.fnf.settle pay stage: requires the payroll_officer capability and only pays an APPROVED settlement", () => {
+test("g10.fnf.settle pay stage: requires the payroll_officer capability and only pays an APPROVED settlement", async () => {
   const services = boot();
   const maker = actor("hr-admin-g10-pay-maker", ["g10.fnf.settle"], { roles: ["hr_admin"] });
   const settlement = services.compensationIntegration.settleFnf(maker, {
@@ -118,11 +118,11 @@ test("g10.fnf.settle pay stage: requires the payroll_officer capability and only
 
 // ---- G12 g12.sr.append (verification only — maps to g12.sr.ingest, already gated) -----------
 
-test("g12.sr.append (verified, no change needed): maps to the existing g12.sr.ingest route, already permission-gated end to end", () => {
+test("g12.sr.append (verified, no change needed): maps to the existing g12.sr.ingest route, already permission-gated end to end", async () => {
   const services = boot();
   const api = createFoundationApi(services);
   const withoutPermission = actor("hr-admin-g12-no-perm", [], { roles: ["hr_admin"] });
-  const forbidden = api.dispatch({
+  const forbidden = await api.dispatch({
     method: "POST",
     path: "/api/v1/sr/ingest",
     headers: { "X-Correlation-Id": "corr-hr-admin-g12", "Idempotency-Key": "idem-hr-admin-g12-forbidden-001" },
@@ -139,7 +139,7 @@ test("g12.sr.append (verified, no change needed): maps to the existing g12.sr.in
   assert.equal(forbidden.status, 403);
 
   const withPermission = actor("hr-admin-g12-with-perm", ["g12.sr.ingest"], { roles: ["hr_admin"] });
-  const accepted = api.dispatch({
+  const accepted = await api.dispatch({
     method: "POST",
     path: "/api/v1/sr/ingest",
     headers: { "X-Correlation-Id": "corr-hr-admin-g12", "Idempotency-Key": "idem-hr-admin-g12-accepted-001" },
@@ -158,7 +158,7 @@ test("g12.sr.append (verified, no change needed): maps to the existing g12.sr.in
 
 // ---- G13 g13.document.store (verification only — maps to document.create + retention.class.define)
 
-test("g13.document.store (verified, no change needed): maps to g13.document.create + g13.retention.class.define, both already gated", () => {
+test("g13.document.store (verified, no change needed): maps to g13.document.create + g13.retention.class.define, both already gated", async () => {
   const services = boot();
   const documentAdmin = actor("hr-admin-g13-doc-store", ["g13.document.create", "g13.retention.class.define"], { roles: ["hr_admin"] });
   const document = services.documentVault.createDocument(documentAdmin, {
@@ -179,7 +179,7 @@ test("g13.document.store (verified, no change needed): maps to g13.document.crea
 
 // ---- G13 g13.letter.author / letter_admin (new thin build) -----------------------------------
 
-test("g13.letter.author: author a template, generate a letter, and enforce generator!=certifier SoD", () => {
+test("g13.letter.author: author a template, generate a letter, and enforce generator!=certifier SoD", async () => {
   const services = boot();
   const author = actor("hr-admin-g13-letter-author", ["g13.letter.author"], { roles: ["hr_admin"] });
   const template = services.letterTemplate.authorTemplate(author, {
@@ -220,7 +220,7 @@ test("g13.letter.author: author a template, generate a letter, and enforce gener
 
 // ---- G14 g14.dashboard.view (verification only — maps to g14.analytics.read on getDashboard())
 
-test("g14.dashboard.view (verified, no change needed): maps to g14.analytics.read on the existing executive dashboard read", () => {
+test("g14.dashboard.view (verified, no change needed): maps to g14.analytics.read on the existing executive dashboard read", async () => {
   const services = boot();
   const withoutPermission = actor("hr-admin-g14-dash-no-perm", [], { roles: ["hr_admin"] });
   assert.throws(
@@ -234,7 +234,7 @@ test("g14.dashboard.view (verified, no change needed): maps to g14.analytics.rea
 
 // ---- G14 g14.report.build (new thin build) ----------------------------------------------------
 
-test("g14.report.build: define a report over mart cards, build JSON/CSV output, and schedule distribution", () => {
+test("g14.report.build: define a report over mart cards, build JSON/CSV output, and schedule distribution", async () => {
   const services = boot();
   const builder = actor("hr-admin-g14-report-builder", ["g14.report.build"], { roles: ["hr_admin"] });
   const definition = services.analytics.defineReport(builder, {

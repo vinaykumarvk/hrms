@@ -36,7 +36,7 @@ function actor(userId, extra = {}) {
 
 // ── G07 credentials ──────────────────────────────────────────────────────────
 
-test("G07 credential_verifications: duplicate external ref fails closed (VAL-G07-CREDREF)", () => {
+test("G07 credential_verifications: duplicate external ref fails closed (VAL-G07-CREDREF)", async () => {
   const s = createFoundationServices();
   const base = {
     employeeId: ph03Ids.employee,
@@ -52,7 +52,7 @@ test("G07 credential_verifications: duplicate external ref fails closed (VAL-G07
   );
 });
 
-test("G07 credential_verifications: verifier SoD bars the submitter", () => {
+test("G07 credential_verifications: verifier SoD bars the submitter", async () => {
   const s = createFoundationServices();
   const { credential } = s.training.captureExternalCredential(actor(SUBMITTER), {
     employeeId: ph03Ids.employee,
@@ -89,7 +89,7 @@ function activeBond(s) {
   return sp;
 }
 
-test("G07 VAL-G07-BOND: a BREACHED bond cannot move to RECOVERED without its BOND_RECOVERY cost", () => {
+test("G07 VAL-G07-BOND: a BREACHED bond cannot move to RECOVERED without its BOND_RECOVERY cost", async () => {
   const s = createFoundationServices();
   const sp = activeBond(s);
   s.training.markSponsorshipBreached(actor(RATIFIER), sp.id, { breachDate: "2026-09-01" });
@@ -107,7 +107,7 @@ test("G07 VAL-G07-BOND: a BREACHED bond cannot move to RECOVERED without its BON
 
 // ── G08 calibration ──────────────────────────────────────────────────────────
 
-test("G08 ERR-G08-RATIFY: an unratified calibration recommendation cannot be applied", () => {
+test("G08 ERR-G08-RATIFY: an unratified calibration recommendation cannot be applied", async () => {
   const s = createFoundationServices();
   const session = s.apar.createCalibrationSession(actor(RATIFIER), {
     cycleId: "cycle-ph16e",
@@ -144,7 +144,7 @@ test("G08 ERR-G08-RATIFY: an unratified calibration recommendation cannot be app
 
 // ── G08 PIP ──────────────────────────────────────────────────────────────────
 
-test("G08 performance_improvement_plans: milestone lifecycle to an outcome", () => {
+test("G08 performance_improvement_plans: milestone lifecycle to an outcome", async () => {
   const s = createFoundationServices();
   const { pip, milestones } = s.apar.createPip(actor(RATIFIER), {
     appraiseeId: ph03Ids.employee,
@@ -164,7 +164,7 @@ test("G08 performance_improvement_plans: milestone lifecycle to an outcome", () 
 
 // ── G08 probation ─────────────────────────────────────────────────────────────
 
-test("G08 probation_confirmations: extension respects probation_extension_max_months cap", () => {
+test("G08 probation_confirmations: extension respects probation_extension_max_months cap", async () => {
   const s = createFoundationServices();
   // Cap of 6 months (service default). First 4-month extension is allowed; a further 4 breaches the cap.
   const conf = s.apar.openProbationConfirmation(actor(RATIFIER), {

@@ -17,18 +17,18 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph55a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-55A G01 governed write-ports: identity change, transfer posting, probation confirmation", () => {
+test("PH-55A G01 governed write-ports: identity change, transfer posting, probation confirmation", async () => {
   const api = createFoundationApi(createFoundationServices());
 
-  const identity = call(api, {
+  const identity = await call(api, {
     method: "POST",
     path: `/api/v1/employees/${ph03Ids.employee}:governed-identity-change`,
     headers: { "Idempotency-Key": "gic-1" },
@@ -38,7 +38,7 @@ test("PH-55A G01 governed write-ports: identity change, transfer posting, probat
   assert.equal(identity.body.employee.displayName, "Ashok Kumar (corrected)");
   assert.ok(identity.body.srEventId);
 
-  const posting = call(api, {
+  const posting = await call(api, {
     method: "POST",
     path: `/api/v1/employees/${ph03Ids.employee}:apply-transfer-posting`,
     headers: { "Idempotency-Key": "atp-1" },
@@ -47,7 +47,7 @@ test("PH-55A G01 governed write-ports: identity change, transfer posting, probat
   assert.equal(posting.status, 202);
   assert.equal(posting.body.employee.orgUnitId, "OU-NEW");
 
-  const probation = call(api, {
+  const probation = await call(api, {
     method: "POST",
     path: `/api/v1/employees/${ph03Ids.employee}:apply-probation-confirmation`,
     headers: { "Idempotency-Key": "apc-1" },
@@ -57,24 +57,24 @@ test("PH-55A G01 governed write-ports: identity change, transfer posting, probat
   assert.equal(probation.body.employee.confirmationDate, "2026-07-06");
 });
 
-test("PH-55A G01 live-record + count reads respond through the kernel", () => {
+test("PH-55A G01 live-record + count reads respond through the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const live = call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.employee}/live-record` });
+  const live = await call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.employee}/live-record` });
   assert.equal(live.status, 200);
   assert.equal(live.body.employee.id, ph03Ids.employee);
 
-  const list = call(api, { method: "GET", path: "/api/v1/employees:list-live-records" });
+  const list = await call(api, { method: "GET", path: "/api/v1/employees:list-live-records" });
   assert.equal(list.status, 200);
   assert.ok(list.body.items.length >= 1);
 
-  const count = call(api, { method: "GET", path: "/api/v1/employees:count" });
+  const count = await call(api, { method: "GET", path: "/api/v1/employees:count" });
   assert.equal(count.status, 200);
   assert.ok(count.body.count >= 1);
 });
 
-test("PH-55A G01 transfer posting on an unknown employee fails closed (NOT_FOUND)", () => {
+test("PH-55A G01 transfer posting on an unknown employee fails closed (NOT_FOUND)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/employees/nope:apply-transfer-posting",
     headers: { "Idempotency-Key": "atp-x" },

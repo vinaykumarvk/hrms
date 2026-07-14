@@ -5,7 +5,7 @@ const test = require("node:test");
 const { legalHoldDisposalCases } = require("../../../dist/apps/api/src/modules/g13/legalHoldDisposal.test");
 
 for (const testCase of legalHoldDisposalCases) {
-  test(`G13 legal-hold/disposal: ${testCase.name}`, () => {
+  test(`G13 legal-hold/disposal: ${testCase.name}`, async () => {
     testCase.run();
   });
 }

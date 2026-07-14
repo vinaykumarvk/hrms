@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G10 gl_export_batches: idempotent ERP post then ACKNOWLEDGED on matching total", () => {
+test("G10 gl_export_batches: idempotent ERP post then ACKNOWLEDGED on matching total", async () => {
   const s = createFoundationServices();
   const first = s.glErpPosting.postToErp(actor(), { exportKey: "GLX-2026-07", totalDebitPaise: 50_000_00, totalCreditPaise: 50_000_00, erpReference: "ERP-DOC-1" });
   assert.equal(first.replayed, false);
@@ -34,7 +34,7 @@ test("G10 gl_export_batches: idempotent ERP post then ACKNOWLEDGED on matching t
   assert.equal(acked.status, "ACKNOWLEDGED");
 });
 
-test("G10 gl_export_batches: an unbalanced batch is rejected and an ACK mismatch is flagged", () => {
+test("G10 gl_export_batches: an unbalanced batch is rejected and an ACK mismatch is flagged", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.glErpPosting.postToErp(actor(), { exportKey: "GLX-BAD", totalDebitPaise: 10, totalCreditPaise: 9, erpReference: "x" }),

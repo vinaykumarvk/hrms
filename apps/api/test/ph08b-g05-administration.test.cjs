@@ -25,8 +25,8 @@ const authorityActor = () => actor({ userId: "user-ph08b-authority", actorUserId
 const receivingActor = () => actor({ userId: "user-ph08b-receiving", actorUserId: "user-ph08b-receiving", roles: ["manager_l1"] });
 const employeeActor = () => actor({ userId: "user-ph08b-employee", actorUserId: "user-ph08b-employee", roles: ["employee"] });
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph08b-g05", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -70,7 +70,7 @@ function manualChannelPolicy(services) {
   });
 }
 
-test("PH-08B FR-020 publication auto-serves via the system channel and the employee acknowledges", () => {
+test("PH-08B FR-020 publication auto-serves via the system channel and the employee acknowledges", async () => {
   const services = createFoundationServices();
   const order = approvedOrder(services, "ack");
   // FR-G05-020 AC1: publication created the order_acknowledgements row (IN_APP system channel).
@@ -87,7 +87,7 @@ test("PH-08B FR-020 publication auto-serves via the system channel and the emplo
   assert.ok(services.audit.listAudit(actor()).some((entry) => entry.action === "G05_ORDER_ACKNOWLEDGED"));
 });
 
-test("PH-08B FR-020 deemed service flips to DEEMED_SERVED only after the statutory window, with recorded basis", () => {
+test("PH-08B FR-020 deemed service flips to DEEMED_SERVED only after the statutory window, with recorded basis", async () => {
   const services = createFoundationServices();
   manualChannelPolicy(services);
   const order = approvedOrder(services, "deem");
@@ -130,7 +130,7 @@ test("PH-08B FR-020 deemed service flips to DEEMED_SERVED only after the statuto
   assert.equal(joined.order.status, "JOINED");
 });
 
-test("PH-08B FR-020 negative: an unserved order cannot relieve or be deemed relieved (ERR-G05-NOT-SERVED)", () => {
+test("PH-08B FR-020 negative: an unserved order cannot relieve or be deemed relieved (ERR-G05-NOT-SERVED)", async () => {
   const services = createFoundationServices();
   manualChannelPolicy(services);
   const order = approvedOrder(services, "unserved");
@@ -147,7 +147,7 @@ test("PH-08B FR-020 negative: an unserved order cannot relieve or be deemed reli
   );
 });
 
-test("PH-08B FR-007 charge handover: dispute blocks relieving until the Authority certifies UNDER_PROTEST after SLA breach", () => {
+test("PH-08B FR-007 charge handover: dispute blocks relieving until the Authority certifies UNDER_PROTEST after SLA breach", async () => {
   const services = createFoundationServices();
   const receiving = services.employeeMaster.create(actor(), {
     firstName: "Ravi",
@@ -212,7 +212,7 @@ test("PH-08B FR-007 charge handover: dispute blocks relieving until the Authorit
   assert.ok(services.audit.listAudit(actor()).some((entry) => entry.action === "G05_CHARGE_HANDOVER_UNDER_PROTEST"));
 });
 
-test("PH-08B FR-009 joining time derives from configured distance-band rule rows (VAL-G05-JTIME)", () => {
+test("PH-08B FR-009 joining time derives from configured distance-band rule rows (VAL-G05-JTIME)", async () => {
   const services = createFoundationServices();
   const order = approvedOrder(services, "jtime");
 
@@ -247,7 +247,7 @@ test("PH-08B FR-009 joining time derives from configured distance-band rule rows
   );
 });
 
-test("PH-08B FR-011 deputation lifecycle: tenure cap blocks over-extension and repatriation raises the reverse order", () => {
+test("PH-08B FR-011 deputation lifecycle: tenure cap blocks over-extension and repatriation raises the reverse order", async () => {
   const services = createFoundationServices();
   const order = approvedOrder(services, "deputation");
   const record = services.transfer.createDeputationRecord(actor(), order.id, {
@@ -298,7 +298,7 @@ test("PH-08B FR-011 deputation lifecycle: tenure cap blocks over-extension and r
   assert.equal(services.transfer.listDeputationRecords(actor()).length, 1);
 });
 
-test("PH-08B FR-022 quarter retention: penal-rate flip on overstay and the permissible-period guard", () => {
+test("PH-08B FR-022 quarter retention: penal-rate flip on overstay and the permissible-period guard", async () => {
   const services = createFoundationServices();
   const order = approvedOrder(services, "quarter");
 
@@ -346,7 +346,7 @@ test("PH-08B FR-022 quarter retention: penal-rate flip on overstay and the permi
   assert.equal(services.transfer.listQuarterAllotments(actor()).length, 1);
 });
 
-test("PH-08B routes expose the administration surface (serve, handover, joining-time, deputations, quarters)", () => {
+test("PH-08B routes expose the administration surface (serve, handover, joining-time, deputations, quarters)", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const receiving = services.employeeMaster.create(actor(), {
@@ -355,7 +355,7 @@ test("PH-08B routes expose the administration surface (serve, handover, joining-
     orgUnitId: ph03Ids.orgRevenue,
     dateOfJoining: "2018-06-01",
   }).employee;
-  const initiated = call(api, {
+  const initiated = await call(api, {
     method: "POST",
     path: "/api/v1/transfers/orders",
     headers: { "Idempotency-Key": "idem-ph08b-route-init-001" },
@@ -364,15 +364,15 @@ test("PH-08B routes expose the administration surface (serve, handover, joining-
   assert.equal(initiated.status, 201);
   const orderId = initiated.body.order.id;
   assert.equal(
-    call(api, { method: "POST", path: `/api/v1/transfers/orders/${orderId}/approve`, headers: { "Idempotency-Key": "idem-ph08b-route-approve-001" }, body: {} }).status,
+    (await call(api, { method: "POST", path: `/api/v1/transfers/orders/${orderId}/approve`, headers: { "Idempotency-Key": "idem-ph08b-route-approve-001" }, body: {} })).status,
     202
   );
 
-  const serviceRecord = call(api, { method: "GET", path: `/api/v1/transfers/orders/${orderId}/service-record` });
+  const serviceRecord = await call(api, { method: "GET", path: `/api/v1/transfers/orders/${orderId}/service-record` });
   assert.equal(serviceRecord.status, 200);
   assert.equal(serviceRecord.body.acknowledgement.acknowledgementStatus, "SERVED");
 
-  const handover = call(api, {
+  const handover = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/orders/${orderId}/charge-handover`,
     headers: { "Idempotency-Key": "idem-ph08b-route-handover-001" },
@@ -381,7 +381,7 @@ test("PH-08B routes expose the administration surface (serve, handover, joining-
   assert.equal(handover.status, 201);
   assert.equal(handover.body.chargeHandover.status, "SUBMITTED");
 
-  const joiningTime = call(api, {
+  const joiningTime = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/orders/${orderId}/joining-time`,
     headers: { "Idempotency-Key": "idem-ph08b-route-jtime-001" },
@@ -391,26 +391,26 @@ test("PH-08B routes expose the administration surface (serve, handover, joining-
   assert.equal(joiningTime.body.joiningDistanceBand, "LONG");
   assert.equal(joiningTime.body.joiningTimeDays, 7);
 
-  const deputation = call(api, {
+  const deputation = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/orders/${orderId}/deputation`,
     headers: { "Idempotency-Key": "idem-ph08b-route-dep-001" },
     body: { startDate: "2026-08-10", initialTenureMonths: 12, maxTenureMonths: 24 },
   });
   assert.equal(deputation.status, 201);
-  assert.equal(call(api, { method: "GET", path: "/api/v1/deputations" }).body.items.length, 1);
+  assert.equal((await call(api, { method: "GET", path: "/api/v1/deputations" })).body.items.length, 1);
 
-  const quarter = call(api, {
+  const quarter = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/orders/${orderId}/quarter-retention`,
     headers: { "Idempotency-Key": "idem-ph08b-route-qtr-001" },
     body: { quarterRef: "QTR-C-2", vacateByDate: "2026-09-15", licenceFeeRate: 1500, penalLicenceFeeRate: 6000 },
   });
   assert.equal(quarter.status, 201);
-  assert.equal(call(api, { method: "GET", path: "/api/v1/quarter-allotments" }).body.items.length, 1);
+  assert.equal((await call(api, { method: "GET", path: "/api/v1/quarter-allotments" })).body.items.length, 1);
 
   // Wire negative: the registered 409 code surfaces on the relieve of a disputed-handover order.
-  const disputeBlocked = call(api, {
+  const disputeBlocked = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/orders/${orderId}:relieve-and-join`,
     headers: { "Idempotency-Key": "idem-ph08b-route-join-001" },

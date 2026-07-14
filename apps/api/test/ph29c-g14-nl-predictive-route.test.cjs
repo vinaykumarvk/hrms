@@ -17,13 +17,13 @@ function actor(extra = {}) {
     ...extra,
   };
 }
-function call(api, request) {
-  return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph29c", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
+async function call(api, request) {
+  return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph29c", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
 }
 
-test("PH-29C POST /api/v1/analytics/nl-query maps a recognised question to a metric", () => {
+test("PH-29C POST /api/v1/analytics/nl-query maps a recognised question to a metric", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/analytics/nl-query",
     headers: { "Idempotency-Key": "idem-ph29c-nlq" },
@@ -34,9 +34,9 @@ test("PH-29C POST /api/v1/analytics/nl-query maps a recognised question to a met
   assert.equal(res.body.mappedMetric, "EMPLOYEE_HEADCOUNT");
 });
 
-test("PH-29C POST /api/v1/analytics/attrition-score returns a banded risk score", () => {
+test("PH-29C POST /api/v1/analytics/attrition-score returns a banded risk score", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/analytics/attrition-score",
     headers: { "Idempotency-Key": "idem-ph29c-attr" },

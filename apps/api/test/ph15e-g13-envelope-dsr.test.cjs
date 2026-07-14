@@ -45,8 +45,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph15e-g13", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -63,7 +63,7 @@ function newVault(masterKeySecret) {
   return { repository, vault };
 }
 
-test("PH-15E runtime aes-256-gcm envelope round-trip: unique per-object DEK, only wrapped_dek + kms_key_id persisted", () => {
+test("PH-15E runtime aes-256-gcm envelope round-trip: unique per-object DEK, only wrapped_dek + kms_key_id persisted", async () => {
   const { repository, vault } = newVault("ph15e-master-secret-A");
   const content = "PH-15E confidential order body bytes — envelope round-trip";
 
@@ -94,7 +94,7 @@ test("PH-15E runtime aes-256-gcm envelope round-trip: unique per-object DEK, onl
   assert.equal(fetched.intent, "VIEW");
 });
 
-test("PH-15E JOB-G13-KEYROTATE rotation re-wraps wrapped_dek without rewriting ciphertext; old objects still decrypt", () => {
+test("PH-15E JOB-G13-KEYROTATE rotation re-wraps wrapped_dek without rewriting ciphertext; old objects still decrypt", async () => {
   const { repository, vault } = newVault("ph15e-master-secret-A");
   const content = "PH-15E bytes stored before the master-key rotation";
   const document = vault.createDocument(scope(), { title: "Pre-rotation object", classification: "INTERNAL", content });
@@ -117,7 +117,7 @@ test("PH-15E JOB-G13-KEYROTATE rotation re-wraps wrapped_dek without rewriting c
   assert.equal(decrypted.toString("utf8"), content);
 });
 
-test("PH-15E NEGATIVE wrong-key decrypt fails closed with thrown ERR-G13-INTEGRITY_FAILED (no partial plaintext)", () => {
+test("PH-15E NEGATIVE wrong-key decrypt fails closed with thrown ERR-G13-INTEGRITY_FAILED (no partial plaintext)", async () => {
   const providerA = new LocalMasterKeyProvider({ masterKeySecret: "ph15e-master-secret-A" });
   const wrongKeyProvider = new LocalMasterKeyProvider({ masterKeySecret: "ph15e-master-secret-WRONG" });
   const envelope = encryptEnvelope(Buffer.from("wrong-key fail-closed payload", "utf8"), providerA);
@@ -146,8 +146,8 @@ test("PH-15E NEGATIVE wrong-key decrypt fails closed with thrown ERR-G13-INTEGRI
   assert.equal(decryptEnvelope(envelope, providerA).toString("utf8"), "wrong-key fail-closed payload");
 });
 
-function createOwnedDocument(api, idem, body) {
-  const response = call(api, {
+async function createOwnedDocument(api, idem, body) {
+  const response = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": idem },
@@ -157,31 +157,31 @@ function createOwnedDocument(api, idem, body) {
   return response.body.document;
 }
 
-test("PH-15E data_subject_requests lifecycle + VAL-G13-LATTICE: hold/WORM/statutory => EXEMPT_RETAINED; blocked erasure throws ERR-G13-ERASURE_EXEMPTED; non-exempt erases via the redaction marker", () => {
+test("PH-15E data_subject_requests lifecycle + VAL-G13-LATTICE: hold/WORM/statutory => EXEMPT_RETAINED; blocked erasure throws ERR-G13-ERASURE_EXEMPTED; non-exempt erases via the redaction marker", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const subject = "emp-ph15e-subject-1";
 
-  const erasable = createOwnedDocument(api, "idem-ph15e-dsr-doc-a", {
+  const erasable = await createOwnedDocument(api, "idem-ph15e-dsr-doc-a", {
     title: "Erasable personal file",
     ownerEmployeeId: subject,
     classification: "INTERNAL",
     content: "personal data of the subject — erasable",
   });
-  const held = createOwnedDocument(api, "idem-ph15e-dsr-doc-b", {
+  const held = await createOwnedDocument(api, "idem-ph15e-dsr-doc-b", {
     title: "Held personal file",
     ownerEmployeeId: subject,
     classification: "INTERNAL",
     content: "personal data of the subject — under legal hold",
   });
-  const worm = createOwnedDocument(api, "idem-ph15e-dsr-doc-c", {
+  const worm = await createOwnedDocument(api, "idem-ph15e-dsr-doc-c", {
     title: "WORM personal file",
     ownerEmployeeId: subject,
     classification: "INTERNAL",
     content: "personal data of the subject — WORM locked",
     isWorm: true,
   });
-  const statutory = createOwnedDocument(api, "idem-ph15e-dsr-doc-d", {
+  const statutory = await createOwnedDocument(api, "idem-ph15e-dsr-doc-d", {
     title: "Statutory personal file",
     ownerEmployeeId: subject,
     classification: "INTERNAL",
@@ -190,38 +190,38 @@ test("PH-15E data_subject_requests lifecycle + VAL-G13-LATTICE: hold/WORM/statut
 
   // Active legal hold on B; permanent retention class (statutory floor) on D.
   assert.equal(
-    call(api, {
+    (await call(api, {
       method: "POST",
       path: "/api/v1/legal-holds",
       headers: { "Idempotency-Key": "idem-ph15e-dsr-hold" },
       body: { documentId: held.id, reason: "Ongoing litigation" },
-    }).status,
+    })).status,
     202
   );
   assert.equal(
-    call(api, {
+    (await call(api, {
       method: "POST",
       path: "/api/v1/retention-classes",
       headers: { "Idempotency-Key": "idem-ph15e-dsr-rc" },
       body: { code: "SR-PERM", name: "Service records — permanent", isPermanent: true, dispositionAction: "REVIEW" },
-    }).status,
+    })).status,
     201
   );
   assert.equal(
-    call(api, {
+    (await call(api, {
       method: "POST",
       path: `/api/v1/documents/${statutory.id}:assign-retention-class`,
       headers: { "Idempotency-Key": "idem-ph15e-dsr-rc-assign" },
       body: { retentionClassCode: "SR-PERM" },
-    }).status,
+    })).status,
     202
   );
 
   // View the erasable document once so its audit trail has PII rows to redact later.
-  assert.equal(call(api, { method: "GET", path: `/api/v1/documents/${erasable.id}:fetch`, query: { intent: "VIEW" } }).status, 200);
+  assert.equal((await call(api, { method: "GET", path: `/api/v1/documents/${erasable.id}:fetch`, query: { intent: "VIEW" } })).status, 200);
 
   // AC1: register — statutory clock starts, lifecycle begins at RECEIVED.
-  const registered = call(api, {
+  const registered = await call(api, {
     method: "POST",
     path: "/api/v1/dsr",
     headers: { "Idempotency-Key": "idem-ph15e-dsr-register" },
@@ -234,7 +234,7 @@ test("PH-15E data_subject_requests lifecycle + VAL-G13-LATTICE: hold/WORM/statut
   const dsrId = registered.body.dataSubjectRequest.id;
 
   // AC2: DPO adjudication evaluates every in-scope document against the precedence lattice.
-  const adjudicated = call(api, {
+  const adjudicated = await call(api, {
     method: "POST",
     path: `/api/v1/dsr/${dsrId}:adjudicate`,
     headers: { "Idempotency-Key": "idem-ph15e-dsr-adjudicate" },
@@ -253,7 +253,7 @@ test("PH-15E data_subject_requests lifecycle + VAL-G13-LATTICE: hold/WORM/statut
   assert.match(outcomes.get(statutory.id).basis, /STATUTORY_RETENTION/);
 
   // AC7 SoD: the adjudicating DPO may not execute — ERR-G13-SOD_VIOLATION (403).
-  const selfExecute = call(api, {
+  const selfExecute = await call(api, {
     method: "POST",
     path: `/api/v1/dsr/${dsrId}:execute`,
     headers: { "Idempotency-Key": "idem-ph15e-dsr-sod" },
@@ -263,7 +263,7 @@ test("PH-15E data_subject_requests lifecycle + VAL-G13-LATTICE: hold/WORM/statut
   assert.equal(selfExecute.body.error.code, "ERR-G13-SOD_VIOLATION");
 
   // NEGATIVE: erasure attempted against the held document is BLOCKED with the registered 409.
-  const blocked = call(api, {
+  const blocked = await call(api, {
     method: "POST",
     path: `/api/v1/dsr/${dsrId}:execute`,
     headers: { "Idempotency-Key": "idem-ph15e-dsr-blocked" },
@@ -274,13 +274,13 @@ test("PH-15E data_subject_requests lifecycle + VAL-G13-LATTICE: hold/WORM/statut
   assert.equal(blocked.body.error.details.messageId, "ERR-G13-ERASURE_EXEMPTED");
   assert.match(blocked.body.error.details.legalBasisExemption, /LEGAL_HOLD/);
   // The held document is recorded EXEMPT_RETAINED — dpdp_erasure_state, content untouched.
-  const heldAfter = call(api, { method: "GET", path: `/api/v1/documents/${held.id}` }).body.document;
+  const heldAfter = (await call(api, { method: "GET", path: `/api/v1/documents/${held.id}` })).body.document;
   assert.equal(heldAfter.dpdpErasureState, "EXEMPT_RETAINED");
   assert.equal(heldAfter.status, "ACTIVE");
   assert.equal(heldAfter.title, "Held personal file");
 
   // Full execution by the custodian: exempt docs retained with basis, the rest erased.
-  const executed = call(api, {
+  const executed = await call(api, {
     method: "POST",
     path: `/api/v1/dsr/${dsrId}:execute`,
     headers: { "Idempotency-Key": "idem-ph15e-dsr-execute" },
@@ -293,7 +293,7 @@ test("PH-15E data_subject_requests lifecycle + VAL-G13-LATTICE: hold/WORM/statut
   // AC5 redaction-marker path (never physical deletion): dpdp_erasure_state transitions to
   // CRYPTO_SHRED, the header title is redacted, and prior audit PII carries the marker while
   // every audit row is retained.
-  const erasedAfter = call(api, { method: "GET", path: `/api/v1/documents/${erasable.id}` }).body.document;
+  const erasedAfter = (await call(api, { method: "GET", path: `/api/v1/documents/${erasable.id}` })).body.document;
   assert.equal(erasedAfter.dpdpErasureState, "CRYPTO_SHRED");
   assert.equal(erasedAfter.title, DPDP_REDACTION_MARKER);
   assert.equal(erasedAfter.status, "DISPOSED");
@@ -307,67 +307,67 @@ test("PH-15E data_subject_requests lifecycle + VAL-G13-LATTICE: hold/WORM/statut
 
   // Exempt documents keep their content and record EXEMPT_RETAINED (WORM + statutory too).
   for (const exemptId of [worm.id, statutory.id]) {
-    const exempt = call(api, { method: "GET", path: `/api/v1/documents/${exemptId}` }).body.document;
+    const exempt = (await call(api, { method: "GET", path: `/api/v1/documents/${exemptId}` })).body.document;
     assert.equal(exempt.dpdpErasureState, "EXEMPT_RETAINED");
     assert.notEqual(exempt.status, "DISPOSED");
   }
 });
 
-test("PH-15E DSR terminal statuses: all-erasable => FULFILLED, all-exempt => EXEMPTED, and REJECT closes the lifecycle", () => {
+test("PH-15E DSR terminal statuses: all-erasable => FULFILLED, all-exempt => EXEMPTED, and REJECT closes the lifecycle", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
 
   // All-erasable subject -> FULFILLED.
-  const plain = createOwnedDocument(api, "idem-ph15e-f-doc", {
+  const plain = await createOwnedDocument(api, "idem-ph15e-f-doc", {
     title: "Only erasable file",
     ownerEmployeeId: "emp-ph15e-subject-2",
     classification: "INTERNAL",
     content: "subject-2 personal data",
   });
-  const fulfilledDsr = call(api, {
+  const fulfilledDsr = (await call(api, {
     method: "POST",
     path: "/api/v1/dsr",
     headers: { "Idempotency-Key": "idem-ph15e-f-register" },
     body: { dataSubjectEmployeeId: "emp-ph15e-subject-2", requestType: "ERASURE" },
-  }).body.dataSubjectRequest;
-  call(api, {
+  })).body.dataSubjectRequest;
+  await call(api, {
     method: "POST",
     path: `/api/v1/dsr/${fulfilledDsr.id}:adjudicate`,
     headers: { "Idempotency-Key": "idem-ph15e-f-adjudicate" },
     actor: { userId: DPO_ID, actorUserId: DPO_ID },
   });
-  const fulfilled = call(api, {
+  const fulfilled = await call(api, {
     method: "POST",
     path: `/api/v1/dsr/${fulfilledDsr.id}:execute`,
     headers: { "Idempotency-Key": "idem-ph15e-f-execute" },
   });
   assert.equal(fulfilled.body.dataSubjectRequest.status, "FULFILLED");
   assert.equal(
-    call(api, { method: "GET", path: `/api/v1/documents/${plain.id}` }).body.document.dpdpErasureState,
+    (await call(api, { method: "GET", path: `/api/v1/documents/${plain.id}` })).body.document.dpdpErasureState,
     "CRYPTO_SHRED"
   );
 
   // All-exempt subject (WORM) -> EXEMPTED with EXEMPT_RETAINED and the basis recorded.
-  createOwnedDocument(api, "idem-ph15e-e-doc", {
+  await createOwnedDocument(api, "idem-ph15e-e-doc", {
     title: "Only WORM file",
     ownerEmployeeId: "emp-ph15e-subject-3",
     classification: "INTERNAL",
     content: "subject-3 personal data",
     isWorm: true,
   });
-  const exemptDsr = call(api, {
+  const exemptDsr = (await call(api, {
     method: "POST",
     path: "/api/v1/dsr",
     headers: { "Idempotency-Key": "idem-ph15e-e-register" },
     body: { dataSubjectEmployeeId: "emp-ph15e-subject-3", requestType: "ERASURE" },
-  }).body.dataSubjectRequest;
-  call(api, {
+  })).body.dataSubjectRequest;
+  await call(api, {
     method: "POST",
     path: `/api/v1/dsr/${exemptDsr.id}:adjudicate`,
     headers: { "Idempotency-Key": "idem-ph15e-e-adjudicate" },
     actor: { userId: DPO_ID, actorUserId: DPO_ID },
   });
-  const exempted = call(api, {
+  const exempted = await call(api, {
     method: "POST",
     path: `/api/v1/dsr/${exemptDsr.id}:execute`,
     headers: { "Idempotency-Key": "idem-ph15e-e-execute" },
@@ -376,13 +376,13 @@ test("PH-15E DSR terminal statuses: all-erasable => FULFILLED, all-exempt => EXE
   assert.equal(exempted.body.dataSubjectRequest.erasureMethod, "EXEMPT_RETAINED");
 
   // REJECT closes the lifecycle without touching any document.
-  const rejectedDsr = call(api, {
+  const rejectedDsr = (await call(api, {
     method: "POST",
     path: "/api/v1/dsr",
     headers: { "Idempotency-Key": "idem-ph15e-r-register" },
     body: { dataSubjectEmployeeId: "emp-ph15e-subject-2", requestType: "ERASURE" },
-  }).body.dataSubjectRequest;
-  const rejected = call(api, {
+  })).body.dataSubjectRequest;
+  const rejected = await call(api, {
     method: "POST",
     path: `/api/v1/dsr/${rejectedDsr.id}:adjudicate`,
     headers: { "Idempotency-Key": "idem-ph15e-r-adjudicate" },

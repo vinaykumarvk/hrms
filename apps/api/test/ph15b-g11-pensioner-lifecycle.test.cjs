@@ -117,7 +117,7 @@ function issuedPensioner(services) {
   return { maker, sanctioner, pensionCase: issued, pensioner };
 }
 
-test("PH-15B G11 FR-12 pensioner enrolment: pen_pensioners created on PPO authorisation, never detached", () => {
+test("PH-15B G11 FR-12 pensioner enrolment: pen_pensioners created on PPO authorisation, never detached", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -139,7 +139,7 @@ test("PH-15B G11 FR-12 pensioner enrolment: pen_pensioners created on PPO author
   assert.ok(services.audit.listAudit(maker).some((entry) => entry.action === "G11_PENSIONER_ENROLLED"));
 });
 
-test("PH-15B G11 FR-12 AC1/AC2 life-certificate lifecycle: lapse -> SUSPENDED_NO_LC -> submit -> release WITH arrear", () => {
+test("PH-15B G11 FR-12 AC1/AC2 life-certificate lifecycle: lapse -> SUSPENDED_NO_LC -> submit -> release WITH arrear", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -171,7 +171,7 @@ test("PH-15B G11 FR-12 AC1/AC2 life-certificate lifecycle: lapse -> SUSPENDED_NO
   assert.equal(certificates.filter((row) => row.status === "ACTIVE").length, 1);
 });
 
-test("PH-15B G11 FR-12 AC1 NEGATIVE: disbursement while SUSPENDED_NO_LC fails closed with ERR-G11-LC-SUSPENDED", () => {
+test("PH-15B G11 FR-12 AC1 NEGATIVE: disbursement while SUSPENDED_NO_LC fails closed with ERR-G11-LC-SUSPENDED", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -205,7 +205,7 @@ test("PH-15B G11 FR-12 AC1 NEGATIVE: disbursement while SUSPENDED_NO_LC fails cl
   assert.equal(released.status, "TRANSMITTED");
 });
 
-test("PH-15B G11 FR-12 AC4 death conversion: E26 hierarchy -> family pension + FAMILY_PENSION PPO -> CONVERTED_TO_FAMILY", () => {
+test("PH-15B G11 FR-12 AC4 death conversion: E26 hierarchy -> family pension + FAMILY_PENSION PPO -> CONVERTED_TO_FAMILY", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -258,7 +258,7 @@ test("PH-15B G11 FR-12 AC4 death conversion: E26 hierarchy -> family pension + F
   assert.ok(services.audit.listAudit(maker).some((entry) => entry.action === "G11_DEATH_CONVERTED_TO_FAMILY" && entry.metadata.marker === "CONVERTED_TO_FAMILY"));
 });
 
-test("PH-15B G11 FR-13 revision determinism: pen_revisions DA batch recompute yields deep-equal deltas with month-wise arrears", () => {
+test("PH-15B G11 FR-13 revision determinism: pen_revisions DA batch recompute yields deep-equal deltas with month-wise arrears", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);
@@ -301,7 +301,7 @@ test("PH-15B G11 FR-13 revision determinism: pen_revisions DA batch recompute yi
   assert.equal(revised.currentDaReliefPaise, 2800000);
 });
 
-test("PH-15B G11 FR-13 pay-commission re-fix + NEGATIVE: mutating an APPLIED batch throws ERR-G11-REVISION-IMMUTABLE", () => {
+test("PH-15B G11 FR-13 pay-commission re-fix + NEGATIVE: mutating an APPLIED batch throws ERR-G11-REVISION-IMMUTABLE", async () => {
   const services = createFoundationServices();
   seedLastPay(services);
   seedPensionRules(services);

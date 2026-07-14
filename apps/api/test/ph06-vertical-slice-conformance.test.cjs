@@ -8,7 +8,7 @@ const {
   minimumRouteSet,
 } = require("../../../dist/apps/api/src");
 
-test("PH-06 route registry exposes G03/G05 vertical-slice surfaces with protected permissions", () => {
+test("PH-06 route registry exposes G03/G05 vertical-slice surfaces with protected permissions", async () => {
   const api = createFoundationApi(createFoundationServices());
   const routes = api.listRoutes();
   for (const expected of [
@@ -25,7 +25,7 @@ test("PH-06 route registry exposes G03/G05 vertical-slice surfaces with protecte
   }
 });
 
-test("PH-06 docs bind vertical slices to existing state-machine contracts and evidence files", () => {
+test("PH-06 docs bind vertical slices to existing state-machine contracts and evidence files", async () => {
   const g03 = fs.readFileSync("docs/spec/vertical-slice-g03-leave.yaml", "utf8");
   const g05 = fs.readFileSync("docs/spec/vertical-slice-g05-transfer.yaml", "utf8");
   const plan = fs.readFileSync("docs/spec/ph-06-vertical-slice-implementation-plan.md", "utf8");

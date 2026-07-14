@@ -5,10 +5,10 @@ const { createFoundationApi, createFoundationServices, ph03Ids } = require("../.
 function actor(extra = {}) {
   return { tenantId: ph03Ids.tenant, entityId: ph03Ids.entity, userId: "user-ph32a", actorUserId: "user-ph32a", permissions: ["*"], roles: ["establishment_officer"], fieldGrants: [], correlationId: "corr-ph32a", ...extra };
 }
-function call(api, request) { return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph32a", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request }); }
-test("PH-32A POST /api/v1/promotions/career-paths defines an ordered path", () => {
+async function call(api, request) { return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph32a", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request }); }
+test("PH-32A POST /api/v1/promotions/career-paths defines an ordered path", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/career-paths",
     headers: { "Idempotency-Key": "idem-ph32a-cp" },
@@ -17,9 +17,9 @@ test("PH-32A POST /api/v1/promotions/career-paths defines an ordered path", () =
   assert.equal(res.status, 201);
   assert.equal(res.body.careerPath.stages.length, 2);
 });
-test("PH-32A POST /api/v1/promotions/seniority-lists:finalise finalises a ranked list", () => {
+test("PH-32A POST /api/v1/promotions/seniority-lists:finalise finalises a ranked list", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/seniority-lists:finalise",
     headers: { "Idempotency-Key": "idem-ph32a-sl" },

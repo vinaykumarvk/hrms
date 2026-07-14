@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("PH-09 G03 LOP, G09 penalty, G10_LAST_PAY_DRAWN_FEED, SoD, and PROVENANCE_COMPLETE compose for pension", () => {
+test("PH-09 G03 LOP, G09 penalty, G10_LAST_PAY_DRAWN_FEED, SoD, and PROVENANCE_COMPLETE compose for pension", async () => {
   const services = createFoundationServices();
   const maker = actor();
   const payrollApprover = actor({ userId: "user-ph09-payroll-approver", actorUserId: "user-ph09-payroll-approver" });

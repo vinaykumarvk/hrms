@@ -21,8 +21,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph04-g12-g13", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -43,9 +43,9 @@ function srBody(sourceReferenceId) {
   };
 }
 
-test("PH-04C G12 routes preserve idempotent append and semantic dedup behavior", () => {
+test("PH-04C G12 routes preserve idempotent append and semantic dedup behavior", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const first = call(api, {
+  const first = await call(api, {
     method: "POST",
     path: "/api/v1/sr/ingest",
     headers: { "Idempotency-Key": "idem-g12-ingest-001" },
@@ -54,7 +54,7 @@ test("PH-04C G12 routes preserve idempotent append and semantic dedup behavior",
   assert.equal(first.status, 201);
   assert.equal(first.body.event.sequenceNo, 1);
 
-  const replay = call(api, {
+  const replay = await call(api, {
     method: "POST",
     path: "/api/v1/sr/ingest",
     headers: { "Idempotency-Key": "idem-g12-ingest-001" },
@@ -66,7 +66,7 @@ test("PH-04C G12 routes preserve idempotent append and semantic dedup behavior",
   assert.deepEqual(replay.body, first.body);
   assert.equal(replay.body.event.id, first.body.event.id);
 
-  const semantic = call(api, {
+  const semantic = await call(api, {
     method: "POST",
     path: "/api/v1/sr/ingest",
     headers: { "Idempotency-Key": "idem-g12-ingest-002" },
@@ -75,7 +75,7 @@ test("PH-04C G12 routes preserve idempotent append and semantic dedup behavior",
   assert.equal(semantic.body.semanticDuplicate, true);
   assert.equal(semantic.body.event.id, first.body.event.id);
 
-  const reversal = call(api, {
+  const reversal = await call(api, {
     method: "POST",
     path: "/api/v1/sr/ingest/reversal",
     headers: { "Idempotency-Key": "idem-g12-reversal-001" },
@@ -84,20 +84,20 @@ test("PH-04C G12 routes preserve idempotent append and semantic dedup behavior",
   assert.equal(reversal.status, 201);
   assert.equal(reversal.body.event.sequenceNo, 2);
 
-  const timeline = call(api, { method: "GET", path: `/api/v1/sr/employees/${ph03Ids.employee}/timeline` });
+  const timeline = await call(api, { method: "GET", path: `/api/v1/sr/employees/${ph03Ids.employee}/timeline` });
   assert.equal(timeline.status, 200);
   assert.equal(timeline.body.items.length, 2);
 });
 
-test("PH-04C G12 corrigendum and dispute routes append manual SR annotations", () => {
+test("PH-04C G12 corrigendum and dispute routes append manual SR annotations", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const first = call(api, {
+  const first = await call(api, {
     method: "POST",
     path: "/api/v1/sr/ingest",
     headers: { "Idempotency-Key": "idem-g12-anno-source-001" },
     body: srBody("employee:identity:annotation:1"),
   });
-  const corrigendum = call(api, {
+  const corrigendum = await call(api, {
     method: "POST",
     path: `/api/v1/sr/events/${first.body.event.id}/corrigendum`,
     headers: { "Idempotency-Key": "idem-g12-corrigendum-001" },
@@ -106,7 +106,7 @@ test("PH-04C G12 corrigendum and dispute routes append manual SR annotations", (
   assert.equal(corrigendum.status, 201);
   assert.equal(corrigendum.body.event.eventTypeCode, "CORRIGENDUM");
 
-  const dispute = call(api, {
+  const dispute = await call(api, {
     method: "POST",
     path: `/api/v1/sr/events/${first.body.event.id}/dispute`,
     headers: { "Idempotency-Key": "idem-g12-dispute-001" },
@@ -114,7 +114,7 @@ test("PH-04C G12 corrigendum and dispute routes append manual SR annotations", (
   });
   assert.equal(dispute.status, 201);
 
-  const resolved = call(api, {
+  const resolved = await call(api, {
     method: "POST",
     path: `/api/v1/sr/disputes/${dispute.body.event.id}/resolve`,
     headers: { "Idempotency-Key": "idem-g12-resolve-001" },
@@ -124,9 +124,9 @@ test("PH-04C G12 corrigendum and dispute routes append manual SR annotations", (
   assert.equal(resolved.body.event.eventTypeCode, "DISPUTE_RESOLUTION");
 });
 
-test("PH-04C G13 routes cover create, attach, legal hold, retention, and fail-closed checkin", () => {
+test("PH-04C G13 routes cover create, attach, legal hold, retention, and fail-closed checkin", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": "idem-g13-create-001" },
@@ -139,7 +139,7 @@ test("PH-04C G13 routes cover create, attach, legal hold, retention, and fail-cl
   });
   assert.equal(created.status, 201);
 
-  const attached = call(api, {
+  const attached = await call(api, {
     method: "POST",
     path: "/api/v1/documents:attach",
     headers: { "Idempotency-Key": "idem-g13-attach-001" },
@@ -151,7 +151,7 @@ test("PH-04C G13 routes cover create, attach, legal hold, retention, and fail-cl
   assert.equal(attached.status, 202);
   assert.equal(attached.body.document.links.length, 1);
 
-  const hold = call(api, {
+  const hold = await call(api, {
     method: "POST",
     path: "/api/v1/legal-holds",
     headers: { "Idempotency-Key": "idem-g13-hold-001" },
@@ -160,10 +160,10 @@ test("PH-04C G13 routes cover create, attach, legal hold, retention, and fail-cl
   assert.equal(hold.status, 202);
   assert.equal(hold.body.document.legalHold, true);
 
-  const retention = call(api, { method: "GET", path: `/api/v1/documents/${created.body.document.id}/retention` });
+  const retention = await call(api, { method: "GET", path: `/api/v1/documents/${created.body.document.id}/retention` });
   assert.equal(retention.body.retention.failClosed, true);
 
-  const blocked = call(api, {
+  const blocked = await call(api, {
     method: "POST",
     path: `/api/v1/documents/${created.body.document.id}:checkin`,
     headers: { "Idempotency-Key": "idem-g13-checkin-001" },
@@ -173,10 +173,10 @@ test("PH-04C G13 routes cover create, attach, legal hold, retention, and fail-cl
   assert.equal(blocked.body.error.code, "PRECONDITION_FAILED");
 });
 
-test("PH-04C G12 timeline pages through the cursor helper with a computed next_cursor", () => {
+test("PH-04C G12 timeline pages through the cursor helper with a computed next_cursor", async () => {
   const api = createFoundationApi(createFoundationServices());
   for (let index = 1; index <= 3; index += 1) {
-    const ingested = call(api, {
+    const ingested = await call(api, {
       method: "POST",
       path: "/api/v1/sr/ingest",
       headers: { "Idempotency-Key": `idem-g12-page-00${index}` },
@@ -188,7 +188,7 @@ test("PH-04C G12 timeline pages through the cursor helper with a computed next_c
     assert.equal(ingested.status, 201);
   }
 
-  const pageOne = call(api, {
+  const pageOne = await call(api, {
     method: "GET",
     path: `/api/v1/sr/employees/${ph03Ids.employee}/timeline`,
     query: { limit: "2" },
@@ -202,7 +202,7 @@ test("PH-04C G12 timeline pages through the cursor helper with a computed next_c
     [1, 2]
   );
 
-  const pageTwo = call(api, {
+  const pageTwo = await call(api, {
     method: "GET",
     path: `/api/v1/sr/employees/${ph03Ids.employee}/timeline`,
     query: { limit: "2", cursor: pageOne.body.next_cursor },
@@ -213,9 +213,9 @@ test("PH-04C G12 timeline pages through the cursor helper with a computed next_c
   assert.equal(pageTwo.body.next_cursor, null);
 });
 
-test("PH-04C G12 reversal consumes the is_reversal envelope and appends without mutating the ledger", () => {
+test("PH-04C G12 reversal consumes the is_reversal envelope and appends without mutating the ledger", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const original = call(api, {
+  const original = await call(api, {
     method: "POST",
     path: "/api/v1/sr/ingest",
     headers: { "Idempotency-Key": "idem-g12-rev-src-001" },
@@ -223,7 +223,7 @@ test("PH-04C G12 reversal consumes the is_reversal envelope and appends without 
   });
   assert.equal(original.status, 201);
 
-  const reversal = call(api, {
+  const reversal = await call(api, {
     method: "POST",
     path: "/api/v1/sr/ingest/reversal",
     headers: { "Idempotency-Key": "idem-g12-rev-env-001" },
@@ -241,14 +241,14 @@ test("PH-04C G12 reversal consumes the is_reversal envelope and appends without 
   // Append-only: the original event's CONTENT is untouched (entryHash unchanged) and both entries
   // remain on the timeline. Its status is a projection of the hash-chained sr_status_events
   // sub-ledger (PH-10A), where the reversal appended a SUPERSESSION transition — no field update.
-  const originalAfter = call(api, { method: "GET", path: `/api/v1/sr/events/${original.body.event.id}` });
+  const originalAfter = await call(api, { method: "GET", path: `/api/v1/sr/events/${original.body.event.id}` });
   assert.equal(originalAfter.status, 200);
   assert.equal(originalAfter.body.event.status, "SUPERSEDED");
   assert.equal(originalAfter.body.event.entryHash, original.body.event.entryHash);
-  const timeline = call(api, { method: "GET", path: `/api/v1/sr/employees/${ph03Ids.employee}/timeline` });
+  const timeline = await call(api, { method: "GET", path: `/api/v1/sr/employees/${ph03Ids.employee}/timeline` });
   assert.equal(timeline.body.items.length, 2);
 
-  const unknown = call(api, {
+  const unknown = await call(api, {
     method: "POST",
     path: "/api/v1/sr/ingest/reversal",
     headers: { "Idempotency-Key": "idem-g12-rev-env-002" },
@@ -263,9 +263,9 @@ test("PH-04C G12 reversal consumes the is_reversal envelope and appends without 
   assert.equal(unknown.body.error.details.messageId, "SR_REVERSAL_TARGET_NOT_FOUND");
 });
 
-test("PH-04C G13 :fetch requires intent and returns structurally different VIEW vs DOWNLOAD bodies", () => {
+test("PH-04C G13 :fetch requires intent and returns structurally different VIEW vs DOWNLOAD bodies", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": "idem-g13-fetch-doc-001" },
@@ -281,7 +281,7 @@ test("PH-04C G13 :fetch requires intent and returns structurally different VIEW 
 
   // PH-10C FR-006: fetching a CONFIDENTIAL document now requires an ACTIVE security clearance
   // (deny-by-default). Grant one to the fixture actor; the DI-16 checker differs from the granter.
-  const clearance = call(api, {
+  const clearance = await call(api, {
     method: "POST",
     path: "/api/v1/security-clearances",
     headers: { "Idempotency-Key": "idem-g13-fetch-clearance-001" },
@@ -296,17 +296,17 @@ test("PH-04C G13 :fetch requires intent and returns structurally different VIEW 
   assert.equal(clearance.status, 201);
   assert.equal(clearance.body.clearance.status, "ACTIVE");
 
-  const missingIntent = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch` });
+  const missingIntent = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch` });
   assert.equal(missingIntent.status, 400);
   assert.equal(missingIntent.body.error.code, "VALIDATION_FAILED");
   assert.equal(missingIntent.body.error.field, "intent");
   assert.equal(missingIntent.body.error.details.messageId, "ERR-G13-FETCH_INTENT_REQUIRED");
 
-  const invalidIntent = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "PRINT" } });
+  const invalidIntent = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "PRINT" } });
   assert.equal(invalidIntent.status, 400);
   assert.equal(invalidIntent.body.error.details.messageId, "ERR-G13-FETCH_INTENT_REQUIRED");
 
-  const view = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
+  const view = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
   assert.equal(view.status, 200);
   assert.equal(view.body.fetch.intent, "VIEW");
   assert.ok(view.body.fetch.render.renderToken);
@@ -315,7 +315,7 @@ test("PH-04C G13 :fetch requires intent and returns structurally different VIEW 
   assert.ok(view.body.fetch.render.expiresInSeconds > 0);
   assert.equal(view.body.fetch.grant, undefined);
 
-  const download = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "DOWNLOAD" } });
+  const download = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "DOWNLOAD" } });
   assert.equal(download.status, 200);
   assert.equal(download.body.fetch.intent, "DOWNLOAD");
   assert.equal(download.body.fetch.grant.right, "DOWNLOAD");
@@ -323,10 +323,10 @@ test("PH-04C G13 :fetch requires intent and returns structurally different VIEW 
   assert.equal(download.body.fetch.render, undefined);
 });
 
-test("PH-04C G13 attach rejects DELETED/DISPOSED/ORPHANED targets (DI-14)", () => {
+test("PH-04C G13 attach rejects DELETED/DISPOSED/ORPHANED targets (DI-14)", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": "idem-g13-di14-doc-001" },
@@ -348,7 +348,7 @@ test("PH-04C G13 attach rejects DELETED/DISPOSED/ORPHANED targets (DI-14)", () =
   const disposed = services.documentVault.dispose(scope, documentId);
   assert.equal(disposed.status, "DISPOSED");
 
-  const attach = call(api, {
+  const attach = await call(api, {
     method: "POST",
     path: "/api/v1/documents:attach",
     headers: { "Idempotency-Key": "idem-g13-di14-attach-001" },
@@ -363,6 +363,6 @@ test("PH-04C G13 attach rejects DELETED/DISPOSED/ORPHANED targets (DI-14)", () =
   assert.equal(attach.body.error.details.status, "DISPOSED");
 
   // No link was written on the rejected attach.
-  const after = call(api, { method: "GET", path: `/api/v1/documents/${documentId}` });
+  const after = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}` });
   assert.equal(after.body.document.links.length, 0);
 });

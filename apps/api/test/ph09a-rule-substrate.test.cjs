@@ -25,8 +25,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph09a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -43,7 +43,7 @@ function codeOf(fn) {
   assert.fail("expected the call to throw");
 }
 
-test("PH-09A G10 pay_components + pay_rules: whitelist DSL accepted, bad token rejected (ERR-G10-RULE-EXPR)", () => {
+test("PH-09A G10 pay_components + pay_rules: whitelist DSL accepted, bad token rejected (ERR-G10-RULE-EXPR)", async () => {
   const services = createFoundationServices();
   const maker = actor();
   services.payRules.createPayComponent(maker, { componentCode: "BASIC", name: "Basic Pay", category: "EARNING", calcMethod: "FLAT" });
@@ -86,7 +86,7 @@ test("PH-09A G10 pay_components + pay_rules: whitelist DSL accepted, bad token r
   assert.ok(services.audit.listAudit(maker).some((entry) => entry.subjectRef.startsWith("g10_pay_rules:")));
 });
 
-test("PH-09A G10 rate_tables: effective-date resolution differs across the boundary and fails closed", () => {
+test("PH-09A G10 rate_tables: effective-date resolution differs across the boundary and fails closed", async () => {
   const services = createFoundationServices();
   const maker = actor();
   // Two adjacent, non-overlapping DA_RATE windows (integer basis points).
@@ -109,7 +109,7 @@ test("PH-09A G10 rate_tables: effective-date resolution differs across the bound
   );
 });
 
-test("PH-09A G10 rate_tables: PT slabs are state-dimensioned (ERR-G10-PT-STATE)", () => {
+test("PH-09A G10 rate_tables: PT slabs are state-dimensioned (ERR-G10-PT-STATE)", async () => {
   const services = createFoundationServices();
   const maker = actor();
   // NEGATIVE: PT_SLAB row without a state of posting is rejected at write.
@@ -139,7 +139,7 @@ test("PH-09A G10 rate_tables: PT slabs are state-dimensioned (ERR-G10-PT-STATE)"
   assert.equal(codeOf(() => services.payRules.resolveRate(maker, { tableType: "PT_SLAB", state: "MH", asOf: "2026-03-01" })), "ERR-G10-PT-STATE");
 });
 
-test("PH-09A G11 pen_commutation_factors: as-of + age-next-birthday lookup fails closed", () => {
+test("PH-09A G11 pen_commutation_factors: as-of + age-next-birthday lookup fails closed", async () => {
   const services = createFoundationServices();
   const maker = actor();
   // Same age key, adjacent windows -> different factors either side of the boundary (x 10^4 fixtures).
@@ -176,7 +176,7 @@ test("PH-09A G11 pen_commutation_factors: as-of + age-next-birthday lookup fails
   );
 });
 
-test("PH-09A G11 rule tables E30/E32-E36 persist and resolve effective-dated rows", () => {
+test("PH-09A G11 rule tables E30/E32-E36 persist and resolve effective-dated rows", async () => {
   const services = createFoundationServices();
   const maker = actor();
   services.pensionRules.addDaReliefRate(maker, { ruleCode: "DR-2026", daPercentBps: 5300, payCommissionBasis: "7CPC", effectiveFrom: "2026-01-01" });
@@ -213,19 +213,19 @@ test("PH-09A G11 rule tables E30/E32-E36 persist and resolve effective-dated row
   }
 });
 
-test("PH-09A routes: rate_tables write/resolve and pen rule tables over the protected API", () => {
+test("PH-09A routes: rate_tables write/resolve and pen rule tables over the protected API", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   assert.equal(
-    call(api, {
+    (await call(api, {
       method: "POST",
       path: "/api/v1/payroll/rate-tables",
       headers: { "Idempotency-Key": "idem-ph09a-rate-001" },
       body: { tableType: "DA_RATE", ratePctBps: 4200, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30" },
-    }).status,
+    })).status,
     201
   );
-  const overlap = call(api, {
+  const overlap = await call(api, {
     method: "POST",
     path: "/api/v1/payroll/rate-tables",
     headers: { "Idempotency-Key": "idem-ph09a-rate-002" },
@@ -234,30 +234,30 @@ test("PH-09A routes: rate_tables write/resolve and pen rule tables over the prot
   assert.equal(overlap.status, 409);
   assert.equal(overlap.body.error.code, "ERR-G10-RATE-OVERLAP");
 
-  const resolved = call(api, { method: "GET", path: "/api/v1/payroll/rate-tables/resolve", query: { tableType: "DA_RATE", asOf: "2026-02-01" } });
+  const resolved = await call(api, { method: "GET", path: "/api/v1/payroll/rate-tables/resolve", query: { tableType: "DA_RATE", asOf: "2026-02-01" } });
   assert.equal(resolved.status, 200);
   assert.equal(resolved.body.rateRow.ratePctBps, 4200);
-  const miss = call(api, { method: "GET", path: "/api/v1/payroll/rate-tables/resolve", query: { tableType: "DA_RATE", asOf: "2026-08-01" } });
+  const miss = await call(api, { method: "GET", path: "/api/v1/payroll/rate-tables/resolve", query: { tableType: "DA_RATE", asOf: "2026-08-01" } });
   assert.equal(miss.status, 422);
   assert.equal(miss.body.error.code, "ERR-G10-RATE-NOTFOUND");
 
   assert.equal(
-    call(api, {
+    (await call(api, {
       method: "POST",
       path: "/api/v1/pension/rules/commutation-factors",
       headers: { "Idempotency-Key": "idem-ph09a-cf-001" },
       body: { ruleCode: "CVP-2026", ageNextBirthday: 59, factorTenThousandths: 81940, effectiveFrom: "2026-01-01" },
-    }).status,
+    })).status,
     201
   );
-  const factor = call(api, {
+  const factor = await call(api, {
     method: "GET",
     path: "/api/v1/pension/rules/commutation-factors/resolve",
     query: { asOf: "2026-06-15", ageNextBirthday: "59" },
   });
   assert.equal(factor.status, 200);
   assert.equal(factor.body.ruleRow.factorTenThousandths, 81940);
-  const factorMiss = call(api, {
+  const factorMiss = await call(api, {
     method: "GET",
     path: "/api/v1/pension/rules/commutation-factors/resolve",
     query: { asOf: "2026-06-15", ageNextBirthday: "42" },

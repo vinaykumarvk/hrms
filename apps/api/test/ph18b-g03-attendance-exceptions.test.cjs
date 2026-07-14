@@ -22,7 +22,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G03 attendance_exceptions: a WFH exception is filed and an overlapping one is rejected", () => {
+test("G03 attendance_exceptions: a WFH exception is filed and an overlapping one is rejected", async () => {
   const s = createFoundationServices();
   const wfh = s.attendanceException.fileException(actor(), {
     employeeId: ph03Ids.employee,
@@ -43,7 +43,7 @@ test("G03 attendance_exceptions: a WFH exception is filed and an overlapping one
   );
 });
 
-test("G03 attendance_exceptions: WFH honours the per-cycle cap (WFH_CAP_EXCEEDED)", () => {
+test("G03 attendance_exceptions: WFH honours the per-cycle cap (WFH_CAP_EXCEEDED)", async () => {
   const s = createFoundationServices();
   // Cap is 8 days; 6 approved then a 4-day request breaches it.
   s.attendanceException.fileException(actor(), { employeeId: ph03Ids.manager, exceptionType: "WFH", fromDate: "2026-07-06", toDate: "2026-07-11" });
@@ -53,7 +53,7 @@ test("G03 attendance_exceptions: WFH honours the per-cycle cap (WFH_CAP_EXCEEDED
   );
 });
 
-test("G03 attendance_exceptions: an on-duty/tour exception requires an order document (DOCUMENT_REQUIRED)", () => {
+test("G03 attendance_exceptions: an on-duty/tour exception requires an order document (DOCUMENT_REQUIRED)", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.attendanceException.fileException(actor(), {

@@ -12,7 +12,7 @@ function coverage() {
   return JSON.parse(out);
 }
 
-test("PH-37A coverage tool: implemented total ties to the live kernel route registry", () => {
+test("PH-37A coverage tool: implemented total ties to the live kernel route registry", async () => {
   const routes = createFoundationApi(createFoundationServices()).listRoutes();
   const record = coverage();
   assert.equal(record.implementedTotal, routes.length);
@@ -21,14 +21,14 @@ test("PH-37A coverage tool: implemented total ties to the live kernel route regi
   assert.equal(summed, record.implementedTotal);
 });
 
-test("PH-37A coverage tool: contract total sums per-module and coverage is the ratio", () => {
+test("PH-37A coverage tool: contract total sums per-module and coverage is the ratio", async () => {
   const record = coverage();
   const summedContract = record.rows.reduce((acc, r) => acc + r.contract, 0);
   assert.equal(summedContract, record.contractTotal);
   assert.equal(record.totalPct, Math.round((record.implementedTotal / record.contractTotal) * 1000) / 10);
 });
 
-test("PH-37A ratchet floor: coverage does not regress below the recorded baseline", () => {
+test("PH-37A ratchet floor: coverage does not regress below the recorded baseline", async () => {
   const record = coverage();
   // Ratchet floor recorded in docs/reviews/contract-coverage-20260703.md (PH-65A raised it to 570 / 43.1%).
   assert.ok(record.implementedTotal >= 570, `implemented routes ${record.implementedTotal} < floor 570`);

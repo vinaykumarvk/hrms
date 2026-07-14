@@ -21,15 +21,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph07-g03", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-07 G03 accrual, leave approval, cancellation, and payroll signals are stable for G10", () => {
+test("PH-07 G03 accrual, leave approval, cancellation, and payroll signals are stable for G10", async () => {
   const services = createFoundationServices();
   const accrued = services.leave.accrue(actor(), { employeeId: ph03Ids.employee, leaveTypeId: "EL", leaveYear: 2026, units: 2, effectiveDate: "2026-07-01" });
   assert.equal(accrued.currentBalance, 32);
@@ -54,7 +54,7 @@ test("PH-07 G03 accrual, leave approval, cancellation, and payroll signals are s
   assert.equal(signals.some((signal) => signal.signalType === "LEAVE_REVERSAL" && signal.status === "READY_FOR_G10"), true);
 });
 
-test("PH-07 G03 attendance regularisation recomputes and emits payroll signals", () => {
+test("PH-07 G03 attendance regularisation recomputes and emits payroll signals", async () => {
   const services = createFoundationServices();
   const anomalous = services.leave.captureAttendance(actor(), {
     employeeId: ph03Ids.employee,
@@ -74,10 +74,10 @@ test("PH-07 G03 attendance regularisation recomputes and emits payroll signals",
   assert.equal(services.leave.listPayrollSignals(actor()).length, 2);
 });
 
-test("PH-07 G03 API routes expose attendance regularisation, overtime, and payroll signals", () => {
+test("PH-07 G03 API routes expose attendance regularisation, overtime, and payroll signals", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const attendance = call(api, {
+  const attendance = await call(api, {
     method: "POST",
     path: "/api/v1/atl/attendance-captures",
     headers: { "Idempotency-Key": "idem-ph07-g03-attendance-route-001" },
@@ -86,7 +86,7 @@ test("PH-07 G03 API routes expose attendance regularisation, overtime, and payro
   assert.equal(attendance.status, 201);
   assert.equal(attendance.body.attendance.status, "ANOMALY");
 
-  const regularised = call(api, {
+  const regularised = await call(api, {
     method: "POST",
     path: `/api/v1/atl/attendance-captures/${attendance.body.attendance.id}:regularise`,
     headers: { "Idempotency-Key": "idem-ph07-g03-reg-route-001" },
@@ -95,7 +95,7 @@ test("PH-07 G03 API routes expose attendance regularisation, overtime, and payro
   assert.equal(regularised.status, 202);
   assert.equal(regularised.body.signal.status, "READY_FOR_G10");
 
-  const overtime = call(api, {
+  const overtime = await call(api, {
     method: "POST",
     path: "/api/v1/atl/overtime",
     headers: { "Idempotency-Key": "idem-ph07-g03-ot-route-001" },
@@ -103,7 +103,7 @@ test("PH-07 G03 API routes expose attendance regularisation, overtime, and payro
   });
   assert.equal(overtime.status, 201);
 
-  const signals = call(api, { method: "GET", path: "/api/v1/atl/payroll-signals" });
+  const signals = await call(api, { method: "GET", path: "/api/v1/atl/payroll-signals" });
   assert.equal(signals.status, 200);
   assert.equal(signals.body.items.length, 2);
 });

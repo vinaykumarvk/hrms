@@ -14,7 +14,7 @@ function readAll() {
   return releaseFiles.map((file) => fs.readFileSync(file, "utf8")).join("\n");
 }
 
-test("PH-10 release evidence pack includes runbook, rollback, coexistence, UAT, and traceability markers", () => {
+test("PH-10 release evidence pack includes runbook, rollback, coexistence, UAT, and traceability markers", async () => {
   const combined = readAll();
   for (const marker of [
     "UAT_ACCEPTANCE_PACK",
@@ -28,7 +28,7 @@ test("PH-10 release evidence pack includes runbook, rollback, coexistence, UAT, 
   }
 });
 
-test("PH-10 release evidence keeps production approval human-controlled", () => {
+test("PH-10 release evidence keeps production approval human-controlled", async () => {
   const deployment = fs.readFileSync("docs/release/deployment-runbook.md", "utf8");
   const uat = fs.readFileSync("docs/release/uat-scripts.md", "utf8");
   assert.equal(deployment.includes("does not approve UAT, production cutover, or rollback execution"), true);
@@ -36,7 +36,7 @@ test("PH-10 release evidence keeps production approval human-controlled", () => 
   assert.equal(deployment.includes("CUTOVER_HUMAN_APPROVAL_REQUIRED"), true);
 });
 
-test("PH-10 risks and migration exceptions have owner/date evidence", () => {
+test("PH-10 risks and migration exceptions have owner/date evidence", async () => {
   const coexistence = fs.readFileSync("docs/release/coexistence-plan.md", "utf8");
   const evidence = fs.readFileSync("docs/release/release-evidence-pack.md", "utf8");
   for (const owner of ["workflow-lead", "legal-lead", "migration-lead", "release-lead", "ops-lead"]) {
@@ -45,7 +45,7 @@ test("PH-10 risks and migration exceptions have owner/date evidence", () => {
   assert.equal(evidence.includes("2026-07-15"), true);
 });
 
-test("PH-10 release documents preserve operational data during rollback", () => {
+test("PH-10 release documents preserve operational data during rollback", async () => {
   const rollback = fs.readFileSync("docs/release/rollback-plan.md", "utf8");
   assert.equal(rollback.includes("Do not delete Service Register rows"), true);
   assert.equal(rollback.includes("Do not unlock already locked payroll periods"), true);

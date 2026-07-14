@@ -30,88 +30,88 @@ function boot() {
   return { services, api, admin, meera, sunita, arjun };
 }
 
-function call(api, actorCtx, request) {
-  return api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-g09-disciplinary-self-service", ...(request.headers ?? {}) }, actor: actorCtx });
+async function call(api, actorCtx, request) {
+  return await api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-g09-disciplinary-self-service", ...(request.headers ?? {}) }, actor: actorCtx });
 }
 
-test("G09 disciplinary: the seed produces a real disciplinary case for Meera at SHOW_CAUSE stage", () => {
+test("G09 disciplinary: the seed produces a real disciplinary case for Meera at SHOW_CAUSE stage", async () => {
   const { api, meera } = boot();
-  const result = call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` });
+  const result = await call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` });
   assert.equal(result.status, 200);
   assert.equal(result.body.items.length, 1);
   assert.equal(result.body.items[0].stage, "INQUIRY_REPORT");
   assert.equal(result.body.items[0].chargedEmployeeId, meera.id);
 });
 
-test("G09 disciplinary: wire responses never leak internal tenantId/entityId/workflowInstanceId fields", () => {
+test("G09 disciplinary: wire responses never leak internal tenantId/entityId/workflowInstanceId fields", async () => {
   const { api, meera } = boot();
-  const cases = call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` }).body.items;
+  const cases = (await call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` })).body.items;
   for (const item of cases) {
     assert.equal("tenantId" in item, false);
     assert.equal("entityId" in item, false);
     assert.equal("workflowInstanceId" in item, false);
   }
-  const notices = call(api, actor(meera.id, ["g09.case.read"]), {
+  const notices = (await call(api, actor(meera.id, ["g09.case.read"]), {
     method: "GET",
     path: `/api/v1/disciplinary/cases/${cases[0].id}/show-cause-notices`,
-  }).body.items;
+  })).body.items;
   for (const notice of notices) {
     assert.equal("tenantId" in notice, false);
     assert.equal("entityId" in notice, false);
   }
 });
 
-test("G09 disciplinary: post-full-review-goal fix — an employee can view their own case, but not another employee's", () => {
+test("G09 disciplinary: post-full-review-goal fix — an employee can view their own case, but not another employee's", async () => {
   const { api, meera, sunita } = boot();
-  const own = call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` });
+  const own = await call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` });
   assert.equal(own.status, 200);
   assert.equal(own.body.items.length, 1);
 
-  const stranger = call(api, actor(sunita.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` });
+  const stranger = await call(api, actor(sunita.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` });
   assert.equal(stranger.status, 403);
 });
 
-test("G09 disciplinary: post-full-review-goal fix — case timeline, evidence, and personal-hearings reads are ownership-gated, not any g09.case.read holder", () => {
+test("G09 disciplinary: post-full-review-goal fix — case timeline, evidence, and personal-hearings reads are ownership-gated, not any g09.case.read holder", async () => {
   const { api, meera, sunita } = boot();
-  const caseId = call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` }).body.items[0]
+  const caseId = (await call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` })).body.items[0]
     .id;
 
-  const strangerTimeline = call(api, actor(sunita.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/case-timeline` });
+  const strangerTimeline = await call(api, actor(sunita.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/case-timeline` });
   assert.equal(strangerTimeline.status, 403);
 
-  const strangerEvidence = call(api, actor(sunita.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/evidence` });
+  const strangerEvidence = await call(api, actor(sunita.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/evidence` });
   assert.equal(strangerEvidence.status, 403);
 
-  const strangerHearings = call(api, actor(sunita.id, ["g09.case.read"]), {
+  const strangerHearings = await call(api, actor(sunita.id, ["g09.case.read"]), {
     method: "GET",
     path: `/api/v1/disciplinary/cases/${caseId}/personal-hearings`,
   });
   assert.equal(strangerHearings.status, 403);
 
-  const ownTimeline = call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/case-timeline` });
+  const ownTimeline = await call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/case-timeline` });
   assert.equal(ownTimeline.status, 200);
   assert.ok(ownTimeline.body.items.length > 0);
 
   // hr_admin is deliberately NOT an override role for G09 (separation-of-duties boundary) — only
   // the dedicated disciplinary_authority chain (or self) may read.
-  const hrAdminTimeline = call(api, actor("hr-admin-probe", ["g09.case.read"], { roles: ["hr_admin"] }), {
+  const hrAdminTimeline = await call(api, actor("hr-admin-probe", ["g09.case.read"], { roles: ["hr_admin"] }), {
     method: "GET",
     path: `/api/v1/disciplinary/cases/${caseId}/case-timeline`,
   });
   assert.equal(hrAdminTimeline.status, 403);
 
-  const disciplinaryAuthorityTimeline = call(api, actor("disciplinary-authority-probe", ["g09.case.read"], { roles: ["disciplinary_authority"] }), {
+  const disciplinaryAuthorityTimeline = await call(api, actor("disciplinary-authority-probe", ["g09.case.read"], { roles: ["disciplinary_authority"] }), {
     method: "GET",
     path: `/api/v1/disciplinary/cases/${caseId}/case-timeline`,
   });
   assert.equal(disciplinaryAuthorityTimeline.status, 200);
 });
 
-test("G09 disciplinary: self-service evidence view only ever shows served artefacts (preliminary inquiry report withheld)", () => {
+test("G09 disciplinary: self-service evidence view only ever shows served artefacts (preliminary inquiry report withheld)", async () => {
   const { api, meera } = boot();
-  const caseId = call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` }).body.items[0]
+  const caseId = (await call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` })).body.items[0]
     .id;
-  const evidence = call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/evidence` });
+  const evidence = await call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/evidence` });
   assert.equal(evidence.status, 200);
   assert.ok(evidence.body.items.every((item) => item.isServed === true));
   assert.ok(evidence.body.items.some((item) => item.artefactType === "CHARGE_MEMO"));
@@ -122,23 +122,23 @@ test("G09 disciplinary: self-service evidence view only ever shows served artefa
 
   // The disciplinary_authority override role sees the full evidence set, including the unserved
   // inquiry report — hr_admin does not (SoD boundary), so it must not be used for this probe.
-  const authorityEvidence = call(api, actor("disciplinary-authority-evidence-probe", ["g09.case.read"], { roles: ["disciplinary_authority"] }), {
+  const authorityEvidence = await call(api, actor("disciplinary-authority-evidence-probe", ["g09.case.read"], { roles: ["disciplinary_authority"] }), {
     method: "GET",
     path: `/api/v1/disciplinary/cases/${caseId}/evidence`,
   });
   assert.ok(authorityEvidence.body.items.some((item) => item.artefactType === "INQUIRY_REPORT" && item.isServed === false));
 });
 
-test("G09 disciplinary: an employee can respond to their own show-cause notice, but nobody else can respond on their behalf", () => {
+test("G09 disciplinary: an employee can respond to their own show-cause notice, but nobody else can respond on their behalf", async () => {
   const { api, meera, sunita } = boot();
-  const caseId = call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` }).body.items[0]
+  const caseId = (await call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` })).body.items[0]
     .id;
-  const noticeId = call(api, actor(meera.id, ["g09.case.read"]), {
+  const noticeId = (await call(api, actor(meera.id, ["g09.case.read"]), {
     method: "GET",
     path: `/api/v1/disciplinary/cases/${caseId}/show-cause-notices`,
-  }).body.items[0].id;
+  })).body.items[0].id;
 
-  const strangerResponds = call(api, actor(sunita.id, ["g09.show-cause.respond"]), {
+  const strangerResponds = await call(api, actor(sunita.id, ["g09.show-cause.respond"]), {
     method: "POST",
     path: `/api/v1/disciplinary/show-cause-notices/${noticeId}:respond`,
     headers: { "Idempotency-Key": "idem-g09-stranger-respond-001" },
@@ -146,7 +146,7 @@ test("G09 disciplinary: an employee can respond to their own show-cause notice, 
   });
   assert.equal(strangerResponds.status, 403);
 
-  const ownResponds = call(api, actor(meera.id, ["g09.show-cause.respond"]), {
+  const ownResponds = await call(api, actor(meera.id, ["g09.show-cause.respond"]), {
     method: "POST",
     path: `/api/v1/disciplinary/show-cause-notices/${noticeId}:respond`,
     headers: { "Idempotency-Key": "idem-g09-own-respond-001" },
@@ -157,12 +157,12 @@ test("G09 disciplinary: an employee can respond to their own show-cause notice, 
   assert.equal("tenantId" in ownResponds.body.notice, false);
 });
 
-test("G09 disciplinary: an employee can request their own personal hearing, but nobody else can request one on their behalf", () => {
+test("G09 disciplinary: an employee can request their own personal hearing, but nobody else can request one on their behalf", async () => {
   const { api, meera, sunita } = boot();
-  const caseId = call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` }).body.items[0]
+  const caseId = (await call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` })).body.items[0]
     .id;
 
-  const strangerRequests = call(api, actor(sunita.id, ["g09.personal-hearing.request"]), {
+  const strangerRequests = await call(api, actor(sunita.id, ["g09.personal-hearing.request"]), {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:personal-hearing`,
     headers: { "Idempotency-Key": "idem-g09-stranger-hearing-001" },
@@ -170,7 +170,7 @@ test("G09 disciplinary: an employee can request their own personal hearing, but 
   });
   assert.equal(strangerRequests.status, 403);
 
-  const ownRequests = call(api, actor(meera.id, ["g09.personal-hearing.request"]), {
+  const ownRequests = await call(api, actor(meera.id, ["g09.personal-hearing.request"]), {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:personal-hearing`,
     headers: { "Idempotency-Key": "idem-g09-own-hearing-001" },
@@ -180,7 +180,7 @@ test("G09 disciplinary: an employee can request their own personal hearing, but 
   assert.equal(ownRequests.body.personalHearing.status, "REQUESTED");
   assert.equal("tenantId" in ownRequests.body.personalHearing, false);
 
-  const ownHearings = call(api, actor(meera.id, ["g09.case.read"]), {
+  const ownHearings = await call(api, actor(meera.id, ["g09.case.read"]), {
     method: "GET",
     path: `/api/v1/disciplinary/cases/${caseId}/personal-hearings`,
   });
@@ -188,17 +188,17 @@ test("G09 disciplinary: an employee can request their own personal hearing, but 
   assert.equal(ownHearings.body.items.length, 1);
 });
 
-test("G09 disciplinary: the disciplinary_authority override role may act on an employee's case on their behalf; hr_admin may not (SoD boundary)", () => {
+test("G09 disciplinary: the disciplinary_authority override role may act on an employee's case on their behalf; hr_admin may not (SoD boundary)", async () => {
   const { api, meera } = boot();
-  const caseId = call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` }).body.items[0]
+  const caseId = (await call(api, actor(meera.id, ["g09.case.read"]), { method: "GET", path: `/api/v1/disciplinary/employees/${meera.id}/cases` })).body.items[0]
     .id;
-  const hrAdminCases = call(api, actor("hr-admin-cases-probe", ["g09.case.read"], { roles: ["hr_admin"] }), {
+  const hrAdminCases = await call(api, actor("hr-admin-cases-probe", ["g09.case.read"], { roles: ["hr_admin"] }), {
     method: "GET",
     path: `/api/v1/disciplinary/employees/${meera.id}/cases`,
   });
   assert.equal(hrAdminCases.status, 403);
 
-  const authorityCases = call(api, actor("disciplinary-authority-cases-probe", ["g09.case.read"], { roles: ["disciplinary_authority"] }), {
+  const authorityCases = await call(api, actor("disciplinary-authority-cases-probe", ["g09.case.read"], { roles: ["disciplinary_authority"] }), {
     method: "GET",
     path: `/api/v1/disciplinary/employees/${meera.id}/cases`,
   });

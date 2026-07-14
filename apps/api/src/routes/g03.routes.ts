@@ -40,10 +40,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.leave.submit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created(
-          context.services.leave.submit(context.actor, {
+          await context.services.leave.submit(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             leaveTypeId: optionalString(body, "leaveTypeId") ?? "EL",
             fromDate: requiredString(body, "fromDate"),
@@ -60,9 +60,9 @@ export function registerG03Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g03.leave.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const applications = context.services.leave.listApplications(context.scope);
+        const applications = await context.services.leave.listApplications(context.scope);
         return ok({ items: applications.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -74,23 +74,23 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.leave.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         const decision = requiredString(body, "decision");
         const leaveApplicationId = requiredParam(context.params, "id");
         const expectedVersion = optionalNumber(body, "expectedVersion");
         if (decision === "APPROVE") {
-          return accepted(context.services.leave.approve(context.actor, leaveApplicationId, requiredString({ key: context.idempotencyKey }, "key"), expectedVersion));
+          return accepted(await context.services.leave.approve(context.actor, leaveApplicationId, requiredString({ key: context.idempotencyKey }, "key"), expectedVersion));
         }
         if (decision === "REJECT") {
-          return accepted(context.services.leave.reject(context.actor, leaveApplicationId));
+          return accepted(await context.services.leave.reject(context.actor, leaveApplicationId));
         }
         if (decision === "DELEGATE") {
-          return accepted(context.services.leave.delegate(context.actor, leaveApplicationId, requiredString(body, "delegateEmployeeId")));
+          return accepted(await context.services.leave.delegate(context.actor, leaveApplicationId, requiredString(body, "delegateEmployeeId")));
         }
         if (decision === "CANCEL") {
           return accepted(
-            context.services.leave.cancelApproved(
+            await context.services.leave.cancelApproved(
               context.actor,
               leaveApplicationId,
               requiredString({ key: context.idempotencyKey }, "key"),
@@ -99,7 +99,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
             )
           );
         }
-        return accepted(context.services.leave.approve(context.actor, leaveApplicationId, requiredString({ key: context.idempotencyKey }, "key"), expectedVersion));
+        return accepted(await context.services.leave.approve(context.actor, leaveApplicationId, requiredString({ key: context.idempotencyKey }, "key"), expectedVersion));
       },
     },
     {
@@ -110,7 +110,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.leave.sanction_special",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ application: context.services.leave.sanctionSpecialLeave(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ application: await context.services.leave.sanctionSpecialLeave(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -120,10 +120,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.leave.withdraw",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body ?? {});
         return accepted(
-          context.services.leave.withdraw(context.actor, requiredParam(context.params, "id"), optionalNumber(body, "expectedVersion"))
+          await context.services.leave.withdraw(context.actor, requiredParam(context.params, "id"), optionalNumber(body, "expectedVersion"))
         );
       },
     },
@@ -135,10 +135,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.leave.cancel",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.leave.cancelApprovedPartial(context.actor, requiredParam(context.params, "id"), requiredString({ key: context.idempotencyKey }, "key"), {
+          await context.services.leave.cancelApprovedPartial(context.actor, requiredParam(context.params, "id"), requiredString({ key: context.idempotencyKey }, "key"), {
             cancelFromDate: requiredString(body, "cancelFromDate"),
             expectedVersion: optionalNumber(body, "expectedVersion"),
           })
@@ -153,10 +153,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.leave.configure",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          leaveType: context.services.leave.configureLeaveType(context.actor, {
+          leaveType: await context.services.leave.configureLeaveType(context.actor, {
             leaveTypeId: requiredString(body, "leaveTypeId"),
             name: requiredString(body, "name"),
             countsHolidays: optionalBoolean(body, "countsHolidays") ?? true,
@@ -178,7 +178,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listLeaveTypes",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ items: context.services.leave.listLeaveTypes(context.scope), limit: 25, next_cursor: null }),
+      handler: async (context) => ok({ items: await context.services.leave.listLeaveTypes(context.scope), limit: 25, next_cursor: null }),
     },
     {
       method: "POST",
@@ -188,10 +188,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.holiday.configure",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          holiday: context.services.leave.addHoliday(context.actor, {
+          holiday: await context.services.leave.addHoliday(context.actor, {
             holidayDate: requiredString(body, "holidayDate"),
             name: requiredString(body, "name"),
             calendarId: optionalString(body, "calendarId"),
@@ -205,7 +205,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listHolidays",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ items: context.services.leave.listHolidays(context.scope), limit: 25, next_cursor: null }),
+      handler: async (context) => ok({ items: await context.services.leave.listHolidays(context.scope), limit: 25, next_cursor: null }),
     },
     {
       method: "GET",
@@ -213,10 +213,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.getLeaveBalance",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => {
+      handler: async (context) => {
         const employeeId = optionalString(context.request.query ?? {}, "employeeId") ?? ph03Ids.employee;
         const leaveTypeId = optionalString(context.request.query ?? {}, "leaveTypeId") ?? "EL";
-        return ok({ balance: context.services.leave.getBalance(context.actor, employeeId, leaveTypeId) });
+        return ok({ balance: await context.services.leave.getBalance(context.actor, employeeId, leaveTypeId) });
       },
     },
     {
@@ -225,7 +225,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listLeaveServiceRegisterOutbox",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ items: context.services.leave.listOutbox(context.scope), limit: 25, next_cursor: null }),
+      handler: async (context) => ok({ items: await context.services.leave.listOutbox(context.scope), limit: 25, next_cursor: null }),
     },
     {
       method: "POST",
@@ -235,10 +235,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.leave.accrue",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          balance: context.services.leave.accrue(context.actor, {
+          balance: await context.services.leave.accrue(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             leaveTypeId: optionalString(body, "leaveTypeId") ?? "EL",
             leaveYear: Number.parseInt(optionalString(body, "leaveYear") ?? "2026", 10),
@@ -256,11 +256,11 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.attendance.capture",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
           attendance: toWireAttendance(
-            context.services.leave.captureAttendance(context.actor, {
+            await context.services.leave.captureAttendance(context.actor, {
               employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
               attendanceDate: requiredString(body, "attendanceDate"),
               inTime: optionalString(body, "inTime"),
@@ -278,9 +278,9 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.attendance.regularise",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        const result = context.services.leave.regulariseAttendance(
+        const result = await context.services.leave.regulariseAttendance(
           context.actor,
           requiredParam(context.params, "id"),
           requiredString(body, "reason"),
@@ -297,10 +297,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.overtime.record",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          signal: context.services.leave.recordOvertime(context.actor, {
+          signal: await context.services.leave.recordOvertime(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             attendanceDate: requiredString(body, "attendanceDate"),
             minutes: Number.parseInt(optionalString(body, "minutes") ?? "60", 10),
@@ -315,9 +315,9 @@ export function registerG03Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g03.payroll.signal.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const signals = context.services.leave.listPayrollSignals(context.scope);
+        const signals = await context.services.leave.listPayrollSignals(context.scope);
         return ok({ items: signals.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -329,9 +329,9 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.payroll.feed.generate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted({ items: context.services.leave.generatePayrollFeed(context.actor, requiredString(body, "payPeriod")) });
+        return accepted({ items: await context.services.leave.generatePayrollFeed(context.actor, requiredString(body, "payPeriod")) });
       },
     },
     {
@@ -342,9 +342,9 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.payroll.feed.lock",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(context.services.leave.lockPayrollFeedPeriod(context.actor, requiredString(body, "payPeriod")));
+        return accepted(await context.services.leave.lockPayrollFeedPeriod(context.actor, requiredString(body, "payPeriod")));
       },
     },
     {
@@ -354,10 +354,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g03.payroll.feed.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
         const payPeriod = optionalString(context.request.query ?? {}, "payPeriod");
-        const rows = context.services.leave.listPayrollFeed(context.scope, payPeriod);
+        const rows = await context.services.leave.listPayrollFeed(context.scope, payPeriod);
         return ok({ items: rows.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -370,10 +370,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.shift.configure",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          shift: context.services.attendanceOps.defineShift(context.actor, {
+          shift: await context.services.attendanceOps.defineShift(context.actor, {
             shiftCode: requiredString(body, "shiftCode"),
             name: requiredString(body, "name"),
             startTime: requiredString(body, "startTime"),
@@ -391,7 +391,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listShifts",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ items: context.services.attendanceOps.listShifts(context.scope), limit: 25, next_cursor: null }),
+      handler: async (context) => ok({ items: await context.services.attendanceOps.listShifts(context.scope), limit: 25, next_cursor: null }),
     },
     // PH-15C FR-01: roster assignment over date ranges (VAL-G03-ROSTER-OVERLAP on publish).
     {
@@ -402,10 +402,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.roster.assign",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          roster: context.services.attendanceOps.assignRoster(context.actor, {
+          roster: await context.services.attendanceOps.assignRoster(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             shiftId: requiredString(body, "shiftId"),
             effectiveFrom: requiredString(body, "effectiveFrom"),
@@ -422,7 +422,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.roster.publish",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted(context.services.attendanceOps.publishRoster(context.actor, requiredParam(context.params, "id"))),
+      handler: async (context) => accepted(await context.services.attendanceOps.publishRoster(context.actor, requiredParam(context.params, "id"))),
     },
     {
       method: "GET",
@@ -430,7 +430,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listRosters",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ items: context.services.attendanceOps.listRosters(context.scope), limit: 25, next_cursor: null }),
+      handler: async (context) => ok({ items: await context.services.attendanceOps.listRosters(context.scope), limit: 25, next_cursor: null }),
     },
     // PH-15C FR-03: device registry (P04 substrate) + punch ingestion into the append-only ledger.
     {
@@ -441,10 +441,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.device.register",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          device: context.services.attendanceOps.registerDevice(context.actor, {
+          device: await context.services.attendanceOps.registerDevice(context.actor, {
             deviceCode: requiredString(body, "deviceCode"),
             deviceType: optionalString(body, "deviceType") as "BIOMETRIC" | "RFID" | "MOBILE_APP" | "WEB" | undefined,
             status: optionalString(body, "status") as "ACTIVE" | "INACTIVE" | "DECOMMISSIONED" | undefined,
@@ -460,10 +460,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.punch.ingest",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created(
-          context.services.attendanceOps.ingestPunch(context.actor, {
+          await context.services.attendanceOps.ingestPunch(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             deviceId: requiredString(body, "deviceId"),
             punchTime: requiredString(body, "punchTime"),
@@ -481,10 +481,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g03.leave.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
         const query = context.request.query ?? {};
-        const punches = context.services.attendanceOps.listPunches(context.scope, optionalString(query, "employeeId"), optionalString(query, "attendanceDate"));
+        const punches = await context.services.attendanceOps.listPunches(context.scope, optionalString(query, "employeeId"), optionalString(query, "attendanceDate"));
         return ok({ items: punches.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -497,11 +497,11 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.attendance.capture",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
           attendance: toWireAttendance(
-            context.services.attendanceOps.deriveAttendanceFromPunches(context.actor, {
+            await context.services.attendanceOps.deriveAttendanceFromPunches(context.actor, {
               employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
               attendanceDate: requiredString(body, "attendanceDate"),
             })
@@ -518,10 +518,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.compoff.earn",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          entry: context.services.attendanceOps.earnCompOff(context.actor, {
+          entry: await context.services.attendanceOps.earnCompOff(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             days: optionalNumber(body, "days") ?? 1,
             earnedOn: requiredString(body, "earnedOn"),
@@ -539,10 +539,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.compoff.redeem",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.attendanceOps.redeemCompOff(context.actor, {
+          await context.services.attendanceOps.redeemCompOff(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             days: optionalNumber(body, "days") ?? 1,
             redeemOn: requiredString(body, "redeemOn"),
@@ -560,9 +560,9 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.compoff.expire",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted(context.services.attendanceOps.runCompOffExpirySweep(context.actor, { asOfDate: requiredString(body, "asOfDate") }));
+        return accepted(await context.services.attendanceOps.runCompOffExpirySweep(context.actor, { asOfDate: requiredString(body, "asOfDate") }));
       },
     },
     {
@@ -572,9 +572,9 @@ export function registerG03Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g03.leave.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const entries = context.services.attendanceOps.listCompOffLedger(context.scope, optionalString(context.request.query ?? {}, "employeeId"));
+        const entries = await context.services.attendanceOps.listCompOffLedger(context.scope, optionalString(context.request.query ?? {}, "employeeId"));
         return ok({ items: entries.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -585,9 +585,9 @@ export function registerG03Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g03.payroll.feed.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const adjustments = context.services.leave.listPayrollFeedAdjustments(context.scope);
+        const adjustments = await context.services.leave.listPayrollFeedAdjustments(context.scope);
         return ok({ items: adjustments.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -600,10 +600,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.yearclose.commit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          close: context.services.leaveYearClose.commitYearClose(context.actor, {
+          close: await context.services.leaveYearClose.commitYearClose(context.actor, {
             orgUnitId: requiredString(body, "orgUnitId"),
             leaveYear: optionalNumber(body, "leaveYear") ?? 0,
             pendingLeaveCount: optionalNumber(body, "pendingLeaveCount") ?? 0,
@@ -620,10 +620,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.exception.file",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          exception: context.services.attendanceException.fileException(context.actor, {
+          exception: await context.services.attendanceException.fileException(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             exceptionType: requiredString(body, "exceptionType") as "WFH" | "ON_DUTY" | "TOUR",
             fromDate: requiredString(body, "fromDate"),
@@ -642,10 +642,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.blackout.declare",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          blackout: context.services.leaveBlackoutMass.declareBlackout(context.actor, {
+          blackout: await context.services.leaveBlackoutMass.declareBlackout(context.actor, {
             orgUnitId: requiredString(body, "orgUnitId"),
             fromDate: requiredString(body, "fromDate"),
             toDate: requiredString(body, "toDate"),
@@ -663,12 +663,12 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.punch.screen",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         const punchA = (body.punchA ?? {}) as { lat: number; lon: number; atEpochMs: number };
         const punchB = (body.punchB ?? {}) as { lat: number; lon: number; atEpochMs: number };
         return created({
-          anomaly: context.services.punchAnomaly.screenPunchPair(context.actor, {
+          anomaly: await context.services.punchAnomaly.screenPunchPair(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             punchA,
             punchB,
@@ -686,10 +686,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.yearclose.simulate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return ok({
-          close: context.services.leaveYearClose.simulateYearClose(context.actor, {
+          close: await context.services.leaveYearClose.simulateYearClose(context.actor, {
             orgUnitId: requiredString(body, "orgUnitId"),
             leaveYear: requiredNumber(body, "leaveYear"),
             pendingLeaveCount: requiredNumber(body, "pendingLeaveCount"),
@@ -706,10 +706,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.encashment.settle",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          encashment: context.services.leaveYearClose.encashLeave(context.actor, {
+          encashment: await context.services.leaveYearClose.encashLeave(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             leaveTypeId: requiredString(body, "leaveTypeId"),
             context: requiredString(body, "context") as EncashmentContext,
@@ -727,7 +727,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listEncashments",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ items: context.services.leaveYearClose.listEncashments(context.scope, requiredParam(context.params, "employeeId")) }),
+      handler: async (context) => ok({ items: await context.services.leaveYearClose.listEncashments(context.scope, requiredParam(context.params, "employeeId")) }),
     },
     {
       method: "POST",
@@ -737,10 +737,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.massleave.apply",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          batch: context.services.leaveBlackoutMass.applyMassLeave(context.actor, {
+          batch: await context.services.leaveBlackoutMass.applyMassLeave(context.actor, {
             orgUnitId: requiredString(body, "orgUnitId"),
             leaveTypeId: requiredString(body, "leaveTypeId"),
             fromDate: requiredString(body, "fromDate"),
@@ -758,10 +758,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.punch.review",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          review: context.services.punchAnomaly.resolveReview(context.actor, requiredParam(context.params, "id"), {
+          review: await context.services.punchAnomaly.resolveReview(context.actor, requiredParam(context.params, "id"), {
             decision: requiredString(body, "decision") as "CONFIRMED_FRAUD" | "VALID",
             note: requiredString(body, "note"),
           }),
@@ -774,7 +774,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.getPunchReview",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ review: context.services.punchAnomaly.getReview(context.scope, requiredParam(context.params, "id")) ?? null }),
+      handler: async (context) => ok({ review: await context.services.punchAnomaly.getReview(context.scope, requiredParam(context.params, "id")) ?? null }),
     },
     {
       method: "GET",
@@ -782,7 +782,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listExceptions",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ items: context.services.attendanceException.listExceptions(context.scope, requiredParam(context.params, "employeeId")) }),
+      handler: async (context) => ok({ items: await context.services.attendanceException.listExceptions(context.scope, requiredParam(context.params, "employeeId")) }),
     },
     // PH-60A — G03 attendance-policy config + leave-ledger/attendance/comp-off-balance reads. Route exposure
     // for already-tested leave / attendanceOps backing.
@@ -794,10 +794,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.attendance.configure",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          policy: context.services.leave.configureAttendancePolicy(context.actor, {
+          policy: await context.services.leave.configureAttendancePolicy(context.actor, {
             backdateWindowDays: optionalNumber(body, "backdateWindowDays"),
             regularisationCapPerPeriod: optionalNumber(body, "regularisationCapPerPeriod"),
             halfDayUnderMinutes: optionalNumber(body, "halfDayUnderMinutes"),
@@ -811,7 +811,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listLeaveLedger",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ items: context.services.leave.listLedger(context.scope) }),
+      handler: async (context) => ok({ items: await context.services.leave.listLedger(context.scope) }),
     },
     {
       method: "GET",
@@ -819,7 +819,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listAttendance",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok({ items: context.services.leave.listAttendance(context.scope).map(toWireAttendance) }),
+      handler: async (context) => ok({ items: await context.services.leave.listAttendance(context.scope).map(toWireAttendance) }),
     },
     {
       method: "GET",
@@ -827,7 +827,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.getCompOffBalance",
       protected: true,
       permission: "g03.leave.read",
-      handler: (context) => ok(context.services.attendanceOps.getCompOffBalance(context.scope, requiredParam(context.params, "employeeId"), context.request.query?.asOfDate ?? "2026-07-02")),
+      handler: async (context) => ok(await context.services.attendanceOps.getCompOffBalance(context.scope, requiredParam(context.params, "employeeId"), context.request.query?.asOfDate ?? "2026-07-02")),
     },
     // Post-hr_admin-goal thin build: biometric.govern capability (consent/lawful-basis/
     // retention-purge governance).
@@ -839,10 +839,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.biometric.govern",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          consent: context.services.biometricGovernance.recordConsent(context.actor, {
+          consent: await context.services.biometricGovernance.recordConsent(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             consentType: requiredString(body, "consentType") as BiometricConsentType,
             granted: Boolean(body.granted),
@@ -857,7 +857,7 @@ export function registerG03Routes(kernel: ApiKernel): void {
       operationId: "g03.listBiometricConsents",
       protected: true,
       permission: "g03.biometric.govern",
-      handler: (context) => ok({ items: context.services.biometricGovernance.listConsents(context.actor, requiredParam(context.params, "employeeId")) }),
+      handler: async (context) => ok({ items: await context.services.biometricGovernance.listConsents(context.actor, requiredParam(context.params, "employeeId")) }),
     },
     {
       method: "POST",
@@ -867,10 +867,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.biometric.govern",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          policy: context.services.biometricGovernance.configureRetentionPolicy(context.actor, {
+          policy: await context.services.biometricGovernance.configureRetentionPolicy(context.actor, {
             dataType: requiredString(body, "dataType") as BiometricDataType,
             retentionDays: requiredNumber(body, "retentionDays"),
           }),
@@ -885,10 +885,10 @@ export function registerG03Routes(kernel: ApiKernel): void {
       permission: "g03.biometric.govern",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          purgeLog: context.services.biometricGovernance.purgeExpiredData(context.actor, {
+          purgeLog: await context.services.biometricGovernance.purgeExpiredData(context.actor, {
             dataType: requiredString(body, "dataType") as BiometricDataType,
             asOfDate: requiredString(body, "asOfDate"),
           }),

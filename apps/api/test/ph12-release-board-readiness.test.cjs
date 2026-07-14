@@ -34,7 +34,7 @@ function requireMarkers(text, markers) {
   }
 }
 
-test("PH-12 release-board dossier and checklist keep human decisions pending", () => {
+test("PH-12 release-board dossier and checklist keep human decisions pending", async () => {
   const text = combined(releaseBoardFiles);
   requireMarkers(text, [
     "RELEASE_BOARD_READY",
@@ -58,7 +58,7 @@ test("PH-12 release-board dossier and checklist keep human decisions pending", (
   assert.equal(text.includes("2026-07-19"), true);
 });
 
-test("PH-12 documents do not claim approval or production execution", () => {
+test("PH-12 documents do not claim approval or production execution", async () => {
   const text = combined([...releaseBoardFiles, ...optionalPhase12Files]);
   const prohibitedClaims = [
     "UAT_SIGNED_OFF",
@@ -74,7 +74,7 @@ test("PH-12 documents do not claim approval or production execution", () => {
   assert.equal(text.includes("GO_LIVE_HUMAN_APPROVAL_PENDING"), true);
 });
 
-test("PH-12 target-environment artifacts remain dry-run when present", () => {
+test("PH-12 target-environment artifacts remain dry-run when present", async () => {
   const text = combined(optionalPhase12Files);
   if (text.length === 0) {
     assert.equal(text.length, 0);
@@ -92,7 +92,7 @@ test("PH-12 target-environment artifacts remain dry-run when present", () => {
   }
 });
 
-test("PH-12 decision templates preserve board authority when present", () => {
+test("PH-12 decision templates preserve board authority when present", async () => {
   const text = combined(optionalPhase12Files);
   if (text.length === 0) {
     assert.equal(text.length, 0);

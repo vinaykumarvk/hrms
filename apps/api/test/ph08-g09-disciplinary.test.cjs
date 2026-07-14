@@ -22,15 +22,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph08-g09", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-08 G09 authority competence blocks self disciplinary authority", () => {
+test("PH-08 G09 authority competence blocks self disciplinary authority", async () => {
   const services = createFoundationServices();
   assert.throws(
     () =>
@@ -43,7 +43,7 @@ test("PH-08 G09 authority competence blocks self disciplinary authority", () => 
   );
 });
 
-test("PH-08 G09 charge, inquiry, MAJOR_PENALTY, appeal, and SR impact are auditable", () => {
+test("PH-08 G09 charge, inquiry, MAJOR_PENALTY, appeal, and SR impact are auditable", async () => {
   const services = createFoundationServices();
   const opened = services.disciplinary.openCase(actor(), {
     chargedEmployeeId: ph03Ids.employee,
@@ -89,17 +89,17 @@ test("PH-08 G09 charge, inquiry, MAJOR_PENALTY, appeal, and SR impact are audita
   assert.ok(services.audit.listAudit(actor()).some((entry) => entry.action === "G09_APPEAL_DECIDED"));
 });
 
-test("PH-08 G09 routes drive disciplinary case through penalty", () => {
+test("PH-08 G09 routes drive disciplinary case through penalty", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const opened = call(api, {
+  const opened = await call(api, {
     method: "POST",
     path: "/api/v1/disciplinary/cases",
     headers: { "Idempotency-Key": "idem-ph08-g09-route-open-001" },
     body: { allegations: "Route allegation", confidential: true },
   });
   assert.equal(opened.status, 201);
-  const charged = call(api, {
+  const charged = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${opened.body.disciplinaryCase.id}:charge`,
     headers: { "Idempotency-Key": "idem-ph08-g09-route-charge-001" },
@@ -107,15 +107,15 @@ test("PH-08 G09 routes drive disciplinary case through penalty", () => {
   });
   assert.equal(charged.status, 202);
   assert.equal(
-    call(api, {
+    (await call(api, {
       method: "POST",
       path: `/api/v1/disciplinary/cases/${opened.body.disciplinaryCase.id}:inquiry-report`,
       headers: { "Idempotency-Key": "idem-ph08-g09-route-inquiry-001" },
       body: { findings: "PROVED", reportDate: "2026-08-20" },
-    }).status,
+    })).status,
     202
   );
-  const penalty = call(api, {
+  const penalty = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${opened.body.disciplinaryCase.id}:penalty`,
     headers: { "Idempotency-Key": "idem-ph08-g09-route-penalty-001" },
@@ -123,5 +123,5 @@ test("PH-08 G09 routes drive disciplinary case through penalty", () => {
   });
   assert.equal(penalty.status, 202);
   assert.equal(penalty.body.penaltyOrder.penaltyType, "MAJOR_PENALTY");
-  assert.equal(call(api, { method: "GET", path: "/api/v1/disciplinary/summary" }).body.penalties, 1);
+  assert.equal((await call(api, { method: "GET", path: "/api/v1/disciplinary/summary" })).body.penalties, 1);
 });

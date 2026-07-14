@@ -96,7 +96,7 @@ function issueCertification(services, options = {}) {
 // (1) G07 taxonomy -> inventory -> gap analysis: skill_gap_items from model vs validated skills
 // ---------------------------------------------------------------------------------------
 
-test("PH-08D G07 gap analysis diffs the role competency model against the validated employee skill inventory", () => {
+test("PH-08D G07 gap analysis diffs the role competency model against the validated employee skill inventory", async () => {
   const services = createFoundationServices();
   const { skillGis, compGis, compCyber, model } = taxonomyFixture(services);
 
@@ -125,7 +125,7 @@ test("PH-08D G07 gap analysis diffs the role competency model against the valida
   assert.equal(run.analysis.criticalGapCount, 1);
 });
 
-test("PH-08D G07 unvalidated/self-declared skills do not close a gap (discounted, FR-G07-008)", () => {
+test("PH-08D G07 unvalidated/self-declared skills do not close a gap (discounted, FR-G07-008)", async () => {
   const services = createFoundationServices();
   const { skillGis, compGis, model } = taxonomyFixture(services);
   // Self-declared, never validated — must not count toward the model target.
@@ -144,7 +144,7 @@ test("PH-08D G07 unvalidated/self-declared skills do not close a gap (discounted
 // (2) FR-G07-024: versioned READ-ONLY Gap Contract published by G07, consumed by G06/G08
 // ---------------------------------------------------------------------------------------
 
-test("PH-08D G07 Gap Contract is published versioned and read-only; recompute supersedes v1 with v2", () => {
+test("PH-08D G07 Gap Contract is published versioned and read-only; recompute supersedes v1 with v2", async () => {
   const services = createFoundationServices();
   const { skillGis, skillCyber, compGis, model } = taxonomyFixture(services);
   services.training.recordEmployeeSkill(actor(), {
@@ -200,7 +200,7 @@ test("PH-08D G07 Gap Contract is published versioned and read-only; recompute su
   assert.equal(current.items.find((item) => item.competencyId === compGis.id), undefined);
 });
 
-test("PH-08D G07 route: G06/G08 consume the Gap Contract via GET /api/v1/gap-contract/v1, never G07 internals", () => {
+test("PH-08D G07 route: G06/G08 consume the Gap Contract via GET /api/v1/gap-contract/v1, never G07 internals", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const { skillGis, model } = taxonomyFixture(services);
@@ -212,7 +212,7 @@ test("PH-08D G07 route: G06/G08 consume the Gap Contract via GET /api/v1/gap-con
   });
   services.training.runSkillGapAnalysis(actor(), { employeeId: ph03Ids.employee, competencyModelId: model.id, generatedOn: "2026-07-02" });
 
-  const response = api.dispatch({
+  const response = await api.dispatch({
     method: "GET",
     path: "/api/v1/gap-contract/v1",
     headers: { "X-Correlation-Id": "corr-ph08d-gap-contract" },
@@ -225,7 +225,7 @@ test("PH-08D G07 route: G06/G08 consume the Gap Contract via GET /api/v1/gap-con
   assert.ok(Array.isArray(response.body.gapContract.items));
 
   // An unpublished (employee, model) pair fails closed — consumers cannot infer G07 internals.
-  const missing = api.dispatch({
+  const missing = await api.dispatch({
     method: "GET",
     path: "/api/v1/gap-contract/v1",
     headers: { "X-Correlation-Id": "corr-ph08d-gap-contract-miss" },
@@ -240,7 +240,7 @@ test("PH-08D G07 route: G06/G08 consume the Gap Contract via GET /api/v1/gap-con
 // (3) FR-G07-012 AC.6-8: cert validity/renewal — JOB-G07-CERTEXPIRY flips lapsed_mandatory
 // ---------------------------------------------------------------------------------------
 
-test("PH-08D G07 JOB-G07-CERTEXPIRY flips lapsed_mandatory on an un-renewed mandatory cert from valid_until evidence", () => {
+test("PH-08D G07 JOB-G07-CERTEXPIRY flips lapsed_mandatory on an un-renewed mandatory cert from valid_until evidence", async () => {
   const services = createFoundationServices();
   const cert = issueCertification(services, { validUntil: "2026-12-31", isMandatory: true });
   assert.equal(cert.lapsedMandatory, false, "a live mandatory cert is not lapsed");
@@ -259,7 +259,7 @@ test("PH-08D G07 JOB-G07-CERTEXPIRY flips lapsed_mandatory on an un-renewed mand
   assert.equal(lapsed.lapsedMandatory, true, "mandatory cert expired un-renewed -> lapsed_mandatory flips true");
 });
 
-test("PH-08D G07 a renewed mandatory cert expires WITHOUT the lapsed_mandatory flag (renewal keeps currency)", () => {
+test("PH-08D G07 a renewed mandatory cert expires WITHOUT the lapsed_mandatory flag (renewal keeps currency)", async () => {
   const services = createFoundationServices();
   const original = issueCertification(services, { validUntil: "2026-12-31", isMandatory: true, programCode: "PRG-CYBER-A" });
   const renewal = issueCertification(services, {
@@ -284,7 +284,7 @@ test("PH-08D G07 a renewed mandatory cert expires WITHOUT the lapsed_mandatory f
 // (4) FR-G07-017 campaign engine: wave assignment + escalation_level
 // ---------------------------------------------------------------------------------------
 
-test("PH-08D G07 campaign assigns capacity-bounded waves and escalates overdue targets (escalation_level)", () => {
+test("PH-08D G07 campaign assigns capacity-bounded waves and escalates overdue targets (escalation_level)", async () => {
   const services = createFoundationServices();
   const campaign = services.training.createCampaign(actor(), {
     code: "CAMP-CYBER-2026",
@@ -370,7 +370,7 @@ function finalisedForm(services, cycle) {
 // (5) G08 masters: appraisal_cycles + appraisal_templates + rating_scales persisted
 // ---------------------------------------------------------------------------------------
 
-test("PH-08D G08 appraisal cycle/template/rating scale masters persist with window + SUPV thresholds", () => {
+test("PH-08D G08 appraisal cycle/template/rating scale masters persist with window + SUPV thresholds", async () => {
   const services = createFoundationServices();
   const { scale, template, cycle } = aparMasters(services);
   assert.equal(scale.status, "ACTIVE");
@@ -399,7 +399,7 @@ test("PH-08D G08 appraisal cycle/template/rating scale masters persist with wind
 // (6) VAL-WEIGHTAGE/WSUM at goal lock: != 100 rejected with ERR-G08-WEIGHTAGE (negative)
 // ---------------------------------------------------------------------------------------
 
-test("PH-08D G08 goal lock enforces VAL-WEIGHTAGE/WSUM: performance weightages != 100 throw ERR-G08-WEIGHTAGE", () => {
+test("PH-08D G08 goal lock enforces VAL-WEIGHTAGE/WSUM: performance weightages != 100 throw ERR-G08-WEIGHTAGE", async () => {
   const services = createFoundationServices();
   const { cycle } = aparMasters(services);
   const form = openCycleForm(services, cycle);
@@ -433,14 +433,14 @@ test("PH-08D G08 goal lock enforces VAL-WEIGHTAGE/WSUM: performance weightages !
   );
 });
 
-test("PH-08D G08 route: locking unbalanced goals returns 422 with error.code ERR-G08-WEIGHTAGE on the wire", () => {
+test("PH-08D G08 route: locking unbalanced goals returns 422 with error.code ERR-G08-WEIGHTAGE on the wire", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const { cycle } = aparMasters(services);
   const form = openCycleForm(services, cycle);
   services.apar.addGoal(actor(), form.id, { title: "Only goal", goalType: "PERFORMANCE", weightage: 55 });
 
-  const response = api.dispatch({
+  const response = await api.dispatch({
     method: "POST",
     path: `/api/v1/apar/forms/${form.id}:lock-goals`,
     headers: { "X-Correlation-Id": "corr-ph08d-wsum", "Idempotency-Key": "idem-ph08d-lock-001" },
@@ -456,7 +456,7 @@ test("PH-08D G08 route: locking unbalanced goals returns 422 with error.code ERR
 // (7) Disclosure + representation window: elapsed window throws ERR-G08-REPWINDOW (negative)
 // ---------------------------------------------------------------------------------------
 
-test("PH-08D G08 disclosure starts the representation-window clock; in-window representation files cleanly", () => {
+test("PH-08D G08 disclosure starts the representation-window clock; in-window representation files cleanly", async () => {
   const services = createFoundationServices();
   const { cycle } = aparMasters(services);
   const form = finalisedForm(services, cycle);
@@ -476,7 +476,7 @@ test("PH-08D G08 disclosure starts the representation-window clock; in-window re
   assert.equal(representation.slaDueAt, "2026-08-09");
 });
 
-test("PH-08D G08 a representation after the window elapsed throws ERR-G08-REPWINDOW; condonation admits it as late", () => {
+test("PH-08D G08 a representation after the window elapsed throws ERR-G08-REPWINDOW; condonation admits it as late", async () => {
   const services = createFoundationServices();
   const { cycle } = aparMasters(services);
   const form = finalisedForm(services, cycle);
@@ -513,7 +513,7 @@ test("PH-08D G08 a representation after the window elapsed throws ERR-G08-REPWIN
 // (8) Multi-RO part-period: No-Report below min_supervision_months; supervision-weighted aggregate
 // ---------------------------------------------------------------------------------------
 
-test("PH-08D G08 multi-RO part-periods aggregate supervision-weighted; below-threshold supervision yields No-Report", () => {
+test("PH-08D G08 multi-RO part-periods aggregate supervision-weighted; below-threshold supervision yields No-Report", async () => {
   const services = createFoundationServices();
   const { cycle } = aparMasters(services, { minSupervisionMonths: 3 });
   const form = openCycleForm(services, cycle);
@@ -576,7 +576,7 @@ test("PH-08D G08 multi-RO part-periods aggregate supervision-weighted; below-thr
 // (9) SLA escalation: authoring right transfers and is_escalated_author is recorded (R9)
 // ---------------------------------------------------------------------------------------
 
-test("PH-08D G08 SLA escalation transfers the authoring right and marks is_escalated_author=true", () => {
+test("PH-08D G08 SLA escalation transfers the authoring right and marks is_escalated_author=true", async () => {
   const services = createFoundationServices();
   const { cycle } = aparMasters(services);
   const form = openCycleForm(services, cycle);

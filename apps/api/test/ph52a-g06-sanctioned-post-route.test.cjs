@@ -17,8 +17,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph52a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -42,14 +42,14 @@ function registerBody(overrides = {}) {
   };
 }
 
-test("PH-52A G06 sanctioned post: register (maker!=checker) -> revise -> reconcile -> reads", () => {
+test("PH-52A G06 sanctioned post: register (maker!=checker) -> revise -> reconcile -> reads", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const registered = call(api, { method: "POST", path: "/api/v1/promotions/sanctioned-posts", headers: { "Idempotency-Key": "sp-1" }, body: registerBody() });
+  const registered = await call(api, { method: "POST", path: "/api/v1/promotions/sanctioned-posts", headers: { "Idempotency-Key": "sp-1" }, body: registerBody() });
   assert.equal(registered.status, 201);
   const id = registered.body.sanctionedPost.id;
   assert.equal(registered.body.sanctionedPost.currentVacancies, 4);
 
-  const revised = call(api, {
+  const revised = await call(api, {
     method: "POST",
     path: `/api/v1/promotions/sanctioned-posts/${id}:revise`,
     headers: { "Idempotency-Key": "sp-r" },
@@ -59,22 +59,22 @@ test("PH-52A G06 sanctioned post: register (maker!=checker) -> revise -> reconci
   assert.equal(revised.body.sanctionedPost.version, 2);
   assert.equal(revised.body.sanctionedPost.currentVacancies, 6);
 
-  const reconciled = call(api, { method: "POST", path: `/api/v1/promotions/sanctioned-posts/${id}:reconcile`, headers: { "Idempotency-Key": "sp-rc" }, body: { filledCount: 8 } });
+  const reconciled = await call(api, { method: "POST", path: `/api/v1/promotions/sanctioned-posts/${id}:reconcile`, headers: { "Idempotency-Key": "sp-rc" }, body: { filledCount: 8 } });
   assert.equal(reconciled.status, 202);
   assert.equal(reconciled.body.sanctionedPost.currentVacancies, 4);
 
-  const read = call(api, { method: "GET", path: `/api/v1/promotions/sanctioned-posts/${id}` });
+  const read = await call(api, { method: "GET", path: `/api/v1/promotions/sanctioned-posts/${id}` });
   assert.equal(read.status, 200);
-  const list = call(api, { method: "GET", path: "/api/v1/promotions/sanctioned-posts" });
+  const list = await call(api, { method: "GET", path: "/api/v1/promotions/sanctioned-posts" });
   assert.equal(list.status, 200);
   assert.ok(list.body.items.some((p) => p.id === id));
-  const vacancy = call(api, { method: "GET", path: `/api/v1/promotions/sanctioned-posts/${id}/vacancy` });
+  const vacancy = await call(api, { method: "GET", path: `/api/v1/promotions/sanctioned-posts/${id}/vacancy` });
   assert.equal(vacancy.status, 200);
 });
 
-test("PH-52A G06 sanctioned post: maker cannot self-approve (SoD, 403)", () => {
+test("PH-52A G06 sanctioned post: maker cannot self-approve (SoD, 403)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/sanctioned-posts",
     headers: { "Idempotency-Key": "sp-sod" },
@@ -83,11 +83,11 @@ test("PH-52A G06 sanctioned post: maker cannot self-approve (SoD, 403)", () => {
   assert.equal(res.status, 403);
 });
 
-test("PH-52A G06 sanctioned post: reconcile beyond sanctioned strength fails closed (STRENGTH_INCONSISTENT)", () => {
+test("PH-52A G06 sanctioned post: reconcile beyond sanctioned strength fails closed (STRENGTH_INCONSISTENT)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const registered = call(api, { method: "POST", path: "/api/v1/promotions/sanctioned-posts", headers: { "Idempotency-Key": "sp-2" }, body: registerBody() });
+  const registered = await call(api, { method: "POST", path: "/api/v1/promotions/sanctioned-posts", headers: { "Idempotency-Key": "sp-2" }, body: registerBody() });
   const id = registered.body.sanctionedPost.id;
-  const bad = call(api, { method: "POST", path: `/api/v1/promotions/sanctioned-posts/${id}:reconcile`, headers: { "Idempotency-Key": "sp-bad" }, body: { filledCount: 20 } });
+  const bad = await call(api, { method: "POST", path: `/api/v1/promotions/sanctioned-posts/${id}:reconcile`, headers: { "Idempotency-Key": "sp-bad" }, body: { filledCount: 20 } });
   assert.equal(bad.status, 409);
   assert.equal(bad.body.error.code, "STRENGTH_INCONSISTENT");
 });

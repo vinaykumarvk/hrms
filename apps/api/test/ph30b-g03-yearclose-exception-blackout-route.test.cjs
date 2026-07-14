@@ -17,13 +17,13 @@ function actor(extra = {}) {
     ...extra,
   };
 }
-function call(api, request) {
-  return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph30b", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
+async function call(api, request) {
+  return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph30b", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
 }
 
-test("PH-30B POST /api/v1/atl/leave-year-close:commit commits with CF/lapse", () => {
+test("PH-30B POST /api/v1/atl/leave-year-close:commit commits with CF/lapse", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/atl/leave-year-close:commit",
     headers: { "Idempotency-Key": "idem-ph30b-yc" },
@@ -35,9 +35,9 @@ test("PH-30B POST /api/v1/atl/leave-year-close:commit commits with CF/lapse", ()
   assert.equal(res.body.close.totalLapsedDays, 15);
 });
 
-test("PH-30B POST /api/v1/atl/attendance-exceptions files a WFH exception", () => {
+test("PH-30B POST /api/v1/atl/attendance-exceptions files a WFH exception", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/atl/attendance-exceptions",
     headers: { "Idempotency-Key": "idem-ph30b-ex" },
@@ -48,9 +48,9 @@ test("PH-30B POST /api/v1/atl/attendance-exceptions files a WFH exception", () =
   assert.equal(res.body.exception.days, 3);
 });
 
-test("PH-30B POST /api/v1/atl/blackout-periods declares a blackout window", () => {
+test("PH-30B POST /api/v1/atl/blackout-periods declares a blackout window", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/atl/blackout-periods",
     headers: { "Idempotency-Key": "idem-ph30b-bo" },

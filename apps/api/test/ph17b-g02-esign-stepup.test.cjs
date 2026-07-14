@@ -25,7 +25,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G02 esignatures: commit fails ERR-G02-ESIGN until a valid signature exists; the chain binds SHA-256 payloadHash", () => {
+test("G02 esignatures: commit fails ERR-G02-ESIGN until a valid signature exists; the chain binds SHA-256 payloadHash", async () => {
   const s = createFoundationServices();
   const cr = "cr-ph17b-1";
   // Unsigned commit is fail-closed.
@@ -43,7 +43,7 @@ test("G02 esignatures: commit fails ERR-G02-ESIGN until a valid signature exists
   assert.equal(head.sequenceNo, 1);
 });
 
-test("G02 esignatures: a method outside policy fails ERR-G02-ESIGN-METHOD", () => {
+test("G02 esignatures: a method outside policy fails ERR-G02-ESIGN-METHOD", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.changeEsignStepUp.signChange(actor(), { changeRequestId: "cr-ph17b-2", method: "SMS_OTP", payload: {}, signedAt: "2026-07-03" }),
@@ -51,7 +51,7 @@ test("G02 esignatures: a method outside policy fails ERR-G02-ESIGN-METHOD", () =
   );
 });
 
-test("G02 cr_step_up_events: a HIGH self-service submit requires a completed step-up (ERR-G02-STEPUP)", () => {
+test("G02 cr_step_up_events: a HIGH self-service submit requires a completed step-up (ERR-G02-STEPUP)", async () => {
   const s = createFoundationServices();
   const cr = "cr-ph17b-3";
   // No step-up yet -> blocked.

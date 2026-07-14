@@ -17,17 +17,17 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph40a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-40A G08 360-feedback: open -> rate x2 -> release -> read via the kernel", () => {
+test("PH-40A G08 360-feedback: open -> rate x2 -> release -> read via the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const opened = call(api, {
+  const opened = await call(api, {
     method: "POST",
     path: "/api/v1/apar/360-feedback",
     headers: { "Idempotency-Key": "f360-open" },
@@ -37,7 +37,7 @@ test("PH-40A G08 360-feedback: open -> rate x2 -> release -> read via the kernel
   const id = opened.body.feedback360.id;
 
   for (const [i, rater] of [["r1", "PEER"], ["r2", "MANAGER"]].entries()) {
-    const rated = call(api, {
+    const rated = await call(api, {
       method: "POST",
       path: `/api/v1/appraisals/360-feedback/${id}:rate`,
       headers: { "Idempotency-Key": `f360-rate-${i}` },
@@ -46,7 +46,7 @@ test("PH-40A G08 360-feedback: open -> rate x2 -> release -> read via the kernel
     assert.equal(rated.status, 202);
   }
 
-  const released = call(api, {
+  const released = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/360-feedback/${id}:release`,
     headers: { "Idempotency-Key": "f360-release" },
@@ -56,21 +56,21 @@ test("PH-40A G08 360-feedback: open -> rate x2 -> release -> read via the kernel
   assert.equal(released.body.release.raterCount, 2);
   assert.equal(released.body.release.aggregateScore, 4);
 
-  const read = call(api, { method: "GET", path: `/api/v1/appraisals/360-feedback/${id}` });
+  const read = await call(api, { method: "GET", path: `/api/v1/appraisals/360-feedback/${id}` });
   assert.equal(read.status, 200);
   assert.equal(read.body.feedback360.status, "RELEASED");
 });
 
-test("PH-40A G08 360-feedback: releasing below MIN_RATERS is blocked", () => {
+test("PH-40A G08 360-feedback: releasing below MIN_RATERS is blocked", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const opened = call(api, {
+  const opened = await call(api, {
     method: "POST",
     path: "/api/v1/apar/360-feedback",
     headers: { "Idempotency-Key": "f360-open-2" },
     body: { cycleId: "cycle-2026", appraiseeId: ph03Ids.employee, minRaters: 3 },
   });
   const id = opened.body.feedback360.id;
-  const blocked = call(api, {
+  const blocked = await call(api, {
     method: "POST",
     path: `/api/v1/appraisals/360-feedback/${id}:release`,
     headers: { "Idempotency-Key": "f360-release-2" },
@@ -79,9 +79,9 @@ test("PH-40A G08 360-feedback: releasing below MIN_RATERS is blocked", () => {
   assert.equal(blocked.status, 412);
 });
 
-test("PH-40A G08 continuous-feedback check-in + list, and signatures read", () => {
+test("PH-40A G08 continuous-feedback check-in + list, and signatures read", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const checkIn = call(api, {
+  const checkIn = await call(api, {
     method: "POST",
     path: "/api/v1/appraisals/continuous-feedback/check-ins",
     headers: { "Idempotency-Key": "ci-1" },
@@ -89,7 +89,7 @@ test("PH-40A G08 continuous-feedback check-in + list, and signatures read", () =
   });
   assert.equal(checkIn.status, 201);
 
-  const listed = call(api, {
+  const listed = await call(api, {
     method: "GET",
     path: "/api/v1/appraisals/continuous-feedback/check-ins",
     query: { cycleId: "cycle-2026", appraiseeId: ph03Ids.employee },
@@ -98,10 +98,10 @@ test("PH-40A G08 continuous-feedback check-in + list, and signatures read", () =
   assert.equal(listed.body.items.length, 1);
 
   // Missing required query -> VALIDATION_FAILED (400).
-  const badQuery = call(api, { method: "GET", path: "/api/v1/appraisals/continuous-feedback/check-ins", query: { cycleId: "cycle-2026" } });
+  const badQuery = await call(api, { method: "GET", path: "/api/v1/appraisals/continuous-feedback/check-ins", query: { cycleId: "cycle-2026" } });
   assert.equal(badQuery.status, 400);
 
-  const signatures = call(api, { method: "GET", path: "/api/v1/apar/forms/form-unknown/signatures" });
+  const signatures = await call(api, { method: "GET", path: "/api/v1/apar/forms/form-unknown/signatures" });
   assert.equal(signatures.status, 200);
   assert.ok(Array.isArray(signatures.body.items));
 });

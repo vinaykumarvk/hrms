@@ -65,7 +65,7 @@ function enqueueApproved(services, overrides = {}) {
 // FR-G04-02 — versioned sr_event_mapping catalog
 // =======================================================================================
 
-test("PH-16C sr_event_mapping lifecycle: DRAFT is editable, PUBLISHED is immutable, RETIRED closes the version", () => {
+test("PH-16C sr_event_mapping lifecycle: DRAFT is editable, PUBLISHED is immutable, RETIRED closes the version", async () => {
   const services = createFoundationServices();
   const mapping = draft(services);
   assert.equal(mapping.status, "DRAFT");
@@ -96,7 +96,7 @@ test("PH-16C sr_event_mapping lifecycle: DRAFT is editable, PUBLISHED is immutab
   assert.equal(next.mappingVersion, 2);
 });
 
-test("PH-16C NEGATIVE overlap: publishing an intersecting PUBLISHED effective range is rejected ERR-G04-MAPPING-OVERLAP", () => {
+test("PH-16C NEGATIVE overlap: publishing an intersecting PUBLISHED effective range is rejected ERR-G04-MAPPING-OVERLAP", async () => {
   const services = createFoundationServices();
   const bounded = draft(services, { effectiveFrom: "2026-01-01", effectiveTo: "2026-05-31" });
   services.leaveSrCatalog.publishMapping(actor(), bounded.id);
@@ -120,7 +120,7 @@ test("PH-16C NEGATIVE overlap: publishing an intersecting PUBLISHED effective ra
   services.leaveSrCatalog.publishMapping(actor(), otherKey.id);
 });
 
-test("PH-16C NEGATIVE citation: a POST_SR mapping without statutory_rule_ref fails closed VAL-G04-CITATION", () => {
+test("PH-16C NEGATIVE citation: a POST_SR mapping without statutory_rule_ref fails closed VAL-G04-CITATION", async () => {
   const services = createFoundationServices();
   // Create-time guard (mirrors ck_sr_mapping_post_sr at publish depth).
   assert.throws(
@@ -148,7 +148,7 @@ test("PH-16C NEGATIVE citation: a POST_SR mapping without statutory_rule_ref fai
 // FR-G04-02 BR3 + FR-G04-15 — pin at first claim, relay_partition_lease, JOB-G04-REAPER
 // =======================================================================================
 
-test("PH-16C pinned_mapping_version is resolved once at first claim and reused across a reaped retry", () => {
+test("PH-16C pinned_mapping_version is resolved once at first claim and reused across a reaped retry", async () => {
   // lease_timeout 0: the claim's lease_expires_at is already past, so the reaper can recover it.
   const services = createFoundationServices({ g04LeaseTimeoutMs: 0 });
   const v1 = draft(services, { effectiveFrom: "2026-01-01" });
@@ -185,7 +185,7 @@ test("PH-16C pinned_mapping_version is resolved once at first claim and reused a
   assert.equal(fresh.claimedEvents[0].pinnedMappingVersion, 2);
 });
 
-test("PH-16C relay_partition_lease: an ACTIVE lease is never double-claimed; claims run in event_sequence order", () => {
+test("PH-16C relay_partition_lease: an ACTIVE lease is never double-claimed; claims run in event_sequence order", async () => {
   const services = createFoundationServices();
   const mapping = draft(services);
   services.leaveSrCatalog.publishMapping(actor(), mapping.id);
@@ -217,7 +217,7 @@ test("PH-16C relay_partition_lease: an ACTIVE lease is never double-claimed; cla
   assert.equal(next.claimedEvents.length, 0); // nothing eligible; both rows still IN_FLIGHT
 });
 
-test("PH-16C JOB-G04-REAPER: expired IN_FLIGHT reaped to retry-eligible with attempt_count incremented; a live lease is untouched", () => {
+test("PH-16C JOB-G04-REAPER: expired IN_FLIGHT reaped to retry-eligible with attempt_count incremented; a live lease is untouched", async () => {
   // Expired path (lease_timeout 0).
   const expired = createFoundationServices({ g04LeaseTimeoutMs: 0 });
   const m1 = draft(expired);
@@ -251,7 +251,7 @@ test("PH-16C JOB-G04-REAPER: expired IN_FLIGHT reaped to retry-eligible with att
   assert.equal(live.leaveSrCatalog.listLeases(actor())[0].status, "ACTIVE");
 });
 
-test("PH-16C claim settles unmapped and excluded events fail-closed (MAPPING_MISSING DLQ / EXCLUDED no-op)", () => {
+test("PH-16C claim settles unmapped and excluded events fail-closed (MAPPING_MISSING DLQ / EXCLUDED no-op)", async () => {
   const services = createFoundationServices();
   const excluded = draft(services, {
     leaveTypeCode: "CASUAL",
@@ -298,7 +298,7 @@ function settleLwpSpell(services, employeeId, days) {
   return event;
 }
 
-test("PH-16C prepension_certificate PASS: zero open findings, zero provisional, lineage complete, SHA-256 checksum, G11 consumption", () => {
+test("PH-16C prepension_certificate PASS: zero open findings, zero provisional, lineage complete, SHA-256 checksum, G11 consumption", async () => {
   const services = createFoundationServices();
   const employeeId = "emp-cert-pass";
   settleLwpSpell(services, employeeId, 121);
@@ -323,7 +323,7 @@ test("PH-16C prepension_certificate PASS: zero open findings, zero provisional, 
   assert.equal(services.leaveSrCatalog.getLatestCertificate(actor(), employeeId).id, certificate.id);
 });
 
-test("PH-16C prepension_certificate FAIL: an open HIGH/CRITICAL finding blocks PASS and names the blocking counts", () => {
+test("PH-16C prepension_certificate FAIL: an open HIGH/CRITICAL finding blocks PASS and names the blocking counts", async () => {
   const services = createFoundationServices();
   const employeeId = "emp-cert-findings";
   // A G03 ledger debit with no SR event -> MISSING_SR (HIGH) finding in the PRE_PENSION run.
@@ -347,7 +347,7 @@ test("PH-16C prepension_certificate FAIL: an open HIGH/CRITICAL finding blocks P
   );
 });
 
-test("PH-16C prepension_certificate FAIL: a remaining PROVISIONAL migrated entry blocks PASS until adjudicated; append-only re-issue", () => {
+test("PH-16C prepension_certificate FAIL: a remaining PROVISIONAL migrated entry blocks PASS until adjudicated; append-only re-issue", async () => {
   const services = createFoundationServices();
   const employeeId = "emp-cert-provisional";
   const record = services.leaveSrCatalog.recordProvisionalMigratedEntry(actor(), {
@@ -374,7 +374,7 @@ test("PH-16C prepension_certificate FAIL: a remaining PROVISIONAL migrated entry
   assert.equal(services.leaveSrCatalog.getLatestCertificate(actor(), employeeId).result, "PASS");
 });
 
-test("PH-16C prepension_certificate requires a COMPLETED PRE_PENSION run; unsettled lineage blocks PASS", () => {
+test("PH-16C prepension_certificate requires a COMPLETED PRE_PENSION run; unsettled lineage blocks PASS", async () => {
   const services = createFoundationServices();
   const employeeId = "emp-cert-lineage";
   // Wrong run type (ON_DEMAND) is rejected outright (FR-18 AC1).

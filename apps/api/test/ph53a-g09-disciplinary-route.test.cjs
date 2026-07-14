@@ -17,16 +17,16 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph53a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-function openCase(api) {
-  const res = call(api, {
+async function openCase(api) {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/disciplinary/cases",
     headers: { "Idempotency-Key": "case-1" },
@@ -36,22 +36,22 @@ function openCase(api) {
   return res.body.disciplinaryCase.id;
 }
 
-test("PH-53A G09 case reads: timeline, ICC appointments, personal hearings", () => {
+test("PH-53A G09 case reads: timeline, ICC appointments, personal hearings", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const caseId = openCase(api);
+  const caseId = await openCase(api);
 
-  const timeline = call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/case-timeline` });
+  const timeline = await call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/case-timeline` });
   assert.equal(timeline.status, 200);
   assert.ok(timeline.body.items.length >= 1);
 
   for (const suffix of ["icc-appointments", "personal-hearings"]) {
-    const res = call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/${suffix}` });
+    const res = await call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/${suffix}` });
     assert.equal(res.status, 200, suffix);
     assert.ok(Array.isArray(res.body.items), suffix);
   }
 });
 
-test("PH-53A G09 mutation routes fail closed on unknown subjects (NOT_FOUND)", () => {
+test("PH-53A G09 mutation routes fail closed on unknown subjects (NOT_FOUND)", async () => {
   const api = createFoundationApi(createFoundationServices());
 
   const cases = [
@@ -61,11 +61,11 @@ test("PH-53A G09 mutation routes fail closed on unknown subjects (NOT_FOUND)", (
     { path: "/api/v1/disciplinary/consultations/nope:waive", body: { waiverReason: "x", waivedOn: "2026-07-02" } },
     { path: "/api/v1/disciplinary/personal-hearings/nope:minutes", body: { heldDate: "2026-07-02", minutesText: "x" } },
   ];
-  cases.forEach((c, i) => {
-    const res = call(api, { method: "POST", path: c.path, headers: { "Idempotency-Key": `nf-${i}` }, body: c.body });
+  cases.forEach(async (c, i) => {
+    const res = await call(api, { method: "POST", path: c.path, headers: { "Idempotency-Key": `nf-${i}` }, body: c.body });
     assert.equal(res.status, 404, c.path);
   });
 
-  const penalty = call(api, { method: "GET", path: "/api/v1/disciplinary/penalty-orders/nope" });
+  const penalty = await call(api, { method: "GET", path: "/api/v1/disciplinary/penalty-orders/nope" });
   assert.equal(penalty.status, 404);
 });

@@ -21,15 +21,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph06-g03", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-06 G03 leave runs REPORTING_CHAIN workflow, delegation, ledger debit, G04 outbox, SR, audit, and notification", () => {
+test("PH-06 G03 leave runs REPORTING_CHAIN workflow, delegation, ledger debit, G04 outbox, SR, audit, and notification", async () => {
   const services = createFoundationServices();
   const submitted = services.leave.submit(actor(), {
     employeeId: ph03Ids.employee,
@@ -69,10 +69,10 @@ test("PH-06 G03 leave runs REPORTING_CHAIN workflow, delegation, ledger debit, G
   assert.ok(services.notifications.list(actor()).some((message) => message.messageId === "G03_LEAVE_APPROVED"));
 });
 
-test("PH-06 G03 routes submit and approve a leave application without manual state edits", () => {
+test("PH-06 G03 routes submit and approve a leave application without manual state edits", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const submitted = call(api, {
+  const submitted = await call(api, {
     method: "POST",
     path: "/api/v1/atl/leave-applications",
     headers: { "Idempotency-Key": "idem-ph06-g03-submit-route-001" },
@@ -81,7 +81,7 @@ test("PH-06 G03 routes submit and approve a leave application without manual sta
   assert.equal(submitted.status, 201);
   assert.equal(submitted.body.application.resolverType, "REPORTING_CHAIN");
 
-  const delegated = call(api, {
+  const delegated = await call(api, {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${submitted.body.application.id}/decision`,
     headers: { "Idempotency-Key": "idem-ph06-g03-delegate-route-001" },
@@ -90,7 +90,7 @@ test("PH-06 G03 routes submit and approve a leave application without manual sta
   assert.equal(delegated.status, 202);
   assert.equal(delegated.body.action.action, "DELEGATE");
 
-  const approved = call(api, {
+  const approved = await call(api, {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${submitted.body.application.id}/decision`,
     headers: { "Idempotency-Key": "idem-ph06-g03-approve-route-001" },
@@ -99,11 +99,11 @@ test("PH-06 G03 routes submit and approve a leave application without manual sta
   assert.equal(approved.status, 202);
   assert.equal(approved.body.outboxEvent.sourceModule, "G04");
 
-  const balance = call(api, { method: "GET", path: "/api/v1/atl/leave-balances", query: { employeeId: ph03Ids.employee, leaveTypeId: "EL" } });
+  const balance = await call(api, { method: "GET", path: "/api/v1/atl/leave-balances", query: { employeeId: ph03Ids.employee, leaveTypeId: "EL" } });
   assert.equal(balance.status, 200);
   assert.equal(balance.body.balance.debited, 2);
 
-  const outbox = call(api, { method: "GET", path: "/api/v1/atl/leave-sr-outbox" });
+  const outbox = await call(api, { method: "GET", path: "/api/v1/atl/leave-sr-outbox" });
   assert.equal(outbox.status, 200);
   assert.equal(outbox.body.items.length, 1);
 });

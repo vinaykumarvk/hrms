@@ -21,15 +21,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph15c-g03", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-15C FR-01 shifts: timings/grace/date_anchor_rule persist; malformed timings throw VAL-G03-SHIFT-TIMES", () => {
+test("PH-15C FR-01 shifts: timings/grace/date_anchor_rule persist; malformed timings throw VAL-G03-SHIFT-TIMES", async () => {
   const services = createFoundationServices();
 
   const general = services.attendanceOps.defineShift(actor(), {
@@ -58,7 +58,7 @@ test("PH-15C FR-01 shifts: timings/grace/date_anchor_rule persist; malformed tim
   assert.equal(services.attendanceOps.listShifts(actor()).length, 1);
 });
 
-test("PH-15C FR-01 rosters: NEGATIVE roster overlap rejected (VAL-G03-ROSTER-OVERLAP); publish supersedes the prior open-ended roster", () => {
+test("PH-15C FR-01 rosters: NEGATIVE roster overlap rejected (VAL-G03-ROSTER-OVERLAP); publish supersedes the prior open-ended roster", async () => {
   const services = createFoundationServices();
   const shift = services.attendanceOps.defineShift(actor(), { shiftCode: "GEN", name: "General", startTime: "09:00", endTime: "17:30" });
 
@@ -90,7 +90,7 @@ test("PH-15C FR-01 rosters: NEGATIVE roster overlap rejected (VAL-G03-ROSTER-OVE
   assert.equal(published.roster.status, "PUBLISHED");
 });
 
-test("PH-15C FR-03 punch ingestion: append-only dedup on (device_id, source_ref); NEGATIVES DEVICE_NOT_AUTHORIZED and INVALID_PUNCH_TIME", () => {
+test("PH-15C FR-03 punch ingestion: append-only dedup on (device_id, source_ref); NEGATIVES DEVICE_NOT_AUTHORIZED and INVALID_PUNCH_TIME", async () => {
   const services = createFoundationServices();
   const device = services.attendanceOps.registerDevice(actor(), { deviceCode: "HQ-GATE-1" });
 
@@ -160,7 +160,7 @@ test("PH-15C FR-03 punch ingestion: append-only dedup on (device_id, source_ref)
   assert.equal(services.attendanceOps.listPunches(actor()).length, 1);
 });
 
-test("PH-15C FR-03 attendance_date derives via the shift date_anchor_rule: a night-shift punch after midnight anchors to the shift start date", () => {
+test("PH-15C FR-03 attendance_date derives via the shift date_anchor_rule: a night-shift punch after midnight anchors to the shift start date", async () => {
   const services = createFoundationServices();
   const night = services.attendanceOps.defineShift(actor(), {
     shiftCode: "NIGHT-A",
@@ -199,7 +199,7 @@ test("PH-15C FR-03 attendance_date derives via the shift date_anchor_rule: a nig
   assert.equal(services.attendanceOps.listPunches(actor(), ph03Ids.employee, "2026-07-10").length, 2);
 });
 
-test("PH-15C FR-03 punch-derived attendance feeds the PH-07D FR-04 derivation (PRESENT day from ledger punches)", () => {
+test("PH-15C FR-03 punch-derived attendance feeds the PH-07D FR-04 derivation (PRESENT day from ledger punches)", async () => {
   const services = createFoundationServices();
   const shift = services.attendanceOps.defineShift(actor(), { shiftCode: "GEN", name: "General", startTime: "09:00", endTime: "17:30" });
   const roster = services.attendanceOps.assignRoster(actor(), { employeeId: ph03Ids.employee, shiftId: shift.id, effectiveFrom: "2026-07-01" });
@@ -230,7 +230,7 @@ test("PH-15C FR-03 punch-derived attendance feeds the PH-07D FR-04 derivation (P
   assert.equal(services.leave.listAttendance(actor()).some((record) => record.id === derived.id), true);
 });
 
-test("PH-15C FR-09 comp_off_ledger: FIFO redemption from non-expired credits, expiry sweep, and NEGATIVES COMP_OFF_INSUFFICIENT / COMP_OFF_EXPIRED", () => {
+test("PH-15C FR-09 comp_off_ledger: FIFO redemption from non-expired credits, expiry sweep, and NEGATIVES COMP_OFF_INSUFFICIENT / COMP_OFF_EXPIRED", async () => {
   const services = createFoundationServices();
 
   // Two credits: the older one expires first (FIFO order = earn date).
@@ -286,11 +286,11 @@ test("PH-15C FR-09 comp_off_ledger: FIFO redemption from non-expired credits, ex
   }
 });
 
-test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off with fail-closed wire negatives", () => {
+test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off with fail-closed wire negatives", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
 
-  const shift = call(api, {
+  const shift = await call(api, {
     method: "POST",
     path: "/api/v1/atl/shifts",
     headers: { "Idempotency-Key": "idem-ph15c-shift-001" },
@@ -299,7 +299,7 @@ test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off wi
   assert.equal(shift.status, 201);
 
   // NEGATIVE over the wire: malformed shift timings are 422 VAL-G03-SHIFT-TIMES.
-  const badShift = call(api, {
+  const badShift = await call(api, {
     method: "POST",
     path: "/api/v1/atl/shifts",
     headers: { "Idempotency-Key": "idem-ph15c-shift-002" },
@@ -308,14 +308,14 @@ test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off wi
   assert.equal(badShift.status, 422);
   assert.equal(badShift.body.error.code, "VAL-G03-SHIFT-TIMES");
 
-  const roster = call(api, {
+  const roster = await call(api, {
     method: "POST",
     path: "/api/v1/atl/rosters",
     headers: { "Idempotency-Key": "idem-ph15c-roster-001" },
     body: { shiftId: shift.body.shift.id, effectiveFrom: "2026-07-01" },
   });
   assert.equal(roster.status, 201);
-  const publish = call(api, {
+  const publish = await call(api, {
     method: "POST",
     path: `/api/v1/atl/rosters/${roster.body.roster.id}:publish`,
     headers: { "Idempotency-Key": "idem-ph15c-roster-002" },
@@ -323,13 +323,13 @@ test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off wi
   assert.equal(publish.status, 202);
 
   // NEGATIVE over the wire: overlapping publish is 409 VAL-G03-ROSTER-OVERLAP.
-  const clash = call(api, {
+  const clash = await call(api, {
     method: "POST",
     path: "/api/v1/atl/rosters",
     headers: { "Idempotency-Key": "idem-ph15c-roster-003" },
     body: { shiftId: shift.body.shift.id, effectiveFrom: "2026-06-15", effectiveTo: "2026-07-15" },
   });
-  const clashPublish = call(api, {
+  const clashPublish = await call(api, {
     method: "POST",
     path: `/api/v1/atl/rosters/${clash.body.roster.id}:publish`,
     headers: { "Idempotency-Key": "idem-ph15c-roster-004" },
@@ -337,7 +337,7 @@ test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off wi
   assert.equal(clashPublish.status, 409);
   assert.equal(clashPublish.body.error.code, "VAL-G03-ROSTER-OVERLAP");
 
-  const device = call(api, {
+  const device = await call(api, {
     method: "POST",
     path: "/api/v1/atl/attendance-devices",
     headers: { "Idempotency-Key": "idem-ph15c-device-001" },
@@ -346,7 +346,7 @@ test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off wi
   assert.equal(device.status, 201);
 
   // NEGATIVE over the wire: unregistered device is 403 DEVICE_NOT_AUTHORIZED (fail closed).
-  const rogue = call(api, {
+  const rogue = await call(api, {
     method: "POST",
     path: "/api/v1/atl/attendance-punches",
     headers: { "Idempotency-Key": "idem-ph15c-punch-000" },
@@ -355,7 +355,7 @@ test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off wi
   assert.equal(rogue.status, 403);
   assert.equal(rogue.body.error.code, "DEVICE_NOT_AUTHORIZED");
 
-  const punch = call(api, {
+  const punch = await call(api, {
     method: "POST",
     path: "/api/v1/atl/attendance-punches",
     headers: { "Idempotency-Key": "idem-ph15c-punch-001" },
@@ -365,7 +365,7 @@ test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off wi
   assert.equal(punch.body.ingestionStatus, "ACCEPTED");
 
   // NEGATIVE over the wire: future punch is 422 INVALID_PUNCH_TIME.
-  const future = call(api, {
+  const future = await call(api, {
     method: "POST",
     path: "/api/v1/atl/attendance-punches",
     headers: { "Idempotency-Key": "idem-ph15c-punch-002" },
@@ -375,14 +375,14 @@ test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off wi
   assert.equal(future.body.error.code, "INVALID_PUNCH_TIME");
 
   // Comp-off earn + over-balance redemption negative over the wire (409 COMP_OFF_INSUFFICIENT).
-  const earned = call(api, {
+  const earned = await call(api, {
     method: "POST",
     path: "/api/v1/atl/comp-off:earn",
     headers: { "Idempotency-Key": "idem-ph15c-compoff-001" },
     body: { days: 1, earnedOn: "2026-07-05", expiresOn: "2026-10-05" },
   });
   assert.equal(earned.status, 201);
-  const overdraw = call(api, {
+  const overdraw = await call(api, {
     method: "POST",
     path: "/api/v1/atl/comp-off:redeem",
     headers: { "Idempotency-Key": "idem-ph15c-compoff-002" },
@@ -391,7 +391,7 @@ test("PH-15C API routes expose shifts, rosters, punch ingestion, and comp-off wi
   assert.equal(overdraw.status, 409);
   assert.equal(overdraw.body.error.code, "COMP_OFF_INSUFFICIENT");
 
-  const ledger = call(api, { method: "GET", path: "/api/v1/atl/comp-off-ledger" });
+  const ledger = await call(api, { method: "GET", path: "/api/v1/atl/comp-off-ledger" });
   assert.equal(ledger.status, 200);
   assert.equal(ledger.body.items.length, 1);
   assert.equal(ledger.body.items[0].entryType, "EARN");

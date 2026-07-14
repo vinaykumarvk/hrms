@@ -31,8 +31,8 @@ function checker(extra = {}) {
   return actor({ userId: CHECKER, actorUserId: CHECKER, ...extra });
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph07c-g02", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -49,7 +49,7 @@ function submit(services, overrides = {}) {
   }).request;
 }
 
-test("PH-07C sensitivity and stage come from field_sensitivity_catalog + approval_matrix_config, not code", () => {
+test("PH-07C sensitivity and stage come from field_sensitivity_catalog + approval_matrix_config, not code", async () => {
   const services = createFoundationServices();
   const low = submit(services);
   assert.equal(low.sensitivity, "LOW");
@@ -73,7 +73,7 @@ test("PH-07C sensitivity and stage come from field_sensitivity_catalog + approva
   );
 });
 
-test("PH-07C SoD negative: the maker who submitted the request cannot approve it (ERR-G02-SOD)", () => {
+test("PH-07C SoD negative: the maker who submitted the request cannot approve it (ERR-G02-SOD)", async () => {
   const services = createFoundationServices();
   const request = submit(services);
   assert.throws(
@@ -85,7 +85,7 @@ test("PH-07C SoD negative: the maker who submitted the request cannot approve it
   assert.equal(approved.status, "APPROVED");
 });
 
-test("PH-07C SoD covers the last editor: resubmitting maker stays barred from deciding (ERR-G02-SOD)", () => {
+test("PH-07C SoD covers the last editor: resubmitting maker stays barred from deciding (ERR-G02-SOD)", async () => {
   const services = createFoundationServices();
   const request = submit(services);
   services.personalDetails.sendBack(checker(), request.id, "Please attach the gazette copy");
@@ -96,7 +96,7 @@ test("PH-07C SoD covers the last editor: resubmitting maker stays barred from de
   );
 });
 
-test("PH-07C mandatory decision reason: reject and sendBack without a comment raise ERR-REASON-REQ", () => {
+test("PH-07C mandatory decision reason: reject and sendBack without a comment raise ERR-REASON-REQ", async () => {
   const services = createFoundationServices();
   const request = submit(services);
   assert.throws(
@@ -112,7 +112,7 @@ test("PH-07C mandatory decision reason: reject and sendBack without a comment ra
   assert.equal(rejected.decisionComment, "Evidence does not match the requested value");
 });
 
-test("PH-07C sendBack -> RETURNED -> resubmit re-routes on a fresh workflow instance with the same requestNo", () => {
+test("PH-07C sendBack -> RETURNED -> resubmit re-routes on a fresh workflow instance with the same requestNo", async () => {
   const services = createFoundationServices();
   const request = submit(services);
   const returned = services.personalDetails.sendBack(checker(), request.id, "Name spelling differs from the gazette");
@@ -138,7 +138,7 @@ test("PH-07C sendBack -> RETURNED -> resubmit re-routes on a fresh workflow inst
   );
 });
 
-test("PH-07C withdraw: requester recalls a pending request to WITHDRAWN; never after APPROVED", () => {
+test("PH-07C withdraw: requester recalls a pending request to WITHDRAWN; never after APPROVED", async () => {
   const services = createFoundationServices();
   const request = submit(services);
   assert.throws(
@@ -156,10 +156,10 @@ test("PH-07C withdraw: requester recalls a pending request to WITHDRAWN; never a
   );
 });
 
-test("PH-07C masked diff: GET /change-requests/{id}/diff applies P02 masking for readers without the field grant", () => {
+test("PH-07C masked diff: GET /change-requests/{id}/diff applies P02 masking for readers without the field grant", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/personal-details/change-requests",
     headers: { "Idempotency-Key": "idem-ph07c-diff-001" },
@@ -168,7 +168,7 @@ test("PH-07C masked diff: GET /change-requests/{id}/diff applies P02 masking for
   assert.equal(created.status, 201);
   const requestId = created.body.request.id;
 
-  const maskedDiff = call(api, { method: "GET", path: `/api/v1/change-requests/${requestId}/diff` });
+  const maskedDiff = await call(api, { method: "GET", path: `/api/v1/change-requests/${requestId}/diff` });
   assert.equal(maskedDiff.status, 200);
   assert.equal(maskedDiff.body.fields.length, 1);
   assert.equal(maskedDiff.body.fields[0].masked, true);
@@ -176,7 +176,7 @@ test("PH-07C masked diff: GET /change-requests/{id}/diff applies P02 masking for
   assert.equal(maskedDiff.body.fields[0].newValue, "[HIDDEN]");
   assert.equal(JSON.stringify(maskedDiff.body).includes("AAAAA1111A"), false, "raw sensitive value never leaks");
 
-  const unmaskedDiff = call(api, {
+  const unmaskedDiff = await call(api, {
     method: "GET",
     path: `/api/v1/change-requests/${requestId}/diff`,
     actor: { fieldGrants: ["employee.pan"] },
@@ -185,10 +185,10 @@ test("PH-07C masked diff: GET /change-requests/{id}/diff applies P02 masking for
   assert.equal(unmaskedDiff.body.fields[0].newValue, "AAAAA1111A");
 });
 
-test("PH-07C lifecycle routes: send-back, resubmit, and withdraw are registered and guarded end-to-end", () => {
+test("PH-07C lifecycle routes: send-back, resubmit, and withdraw are registered and guarded end-to-end", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/personal-details/change-requests",
     headers: { "Idempotency-Key": "idem-ph07c-route-001" },
@@ -196,7 +196,7 @@ test("PH-07C lifecycle routes: send-back, resubmit, and withdraw are registered 
   });
   const requestId = created.body.request.id;
 
-  const missingReason = call(api, {
+  const missingReason = await call(api, {
     method: "POST",
     path: `/api/v1/personal-details/change-requests/${requestId}:send-back`,
     headers: { "Idempotency-Key": "idem-ph07c-route-002" },
@@ -206,7 +206,7 @@ test("PH-07C lifecycle routes: send-back, resubmit, and withdraw are registered 
   assert.equal(missingReason.status, 400);
   assert.equal(missingReason.body.error.details.messageId, "ERR-REASON-REQ");
 
-  const sodBreach = call(api, {
+  const sodBreach = await call(api, {
     method: "POST",
     path: `/api/v1/personal-details/change-requests/${requestId}:approve`,
     headers: { "Idempotency-Key": "idem-ph07c-route-003" },
@@ -215,7 +215,7 @@ test("PH-07C lifecycle routes: send-back, resubmit, and withdraw are registered 
   assert.equal(sodBreach.status, 403);
   assert.equal(sodBreach.body.error.details.messageId, "ERR-G02-SOD");
 
-  const returned = call(api, {
+  const returned = await call(api, {
     method: "POST",
     path: `/api/v1/personal-details/change-requests/${requestId}:send-back`,
     headers: { "Idempotency-Key": "idem-ph07c-route-004" },
@@ -225,7 +225,7 @@ test("PH-07C lifecycle routes: send-back, resubmit, and withdraw are registered 
   assert.equal(returned.status, 202);
   assert.equal(returned.body.request.status, "RETURNED");
 
-  const resubmitted = call(api, {
+  const resubmitted = await call(api, {
     method: "POST",
     path: `/api/v1/change-requests/${requestId}/resubmit`,
     headers: { "Idempotency-Key": "idem-ph07c-route-005" },
@@ -235,7 +235,7 @@ test("PH-07C lifecycle routes: send-back, resubmit, and withdraw are registered 
   assert.equal(resubmitted.body.request.status, "IN_REVIEW");
   assert.equal(resubmitted.body.request.revisionNo, 2);
 
-  const withdrawn = call(api, {
+  const withdrawn = await call(api, {
     method: "POST",
     path: `/api/v1/change-requests/${requestId}/withdraw`,
     headers: { "Idempotency-Key": "idem-ph07c-route-006" },

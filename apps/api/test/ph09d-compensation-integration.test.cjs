@@ -99,7 +99,7 @@ function imposePenaltyOrder(services) {
   }).penaltyOrder;
 }
 
-test("PH-09D FR-14/15: disbursed + held + failed = run net on real ledger rows; sign-off SoD gates completion", () => {
+test("PH-09D FR-14/15: disbursed + held + failed = run net on real ledger rows; sign-off SoD gates completion", async () => {
   const services = createFoundationServices();
   const maker = actor();
   seedRules(services, [
@@ -155,7 +155,7 @@ test("PH-09D FR-14/15: disbursed + held + failed = run net on real ledger rows; 
   assert.ok(services.payrollEngine.getEngineRun(maker, run.id).transmittedAt);
 });
 
-test("PH-09D NEGATIVE FR-15: an induced residual (written-off hold) blocks with ERR-G10-RECON-TIEOUT", () => {
+test("PH-09D NEGATIVE FR-15: an induced residual (written-off hold) blocks with ERR-G10-RECON-TIEOUT", async () => {
   const services = createFoundationServices();
   const maker = actor();
   seedRules(services, [
@@ -180,7 +180,7 @@ test("PH-09D NEGATIVE FR-15: an induced residual (written-off hold) blocks with 
   );
 });
 
-test("PH-09D FR-09: G09 penalty recovery is bounded by the net-pay floor + CPC s.60 cap; barred residue books to deduction_carryforwards", () => {
+test("PH-09D FR-09: G09 penalty recovery is bounded by the net-pay floor + CPC s.60 cap; barred residue books to deduction_carryforwards", async () => {
   const services = createFoundationServices();
   const maker = actor();
   seedRules(services, [{ employeeId: ph03Ids.employee, basicPaise: 3100000 }]);
@@ -254,7 +254,7 @@ test("PH-09D FR-09: G09 penalty recovery is bounded by the net-pay floor + CPC s
   );
 });
 
-test("PH-09D FR-20: fnf_settlements consolidates open loans_advances + deduction_carryforwards with the AC2 net equation and FNF SoD", () => {
+test("PH-09D FR-20: fnf_settlements consolidates open loans_advances + deduction_carryforwards with the AC2 net equation and FNF SoD", async () => {
   const services = createFoundationServices();
   const maker = actor();
   seedRules(services, [{ employeeId: ph03Ids.employee, basicPaise: 3100000 }]);
@@ -341,7 +341,7 @@ test("PH-09D FR-20: fnf_settlements consolidates open loans_advances + deduction
   assert.equal(negative.status, "RECOVERY_PENDING");
 });
 
-test("PH-09D FR-23: PAY_FIXATION / ANNUAL_INCREMENT post via the G12 ingest contract; a replayed fact_key is a SEMANTIC duplicate", () => {
+test("PH-09D FR-23: PAY_FIXATION / ANNUAL_INCREMENT post via the G12 ingest contract; a replayed fact_key is a SEMANTIC duplicate", async () => {
   const services = createFoundationServices();
   const maker = actor();
   const timelineBefore = services.serviceRegister.getTimeline(maker, ph03Ids.employee).length;
@@ -387,7 +387,7 @@ test("PH-09D FR-23: PAY_FIXATION / ANNUAL_INCREMENT post via the G12 ingest cont
   assert.equal(services.serviceRegister.getTimeline(maker, ph03Ids.employee).length, timelineBefore + 2);
 });
 
-test("PH-09D NEGATIVE G11 FR-14: disbursement without an ACTIVE PASSED account verification fails closed with ERR-G11-ACCOUNT-VERIFY", () => {
+test("PH-09D NEGATIVE G11 FR-14: disbursement without an ACTIVE PASSED account verification fails closed with ERR-G11-ACCOUNT-VERIFY", async () => {
   const services = createFoundationServices();
   const maker = actor();
   const sanctioner = actor({ userId: "user-ph09d-pension-sanctioner", actorUserId: "user-ph09d-pension-sanctioner" });

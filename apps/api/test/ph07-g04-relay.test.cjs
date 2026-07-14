@@ -21,15 +21,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph07-g04", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-07 G04 relay posts leave SR events idempotently and reconciles the outbox", () => {
+test("PH-07 G04 relay posts leave SR events idempotently and reconciles the outbox", async () => {
   const services = createFoundationServices();
   const event = services.leaveSrRelay.enqueueApprovedLeave(actor(), {
     leaveApplicationId: "leave-app-ph07-001",
@@ -51,7 +51,7 @@ test("PH-07 G04 relay posts leave SR events idempotently and reconciles the outb
   assert.equal(report.posted, 1);
 });
 
-test("PH-07 G04 DLQ replay and discard are explicit custodian actions", () => {
+test("PH-07 G04 DLQ replay and discard are explicit custodian actions", async () => {
   const services = createFoundationServices();
   const event = services.leaveSrRelay.enqueueApprovedLeave(actor(), {
     leaveApplicationId: "leave-app-ph07-002",
@@ -79,7 +79,7 @@ test("PH-07 G04 DLQ replay and discard are explicit custodian actions", () => {
   assert.ok(services.audit.listAudit(actor()).some((entry) => entry.action === "G04_RELAY_DISCARD"));
 });
 
-test("PH-07 G04 routes expose outbox relay and reconciliation", () => {
+test("PH-07 G04 routes expose outbox relay and reconciliation", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const event = services.leaveSrRelay.enqueueApprovedLeave(actor(), {
@@ -89,7 +89,7 @@ test("PH-07 G04 routes expose outbox relay and reconciliation", () => {
     payload: { applicationNo: "LA/2026/90004", totalDays: 1 },
   });
 
-  const relayed = call(api, {
+  const relayed = await call(api, {
     method: "POST",
     path: `/api/v1/leave-sr/outbox/${event.id}:relay`,
     headers: { "Idempotency-Key": "idem-ph07-g04-relay-route-001" },
@@ -98,11 +98,11 @@ test("PH-07 G04 routes expose outbox relay and reconciliation", () => {
   assert.equal(relayed.status, 202);
   assert.equal(relayed.body.outboxEvent.status, "POSTED");
 
-  const outbox = call(api, { method: "GET", path: "/api/v1/leave-sr/outbox" });
+  const outbox = await call(api, { method: "GET", path: "/api/v1/leave-sr/outbox" });
   assert.equal(outbox.status, 200);
   assert.equal(outbox.body.items.length, 1);
 
-  const reconciliation = call(api, { method: "GET", path: "/api/v1/leave-sr/reconciliation" });
+  const reconciliation = await call(api, { method: "GET", path: "/api/v1/leave-sr/reconciliation" });
   assert.equal(reconciliation.status, 200);
   assert.equal(reconciliation.body.report.posted, 1);
 });

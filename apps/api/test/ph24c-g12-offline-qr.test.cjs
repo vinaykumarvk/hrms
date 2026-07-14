@@ -22,7 +22,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G12 offline-QR: a genuine bundle verifies offline", () => {
+test("G12 offline-QR: a genuine bundle verifies offline", async () => {
   const s = createFoundationServices();
   const bundle = s.offlineVerification.issueBundle(actor(), {
     subjectRef: "sr-event-991",
@@ -34,7 +34,7 @@ test("G12 offline-QR: a genuine bundle verifies offline", () => {
   assert.equal(res.valid, true);
 });
 
-test("G12 offline-QR: a tampered bundle fails verification (no live ledger needed)", () => {
+test("G12 offline-QR: a tampered bundle fails verification (no live ledger needed)", async () => {
   const s = createFoundationServices();
   const bundle = s.offlineVerification.issueBundle(actor(), {
     subjectRef: "sr-event-992",

@@ -17,8 +17,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph45a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -27,12 +27,12 @@ function call(api, request) {
 
 const approver = { userId: "reveal-approver", actorUserId: "reveal-approver" };
 
-test("PH-45A G01 Aadhaar reveal (4-eyes): request -> approve; read vault", () => {
+test("PH-45A G01 Aadhaar reveal (4-eyes): request -> approve; read vault", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const vault = services.aadhaarVault.captureAadhaar(actor(), { employeeId: ph03Ids.employee, rawAadhaar: "412345678900" });
 
-  const req = call(api, {
+  const req = await call(api, {
     method: "POST",
     path: `/api/v1/employees/aadhaar-vault/${vault.id}:request-reveal`,
     headers: { "Idempotency-Key": "rev-1" },
@@ -43,22 +43,22 @@ test("PH-45A G01 Aadhaar reveal (4-eyes): request -> approve; read vault", () =>
   assert.equal(req.body.reveal.status, "REQUESTED");
 
   // 4-eyes: the requester cannot approve their own reveal.
-  const selfApprove = call(api, { method: "POST", path: `/api/v1/employees/aadhaar-reveals/${revealId}:approve`, headers: { "Idempotency-Key": "rev-self" }, body: {} });
+  const selfApprove = await call(api, { method: "POST", path: `/api/v1/employees/aadhaar-reveals/${revealId}:approve`, headers: { "Idempotency-Key": "rev-self" }, body: {} });
   assert.equal(selfApprove.status, 403);
 
-  const approved = call(api, { method: "POST", path: `/api/v1/employees/aadhaar-reveals/${revealId}:approve`, headers: { "Idempotency-Key": "rev-ap" }, actor: approver, body: {} });
+  const approved = await call(api, { method: "POST", path: `/api/v1/employees/aadhaar-reveals/${revealId}:approve`, headers: { "Idempotency-Key": "rev-ap" }, actor: approver, body: {} });
   assert.equal(approved.status, 202);
   assert.equal(approved.body.request.status, "APPROVED");
   assert.match(approved.body.maskedAadhaar, /^XXXX-XXXX-\d{4}$/);
 
-  const read = call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.employee}/aadhaar-vault` });
+  const read = await call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.employee}/aadhaar-vault` });
   assert.equal(read.status, 200);
   assert.equal(read.body.vault.id, vault.id);
 });
 
-test("PH-45A G01 employee legal hold: place -> release; blocking obligation: register -> clear", () => {
+test("PH-45A G01 employee legal hold: place -> release; blocking obligation: register -> clear", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const placed = call(api, {
+  const placed = await call(api, {
     method: "POST",
     path: `/api/v1/employees/${ph03Ids.employee}:place-legal-hold`,
     headers: { "Idempotency-Key": "lh-1" },
@@ -68,11 +68,11 @@ test("PH-45A G01 employee legal hold: place -> release; blocking obligation: reg
   const holdId = placed.body.hold.id;
   assert.equal(placed.body.hold.status, "ACTIVE");
 
-  const released = call(api, { method: "POST", path: `/api/v1/employees/legal-holds/${holdId}:release`, headers: { "Idempotency-Key": "lh-r" }, body: {} });
+  const released = await call(api, { method: "POST", path: `/api/v1/employees/legal-holds/${holdId}:release`, headers: { "Idempotency-Key": "lh-r" }, body: {} });
   assert.equal(released.status, 202);
   assert.equal(released.body.hold.status, "RELEASED");
 
-  const obligation = call(api, {
+  const obligation = await call(api, {
     method: "POST",
     path: `/api/v1/employees/${ph03Ids.employee}:register-obligation`,
     headers: { "Idempotency-Key": "ob-1" },
@@ -82,18 +82,18 @@ test("PH-45A G01 employee legal hold: place -> release; blocking obligation: reg
   const obligationId = obligation.body.obligation.id;
   assert.equal(obligation.body.obligation.status, "OPEN");
 
-  const cleared = call(api, { method: "POST", path: `/api/v1/employees/obligations/${obligationId}:clear`, headers: { "Idempotency-Key": "ob-c" }, body: {} });
+  const cleared = await call(api, { method: "POST", path: `/api/v1/employees/obligations/${obligationId}:clear`, headers: { "Idempotency-Key": "ob-c" }, body: {} });
   assert.equal(cleared.status, 202);
   assert.equal(cleared.body.obligation.status, "CLEARED");
 });
 
-test("PH-45A G01 service-no lookup requires serviceNo and resolves a seeded employee", () => {
+test("PH-45A G01 service-no lookup requires serviceNo and resolves a seeded employee", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const bad = call(api, { method: "GET", path: "/api/v1/employees:by-service-no" });
+  const bad = await call(api, { method: "GET", path: "/api/v1/employees:by-service-no" });
   assert.equal(bad.status, 400);
   assert.equal(bad.body.error.code, "VALIDATION_FAILED");
 
-  const found = call(api, { method: "GET", path: "/api/v1/employees:by-service-no", query: { serviceNo: "GOV-100245" } });
+  const found = await call(api, { method: "GET", path: "/api/v1/employees:by-service-no", query: { serviceNo: "GOV-100245" } });
   assert.equal(found.status, 200);
   assert.equal(found.body.employee.serviceNo, "GOV-100245");
 });

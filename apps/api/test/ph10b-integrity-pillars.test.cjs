@@ -63,7 +63,7 @@ function ingest(services, scope, employeeId, seq, eventTypeCode = "IDENTITY_CHAN
   }).event;
 }
 
-test("PH-10B FR-04 verify endpoint recomputes both chains and reports OK; JOB-G12-INTEGRITY drives the same path", () => {
+test("PH-10B FR-04 verify endpoint recomputes both chains and reports OK; JOB-G12-INTEGRITY drives the same path", async () => {
   const services = createFoundationServices();
   const scope = actor("user-ph10b-verify");
   const api = createFoundationApi(services);
@@ -72,7 +72,7 @@ test("PH-10B FR-04 verify endpoint recomputes both chains and reports OK; JOB-G1
   ingest(services, scope, "emp-ph10b-0001", 3);
 
   // Endpoint: recompute-from-content verification of the intact chain is OK.
-  const response = api.dispatch({
+  const response = await api.dispatch({
     method: "GET",
     path: "/api/v1/sr/employees/emp-ph10b-0001/integrity/verify",
     headers: { "X-Correlation-Id": "corr-ph10b" },
@@ -94,7 +94,7 @@ test("PH-10B FR-04 verify endpoint recomputes both chains and reports OK; JOB-G1
   assert.deepEqual(jobResult.failures, []);
 });
 
-test("PH-10B NEGATIVE tamper detection: a mutated copy of the chain FAILs verify at the offending sequence number", () => {
+test("PH-10B NEGATIVE tamper detection: a mutated copy of the chain FAILs verify at the offending sequence number", async () => {
   const services = createFoundationServices();
   const scope = actor("user-ph10b-tamper");
   ingest(services, scope, "emp-ph10b-0002", 1);
@@ -137,7 +137,7 @@ test("PH-10B NEGATIVE tamper detection: a mutated copy of the chain FAILs verify
   assert.equal(services.srIntegrity.verifyEmployee(scope, "emp-ph10b-0002").result, "OK");
 });
 
-test("PH-10B Merkle root is real pairwise SHA-256 with odd-node promotion: recomputable and head-sensitive", () => {
+test("PH-10B Merkle root is real pairwise SHA-256 with odd-node promotion: recomputable and head-sensitive", async () => {
   const leafA = sha256Hex("leaf-a");
   const leafB = sha256Hex("leaf-b");
   const leafC = sha256Hex("leaf-c");
@@ -155,7 +155,7 @@ test("PH-10B Merkle root is real pairwise SHA-256 with odd-node promotion: recom
   assert.equal(computeMerkleRoot([]), GENESIS_HASH);
 });
 
-test("PH-10B JOB-G12-ANCHOR persists a real Merkle anchor over per-employee chain heads behind the TSA seam", () => {
+test("PH-10B JOB-G12-ANCHOR persists a real Merkle anchor over per-employee chain heads behind the TSA seam", async () => {
   const tsa = fakeTsa();
   const services = createFoundationServices({ g12TimestampAuthority: tsa });
   const scope = actor("user-ph10b-anchor");
@@ -194,7 +194,7 @@ test("PH-10B JOB-G12-ANCHOR persists a real Merkle anchor over per-employee chai
   assert.equal(services.srIntegrity.listAnchors(scope).length, 2);
 });
 
-test("PH-10B JOB-G12-GAPSCAN reconciles expected-event rules and appends GAP_FLAGGED rows; lifecycle never deletes", () => {
+test("PH-10B JOB-G12-GAPSCAN reconciles expected-event rules and appends GAP_FLAGGED rows; lifecycle never deletes", async () => {
   const services = createFoundationServices();
   const scope = actor("user-ph10b-gapscan");
   // emp-A misses the expected increment; emp-B recorded it; emp-C has a legitimate suppressor.
@@ -248,7 +248,7 @@ test("PH-10B JOB-G12-GAPSCAN reconciles expected-event rules and appends GAP_FLA
   assert.throws(() => services.srIntegrity.resolveGap(scope, gapId, { gapStatus: "UNDER_REVIEW" }), /transition/);
 });
 
-test("PH-10B custodian attestation signs the chain head; SERVER_SIGNED is banned for statutory attestations", () => {
+test("PH-10B custodian attestation signs the chain head; SERVER_SIGNED is banned for statutory attestations", async () => {
   const tsa = fakeTsa();
   const services = createFoundationServices({ g12TimestampAuthority: tsa });
   const scope = actor("user-ph10b-custodian");
@@ -281,7 +281,7 @@ test("PH-10B custodian attestation signs the chain head; SERVER_SIGNED is banned
   );
 });
 
-test("PH-10B certified extract snapshots the redacted rendering: P02 field mask fail-closed + purpose policy", () => {
+test("PH-10B certified extract snapshots the redacted rendering: P02 field mask fail-closed + purpose policy", async () => {
   const services = createFoundationServices();
   const scope = actor("user-ph10b-extract");
   ingest(services, scope, "emp-ph10b-0006", 1, "IDENTITY_CHANGE", { displayName: "Kiran Verified", basicPay: 56100 });
@@ -323,14 +323,14 @@ test("PH-10B certified extract snapshots the redacted rendering: P02 field mask 
   assert.equal(services.srIntegrity.getExtract(scope, extract.id).contentDigest, extract.contentDigest);
 });
 
-test("PH-10B integrity routes are protected and drive the pillars end-to-end", () => {
+test("PH-10B integrity routes are protected and drive the pillars end-to-end", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const scope = actor("user-ph10b-routes");
   ingest(services, scope, "emp-ph10b-0007", 1);
 
   // JOB-G12-INTEGRITY over the API surface.
-  const runResponse = api.dispatch({
+  const runResponse = await api.dispatch({
     method: "POST",
     path: "/api/v1/sr/integrity/run",
     headers: { "X-Correlation-Id": "corr-ph10b", "Idempotency-Key": "idem-ph10b-run-1" },
@@ -342,7 +342,7 @@ test("PH-10B integrity routes are protected and drive the pillars end-to-end", (
   assert.equal(runResponse.body.result, "OK");
 
   // Certified extract issue over the API surface applies the same redaction path.
-  const extractResponse = api.dispatch({
+  const extractResponse = await api.dispatch({
     method: "POST",
     path: "/api/v1/sr/extracts",
     headers: { "X-Correlation-Id": "corr-ph10b", "Idempotency-Key": "idem-ph10b-extract-1" },
@@ -353,7 +353,7 @@ test("PH-10B integrity routes are protected and drive the pillars end-to-end", (
   assert.equal(extractResponse.body.redactedFields.length > 0, true);
 
   // Without the permission the verify endpoint is denied (deny-by-default P02).
-  const denied = api.dispatch({
+  const denied = await api.dispatch({
     method: "GET",
     path: "/api/v1/sr/employees/emp-ph10b-0007/integrity/verify",
     headers: { "X-Correlation-Id": "corr-ph10b" },

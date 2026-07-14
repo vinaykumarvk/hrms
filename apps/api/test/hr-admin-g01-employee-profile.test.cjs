@@ -29,13 +29,13 @@ function boot() {
   return { services, api, admin, meera };
 }
 
-function call(api, actorCtx, request) {
-  return api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-hr-admin-g01", ...(request.headers ?? {}) }, actor: actorCtx });
+async function call(api, actorCtx, request) {
+  return await api.dispatch({ ...request, headers: { "X-Correlation-Id": "corr-hr-admin-g01", ...(request.headers ?? {}) }, actor: actorCtx });
 }
 
-test("epm.employee.manage (runtime: g01.employee.create): hr_admin can create an employee master record", () => {
+test("epm.employee.manage (runtime: g01.employee.create): hr_admin can create an employee master record", async () => {
   const { api } = boot();
-  const result = call(api, actor("hr-admin-create-probe", ["g01.employee.create"]), {
+  const result = await call(api, actor("hr-admin-create-probe", ["g01.employee.create"]), {
     method: "POST",
     path: "/api/v1/employees",
     headers: { "Idempotency-Key": "idem-hr-admin-g01-create-001" },
@@ -52,9 +52,9 @@ test("epm.employee.manage (runtime: g01.employee.create): hr_admin can create an
   assert.equal(result.body.employee.firstName, "Kavita");
 });
 
-test("epm.field.pii_unmask (read side): hr_admin with the right field grants sees unmasked PAN/DOB/category; without grants sees [HIDDEN]", () => {
+test("epm.field.pii_unmask (read side): hr_admin with the right field grants sees unmasked PAN/DOB/category; without grants sees [HIDDEN]", async () => {
   const { api, meera } = boot();
-  const created = call(api, actor("hr-admin-pii-setup-probe", ["g01.employee.create"], { fieldGrants: ["*"] }), {
+  const created = await call(api, actor("hr-admin-pii-setup-probe", ["g01.employee.create"], { fieldGrants: ["*"] }), {
     method: "POST",
     path: "/api/v1/employees",
     headers: { "Idempotency-Key": "idem-hr-admin-g01-pii-setup-001" },
@@ -62,7 +62,7 @@ test("epm.field.pii_unmask (read side): hr_admin with the right field grants see
   });
   const employeeId = created.body.employee.id;
 
-  const withGrants = call(api, actor("hr-admin-with-grants", ["g01.employee.read"], { fieldGrants: ["employee.pan", "employee.aadhaar", "employee.category", "employee.dob"] }), {
+  const withGrants = await call(api, actor("hr-admin-with-grants", ["g01.employee.read"], { fieldGrants: ["employee.pan", "employee.aadhaar", "employee.category", "employee.dob"] }), {
     method: "GET",
     path: `/api/v1/employees/${employeeId}/profile-360`,
   });
@@ -71,7 +71,7 @@ test("epm.field.pii_unmask (read side): hr_admin with the right field grants see
   assert.equal(withGrants.body.profile.dob, "1990-01-20");
   assert.equal(withGrants.body.profile.category, "GENERAL");
 
-  const withoutGrants = call(api, actor("hr-admin-without-grants", ["g01.employee.read"], { fieldGrants: [] }), {
+  const withoutGrants = await call(api, actor("hr-admin-without-grants", ["g01.employee.read"], { fieldGrants: [] }), {
     method: "GET",
     path: `/api/v1/employees/${employeeId}/profile-360`,
   });
@@ -82,9 +82,9 @@ test("epm.field.pii_unmask (read side): hr_admin with the right field grants see
   void meera;
 });
 
-test("epm.field.pii_unmask (write side): hr_admin can correct PAN/DOB with a recorded reason; a reason is mandatory; PAN format is validated", () => {
+test("epm.field.pii_unmask (write side): hr_admin can correct PAN/DOB with a recorded reason; a reason is mandatory; PAN format is validated", async () => {
   const { api } = boot();
-  const created = call(api, actor("hr-admin-correct-setup-probe", ["g01.employee.create"]), {
+  const created = await call(api, actor("hr-admin-correct-setup-probe", ["g01.employee.create"]), {
     method: "POST",
     path: "/api/v1/employees",
     headers: { "Idempotency-Key": "idem-hr-admin-g01-correct-setup-001" },
@@ -93,7 +93,7 @@ test("epm.field.pii_unmask (write side): hr_admin can correct PAN/DOB with a rec
   const employeeId = created.body.employee.id;
 
   const correctProbeFieldGrants = { fieldGrants: ["employee.pan", "employee.aadhaar", "employee.category", "employee.dob"] };
-  const missingReason = call(api, actor("hr-admin-correct-probe", ["g01.employee.pii.correct"], correctProbeFieldGrants), {
+  const missingReason = await call(api, actor("hr-admin-correct-probe", ["g01.employee.pii.correct"], correctProbeFieldGrants), {
     method: "POST",
     path: `/api/v1/employees/${employeeId}:correct-pii`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-correct-001" },
@@ -101,7 +101,7 @@ test("epm.field.pii_unmask (write side): hr_admin can correct PAN/DOB with a rec
   });
   assert.equal(missingReason.status, 400);
 
-  const badPan = call(api, actor("hr-admin-correct-probe", ["g01.employee.pii.correct"]), {
+  const badPan = await call(api, actor("hr-admin-correct-probe", ["g01.employee.pii.correct"]), {
     method: "POST",
     path: `/api/v1/employees/${employeeId}:correct-pii`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-correct-002" },
@@ -109,7 +109,7 @@ test("epm.field.pii_unmask (write side): hr_admin can correct PAN/DOB with a rec
   });
   assert.equal(badPan.status, 400);
 
-  const corrected = call(api, actor("hr-admin-correct-probe", ["g01.employee.pii.correct"], correctProbeFieldGrants), {
+  const corrected = await call(api, actor("hr-admin-correct-probe", ["g01.employee.pii.correct"], correctProbeFieldGrants), {
     method: "POST",
     path: `/api/v1/employees/${employeeId}:correct-pii`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-correct-003" },
@@ -120,7 +120,7 @@ test("epm.field.pii_unmask (write side): hr_admin can correct PAN/DOB with a rec
   assert.equal(corrected.body.profile.dob, "1988-08-09");
 
   // A plain g01.employee.read holder (no g01.employee.pii.correct) cannot correct.
-  const forbidden = call(api, actor("employee-reader-probe", ["g01.employee.read"]), {
+  const forbidden = await call(api, actor("employee-reader-probe", ["g01.employee.read"]), {
     method: "POST",
     path: `/api/v1/employees/${employeeId}:correct-pii`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-correct-004" },
@@ -129,9 +129,9 @@ test("epm.field.pii_unmask (write side): hr_admin can correct PAN/DOB with a rec
   assert.equal(forbidden.status, 403);
 });
 
-test("g01.bank.approve: hr_admin (checker) can approve a bank-account change but not one they themselves submitted (maker!=checker SOD)", () => {
+test("g01.bank.approve: hr_admin (checker) can approve a bank-account change but not one they themselves submitted (maker!=checker SOD)", async () => {
   const { api, meera } = boot();
-  const submitted = call(api, actor(meera.id, ["g01.bank.write"], { roles: ["employee"] }), {
+  const submitted = await call(api, actor(meera.id, ["g01.bank.write"], { roles: ["employee"] }), {
     method: "POST",
     path: `/api/v1/employees/${meera.id}/bank-accounts`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-bank-001" },
@@ -140,7 +140,7 @@ test("g01.bank.approve: hr_admin (checker) can approve a bank-account change but
   assert.equal(submitted.status, 201);
   const accountId = submitted.body.bankAccount.id;
 
-  const selfApprove = call(api, actor(meera.id, ["g01.bank.approve"], { roles: ["employee"] }), {
+  const selfApprove = await call(api, actor(meera.id, ["g01.bank.approve"], { roles: ["employee"] }), {
     method: "POST",
     path: `/api/v1/employees/${meera.id}/bank-accounts/${accountId}:approve`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-bank-002" },
@@ -148,7 +148,7 @@ test("g01.bank.approve: hr_admin (checker) can approve a bank-account change but
   });
   assert.equal(selfApprove.status, 403);
 
-  const hrAdminApprove = call(api, actor("hr-admin-bank-approver-probe", ["g01.bank.approve"], { roles: ["hr_admin"] }), {
+  const hrAdminApprove = await call(api, actor("hr-admin-bank-approver-probe", ["g01.bank.approve"], { roles: ["hr_admin"] }), {
     method: "POST",
     path: `/api/v1/employees/${meera.id}/bank-accounts/${accountId}:approve`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-bank-003" },
@@ -157,9 +157,9 @@ test("g01.bank.approve: hr_admin (checker) can approve a bank-account change but
   assert.equal(hrAdminApprove.status, 202);
 });
 
-test("bgv_review: a vendor/onboarding-desk actor records a BGV result; hr_admin without the bgv_reviewer role cannot review it; with the role, can", () => {
+test("bgv_review: a vendor/onboarding-desk actor records a BGV result; hr_admin without the bgv_reviewer role cannot review it; with the role, can", async () => {
   const { api, meera } = boot();
-  const recorded = call(api, actor("onboarding-desk-probe", ["g01.bgv.record"], { roles: ["onboarding_admin"] }), {
+  const recorded = await call(api, actor("onboarding-desk-probe", ["g01.bgv.record"], { roles: ["onboarding_admin"] }), {
     method: "POST",
     path: `/api/v1/employees/${meera.id}/bgv-records`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-bgv-record-001" },
@@ -177,7 +177,7 @@ test("bgv_review: a vendor/onboarding-desk actor records a BGV result; hr_admin 
   const recordId = recorded.body.bgvRecord.id;
 
   // hr_admin without the bgv_reviewer capability role cannot review the discrepancy.
-  const withoutFlag = call(api, actor("hr-admin-no-flag-probe", ["g01.bgv.review"], { roles: ["hr_admin"] }), {
+  const withoutFlag = await call(api, actor("hr-admin-no-flag-probe", ["g01.bgv.review"], { roles: ["hr_admin"] }), {
     method: "POST",
     path: `/api/v1/bgv-records/${recordId}:review`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-bgv-review-001" },
@@ -186,7 +186,7 @@ test("bgv_review: a vendor/onboarding-desk actor records a BGV result; hr_admin 
   assert.equal(withoutFlag.status, 403);
 
   // hr_admin WITH the bgv_reviewer capability role can review it.
-  const withFlag = call(api, actor("hr-admin-with-flag-probe", ["g01.bgv.review"], { roles: ["hr_admin", "bgv_reviewer"] }), {
+  const withFlag = await call(api, actor("hr-admin-with-flag-probe", ["g01.bgv.review"], { roles: ["hr_admin", "bgv_reviewer"] }), {
     method: "POST",
     path: `/api/v1/bgv-records/${recordId}:review`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-bgv-review-002" },
@@ -195,7 +195,7 @@ test("bgv_review: a vendor/onboarding-desk actor records a BGV result; hr_admin 
   assert.equal(withFlag.status, 200);
   assert.equal(withFlag.body.bgvRecord.reviewOutcome, "ESCALATED");
 
-  const listed = call(api, actor("hr-admin-list-probe", ["g01.bgv.read"], { roles: ["hr_admin"] }), {
+  const listed = await call(api, actor("hr-admin-list-probe", ["g01.bgv.read"], { roles: ["hr_admin"] }), {
     method: "GET",
     path: `/api/v1/employees/${meera.id}/bgv-records`,
   });
@@ -204,9 +204,9 @@ test("bgv_review: a vendor/onboarding-desk actor records a BGV result; hr_admin 
   assert.equal(listed.body.items[0].reviewOutcome, "ESCALATED");
 });
 
-test("bgv_review: a CLEAR result cannot be reviewed/dispositioned (nothing to review); a discrepancy result requires notes", () => {
+test("bgv_review: a CLEAR result cannot be reviewed/dispositioned (nothing to review); a discrepancy result requires notes", async () => {
   const { api, meera } = boot();
-  const clearRecord = call(api, actor("onboarding-desk-probe-2", ["g01.bgv.record"], { roles: ["onboarding_admin"] }), {
+  const clearRecord = await call(api, actor("onboarding-desk-probe-2", ["g01.bgv.record"], { roles: ["onboarding_admin"] }), {
     method: "POST",
     path: `/api/v1/employees/${meera.id}/bgv-records`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-bgv-record-002" },
@@ -214,7 +214,7 @@ test("bgv_review: a CLEAR result cannot be reviewed/dispositioned (nothing to re
   });
   assert.equal(clearRecord.status, 201);
 
-  const reviewClear = call(api, actor("hr-admin-review-clear-probe", ["g01.bgv.review"], { roles: ["hr_admin", "bgv_reviewer"] }), {
+  const reviewClear = await call(api, actor("hr-admin-review-clear-probe", ["g01.bgv.review"], { roles: ["hr_admin", "bgv_reviewer"] }), {
     method: "POST",
     path: `/api/v1/bgv-records/${clearRecord.body.bgvRecord.id}:review`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-bgv-review-003" },
@@ -222,7 +222,7 @@ test("bgv_review: a CLEAR result cannot be reviewed/dispositioned (nothing to re
   });
   assert.equal(reviewClear.status, 412);
 
-  const missingNotes = call(api, actor("onboarding-desk-probe-3", ["g01.bgv.record"], { roles: ["onboarding_admin"] }), {
+  const missingNotes = await call(api, actor("onboarding-desk-probe-3", ["g01.bgv.record"], { roles: ["onboarding_admin"] }), {
     method: "POST",
     path: `/api/v1/employees/${meera.id}/bgv-records`,
     headers: { "Idempotency-Key": "idem-hr-admin-g01-bgv-record-003" },

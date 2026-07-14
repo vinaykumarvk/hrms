@@ -23,7 +23,7 @@ function actorFor(userId, extra = {}) {
   };
 }
 
-test("workflow-approver-identity: an actor who is not the resolved reporting-chain approver cannot approve", () => {
+test("workflow-approver-identity: an actor who is not the resolved reporting-chain approver cannot approve", async () => {
   const services = createFoundationServices();
   const submitted = services.leave.submit(actorFor(ph03Ids.employee), {
     employeeId: ph03Ids.employee,
@@ -46,7 +46,7 @@ test("workflow-approver-identity: an actor who is not the resolved reporting-cha
   assert.equal(stillSubmitted.status, "SUBMITTED");
 });
 
-test("workflow-approver-identity: the actual resolved approver can approve", () => {
+test("workflow-approver-identity: the actual resolved approver can approve", async () => {
   const services = createFoundationServices();
   const submitted = services.leave.submit(actorFor(ph03Ids.employee), {
     employeeId: ph03Ids.employee,
@@ -58,7 +58,7 @@ test("workflow-approver-identity: the actual resolved approver can approve", () 
   assert.equal(approved.application.status, "APPROVED");
 });
 
-test("workflow-approver-identity: an hr_admin override role can approve on behalf of the resolved approver", () => {
+test("workflow-approver-identity: an hr_admin override role can approve on behalf of the resolved approver", async () => {
   const services = createFoundationServices();
   const submitted = services.leave.submit(actorFor(ph03Ids.employee), {
     employeeId: ph03Ids.employee,
@@ -72,7 +72,7 @@ test("workflow-approver-identity: an hr_admin override role can approve on behal
   assert.equal(approved.application.status, "APPROVED");
 });
 
-test("workflow-approver-identity: a non-assignee, non-override actor cannot reject either", () => {
+test("workflow-approver-identity: a non-assignee, non-override actor cannot reject either", async () => {
   const services = createFoundationServices();
   const submitted = services.leave.submit(actorFor(ph03Ids.employee), {
     employeeId: ph03Ids.employee,

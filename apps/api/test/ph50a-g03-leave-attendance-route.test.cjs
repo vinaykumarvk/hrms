@@ -17,18 +17,18 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph50a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-50A G03 leave year-close simulate + encashment via the kernel", () => {
+test("PH-50A G03 leave year-close simulate + encashment via the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
 
-  const sim = call(api, {
+  const sim = await call(api, {
     method: "POST",
     path: "/api/v1/leave/year-close:simulate",
     headers: { "Idempotency-Key": "yc-1" },
@@ -42,7 +42,7 @@ test("PH-50A G03 leave year-close simulate + encashment via the kernel", () => {
   assert.equal(sim.status, 200);
   assert.ok(sim.body.close);
 
-  const encashed = call(api, {
+  const encashed = await call(api, {
     method: "POST",
     path: "/api/v1/leave/encashments",
     headers: { "Idempotency-Key": "enc-1" },
@@ -52,7 +52,7 @@ test("PH-50A G03 leave year-close simulate + encashment via the kernel", () => {
   assert.equal(encashed.body.encashment.encashedDays, 5);
 
   // Over the cap fails closed.
-  const overCap = call(api, {
+  const overCap = await call(api, {
     method: "POST",
     path: "/api/v1/leave/encashments",
     headers: { "Idempotency-Key": "enc-2" },
@@ -60,14 +60,14 @@ test("PH-50A G03 leave year-close simulate + encashment via the kernel", () => {
   });
   assert.equal(overCap.body.error.code, "ENCASHMENT_CAP_EXCEEDED");
 
-  const list = call(api, { method: "GET", path: `/api/v1/leave/employees/${ph03Ids.employee}/encashments` });
+  const list = await call(api, { method: "GET", path: `/api/v1/leave/employees/${ph03Ids.employee}/encashments` });
   assert.equal(list.status, 200);
   assert.equal(list.body.items.length, 1);
 });
 
-test("PH-50A G03 mass-leave requires at least one member; a valid batch applies", () => {
+test("PH-50A G03 mass-leave requires at least one member; a valid batch applies", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const empty = call(api, {
+  const empty = await call(api, {
     method: "POST",
     path: "/api/v1/leave/mass-leave",
     headers: { "Idempotency-Key": "ml-0" },
@@ -76,7 +76,7 @@ test("PH-50A G03 mass-leave requires at least one member; a valid batch applies"
   assert.equal(empty.status, 400);
   assert.equal(empty.body.error.code, "VALIDATION_FAILED");
 
-  const applied = call(api, {
+  const applied = await call(api, {
     method: "POST",
     path: "/api/v1/leave/mass-leave",
     headers: { "Idempotency-Key": "ml-1" },
@@ -86,14 +86,14 @@ test("PH-50A G03 mass-leave requires at least one member; a valid batch applies"
   assert.ok(applied.body.batch.id);
 });
 
-test("PH-50A G03 punch-review read + resolve, and attendance-exception read", () => {
+test("PH-50A G03 punch-review read + resolve, and attendance-exception read", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const missing = call(api, { method: "GET", path: "/api/v1/attendance/punch-reviews/unknown-review" });
+  const missing = await call(api, { method: "GET", path: "/api/v1/attendance/punch-reviews/unknown-review" });
   assert.equal(missing.status, 200);
   assert.equal(missing.body.review, null);
 
   // Resolving a non-existent review fails NOT_FOUND (404).
-  const badResolve = call(api, {
+  const badResolve = await call(api, {
     method: "POST",
     path: "/api/v1/attendance/punch-reviews/unknown-review:resolve",
     headers: { "Idempotency-Key": "pr-x" },
@@ -101,7 +101,7 @@ test("PH-50A G03 punch-review read + resolve, and attendance-exception read", ()
   });
   assert.equal(badResolve.status, 404);
 
-  const exceptions = call(api, { method: "GET", path: `/api/v1/attendance/employees/${ph03Ids.employee}/exceptions` });
+  const exceptions = await call(api, { method: "GET", path: `/api/v1/attendance/employees/${ph03Ids.employee}/exceptions` });
   assert.equal(exceptions.status, 200);
   assert.ok(Array.isArray(exceptions.body.items));
 });

@@ -36,7 +36,7 @@ function requireMarkers(text, markers) {
   }
 }
 
-test("PH-13 release-candidate seal files exist and keep approval pending", () => {
+test("PH-13 release-candidate seal files exist and keep approval pending", async () => {
   const text = combined(requiredSealFiles);
   requireMarkers(text, [
     "RELEASE_CANDIDATE_SEALED",
@@ -47,7 +47,7 @@ test("PH-13 release-candidate seal files exist and keep approval pending", () =>
   ]);
 });
 
-test("PH-13 checksum manifest parses and hashes every sealed artifact", () => {
+test("PH-13 checksum manifest parses and hashes every sealed artifact", async () => {
   const manifest = JSON.parse(read(checksumManifestPath));
   assert.equal(manifest.marker, "EVIDENCE_CHECKSUM_MANIFEST");
   assert.equal(manifest.seal, "SHA256_EVIDENCE_SEAL");
@@ -62,7 +62,7 @@ test("PH-13 checksum manifest parses and hashes every sealed artifact", () => {
   }
 });
 
-test("PH-13 approval-sensitive documents do not claim approval or production execution", () => {
+test("PH-13 approval-sensitive documents do not claim approval or production execution", async () => {
   const manifest = JSON.parse(read(checksumManifestPath));
   const text = [
     "docs/release/release-candidate-manifest.md",
@@ -82,7 +82,7 @@ test("PH-13 approval-sensitive documents do not claim approval or production exe
   assert.equal(text.includes("GO_LIVE_HUMAN_APPROVAL_PENDING"), true);
 });
 
-test("PH-13 approval intake and archive markers are retained when present", () => {
+test("PH-13 approval intake and archive markers are retained when present", async () => {
   const text = combined(optionalPhase13Files);
   if (text.length === 0) {
     assert.equal(text.length, 0);

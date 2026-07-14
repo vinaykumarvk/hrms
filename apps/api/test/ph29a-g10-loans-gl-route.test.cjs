@@ -17,13 +17,13 @@ function actor(extra = {}) {
     ...extra,
   };
 }
-function call(api, request) {
-  return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph29a", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
+async function call(api, request) {
+  return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph29a", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
 }
 
-test("PH-29A POST /api/v1/payroll/loans:sanction sanctions a loan", () => {
+test("PH-29A POST /api/v1/payroll/loans:sanction sanctions a loan", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/payroll/loans:sanction",
     headers: { "Idempotency-Key": "idem-ph29a-loan" },
@@ -34,9 +34,9 @@ test("PH-29A POST /api/v1/payroll/loans:sanction sanctions a loan", () => {
   assert.equal(res.body.loan.status, "ACTIVE");
 });
 
-test("PH-29A POST /api/v1/payroll/gl-export posts a balanced GL batch to the ERP", () => {
+test("PH-29A POST /api/v1/payroll/gl-export posts a balanced GL batch to the ERP", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/payroll/gl-export",
     headers: { "Idempotency-Key": "idem-ph29a-gl" },

@@ -30,13 +30,13 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.document.create",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       // FR-G13-005/007: `content` is the gated byte-ingest path (server-side SHA-256 +
       // PENDING_SCAN); `contentHash` alone is the pre-scanned registration seam.
       return created({
         document: toWireDocument(
-          context.services.documentVault.createDocument(context.scope, {
+          await context.services.documentVault.createDocument(context.scope, {
             title: requiredString(body, "title"),
             ownerEmployeeId: optionalString(body, "ownerEmployeeId"),
             classification: readClassification(body),
@@ -55,7 +55,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     protected: true,
     permission: "g13.document.read",
     list: { defaultLimit: 25, maxLimit: 100 },
-    handler: (context) => ok(pageItems(context.services.documentVault.list(context.actor).map(toWireDocument), context.pagination ?? { limit: 25 })),
+    handler: async (context) => ok(pageItems(await context.services.documentVault.list(context.actor).map(toWireDocument), context.pagination ?? { limit: 25 })),
   });
   kernel.register({
     method: "GET",
@@ -63,8 +63,8 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.listMyDocuments",
     protected: true,
     permission: "g13.document.read",
-    handler: (context) =>
-      ok({ items: context.services.documentVault.listMyDocuments(context.actor, requiredParam(context.params, "id")).map(toWireDocument) }),
+    handler: async (context) =>
+      ok({ items: await context.services.documentVault.listMyDocuments(context.actor, requiredParam(context.params, "id")).map(toWireDocument) }),
   });
   kernel.register({
     method: "POST",
@@ -74,12 +74,12 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.document.attach",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       const link = optionalRecord(body, "link") ?? body;
       return accepted({
         document: toWireDocument(
-          context.services.documentVault.attach(context.scope, requiredString(body, "documentId"), {
+          await context.services.documentVault.attach(context.scope, requiredString(body, "documentId"), {
             moduleCode: requiredString(link, "moduleCode"),
             entityName: requiredString(link, "entityName"),
             entityRefId: requiredString(link, "entityRefId"),
@@ -95,7 +95,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.listDocumentVersions",
     protected: true,
     permission: "g13.document.read",
-    handler: (context) => ok({ items: context.services.documentVault.listVersions(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ items: await context.services.documentVault.listVersions(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "POST",
@@ -105,11 +105,11 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.document.checkin",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted({
         document: toWireDocument(
-          context.services.documentVault.checkIn(context.scope, requiredParam(context.params, "id"), {
+          await context.services.documentVault.checkIn(context.scope, requiredParam(context.params, "id"), {
             contentHash: optionalString(body, "contentHash"),
             content: optionalString(body, "content"),
             title: optionalString(body, "title"),
@@ -126,11 +126,11 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.document.supersede",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted({
         document: toWireDocument(
-          context.services.documentVault.supersede(context.scope, requiredParam(context.params, "id"), optionalString(body, "replacementDocumentId"))
+          await context.services.documentVault.supersede(context.scope, requiredParam(context.params, "id"), optionalString(body, "replacementDocumentId"))
         ),
       });
     },
@@ -141,7 +141,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.getDocumentRetention",
     protected: true,
     permission: "g13.document.read",
-    handler: (context) => ok({ retention: context.services.documentVault.getRetention(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ retention: await context.services.documentVault.getRetention(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "POST",
@@ -151,10 +151,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.document.retention.extend",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted({
-        retention: context.services.documentVault.extendRetention(
+        retention: await context.services.documentVault.extendRetention(
           context.scope,
           requiredParam(context.params, "id"),
           requiredString(body, "retentionUntil"),
@@ -169,16 +169,16 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.fetchDocument",
     protected: true,
     permission: "g13.document.read",
-    handler: (context) => {
+    handler: async (context) => {
       // FR-G13-016 R2 (VAL-G13-FETCH-INTENT): intent=VIEW|DOWNLOAD is mandatory on :fetch.
       const intent = readFetchIntent(context.request.query?.intent);
       if (intent === "DOWNLOAD") {
         // FR-G13-016 AC6: the file grant is served ONLY with the distinct DOWNLOAD right.
-        context.services.authorization.check(context.actor, "g13.document.download", context.scope);
+        await context.services.authorization.check(context.actor, "g13.document.download", context.scope);
       }
       // FR-G13-006/015: the actor (with roles) feeds the deny-by-default clearance gate and the
       // VIEW/DOWNLOAD access-audit event on the E12 document_audit ledger.
-      return ok({ fetch: context.services.documentVault.fetch(context.actor, requiredParam(context.params, "id"), intent) });
+      return ok({ fetch: await context.services.documentVault.fetch(context.actor, requiredParam(context.params, "id"), intent) });
     },
   });
   kernel.register({
@@ -187,8 +187,8 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.getDocument",
     protected: true,
     permission: "g13.document.read",
-    handler: (context) => {
-      const document = context.services.documentVault.get(context.actor, requiredParam(context.params, "id"));
+    handler: async (context) => {
+      const document = await context.services.documentVault.get(context.actor, requiredParam(context.params, "id"));
       if (!document) {
         throw new FoundationError("NOT_FOUND", "Document not found");
       }
@@ -203,10 +203,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.legal_hold.place",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted({
-        document: toWireDocument(context.services.documentVault.placeLegalHold(context.scope, requiredString(body, "documentId"), requiredString(body, "reason"))),
+        document: toWireDocument(await context.services.documentVault.placeLegalHold(context.scope, requiredString(body, "documentId"), requiredString(body, "reason"))),
       });
     },
   });
@@ -218,11 +218,11 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.legal_hold.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted({
         document: toWireDocument(
-          context.services.documentVault.placeLegalHold(context.scope, requiredParam(context.params, "id"), optionalString(body, "reason") ?? "Approved")
+          await context.services.documentVault.placeLegalHold(context.scope, requiredParam(context.params, "id"), optionalString(body, "reason") ?? "Approved")
         ),
       });
     },
@@ -235,11 +235,11 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.legal_hold.release",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted({
         document: toWireDocument(
-          context.services.documentVault.releaseLegalHold(context.scope, requiredParam(context.params, "id"), optionalString(body, "reason") ?? "Released")
+          await context.services.documentVault.releaseLegalHold(context.scope, requiredParam(context.params, "id"), optionalString(body, "reason") ?? "Released")
         ),
       });
     },
@@ -253,10 +253,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.clearance.grant",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        clearance: context.services.documentVault.grantSecurityClearance(context.scope, {
+        clearance: await context.services.documentVault.grantSecurityClearance(context.scope, {
           principalType: readPrincipalType(body),
           principalRef: requiredString(body, "principalRef"),
           clearanceLevel: readClearanceLevel(body),
@@ -276,10 +276,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.retention.class.define",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        retentionClass: context.services.documentVault.defineRetentionClass(context.scope, {
+        retentionClass: await context.services.documentVault.defineRetentionClass(context.scope, {
           code: requiredString(body, "code"),
           name: requiredString(body, "name"),
           retentionPeriodMonths: optionalNumber(body, "retentionPeriodMonths"),
@@ -297,11 +297,11 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.retention.assign",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return accepted({
         document: toWireDocument(
-          context.services.documentVault.assignRetentionClass(context.scope, requiredParam(context.params, "id"), requiredString(body, "retentionClassCode"))
+          await context.services.documentVault.assignRetentionClass(context.scope, requiredParam(context.params, "id"), requiredString(body, "retentionClassCode"))
         ),
       });
     },
@@ -315,10 +315,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.disposition.propose",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        disposition: context.services.documentVault.proposeDisposition(
+        disposition: await context.services.documentVault.proposeDisposition(
           context.scope,
           requiredParam(context.params, "id"),
           optionalString(body, "action") ? readDispositionAction(body, "action") : undefined
@@ -334,7 +334,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.disposition.approve",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted({ disposition: context.services.documentVault.approveDisposition(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => accepted({ disposition: await context.services.documentVault.approveDisposition(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "POST",
@@ -344,7 +344,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.disposition.execute",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted({ disposition: context.services.documentVault.executeDisposition(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => accepted({ disposition: await context.services.documentVault.executeDisposition(context.scope, requiredParam(context.params, "id")) }),
   });
   // FR-G13-005 AC4 (JOB-G13-KEYROTATE): rotate the master key and re-wrap every stored
   // wrapped_dek under the new kms_key_id — object ciphertext is never rewritten.
@@ -356,7 +356,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.key.rotate",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted({ rotation: context.services.documentVault.rotateEncryptionKeys(context.scope) }),
+    handler: async (context) => accepted({ rotation: await context.services.documentVault.rotateEncryptionKeys(context.scope) }),
   });
   // FR-G13-018 (E22 data_subject_requests): DPDP DSR lifecycle — register (statutory clock),
   // adjudicate against VAL-G13-LATTICE (DPO), execute (dual-control custodian, SoD).
@@ -368,10 +368,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.dsr.register",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        dataSubjectRequest: context.services.documentVault.registerDataSubjectRequest(context.scope, {
+        dataSubjectRequest: await context.services.documentVault.registerDataSubjectRequest(context.scope, {
           dataSubjectEmployeeId: requiredString(body, "dataSubjectEmployeeId"),
           requestType: readDsrType(body),
           consentRefId: optionalString(body, "consentRefId"),
@@ -386,7 +386,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.listDataSubjectRequests",
     protected: true,
     permission: "g13.dsr.read",
-    handler: (context) => ok(pageItems(context.services.documentVault.listDataSubjectRequests(context.scope), context.pagination ?? { limit: 25 })),
+    handler: async (context) => ok(pageItems(await context.services.documentVault.listDataSubjectRequests(context.scope), context.pagination ?? { limit: 25 })),
   });
   kernel.register({
     method: "GET",
@@ -394,7 +394,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.getDataSubjectRequest",
     protected: true,
     permission: "g13.dsr.read",
-    handler: (context) => ok({ dataSubjectRequest: context.services.documentVault.getDataSubjectRequest(context.scope, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ dataSubjectRequest: await context.services.documentVault.getDataSubjectRequest(context.scope, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "POST",
@@ -404,10 +404,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.dsr.adjudicate",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body ?? {});
       return accepted({
-        dataSubjectRequest: context.services.documentVault.adjudicateDataSubjectRequest(context.actor, requiredParam(context.params, "id"), {
+        dataSubjectRequest: await context.services.documentVault.adjudicateDataSubjectRequest(context.actor, requiredParam(context.params, "id"), {
           decision: readDsrDecision(body),
           resolutionNote: optionalString(body, "resolutionNote"),
         }),
@@ -424,10 +424,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.dsr.execute",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body ?? {});
       return accepted({
-        dataSubjectRequest: context.services.documentVault.executeDataSubjectRequest(
+        dataSubjectRequest: await context.services.documentVault.executeDataSubjectRequest(
           context.scope,
           requiredParam(context.params, "id"),
           optionalString(body, "documentId")
@@ -445,10 +445,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.certifiedcopy.issue",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        certifiedCopy: context.services.certifiedCopy.issueCertifiedCopy(context.actor, {
+        certifiedCopy: await context.services.certifiedCopy.issueCertifiedCopy(context.actor, {
           sourceDocumentId: requiredParam(context.params, "id"),
           sourceStatus: requiredString(body, "sourceStatus"),
           issuingAuthority: requiredString(body, "issuingAuthority"),
@@ -465,10 +465,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.listMyRightsRequests",
     protected: true,
     permission: "g13.dsr.read",
-    handler: (context) =>
+    handler: async (context) =>
       ok(
         pageItems(
-          context.services.documentVault
+          await context.services.documentVault
             .listDataSubjectRequests(context.scope)
             .filter((r) => r.dataSubjectEmployeeId === context.actor.actorUserId || r.dataSubjectEmployeeId === context.actor.userId),
           context.pagination ?? { limit: 25 }
@@ -483,10 +483,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.dsr.register",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        rightsRequest: context.services.documentVault.registerDataSubjectRequest(context.scope, {
+        rightsRequest: await context.services.documentVault.registerDataSubjectRequest(context.scope, {
           dataSubjectEmployeeId: context.actor.actorUserId ?? context.actor.userId,
           requestType: readDsrType(body),
         }),
@@ -499,9 +499,9 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.ocrSearch",
     protected: true,
     permission: "g13.ocr.search",
-    handler: (context) =>
+    handler: async (context) =>
       ok(
-        context.services.ocrSearch.search(context.actor, {
+        await context.services.ocrSearch.search(context.actor, {
           query: String(context.request.query?.q ?? ""),
           clearance: (String(context.request.query?.clearance ?? "PUBLIC") as "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "SECRET" | "TOP_SECRET"),
         })
@@ -518,9 +518,9 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.document.checkin",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
-      return accepted({ lock: context.services.documentVault.checkout(context.actor, requiredParam(context.params, "id"), optionalString(body, "intentNote")) });
+      return accepted({ lock: await context.services.documentVault.checkout(context.actor, requiredParam(context.params, "id"), optionalString(body, "intentNote")) });
     },
   });
   kernel.register({
@@ -531,7 +531,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.document.checkin",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted({ lock: context.services.documentVault.releaseCheckout(context.actor, requiredParam(context.params, "id")) }),
+    handler: async (context) => accepted({ lock: await context.services.documentVault.releaseCheckout(context.actor, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "GET",
@@ -539,7 +539,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.getCheckoutLock",
     protected: true,
     permission: "g13.document.read",
-    handler: (context) => ok({ lock: context.services.documentVault.getCheckoutLock(context.actor, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ lock: await context.services.documentVault.getCheckoutLock(context.actor, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "POST",
@@ -549,7 +549,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.document.checkin",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => accepted({ document: toWireDocument(context.services.documentVault.rescan(context.actor, requiredParam(context.params, "id"))) }),
+    handler: async (context) => accepted({ document: toWireDocument(await context.services.documentVault.rescan(context.actor, requiredParam(context.params, "id"))) }),
   });
   kernel.register({
     method: "GET",
@@ -557,7 +557,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.listAccessAudit",
     protected: true,
     permission: "g13.document.read",
-    handler: (context) => ok({ items: context.services.documentVault.listAccessAudit(context.actor, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ items: await context.services.documentVault.listAccessAudit(context.actor, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "GET",
@@ -565,7 +565,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.listScanResults",
     protected: true,
     permission: "g13.document.read",
-    handler: (context) => ok({ items: context.services.documentVault.listScanResults(context.actor, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ items: await context.services.documentVault.listScanResults(context.actor, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "GET",
@@ -573,13 +573,13 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.listByModuleRef",
     protected: true,
     permission: "g13.document.read",
-    handler: (context) => {
+    handler: async (context) => {
       const moduleCode = context.request.query?.moduleCode;
       const entityRefId = context.request.query?.entityRefId;
       if (!moduleCode || !entityRefId) {
         throw new FoundationError("VALIDATION_FAILED", "moduleCode and entityRefId query parameters are required", { field: "moduleCode" });
       }
-      return ok({ items: context.services.documentVault.listByModuleRef(context.actor, moduleCode, entityRefId).map(toWireDocument) });
+      return ok({ items: await context.services.documentVault.listByModuleRef(context.actor, moduleCode, entityRefId).map(toWireDocument) });
     },
   });
 
@@ -592,10 +592,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.ocr.index",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        entry: context.services.ocrSearch.indexDocumentFromPayload(context.actor, {
+        entry: await context.services.ocrSearch.indexDocumentFromPayload(context.actor, {
           documentId: requiredString(body, "documentId"),
           classification: readClassification(body),
           mimeType: requiredString(body, "mimeType"),
@@ -610,7 +610,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.listOcrIndex",
     protected: true,
     permission: "g13.ocr.search",
-    handler: (context) => ok({ items: context.services.ocrSearch.listIndex(context.scope) }),
+    handler: async (context) => ok({ items: await context.services.ocrSearch.listIndex(context.scope) }),
   });
 
   // hr_admin `g13.letter.author`/`letter_admin` capability — letter templates + merge-field
@@ -623,10 +623,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.letter.author",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return created({
-        template: context.services.letterTemplate.authorTemplate(context.actor, {
+        template: await context.services.letterTemplate.authorTemplate(context.actor, {
           templateCode: requiredString(body, "templateCode"),
           title: requiredString(body, "title"),
           bodyText: requiredString(body, "bodyText"),
@@ -643,10 +643,10 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.letter.author",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       return ok({
-        template: context.services.letterTemplate.updateTemplate(context.actor, requiredParam(context.params, "id"), {
+        template: await context.services.letterTemplate.updateTemplate(context.actor, requiredParam(context.params, "id"), {
           title: optionalString(body, "title"),
           bodyText: optionalString(body, "bodyText"),
           mergeFields: body.mergeFields !== undefined ? readMergeFields(body) : undefined,
@@ -660,7 +660,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.listLetterTemplates",
     protected: true,
     permission: "g13.letter.author",
-    handler: (context) => ok({ items: context.services.letterTemplate.listTemplates(context.actor) }),
+    handler: async (context) => ok({ items: await context.services.letterTemplate.listTemplates(context.actor) }),
   });
   kernel.register({
     method: "POST",
@@ -670,11 +670,11 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.letter.author",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => {
+    handler: async (context) => {
       const body = readBodyRecord(context.request.body);
       const mergeValues = (optionalRecord(body, "mergeValues") as Record<string, string> | undefined) ?? {};
       return created({
-        letter: context.services.letterTemplate.generateLetter(context.actor, {
+        letter: await context.services.letterTemplate.generateLetter(context.actor, {
           templateId: requiredParam(context.params, "id"),
           employeeId: requiredString(body, "employeeId"),
           mergeValues,
@@ -690,7 +690,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     permission: "g13.letter.author",
     unsafe: true,
     requiresIdempotencyKey: true,
-    handler: (context) => ok({ letter: context.services.letterTemplate.certifyGeneratedCopy(context.actor, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ letter: await context.services.letterTemplate.certifyGeneratedCopy(context.actor, requiredParam(context.params, "id")) }),
   });
   kernel.register({
     method: "GET",
@@ -698,7 +698,7 @@ export function registerG13Routes(kernel: ApiKernel): void {
     operationId: "g13.listGeneratedLetters",
     protected: true,
     permission: "g13.letter.author",
-    handler: (context) => ok({ items: context.services.letterTemplate.listGeneratedLetters(context.actor, requiredParam(context.params, "id")) }),
+    handler: async (context) => ok({ items: await context.services.letterTemplate.listGeneratedLetters(context.actor, requiredParam(context.params, "id")) }),
   });
 }
 

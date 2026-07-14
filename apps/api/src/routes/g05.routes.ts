@@ -106,9 +106,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.initiate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        const result = context.services.transfer.initiate(context.actor, {
+        const result = await context.services.transfer.initiate(context.actor, {
           employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
           fromOrgUnitId: optionalString(body, "fromOrgUnitId") ?? ph03Ids.orgRevenue,
           toOrgUnitId: requiredString(body, "toOrgUnitId"),
@@ -125,7 +125,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listMyTransferOrders",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) => ok({ items: context.services.transfer.listMyOrders(context.actor, requiredParam(context.params, "id")).map(toWireOrder) }),
+      handler: async (context) => ok({ items: await context.services.transfer.listMyOrders(context.actor, requiredParam(context.params, "id")).map(toWireOrder) }),
     },
     {
       method: "GET",
@@ -134,9 +134,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g05.transfer.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const orders = context.services.transfer.listOrders(context.actor).map(toWireOrder);
+        const orders = await context.services.transfer.listOrders(context.actor).map(toWireOrder);
         return ok({ items: orders.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -148,8 +148,8 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
-        const result = context.services.transfer.approve(context.actor, requiredParam(context.params, "id"), {
+      handler: async (context) => {
+        const result = await context.services.transfer.approve(context.actor, requiredParam(context.params, "id"), {
           idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
         });
         return accepted({ ...result, order: toWireOrder(result.order) });
@@ -161,7 +161,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.getTransferClearance",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) => ok({ clearanceItems: context.services.transfer.getOrder(context.actor, requiredParam(context.params, "id")).clearanceItems }),
+      handler: async (context) => ok({ clearanceItems: await context.services.transfer.getOrder(context.actor, requiredParam(context.params, "id")).clearanceItems }),
     },
     {
       method: "POST",
@@ -171,11 +171,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.clearance",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           order: toWireOrder(
-            context.services.transfer.completeClearance(
+            await context.services.transfer.completeClearance(
               context.actor,
               requiredParam(context.params, "id"),
               requiredParam(context.params, "clearance_code"),
@@ -193,11 +193,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.clearance.deem",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           order: toWireOrder(
-            context.services.transfer.deemClearance(
+            await context.services.transfer.deemClearance(
               context.actor,
               requiredParam(context.params, "id"),
               requiredParam(context.params, "clearance_code"),
@@ -215,9 +215,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.join",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        const result = context.services.transfer.relieveAndJoin(context.actor, requiredParam(context.params, "id"), {
+        const result = await context.services.transfer.relieveAndJoin(context.actor, requiredParam(context.params, "id"), {
           relievingDate: requiredString(body, "relievingDate"),
           joiningDate: requiredString(body, "joiningDate"),
           idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
@@ -238,11 +238,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.representation.file",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
           representation: toWireRepresentation(
-            context.services.transfer.fileRepresentation(context.actor, requiredParam(context.params, "id"), {
+            await context.services.transfer.fileRepresentation(context.actor, requiredParam(context.params, "id"), {
               grounds: requiredString(body, "grounds"),
               evidenceTitle: optionalString(body, "evidenceTitle"),
             })
@@ -257,9 +257,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g05.transfer.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const representations = context.services.transfer.listRepresentations(context.actor).map(toWireRepresentation);
+        const representations = await context.services.transfer.listRepresentations(context.actor).map(toWireRepresentation);
         return ok({ items: representations.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -271,9 +271,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.representation.decide",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        const result = context.services.transfer.retainOnRepresentation(context.actor, requiredParam(context.params, "id"), {
+        const result = await context.services.transfer.retainOnRepresentation(context.actor, requiredParam(context.params, "id"), {
           decisionDate: requiredString(body, "decisionDate"),
           reason: requiredString(body, "reason"),
           idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
@@ -289,9 +289,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.cancel",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        const result = context.services.transfer.cancel(context.actor, requiredParam(context.params, "id"), {
+        const result = await context.services.transfer.cancel(context.actor, requiredParam(context.params, "id"), {
           cancellationDate: requiredString(body, "cancellationDate"),
           reason: requiredString(body, "reason"),
           idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
@@ -307,9 +307,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.deem_relieved",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        const result = context.services.transfer.deemRelieved(context.actor, requiredParam(context.params, "id"), {
+        const result = await context.services.transfer.deemRelieved(context.actor, requiredParam(context.params, "id"), {
           deemedRelievingDate: requiredString(body, "deemedRelievingDate"),
           reason: requiredString(body, "reason"),
           idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
@@ -326,11 +326,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.serve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
           acknowledgement: toWireAcknowledgement(
-            context.services.transfer.serveOrder(context.actor, requiredParam(context.params, "id"), {
+            await context.services.transfer.serveOrder(context.actor, requiredParam(context.params, "id"), {
               servedOnDate: requiredString(body, "servedOnDate"),
               deliveryChannel: requiredString(body, "deliveryChannel") as DeliveryChannel,
               proofDocumentTitle: optionalString(body, "proofDocumentTitle"),
@@ -347,11 +347,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.acknowledge",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           acknowledgement: toWireAcknowledgement(
-            context.services.transfer.acknowledgeOrder(context.actor, requiredParam(context.params, "id"), {
+            await context.services.transfer.acknowledgeOrder(context.actor, requiredParam(context.params, "id"), {
               acknowledgedAt: requiredString(body, "acknowledgedAt"),
             })
           ),
@@ -366,11 +366,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.deem_served",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           acknowledgement: toWireAcknowledgement(
-            context.services.transfer.deemOrderServed(context.actor, requiredParam(context.params, "id"), {
+            await context.services.transfer.deemOrderServed(context.actor, requiredParam(context.params, "id"), {
               asOf: requiredString(body, "asOf"),
               basis: requiredString(body, "basis") as DeemedServiceBasis,
               reason: requiredString(body, "reason"),
@@ -385,8 +385,8 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.getTransferServiceRecord",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) => {
-        const record = context.services.transfer.getServiceRecord(context.actor, requiredParam(context.params, "id"));
+      handler: async (context) => {
+        const record = await context.services.transfer.getServiceRecord(context.actor, requiredParam(context.params, "id"));
         return ok({ acknowledgement: record ? toWireAcknowledgement(record) : null });
       },
     },
@@ -399,11 +399,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.handover.record",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
           chargeHandover: toWireChargeHandover(
-            context.services.transfer.recordChargeHandover(context.actor, requiredParam(context.params, "id"), {
+            await context.services.transfer.recordChargeHandover(context.actor, requiredParam(context.params, "id"), {
               receivingEmployeeId: requiredString(body, "receivingEmployeeId"),
               handoverDate: requiredString(body, "handoverDate"),
               phase: optionalString(body, "phase") as ChargePhase | undefined,
@@ -424,11 +424,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.handover.accept",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           chargeHandover: toWireChargeHandover(
-            context.services.transfer.acceptChargeHandover(context.actor, requiredParam(context.params, "id"), {
+            await context.services.transfer.acceptChargeHandover(context.actor, requiredParam(context.params, "id"), {
               acceptedAt: requiredString(body, "acceptedAt"),
             })
           ),
@@ -443,11 +443,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.handover.dispute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           chargeHandover: toWireChargeHandover(
-            context.services.transfer.disputeChargeHandover(context.actor, requiredParam(context.params, "id"), {
+            await context.services.transfer.disputeChargeHandover(context.actor, requiredParam(context.params, "id"), {
               remarks: requiredString(body, "remarks"),
               disputedAt: requiredString(body, "disputedAt"),
             })
@@ -463,11 +463,11 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.handover.protest",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           chargeHandover: toWireChargeHandover(
-            context.services.transfer.certifyHandoverUnderProtest(context.actor, requiredParam(context.params, "id"), {
+            await context.services.transfer.certifyHandoverUnderProtest(context.actor, requiredParam(context.params, "id"), {
               asOf: requiredString(body, "asOf"),
               reason: requiredString(body, "reason"),
             })
@@ -484,10 +484,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.transfer.joining_time.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.transfer.computeJoiningTime(context.actor, requiredParam(context.params, "id"), {
+          await context.services.transfer.computeJoiningTime(context.actor, requiredParam(context.params, "id"), {
             distanceKm: optionalNumber(body, "distanceKm"),
             sameStation: body.sameStation === true,
           })
@@ -503,10 +503,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.deputation.manage",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          deputation: context.services.transfer.createDeputationRecord(context.actor, requiredParam(context.params, "id"), {
+          deputation: await context.services.transfer.createDeputationRecord(context.actor, requiredParam(context.params, "id"), {
             startDate: requiredString(body, "startDate"),
             initialTenureMonths: optionalNumber(body, "initialTenureMonths") ?? 12,
             maxTenureMonths: optionalNumber(body, "maxTenureMonths"),
@@ -524,9 +524,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g05.transfer.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const deputations = context.services.transfer.listDeputationRecords(context.scope);
+        const deputations = await context.services.transfer.listDeputationRecords(context.scope);
         return ok({ items: deputations.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -538,10 +538,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.deputation.extend",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          deputation: context.services.transfer.extendDeputation(context.actor, requiredParam(context.params, "id"), {
+          deputation: await context.services.transfer.extendDeputation(context.actor, requiredParam(context.params, "id"), {
             extensionMonths: optionalNumber(body, "extensionMonths") ?? 0,
             reason: optionalString(body, "reason"),
           }),
@@ -556,10 +556,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.deputation.repatriate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.transfer.repatriateDeputation(context.actor, requiredParam(context.params, "id"), {
+          await context.services.transfer.repatriateDeputation(context.actor, requiredParam(context.params, "id"), {
             repatriationDate: requiredString(body, "repatriationDate"),
             reason: requiredString(body, "reason"),
           })
@@ -575,10 +575,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.quarter.request",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          quarterAllotment: context.services.transfer.requestQuarterRetention(context.actor, requiredParam(context.params, "id"), {
+          quarterAllotment: await context.services.transfer.requestQuarterRetention(context.actor, requiredParam(context.params, "id"), {
             quarterRef: requiredString(body, "quarterRef"),
             orgUnitId: optionalString(body, "orgUnitId"),
             vacateByDate: requiredString(body, "vacateByDate"),
@@ -596,10 +596,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.quarter.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          quarterAllotment: context.services.transfer.approveQuarterRetention(context.actor, requiredParam(context.params, "id"), {
+          quarterAllotment: await context.services.transfer.approveQuarterRetention(context.actor, requiredParam(context.params, "id"), {
             approvedOn: requiredString(body, "approvedOn"),
           }),
         });
@@ -613,10 +613,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.quarter.overstay",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          quarterAllotment: context.services.transfer.flagQuarterOverstay(context.actor, requiredParam(context.params, "id"), {
+          quarterAllotment: await context.services.transfer.flagQuarterOverstay(context.actor, requiredParam(context.params, "id"), {
             asOf: requiredString(body, "asOf"),
           }),
         });
@@ -630,10 +630,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.quarter.vacate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          quarterAllotment: context.services.transfer.recordQuarterVacation(context.actor, requiredParam(context.params, "id"), {
+          quarterAllotment: await context.services.transfer.recordQuarterVacation(context.actor, requiredParam(context.params, "id"), {
             vacatedOn: requiredString(body, "vacatedOn"),
           }),
         });
@@ -646,9 +646,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g05.transfer.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const allotments = context.services.transfer.listQuarterAllotments(context.scope);
+        const allotments = await context.services.transfer.listQuarterAllotments(context.scope);
         return ok({ items: allotments.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -661,10 +661,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.vacancy.publish",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          vacancyPosition: context.services.transferCounselling.publishVacancyPosition(context.actor, {
+          vacancyPosition: await context.services.transferCounselling.publishVacancyPosition(context.actor, {
             sanctionedPostId: requiredString(body, "sanctionedPostId"),
             driveId: requiredParam(context.params, "id"),
             cadre: optionalString(body, "cadre"),
@@ -679,9 +679,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g05.transfer.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const items = context.services.transferCounselling.listVacancyPositions(context.actor, requiredParam(context.params, "id"));
+        const items = await context.services.transferCounselling.listVacancyPositions(context.actor, requiredParam(context.params, "id"));
         return ok({ items: items.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -693,10 +693,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.preference.submit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          preferences: context.services.transferCounselling
+          preferences: await context.services.transferCounselling
             .capturePreferences(context.actor, {
               driveId: requiredParam(context.params, "id"),
               employeeId: requiredString(body, "employeeId"),
@@ -714,10 +714,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.vacancy.allot",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          reservation: context.services.transferCounselling.allotVacancy(context.actor, {
+          reservation: await context.services.transferCounselling.allotVacancy(context.actor, {
             vacancyPositionId: requiredString(body, "vacancyPositionId"),
             employeeId: requiredString(body, "employeeId"),
             driveId: requiredParam(context.params, "id"),
@@ -734,10 +734,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.vacancy.lifecycle",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          reservation: context.services.transferCounselling.markReservationVacatedOnRelief(context.actor, requiredParam(context.params, "id"), {
+          reservation: await context.services.transferCounselling.markReservationVacatedOnRelief(context.actor, requiredParam(context.params, "id"), {
             vacatedOn: requiredString(body, "vacatedOn"),
           }),
         });
@@ -751,10 +751,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.vacancy.lifecycle",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          reservation: context.services.transferCounselling.markReservationFilledOnJoin(context.actor, requiredParam(context.params, "id"), {
+          reservation: await context.services.transferCounselling.markReservationFilledOnJoin(context.actor, requiredParam(context.params, "id"), {
             joinedOn: requiredString(body, "joinedOn"),
           }),
         });
@@ -769,10 +769,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.counselling.schedule",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          session: context.services.transferCounselling.scheduleCounsellingSession(context.actor, {
+          session: await context.services.transferCounselling.scheduleCounsellingSession(context.actor, {
             sessionCode: requiredString(body, "sessionCode"),
             driveId: requiredParam(context.params, "id"),
             scheduledAt: requiredString(body, "scheduledAt"),
@@ -792,8 +792,8 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.counselling.conduct",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) =>
-        accepted({ session: context.services.transferCounselling.startCounsellingSession(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) =>
+        accepted({ session: await context.services.transferCounselling.startCounsellingSession(context.actor, requiredParam(context.params, "id")) }),
     },
     // PH-28C — counselling session read (consumed by the G05 counselling console UI, PH-27B).
     {
@@ -802,7 +802,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.getCounsellingSession",
       protected: true,
       permission: "g05.counselling.read",
-      handler: (context) => ok({ session: context.services.transferCounselling.getCounsellingSession(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ session: await context.services.transferCounselling.getCounsellingSession(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -812,10 +812,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.counselling.choice",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.transferCounselling.recordChoice(context.actor, requiredParam(context.params, "id"), {
+          await context.services.transferCounselling.recordChoice(context.actor, requiredParam(context.params, "id"), {
             employeeId: requiredString(body, "employeeId"),
             choiceAction: requiredString(body, "choiceAction") as Exclude<CounsellingChoiceAction, "AUTO_PASS_TIMEOUT">,
             vacancyPositionId: optionalString(body, "vacancyPositionId"),
@@ -832,8 +832,8 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.counselling.conduct",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) =>
-        accepted(context.services.transferCounselling.sweepTurnTimeout(context.actor, requiredParam(context.params, "id"))),
+      handler: async (context) =>
+        accepted(await context.services.transferCounselling.sweepTurnTimeout(context.actor, requiredParam(context.params, "id"))),
     },
     {
       method: "GET",
@@ -842,9 +842,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g05.transfer.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const pagination = context.pagination ?? { limit: 25 };
-        const items = context.services.transferCounselling.listChoices(context.actor, requiredParam(context.params, "id"));
+        const items = await context.services.transferCounselling.listChoices(context.actor, requiredParam(context.params, "id"));
         return ok({ items: items.slice(0, pagination.limit), limit: pagination.limit, next_cursor: null });
       },
     },
@@ -857,10 +857,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.mutual.request",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          request: context.services.transferCounselling.fileMutualRequest(context.actor, {
+          request: await context.services.transferCounselling.fileMutualRequest(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             mutualCounterpartEmployeeId: requiredString(body, "mutualCounterpartEmployeeId"),
             fromOrgUnitId: requiredString(body, "fromOrgUnitId"),
@@ -877,10 +877,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.mutual.pair",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.transferCounselling.pairMutualRequests(context.actor, {
+          await context.services.transferCounselling.pairMutualRequests(context.actor, {
             requestId: requiredString(body, "requestId"),
             counterpartRequestId: requiredString(body, "counterpartRequestId"),
           })
@@ -895,10 +895,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.mutual.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.transferCounselling.approveMutualPair(context.actor, requiredParam(context.params, "id"), {
+          await context.services.transferCounselling.approveMutualPair(context.actor, requiredParam(context.params, "id"), {
             orderDate: requiredString(body, "orderDate"),
             effectiveDate: requiredString(body, "effectiveDate"),
             idempotencyKey: context.idempotencyKey ?? "",
@@ -914,10 +914,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.mutual.progress",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          order: context.services.transferCounselling.recordMutualRelief(context.actor, requiredParam(context.params, "id"), {
+          order: await context.services.transferCounselling.recordMutualRelief(context.actor, requiredParam(context.params, "id"), {
             relievedOn: requiredString(body, "relievedOn"),
           }),
         });
@@ -931,10 +931,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.mutual.progress",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          order: context.services.transferCounselling.recordMutualJoin(context.actor, requiredParam(context.params, "id"), {
+          order: await context.services.transferCounselling.recordMutualJoin(context.actor, requiredParam(context.params, "id"), {
             joinedOn: requiredString(body, "joinedOn"),
           }),
         });
@@ -949,10 +949,10 @@ export function registerG05Routes(kernel: ApiKernel): void {
       permission: "g05.joining.sequence",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          sequence: context.services.joiningSequence.assignJoiningSequence(context.actor, {
+          sequence: await context.services.joiningSequence.assignJoiningSequence(context.actor, {
             batchId: requiredString(body, "batchId"),
             joiners: Array.isArray(body.joiners) ? (body.joiners as Array<{ employeeId: string; orderDate: string; serviceNo: string }>) : [],
           }),
@@ -967,7 +967,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.getVacancyPosition",
       protected: true,
       permission: "g05.counselling.read",
-      handler: (context) => ok({ vacancyPosition: context.services.transferCounselling.getVacancyPosition(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ vacancyPosition: await context.services.transferCounselling.getVacancyPosition(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -975,7 +975,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.getReservation",
       protected: true,
       permission: "g05.counselling.read",
-      handler: (context) => ok({ reservation: context.services.transferCounselling.getReservation(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ reservation: await context.services.transferCounselling.getReservation(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -983,7 +983,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listReservations",
       protected: true,
       permission: "g05.counselling.read",
-      handler: (context) => ok({ items: context.services.transferCounselling.listReservations(context.actor, context.request.query?.vacancyPositionId) }),
+      handler: async (context) => ok({ items: await context.services.transferCounselling.listReservations(context.actor, context.request.query?.vacancyPositionId) }),
     },
     {
       method: "GET",
@@ -991,9 +991,9 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listPreferences",
       protected: true,
       permission: "g05.counselling.read",
-      handler: (context) =>
+      handler: async (context) =>
         ok({
-          items: context.services.transferCounselling
+          items: await context.services.transferCounselling
             .listPreferences(context.actor, requiredParam(context.params, "driveId"), requiredParam(context.params, "employeeId"))
             .map(toWirePreference),
         }),
@@ -1004,7 +1004,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.getMutualOrder",
       protected: true,
       permission: "g05.mutual.progress",
-      handler: (context) => ok({ mutualOrder: context.services.transferCounselling.getMutualOrder(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ mutualOrder: await context.services.transferCounselling.getMutualOrder(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -1012,7 +1012,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listMutualOrders",
       protected: true,
       permission: "g05.mutual.progress",
-      handler: (context) => ok({ items: context.services.transferCounselling.listMutualOrders(context.actor, context.request.query?.pairId) }),
+      handler: async (context) => ok({ items: await context.services.transferCounselling.listMutualOrders(context.actor, context.request.query?.pairId) }),
     },
     {
       method: "GET",
@@ -1020,7 +1020,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listChargeHandovers",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) => ok({ items: context.services.transfer.listChargeHandovers(context.actor, requiredParam(context.params, "id")).map(toWireChargeHandover) }),
+      handler: async (context) => ok({ items: await context.services.transfer.listChargeHandovers(context.actor, requiredParam(context.params, "id")).map(toWireChargeHandover) }),
     },
     {
       method: "GET",
@@ -1028,7 +1028,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listRelievingOrders",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) => ok({ items: context.services.transfer.listRelievingOrders(context.actor).map(toWireRelievingOrder) }),
+      handler: async (context) => ok({ items: await context.services.transfer.listRelievingOrders(context.actor).map(toWireRelievingOrder) }),
     },
     {
       method: "GET",
@@ -1036,7 +1036,7 @@ export function registerG05Routes(kernel: ApiKernel): void {
       operationId: "g05.listJoiningReports",
       protected: true,
       permission: "g05.transfer.read",
-      handler: (context) => ok({ items: context.services.transfer.listJoiningReports(context.actor).map(toWireJoiningReport) }),
+      handler: async (context) => ok({ items: await context.services.transfer.listJoiningReports(context.actor).map(toWireJoiningReport) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

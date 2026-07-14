@@ -44,7 +44,7 @@ export interface ApiContext {
   pagination?: PaginationRequest;
 }
 
-export type RouteHandler = (context: ApiContext) => ApiResponse;
+export type RouteHandler = (context: ApiContext) => Promise<ApiResponse>;
 
 export interface RouteDefinition {
   method: HttpMethod;

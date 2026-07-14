@@ -18,13 +18,13 @@ function actor(extra = {}) {
     ...extra,
   };
 }
-function call(api, request) {
-  return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph28c", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
+async function call(api, request) {
+  return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph28c", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
 }
 
-test("PH-28C GET /api/v1/counselling-sessions/{id} returns the scheduled session", () => {
+test("PH-28C GET /api/v1/counselling-sessions/{id} returns the scheduled session", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const scheduled = call(api, {
+  const scheduled = await call(api, {
     method: "POST",
     path: "/api/v1/transfers/drives/drive-ph28c/counselling-sessions",
     headers: { "Idempotency-Key": "idem-ph28c-sched" },
@@ -41,7 +41,7 @@ test("PH-28C GET /api/v1/counselling-sessions/{id} returns the scheduled session
   });
   assert.equal(scheduled.status, 201);
   const sessionId = scheduled.body.session.id;
-  const got = call(api, { method: "GET", path: `/api/v1/counselling-sessions/${sessionId}` });
+  const got = await call(api, { method: "GET", path: `/api/v1/counselling-sessions/${sessionId}` });
   assert.equal(got.status, 200);
   assert.equal(got.body.session.id, sessionId);
 });

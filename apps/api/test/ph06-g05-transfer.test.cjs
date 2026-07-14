@@ -22,8 +22,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph06-g05", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -52,7 +52,7 @@ function clearAll(services, orderId, order, completedOn, deemedOn) {
   return services.transfer.deemClearance(actor(), orderId, codes[0], deemedOn);
 }
 
-test("PH-06 G05 transfer uses POSITION_AUTHORITY, SoD-safe delegation, parallel clearance, deemed clearance, documents, SR, audit, and notification", () => {
+test("PH-06 G05 transfer uses POSITION_AUTHORITY, SoD-safe delegation, parallel clearance, deemed clearance, documents, SR, audit, and notification", async () => {
   const services = createFoundationServices();
   const initiated = services.transfer.initiate(actor(), transferInput());
   assert.equal(initiated.order.status, "PENDING_APPROVAL");
@@ -93,7 +93,7 @@ test("PH-06 G05 transfer uses POSITION_AUTHORITY, SoD-safe delegation, parallel 
   assert.ok(services.notifications.list(actor()).some((message) => message.messageId === "G05_JOINING_CONFIRMED"));
 });
 
-test("PH-06 G05 validates transfer dates and deemed-clearance SLA", () => {
+test("PH-06 G05 validates transfer dates and deemed-clearance SLA", async () => {
   const services = createFoundationServices();
   assert.throws(
     () => services.transfer.initiate(actor(), transferInput({ orderDate: "2026-07-10", effectiveDate: "2026-07-02" })),
@@ -107,10 +107,10 @@ test("PH-06 G05 validates transfer dates and deemed-clearance SLA", () => {
   );
 });
 
-test("PH-06 G05 routes drive transfer order approval, clearance, and joining", () => {
+test("PH-06 G05 routes drive transfer order approval, clearance, and joining", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const initiated = call(api, {
+  const initiated = await call(api, {
     method: "POST",
     path: "/api/v1/transfers/orders",
     headers: { "Idempotency-Key": "idem-ph06-g05-initiate-route-001" },
@@ -119,7 +119,7 @@ test("PH-06 G05 routes drive transfer order approval, clearance, and joining", (
   assert.equal(initiated.status, 201);
   assert.equal(initiated.body.order.resolverType, "POSITION_AUTHORITY");
 
-  const approved = call(api, {
+  const approved = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/orders/${initiated.body.order.id}/approve`,
     headers: { "Idempotency-Key": "idem-ph06-g05-approve-route-001" },
@@ -130,7 +130,7 @@ test("PH-06 G05 routes drive transfer order approval, clearance, and joining", (
 
   const codes = approved.body.order.clearanceItems.map((item) => item.code);
   for (const code of codes.slice(1)) {
-    const completed = call(api, {
+    const completed = await call(api, {
       method: "POST",
       path: `/api/v1/transfers/orders/${initiated.body.order.id}/clearances/${code}:complete`,
       headers: { "Idempotency-Key": `idem-ph06-g05-${code.toLowerCase()}-route-001` },
@@ -139,7 +139,7 @@ test("PH-06 G05 routes drive transfer order approval, clearance, and joining", (
     assert.equal(completed.status, 202);
   }
 
-  const deemed = call(api, {
+  const deemed = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/orders/${initiated.body.order.id}/clearances/${codes[0]}:deem`,
     headers: { "Idempotency-Key": "idem-ph06-g05-deem-route-001" },
@@ -147,7 +147,7 @@ test("PH-06 G05 routes drive transfer order approval, clearance, and joining", (
   });
   assert.equal(deemed.status, 202);
 
-  const joined = call(api, {
+  const joined = await call(api, {
     method: "POST",
     path: `/api/v1/transfers/orders/${initiated.body.order.id}:relieve-and-join`,
     headers: { "Idempotency-Key": "idem-ph06-g05-join-route-001" },

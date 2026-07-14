@@ -22,14 +22,14 @@ function actor(extra = {}) {
   };
 }
 
-test("G11 death detection: reconciliation marks DECEASED and suspends disbursement", () => {
+test("G11 death detection: reconciliation marks DECEASED and suspends disbursement", async () => {
   const s = createFoundationServices();
   const vital = s.deathRecovery.reconcileDeath(actor(), { pensionerId: ph03Ids.employee, dateOfDeath: "2026-05-20" });
   assert.equal(vital.status, "DECEASED");
   assert.equal(vital.disbursementSuspended, true);
 });
 
-test("G11 overpayment_recoveries: recovery is bounded and closes when fully recovered", () => {
+test("G11 overpayment_recoveries: recovery is bounded and closes when fully recovered", async () => {
   const s = createFoundationServices();
   s.deathRecovery.reconcileDeath(actor(), { pensionerId: ph03Ids.employee, dateOfDeath: "2026-05-20" });
   const rec = s.deathRecovery.openOverpaymentRecovery(actor(), { pensionerId: ph03Ids.employee, overpaidPaise: 50_000_00, recoverFrom: "FAMILY_PENSION_ARREARS" });
@@ -44,7 +44,7 @@ test("G11 overpayment_recoveries: recovery is bounded and closes when fully reco
   assert.equal(closed.status, "CLOSED");
 });
 
-test("G11 overpayment_recoveries: cannot open a recovery for a living pensioner", () => {
+test("G11 overpayment_recoveries: cannot open a recovery for a living pensioner", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.deathRecovery.openOverpaymentRecovery(actor(), { pensionerId: "still-alive", overpaidPaise: 100, recoverFrom: "ESTATE" }),

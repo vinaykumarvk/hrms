@@ -17,13 +17,13 @@ function actor(extra = {}) {
     ...extra,
   };
 }
-function call(api, request) {
-  return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph30c", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
+async function call(api, request) {
+  return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph30c", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
 }
 
-test("PH-30C POST /api/v1/apar/forms/{id}/e-signature records a DSC signature", () => {
+test("PH-30C POST /api/v1/apar/forms/{id}/e-signature records a DSC signature", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/apar/forms/apar-ph30c/e-signature",
     headers: { "Idempotency-Key": "idem-ph30c-sig" },
@@ -35,9 +35,9 @@ test("PH-30C POST /api/v1/apar/forms/{id}/e-signature records a DSC signature", 
   assert.ok(res.body.signature.payloadHash.length === 64);
 });
 
-test("PH-30C POST /api/v1/apar/continuous-feedback records a feedback entry", () => {
+test("PH-30C POST /api/v1/apar/continuous-feedback records a feedback entry", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/apar/continuous-feedback",
     headers: { "Idempotency-Key": "idem-ph30c-fb" },

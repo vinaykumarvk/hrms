@@ -46,7 +46,7 @@ function clearAll(services, order, completedOn, deemedOn) {
   services.transfer.deemClearance(actor(), order.id, codes[0], deemedOn);
 }
 
-test("PH-06C order numbers are gapless via order_number_sequences reserve-then-commit", () => {
+test("PH-06C order numbers are gapless via order_number_sequences reserve-then-commit", async () => {
   const services = createFoundationServices();
   const first = services.transfer.initiate(actor(), transferInput());
   const second = services.transfer.initiate(actor(), transferInput({ orderDate: "2026-07-03", effectiveDate: "2026-07-11" }));
@@ -63,7 +63,7 @@ test("PH-06C order numbers are gapless via order_number_sequences reserve-then-c
   assert.deepEqual(values, [1, 2]);
 });
 
-test("PH-06C full journey posts frozen-catalog TRANSFER/RELIEVING/JOINING and applies the G01 posting on join", () => {
+test("PH-06C full journey posts frozen-catalog TRANSFER/RELIEVING/JOINING and applies the G01 posting on join", async () => {
   const services = createFoundationServices();
   // A transferee whose current posting is the SOURCE office, so the join visibly moves it.
   const created = services.employeeMaster.create(actor(), {
@@ -115,7 +115,7 @@ test("PH-06C full journey posts frozen-catalog TRANSFER/RELIEVING/JOINING and ap
   assert.equal(postingOutbox[0].payload.orgUnitId, ph03Ids.orgAssessment);
 });
 
-test("PH-06C transfer cancel flows through the SR reversal envelope, never a forward pseudo-event", () => {
+test("PH-06C transfer cancel flows through the SR reversal envelope, never a forward pseudo-event", async () => {
   const services = createFoundationServices();
   const initiated = services.transfer.initiate(actor(), transferInput());
   services.transfer.approve(actor(), initiated.order.id, { idempotencyKey: "idem-ph06c-cancel-approve-001" });
@@ -148,7 +148,7 @@ test("PH-06C transfer cancel flows through the SR reversal envelope, never a for
   assert.equal(services.serviceRegister.getTimeline(actor(), ph03Ids.employee).length, 2);
 });
 
-test("PH-06C clearance departments are per-office configuration, not a hardcoded list", () => {
+test("PH-06C clearance departments are per-office configuration, not a hardcoded list", async () => {
   const services = createFoundationServices();
   // Unconfigured office falls back to the seeded g05_clearance_department catalog (7 departments).
   const seeded = services.transfer.initiate(actor(), transferInput());
@@ -176,10 +176,10 @@ test("PH-06C clearance departments are per-office configuration, not a hardcoded
   );
 });
 
-test("PH-06C route surface still drives the BRD-depth flow end to end", () => {
+test("PH-06C route surface still drives the BRD-depth flow end to end", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const initiated = api.dispatch({
+  const initiated = await api.dispatch({
     method: "POST",
     path: "/api/v1/transfers/orders",
     headers: { "X-Correlation-Id": "corr-ph06c-g05", "Idempotency-Key": "idem-ph06c-route-init-001" },
@@ -189,7 +189,7 @@ test("PH-06C route surface still drives the BRD-depth flow end to end", () => {
   assert.equal(initiated.status, 201);
   assert.equal(initiated.body.order.orderNo, "TO/2026/00001");
 
-  const approved = api.dispatch({
+  const approved = await api.dispatch({
     method: "POST",
     path: `/api/v1/transfers/orders/${initiated.body.order.id}/approve`,
     headers: { "X-Correlation-Id": "corr-ph06c-g05", "Idempotency-Key": "idem-ph06c-route-approve-001" },

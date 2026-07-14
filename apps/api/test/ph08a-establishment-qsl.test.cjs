@@ -83,7 +83,7 @@ function finalisedSeniorityList(services) {
 // FR-016: QSL compute — net qualifying = gross minus rule-driven exclusions
 // ---------------------------------------------------------------------------------------
 
-test("PH-08A FR-016 QSL compute: netQualifyingYears = gross - exclusions with itemised breakdown", () => {
+test("PH-08A FR-016 QSL compute: netQualifyingYears = gross - exclusions with itemised breakdown", async () => {
   const services = createFoundationServices();
   const rule = statutoryRule(services);
   const { snapshot, supersededSnapshotId } = services.promotion.computeQualifyingService(actor(), {
@@ -113,7 +113,7 @@ test("PH-08A FR-016 QSL compute: netQualifyingYears = gross - exclusions with it
   assert.equal(suspensionItem.excludedDays, 0, "exonerated suspension counts as qualifying");
 });
 
-test("PH-08A FR-016 exclusion-rule treatments: EOL / dies-non / suspension / break-in-service flags drive the engine", () => {
+test("PH-08A FR-016 exclusion-rule treatments: EOL / dies-non / suspension / break-in-service flags drive the engine", async () => {
   const baseRule = {
     id: "rule-inline",
     tenantId: ph03Ids.tenant,
@@ -177,7 +177,7 @@ test("PH-08A FR-016 exclusion-rule treatments: EOL / dies-non / suspension / bre
 // FR-016: immutable snapshots with supersede lineage
 // ---------------------------------------------------------------------------------------
 
-test("PH-08A FR-016 recompute supersedes the prior snapshot: lineage flip only, history never mutated", () => {
+test("PH-08A FR-016 recompute supersedes the prior snapshot: lineage flip only, history never mutated", async () => {
   const services = createFoundationServices();
   const rule = statutoryRule(services);
   const computeInput = {
@@ -209,7 +209,7 @@ test("PH-08A FR-016 recompute supersedes the prior snapshot: lineage flip only, 
   assert.equal(current.supersedingSnapshotId, undefined);
 });
 
-test("PH-08A FR-016/FR-003 eligibility cites the current QSL snapshot instead of recomputing", () => {
+test("PH-08A FR-016/FR-003 eligibility cites the current QSL snapshot instead of recomputing", async () => {
   const services = createFoundationServices();
   const rule = statutoryRule(services);
   const { snapshot } = services.promotion.computeQualifyingService(actor(), {
@@ -252,7 +252,7 @@ test("PH-08A FR-016/FR-003 eligibility cites the current QSL snapshot instead of
 // Persistence durability: rehydrate the file-backed store
 // ---------------------------------------------------------------------------------------
 
-test("PH-08A durability: kernel state survives re-opening (rehydrate) the file-backed persistence layer", () => {
+test("PH-08A durability: kernel state survives re-opening (rehydrate) the file-backed persistence layer", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ph08a-kernel-"));
   const storePath = path.join(dir, "g06-kernel-state.json");
   try {
@@ -318,7 +318,7 @@ test("PH-08A durability: kernel state survives re-opening (rehydrate) the file-b
 // FR-015: establishment register — vacancy computation, reconcile, quota split
 // ---------------------------------------------------------------------------------------
 
-test("PH-08A FR-015 register derives vacancies and reconciles strength; promotion case vacancy is register-validated", () => {
+test("PH-08A FR-015 register derives vacancies and reconciles strength; promotion case vacancy is register-validated", async () => {
   const services = createFoundationServices();
   const post = registerPost(services);
   assert.equal(post.currentVacancies, 8, "current_vacancies = sanctioned_strength - filled_count, never free-entered");
@@ -358,7 +358,7 @@ test("PH-08A FR-015 register derives vacancies and reconciles strength; promotio
   assert.equal(reconciled.currentVacancies, 5, "reconcile re-derives current_vacancies");
 });
 
-test("PH-08A FR-015 negative: quota split above 100 is rejected with QUOTA_SPLIT_INVALID", () => {
+test("PH-08A FR-015 negative: quota split above 100 is rejected with QUOTA_SPLIT_INVALID", async () => {
   const services = createFoundationServices();
   assert.throws(
     () => registerPost(services, { drQuotaPct: 60, promotionQuotaPct: 50, ldceQuotaPct: 10 }),
@@ -373,7 +373,7 @@ test("PH-08A FR-015 negative: quota split above 100 is rejected with QUOTA_SPLIT
   );
 });
 
-test("PH-08A FR-015 negative: filled_count above sanctioned_strength is rejected with STRENGTH_INCONSISTENT", () => {
+test("PH-08A FR-015 negative: filled_count above sanctioned_strength is rejected with STRENGTH_INCONSISTENT", async () => {
   const services = createFoundationServices();
   assert.throws(
     () => registerPost(services, { sanctionedStrength: 20, filledCount: 25 }),
@@ -388,7 +388,7 @@ test("PH-08A FR-015 negative: filled_count above sanctioned_strength is rejected
   );
 });
 
-test("PH-08A FR-015/FR-016 SoD: the same actor may not both propose and approve", () => {
+test("PH-08A FR-015/FR-016 SoD: the same actor may not both propose and approve", async () => {
   const services = createFoundationServices();
   assert.throws(
     () => registerPost(services, { approverActorId: "user-ph08a-maker" }),

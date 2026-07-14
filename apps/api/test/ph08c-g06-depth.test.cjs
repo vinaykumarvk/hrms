@@ -86,7 +86,7 @@ function heldDpc(services, promotionCase) {
 //     and the APAR-usability gate excludes uncommunicated adverse years (§5.6-16)
 // ---------------------------------------------------------------------------------------
 
-test("PH-08C eligibility cites the current qualifying_service_ledger (QSL) snapshot — no re-derivation in G06", () => {
+test("PH-08C eligibility cites the current qualifying_service_ledger (QSL) snapshot — no re-derivation in G06", async () => {
   const services = createFoundationServices();
   const snapshot = computeQslSnapshot(services, ph03Ids.employee, 3650); // 10.0 net qualifying years
   const eligible = services.promotion.assessPromotionEligibility(actor(), {
@@ -107,7 +107,7 @@ test("PH-08C eligibility cites the current qualifying_service_ledger (QSL) snaps
   assert.equal(short.eligible, false, "below the qualifying-service floor is ineligible");
 });
 
-test("PH-08C APAR-usability gate (VAL-G06-APAR-USABLE): adverse counts only if communicated and representation disposed", () => {
+test("PH-08C APAR-usability gate (VAL-G06-APAR-USABLE): adverse counts only if communicated and representation disposed", async () => {
   const services = createFoundationServices();
   computeQslSnapshot(services, ph03Ids.employee, 3650);
   // Uncommunicated adverse APAR (Dev Dutt line): unusable, excluded from the reckoning.
@@ -144,7 +144,7 @@ test("PH-08C APAR-usability gate (VAL-G06-APAR-USABLE): adverse counts only if c
   assert.equal(pending.eligible, true);
 });
 
-test("PH-08C DPC supersession citing an unusable APAR year fails closed with APAR_NOT_USABLE", () => {
+test("PH-08C DPC supersession citing an unusable APAR year fails closed with APAR_NOT_USABLE", async () => {
   const services = createFoundationServices();
   computeQslSnapshot(services, ph03Ids.employee, 3650);
   services.promotion.assessPromotionEligibility(actor(), {
@@ -172,7 +172,7 @@ test("PH-08C DPC supersession citing an unusable APAR year fails closed with APA
 // (2) Zone of consideration: pinned non-linear slab (Appendix D.1) on the crucial date
 // ---------------------------------------------------------------------------------------
 
-test("PH-08C zone of consideration uses the pinned DoPT slab (5 if v=1; 8 if v=2; 3xV if v>=3), never a flat multiplier", () => {
+test("PH-08C zone of consideration uses the pinned DoPT slab (5 if v=1; 8 if v=2; 3xV if v>=3), never a flat multiplier", async () => {
   assert.equal(zoneOfConsiderationSlab(1), 5);
   assert.equal(zoneOfConsiderationSlab(2), 8);
   assert.equal(zoneOfConsiderationSlab(3), 9);
@@ -217,7 +217,7 @@ test("PH-08C zone of consideration uses the pinned DoPT slab (5 if v=1; 8 if v=2
 // (3) Reservation roster: roster_points occupation with own-merit migration (§5.6-6)
 // ---------------------------------------------------------------------------------------
 
-test("PH-08C roster own-merit migration: reserved candidate on own merit occupies a GEN point with adjusted_against_category=GEN", () => {
+test("PH-08C roster own-merit migration: reserved candidate on own merit occupies a GEN point with adjusted_against_category=GEN", async () => {
   const services = createFoundationServices();
   const { roster, points } = services.promotion.createReservationRoster(actor(), {
     rosterNo: "ROSTER/REV/2026/01",
@@ -280,7 +280,7 @@ test("PH-08C roster own-merit migration: reserved candidate on own merit occupie
 // (4) Refusal consequences: debarment window bars re-consideration (§5.6-18)
 // ---------------------------------------------------------------------------------------
 
-test("PH-08C refusal creates the debarment window and re-consideration inside it throws EMPLOYEE_DEBARRED", () => {
+test("PH-08C refusal creates the debarment window and re-consideration inside it throws EMPLOYEE_DEBARRED", async () => {
   const services = createFoundationServices();
   const promotionCase = singleCandidateCase(services);
   heldDpc(services, promotionCase);
@@ -331,7 +331,7 @@ test("PH-08C refusal creates the debarment window and re-consideration inside it
 // (5) Probation lifecycle: auto-created on order effect (§5.6-11)
 // ---------------------------------------------------------------------------------------
 
-test("PH-08C effecting a promotion order auto-creates the probation record (ON_PROBATION, scheduled_end = start + months)", () => {
+test("PH-08C effecting a promotion order auto-creates the probation record (ON_PROBATION, scheduled_end = start + months)", async () => {
   const services = createFoundationServices();
   const promotionCase = singleCandidateCase(services);
   heldDpc(services, promotionCase);
@@ -354,7 +354,7 @@ test("PH-08C effecting a promotion order auto-creates the probation record (ON_P
 // (6) Sub-judice guard: an active interim stay blocks effecting (§5.6-20)
 // ---------------------------------------------------------------------------------------
 
-test("PH-08C an active interim stay blocks effecting with ENTITY_SUB_JUDICE; a vacated stay restores effecting", () => {
+test("PH-08C an active interim stay blocks effecting with ENTITY_SUB_JUDICE; a vacated stay restores effecting", async () => {
   const services = createFoundationServices();
   const promotionCase = singleCandidateCase(services);
   heldDpc(services, promotionCase);
@@ -395,7 +395,7 @@ test("PH-08C an active interim stay blocks effecting with ENTITY_SUB_JUDICE; a v
 //     SENIORITY_LIST_NOT_FINAL — every negative asserts the thrown error.code directly
 // ---------------------------------------------------------------------------------------
 
-test("PH-08C DPC quorum failure throws error.code QUORUM_NOT_MET", () => {
+test("PH-08C DPC quorum failure throws error.code QUORUM_NOT_MET", async () => {
   const services = createFoundationServices();
   const promotionCase = singleCandidateCase(services);
   assert.throws(
@@ -408,7 +408,7 @@ test("PH-08C DPC quorum failure throws error.code QUORUM_NOT_MET", () => {
   );
 });
 
-test("PH-08C a candidate sitting on the panel without recusal throws error.code PANEL_CONFLICT_OF_INTEREST (SoD)", () => {
+test("PH-08C a candidate sitting on the panel without recusal throws error.code PANEL_CONFLICT_OF_INTEREST (SoD)", async () => {
   const services = createFoundationServices();
   const promotionCase = singleCandidateCase(services);
   assert.throws(
@@ -435,7 +435,7 @@ test("PH-08C a candidate sitting on the panel without recusal throws error.code 
   assert.equal(held.status, "DPC_HELD");
 });
 
-test("PH-08C a promotion case on a non-finalised list throws error.code SENIORITY_LIST_NOT_FINAL", () => {
+test("PH-08C a promotion case on a non-finalised list throws error.code SENIORITY_LIST_NOT_FINAL", async () => {
   const services = createFoundationServices();
   const draft = services.promotion.createSeniorityList(actor(), {
     cadreId: ph03Ids.cadreRevenue,
@@ -458,7 +458,7 @@ test("PH-08C a promotion case on a non-finalised list throws error.code SENIORIT
 // (8) Wire conformance: the sub-judice block surfaces as 412 ENTITY_SUB_JUDICE over the API
 // ---------------------------------------------------------------------------------------
 
-test("PH-08C route: effecting a stayed order returns 412 with error.code ENTITY_SUB_JUDICE", () => {
+test("PH-08C route: effecting a stayed order returns 412 with error.code ENTITY_SUB_JUDICE", async () => {
   const { createFoundationApi } = require("../../../dist/apps/api/src");
   const services = createFoundationServices();
   const api = createFoundationApi(services);
@@ -472,7 +472,7 @@ test("PH-08C route: effecting a stayed order returns 412 with error.code ENTITY_
     caseReference: "OA/9876/2026",
     interimStay: true,
   });
-  const response = api.dispatch({
+  const response = await api.dispatch({
     method: "POST",
     path: `/api/v1/promotions/orders/${order.id}:effect`,
     headers: { "X-Correlation-Id": "corr-ph08c-route", "Idempotency-Key": "idem-ph08c-route-effect-001" },

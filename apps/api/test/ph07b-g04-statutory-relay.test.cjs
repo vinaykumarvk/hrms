@@ -52,7 +52,7 @@ function enqueueApproved(relay, leaveApplicationId, payload = { totalDays: 2 }) 
   });
 }
 
-test("PH-07B G04 outbox events carry stable spell lineage and a monotonic unique event_sequence", () => {
+test("PH-07B G04 outbox events carry stable spell lineage and a monotonic unique event_sequence", async () => {
   const { relay, repository } = buildRelay();
   const approved = enqueueApproved(relay, "leave-app-ph07b-lineage");
   const cancelled = relay.enqueueLeaveCancellation(actor(), {
@@ -80,7 +80,7 @@ test("PH-07B G04 outbox events carry stable spell lineage and a monotonic unique
   );
 });
 
-test("PH-07B G04 lineage propagates from the G03 leave application into the outbox", () => {
+test("PH-07B G04 lineage propagates from the G03 leave application into the outbox", async () => {
   const services = createFoundationServices();
   const submitted = services.leave.submit(actor(), {
     employeeId: ph03Ids.employee,
@@ -94,7 +94,7 @@ test("PH-07B G04 lineage propagates from the G03 leave application into the outb
   assert.equal(approved.outboxEvent.eventSequence, 1);
 });
 
-test("PH-07B G04 payload signature is a real HMAC and tampering quarantines with ERR-G04-SIGNATURE-INVALID", () => {
+test("PH-07B G04 payload signature is a real HMAC and tampering quarantines with ERR-G04-SIGNATURE-INVALID", async () => {
   const { relay, repository, serviceRegister } = buildRelay();
   const event = enqueueApproved(relay, "leave-app-ph07b-tamper", { applicationNo: "LA/2026/91001", totalDays: 3 });
 
@@ -126,7 +126,7 @@ test("PH-07B G04 payload signature is a real HMAC and tampering quarantines with
   assert.equal(deadLetters[0].lastErrorCode, "ERR-G04-SIGNATURE-INVALID");
 });
 
-test("PH-07B G04 failed relays schedule exponential backoff via availableAt and the picker honours it", () => {
+test("PH-07B G04 failed relays schedule exponential backoff via availableAt and the picker honours it", async () => {
   let now = new Date("2026-07-02T00:00:00.000Z");
   const { relay, serviceRegister } = buildRelay({ backoffBaseMs: 60_000, now: () => now });
   const event = enqueueApproved(relay, "leave-app-ph07b-backoff");
@@ -146,7 +146,7 @@ test("PH-07B G04 failed relays schedule exponential backoff via availableAt and 
   assert.equal(serviceRegister.count(actor()), 1);
 });
 
-test("PH-07B G04 exhausted events persist to sr_dead_letter and replay resolves the entity", () => {
+test("PH-07B G04 exhausted events persist to sr_dead_letter and replay resolves the entity", async () => {
   const { relay } = buildRelay({ maxAttempts: 2 });
   const event = enqueueApproved(relay, "leave-app-ph07b-dlq");
   relay.relayEvent(actor(), event.id, { simulateFailure: true });
@@ -164,7 +164,7 @@ test("PH-07B G04 exhausted events persist to sr_dead_letter and replay resolves 
   assert.equal(relay.listDeadLetters(actor())[0].state, "RESOLVED_REPLAYED");
 });
 
-test("PH-07B G04 cancellation posts write sr_correction_link rows back to the original SR entry", () => {
+test("PH-07B G04 cancellation posts write sr_correction_link rows back to the original SR entry", async () => {
   const { relay } = buildRelay();
   const approved = enqueueApproved(relay, "leave-app-ph07b-corr");
   const posted = relay.relayEvent(actor(), approved.id);
@@ -184,7 +184,7 @@ test("PH-07B G04 cancellation posts write sr_correction_link rows back to the or
   assert.equal(links[0].correctionType, "REVERSAL");
 });
 
-test("PH-07B G04 reconciliation compares the G03 ledger with G12 SR and emits MISSING_SR and ORPHAN_CORRECTION", () => {
+test("PH-07B G04 reconciliation compares the G03 ledger with G12 SR and emits MISSING_SR and ORPHAN_CORRECTION", async () => {
   const { relay } = buildRelay();
 
   // Orphan correction: a cancellation posted with no original approval in the register.
@@ -218,7 +218,7 @@ test("PH-07B G04 reconciliation compares the G03 ledger with G12 SR and emits MI
   assert.equal(persisted.length, 2, "reconciliation findings are persisted entities");
 });
 
-test("PH-07B G04 reconciliation stays clean when the ledger and SR agree via lineage", () => {
+test("PH-07B G04 reconciliation stays clean when the ledger and SR agree via lineage", async () => {
   const { relay } = buildRelay();
   const approved = enqueueApproved(relay, "leave-app-ph07b-clean");
   relay.relayEvent(actor(), approved.id);

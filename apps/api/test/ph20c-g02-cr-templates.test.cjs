@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G02 change_request_templates: start-from-template pre-fills allowed fields and drops the rest", () => {
+test("G02 change_request_templates: start-from-template pre-fills allowed fields and drops the rest", async () => {
   const s = createFoundationServices();
   const tpl = s.changeRequestTemplate.createTemplate(actor(), {
     templateCode: "ADDR-CHANGE",
@@ -37,7 +37,7 @@ test("G02 change_request_templates: start-from-template pre-fills allowed fields
   assert.deepEqual(prefill.droppedFields, ["aadhaarNumber"]);
 });
 
-test("G02 change_request_templates: a deactivated template cannot start a request", () => {
+test("G02 change_request_templates: a deactivated template cannot start a request", async () => {
   const s = createFoundationServices();
   const tpl = s.changeRequestTemplate.createTemplate(actor(), {
     templateCode: "NAME-CHANGE",

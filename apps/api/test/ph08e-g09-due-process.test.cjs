@@ -26,8 +26,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph08e-g09", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -46,7 +46,7 @@ function caseAtInquiryReport(services, suffix) {
   return opened;
 }
 
-test("PH-08E preliminary inquiry runs ORDERED -> IN_PROGRESS -> SUBMITTED with a recommendation", () => {
+test("PH-08E preliminary inquiry runs ORDERED -> IN_PROGRESS -> SUBMITTED with a recommendation", async () => {
   const services = createFoundationServices();
   const opened = services.disciplinary.openCase(actor(), {
     chargedEmployeeId: ph03Ids.employee,
@@ -81,7 +81,7 @@ test("PH-08E preliminary inquiry runs ORDERED -> IN_PROGRESS -> SUBMITTED with a
   );
 });
 
-test("PH-08E suspension enforces subsistence bounds and the non-employment certificate gate", () => {
+test("PH-08E suspension enforces subsistence bounds and the non-employment certificate gate", async () => {
   const services = createFoundationServices();
   const opened = services.disciplinary.openCase(actor(), {
     chargedEmployeeId: ph03Ids.employee,
@@ -123,7 +123,7 @@ test("PH-08E suspension enforces subsistence bounds and the non-employment certi
   assert.equal(reviewed.status, "REVOKED");
 });
 
-test("PH-08E DI-4: final penalty beyond the show-cause proposed set is refused, subset succeeds end-to-end", () => {
+test("PH-08E DI-4: final penalty beyond the show-cause proposed set is refused, subset succeeds end-to-end", async () => {
   const services = createFoundationServices();
   services.disciplinary.registerAuthorityLevel(actor(), { employeeId: "appointing-authority-001", authorityLevel: "APPOINTING_AUTHORITY" });
   const opened = caseAtInquiryReport(services, "DI-4 subset");
@@ -166,7 +166,7 @@ test("PH-08E DI-4: final penalty beyond the show-cause proposed set is refused, 
   assert.match(finalised.srEventId, /^sr-/);
 });
 
-test("PH-08E Art. 311(1) NEGATIVE: DISMISSAL finalised by a subordinate authority throws ERR-G09-AUTHORITY-NOT-COMPETENT", () => {
+test("PH-08E Art. 311(1) NEGATIVE: DISMISSAL finalised by a subordinate authority throws ERR-G09-AUTHORITY-NOT-COMPETENT", async () => {
   const services = createFoundationServices();
   // The passing authority sits BELOW the appointing authority on the ladder (subordinate).
   services.disciplinary.registerAuthorityLevel(actor(), { employeeId: "subordinate-authority-001", authorityLevel: "HEAD_OF_OFFICE" });
@@ -211,7 +211,7 @@ test("PH-08E Art. 311(1) NEGATIVE: DISMISSAL finalised by a subordinate authorit
   assert.deepEqual(finalised.penaltyOrder.penaltyItems, ["DISMISSAL"]);
 });
 
-test("PH-08E fail-safe deny: an unassigned authority level cannot finalise any penalty", () => {
+test("PH-08E fail-safe deny: an unassigned authority level cannot finalise any penalty", async () => {
   const services = createFoundationServices();
   const opened = caseAtInquiryReport(services, "fail-safe deny");
   const notice = services.disciplinary.issueShowCauseNotice(actor(), opened.id, {
@@ -234,7 +234,7 @@ test("PH-08E fail-safe deny: an unassigned authority level cannot finalise any p
   );
 });
 
-test("PH-08E DI-14: pending mandatory consultation blocks finalise until CLOSED or WAIVED", () => {
+test("PH-08E DI-14: pending mandatory consultation blocks finalise until CLOSED or WAIVED", async () => {
   const services = createFoundationServices();
   services.disciplinary.registerAuthorityLevel(actor(), { employeeId: "appointing-authority-003", authorityLevel: "APPOINTING_AUTHORITY" });
   const opened = caseAtInquiryReport(services, "consultation gate");
@@ -271,7 +271,7 @@ test("PH-08E DI-14: pending mandatory consultation blocks finalise until CLOSED 
   assert.equal(finalised.penaltyOrder.status, "FINALISED");
 });
 
-test("PH-08E disagreement memo must be served AND responded before the order can be finalised", () => {
+test("PH-08E disagreement memo must be served AND responded before the order can be finalised", async () => {
   const services = createFoundationServices();
   services.disciplinary.registerAuthorityLevel(actor(), { employeeId: "appointing-authority-004", authorityLevel: "APPOINTING_AUTHORITY" });
   const opened = caseAtInquiryReport(services, "disagreement memo");
@@ -308,7 +308,7 @@ test("PH-08E disagreement memo must be served AND responded before the order can
   assert.equal(finalised.penaltyOrder.status, "FINALISED");
 });
 
-test("PH-08E DI-26: death of the respondent abates the case and blocks penalty finalise", () => {
+test("PH-08E DI-26: death of the respondent abates the case and blocks penalty finalise", async () => {
   const services = createFoundationServices();
   services.disciplinary.registerAuthorityLevel(actor(), { employeeId: "appointing-authority-005", authorityLevel: "APPOINTING_AUTHORITY" });
   const opened = caseAtInquiryReport(services, "abatement");
@@ -334,7 +334,7 @@ test("PH-08E DI-26: death of the respondent abates the case and blocks penalty f
   );
 });
 
-test("PH-08E DI-21: every action appends a chained timeline row (seq_no, prev_hash, row_hash) and verify passes", () => {
+test("PH-08E DI-21: every action appends a chained timeline row (seq_no, prev_hash, row_hash) and verify passes", async () => {
   const services = createFoundationServices();
   const opened = caseAtInquiryReport(services, "timeline chain");
   services.disciplinary.orderSuspension(actor(), opened.id, { effectiveFrom: "2026-07-05", subsistenceRatePct: 50 });
@@ -352,7 +352,7 @@ test("PH-08E DI-21: every action appends a chained timeline row (seq_no, prev_ha
   assert.equal(verified.eventCount, timeline.length);
 });
 
-test("PH-08E DI-21 tamper: a DB-layer mutation of a timeline row is detected as ERR-G09-AUDIT-CHAIN-BROKEN", () => {
+test("PH-08E DI-21 tamper: a DB-layer mutation of a timeline row is detected as ERR-G09-AUDIT-CHAIN-BROKEN", async () => {
   const stateFile = join(mkdtempSync(join(tmpdir(), "ph08e-g09-")), "g09-due-process.json");
   const repository = new FileBackedG09DueProcessRepository(stateFile);
   const services = createFoundationServices({ g09DueProcessRepository: repository });
@@ -375,12 +375,12 @@ test("PH-08E DI-21 tamper: a DB-layer mutation of a timeline row is detected as 
   );
 });
 
-test("PH-08E routes drive the due-process chain and surface BRD codes on the wire", () => {
+test("PH-08E routes drive the due-process chain and surface BRD codes on the wire", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   services.disciplinary.registerAuthorityLevel(actor(), { employeeId: "appointing-authority-006", authorityLevel: "APPOINTING_AUTHORITY" });
 
-  const opened = call(api, {
+  const opened = await call(api, {
     method: "POST",
     path: "/api/v1/disciplinary/cases",
     headers: { "Idempotency-Key": "idem-ph08e-route-open-001" },
@@ -389,7 +389,7 @@ test("PH-08E routes drive the due-process chain and surface BRD codes on the wir
   assert.equal(opened.status, 201);
   const caseId = opened.body.disciplinaryCase.id;
 
-  const pi = call(api, {
+  const pi = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:preliminary-inquiry`,
     headers: { "Idempotency-Key": "idem-ph08e-route-pi-001" },
@@ -397,17 +397,17 @@ test("PH-08E routes drive the due-process chain and surface BRD codes on the wir
   });
   assert.equal(pi.status, 201);
   assert.equal(
-    call(api, {
+    (await call(api, {
       method: "POST",
       path: `/api/v1/disciplinary/preliminary-inquiries/${pi.body.preliminaryInquiry.id}:submit`,
       headers: { "Idempotency-Key": "idem-ph08e-route-pi-002" },
       body: { findingsSummary: "Prima facie", recommendation: "PROCEED_MAJOR", submittedAt: "2026-07-20" },
-    }).status,
+    })).status,
     202
   );
 
   // Out-of-bounds subsistence over the wire is a 422 with the BRD code.
-  const badSuspension = call(api, {
+  const badSuspension = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:suspend`,
     headers: { "Idempotency-Key": "idem-ph08e-route-susp-001" },
@@ -416,19 +416,19 @@ test("PH-08E routes drive the due-process chain and surface BRD codes on the wir
   assert.equal(badSuspension.status, 422);
   assert.equal(badSuspension.body.error.code, "ERR-G09-SUBSISTENCE-OUT-OF-BOUNDS");
 
-  call(api, {
+  await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:charge`,
     headers: { "Idempotency-Key": "idem-ph08e-route-charge-001" },
     body: { servedOn: "2026-08-01", articles: ["Article I"] },
   });
-  call(api, {
+  await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:inquiry-report`,
     headers: { "Idempotency-Key": "idem-ph08e-route-inq-001" },
     body: { findings: "PROVED", reportDate: "2026-08-20" },
   });
-  const notice = call(api, {
+  const notice = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:show-cause`,
     headers: { "Idempotency-Key": "idem-ph08e-route-scn-001" },
@@ -437,7 +437,7 @@ test("PH-08E routes drive the due-process chain and surface BRD codes on the wir
   assert.equal(notice.status, 201);
 
   // DI-4 over the wire: DISMISSAL was not proposed -> 409 ERR-G09-PENALTY-EXCEEDS-PROPOSED.
-  const exceeds = call(api, {
+  const exceeds = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:finalise-order`,
     headers: { "Idempotency-Key": "idem-ph08e-route-fin-001" },
@@ -453,7 +453,7 @@ test("PH-08E routes drive the due-process chain and surface BRD codes on the wir
   assert.equal(exceeds.status, 409);
   assert.equal(exceeds.body.error.code, "ERR-G09-PENALTY-EXCEEDS-PROPOSED");
 
-  const finalised = call(api, {
+  const finalised = await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:finalise-order`,
     headers: { "Idempotency-Key": "idem-ph08e-route-fin-002" },
@@ -469,7 +469,7 @@ test("PH-08E routes drive the due-process chain and surface BRD codes on the wir
   assert.equal(finalised.status, 202);
   assert.deepEqual(finalised.body.penaltyOrder.penaltyItems, ["REMOVAL"]);
 
-  const verify = call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/timeline-verify` });
+  const verify = await call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/timeline-verify` });
   assert.equal(verify.status, 200);
   assert.equal(verify.body.verified, true);
 });

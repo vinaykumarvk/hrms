@@ -84,7 +84,7 @@ function newEmployee(services, firstName) {
 // FR-G05-003 — vacancy publication with strength read-through + preferences
 // =======================================================================================
 
-test("PH-16D vacancy_positions: published strength is a read-through from the sanctioned-posts kernel and vacant_count is derived, never G05-owned", () => {
+test("PH-16D vacancy_positions: published strength is a read-through from the sanctioned-posts kernel and vacant_count is derived, never G05-owned", async () => {
   const { services } = servicesWithClock();
   const post = registerPost(services, { sanctionedStrength: 12, filledCount: 9 });
   const vacancy = publishVacancy(services, post);
@@ -106,7 +106,7 @@ test("PH-16D vacancy_positions: published strength is a read-through from the sa
   assert.equal(refreshed.vacantCount, 1);
 });
 
-test("PH-16D transfer_preferences: ranked capture requires unique contiguous ranks and marks allotted=true on reservation", () => {
+test("PH-16D transfer_preferences: ranked capture requires unique contiguous ranks and marks allotted=true on reservation", async () => {
   const { services } = servicesWithClock();
   const post = registerPost(services);
   const vacancy = publishVacancy(services, post);
@@ -148,7 +148,7 @@ test("PH-16D transfer_preferences: ranked capture requires unique contiguous ran
 // BRD rule 6 — reservation lifecycle + transactional over-allotment guard
 // =======================================================================================
 
-test("PH-16D vacancy_reservations lifecycle: RESERVED -> VACATED_ON_RELIEF -> FILLED_ON_JOIN with stamps", () => {
+test("PH-16D vacancy_reservations lifecycle: RESERVED -> VACATED_ON_RELIEF -> FILLED_ON_JOIN with stamps", async () => {
   const { services } = servicesWithClock();
   const post = registerPost(services, { sanctionedStrength: 10, filledCount: 8 });
   const vacancy = publishVacancy(services, post);
@@ -175,7 +175,7 @@ test("PH-16D vacancy_reservations lifecycle: RESERVED -> VACATED_ON_RELIEF -> FI
   assert.equal(view.vacantCount, 1); // 10 − 8 − 1
 });
 
-test("PH-16D NEGATIVE over-allotment: reservation beyond the read-through vacant_count fails closed with ERR-G05-VACANCY-FULL", () => {
+test("PH-16D NEGATIVE over-allotment: reservation beyond the read-through vacant_count fails closed with ERR-G05-VACANCY-FULL", async () => {
   const { services } = servicesWithClock();
   const post = registerPost(services, { sanctionedStrength: 10, filledCount: 9 }); // exactly one vacancy
   const vacancy = publishVacancy(services, post);
@@ -201,7 +201,7 @@ test("PH-16D NEGATIVE over-allotment: reservation beyond the read-through vacant
   assert.equal(services.transferCounselling.listReservations(actor(), vacancy.id).length, 1);
 });
 
-test("PH-16D NEGATIVE join-time double-fill: a second FILLED_ON_JOIN on the same reservation throws ERR-G05-VACANCY-FULL", () => {
+test("PH-16D NEGATIVE join-time double-fill: a second FILLED_ON_JOIN on the same reservation throws ERR-G05-VACANCY-FULL", async () => {
   const { services } = servicesWithClock();
   const post = registerPost(services, { sanctionedStrength: 10, filledCount: 8 });
   const vacancy = publishVacancy(services, post);
@@ -239,7 +239,7 @@ function scheduledSession(services, vacancy, overrides = {}) {
   });
 }
 
-test("PH-16D counselling_sessions: SENIORITY turn order breaks ties by service_no and the live turn holds the vacancy lock", () => {
+test("PH-16D counselling_sessions: SENIORITY turn order breaks ties by service_no and the live turn holds the vacancy lock", async () => {
   const { services } = servicesWithClock();
   const post = registerPost(services, { sanctionedStrength: 10, filledCount: 8 });
   const vacancy = publishVacancy(services, post, { driveId: "drive-ph16d-counselling" });
@@ -258,7 +258,7 @@ test("PH-16D counselling_sessions: SENIORITY turn order breaks ties by service_n
   assert.equal(started.currentTurnEmployeeId, ph03Ids.manager); // vacancy lock holder
 });
 
-test("PH-16D NEGATIVE out-of-turn: a choice by anyone other than current_turn_employee_id throws ERR-G05-COUNSEL-TURN and appends nothing", () => {
+test("PH-16D NEGATIVE out-of-turn: a choice by anyone other than current_turn_employee_id throws ERR-G05-COUNSEL-TURN and appends nothing", async () => {
   const { services } = servicesWithClock();
   const post = registerPost(services, { sanctionedStrength: 10, filledCount: 8 });
   const vacancy = publishVacancy(services, post, { driveId: "drive-ph16d-counselling" });
@@ -281,7 +281,7 @@ test("PH-16D NEGATIVE out-of-turn: a choice by anyone other than current_turn_em
   assert.equal(services.transferCounselling.getCounsellingSession(actor(), session.id).currentTurnEmployeeId, ph03Ids.manager);
 });
 
-test("PH-16D counselling_choices ledger: CHOSEN converts to a RESERVED reservation, rows are append-only with turn_position and recording officer", () => {
+test("PH-16D counselling_choices ledger: CHOSEN converts to a RESERVED reservation, rows are append-only with turn_position and recording officer", async () => {
   const { services } = servicesWithClock();
   const post = registerPost(services, { sanctionedStrength: 10, filledCount: 8 });
   const vacancy = publishVacancy(services, post, { driveId: "drive-ph16d-counselling" });
@@ -318,7 +318,7 @@ test("PH-16D counselling_choices ledger: CHOSEN converts to a RESERVED reservati
   assert.ok(reread.every((row) => row.choiceMadeAt && row.recordedBy && row.turnPosition >= 1));
 });
 
-test("PH-16D JOB-G05-COUNSEL-TIMEOUT: a turn past turn_timeout_seconds records AUTO_PASS_TIMEOUT and advances (injectable clock, no busy-wait)", () => {
+test("PH-16D JOB-G05-COUNSEL-TIMEOUT: a turn past turn_timeout_seconds records AUTO_PASS_TIMEOUT and advances (injectable clock, no busy-wait)", async () => {
   const { services, advanceSeconds } = servicesWithClock();
   const post = registerPost(services, { sanctionedStrength: 10, filledCount: 8 });
   const vacancy = publishVacancy(services, post, { driveId: "drive-ph16d-counselling" });
@@ -344,7 +344,7 @@ test("PH-16D JOB-G05-COUNSEL-TIMEOUT: a turn past turn_timeout_seconds records A
   assert.equal(ledger[0].recordedBy, PRESIDER); // presiding officer records the auto-pass
 });
 
-test("PH-16D counselling + vacancy guard: a CHOSEN vacancy with no remaining capacity fails closed with ERR-G05-VACANCY-FULL before the ledger append", () => {
+test("PH-16D counselling + vacancy guard: a CHOSEN vacancy with no remaining capacity fails closed with ERR-G05-VACANCY-FULL before the ledger append", async () => {
   const { services } = servicesWithClock();
   const post = registerPost(services, { sanctionedStrength: 10, filledCount: 9 }); // one vacancy
   const vacancy = publishVacancy(services, post, { driveId: "drive-ph16d-counselling" });
@@ -387,7 +387,7 @@ function reciprocalRequests(services) {
   return { first, second };
 }
 
-test("PH-16D MUTUAL pairing: reciprocal requests couple and approval publishes BOTH orders atomically with the frozen SR code MUTUAL_TRANSFER", () => {
+test("PH-16D MUTUAL pairing: reciprocal requests couple and approval publishes BOTH orders atomically with the frozen SR code MUTUAL_TRANSFER", async () => {
   const { services } = servicesWithClock();
   const { first, second } = reciprocalRequests(services);
 
@@ -417,7 +417,7 @@ test("PH-16D MUTUAL pairing: reciprocal requests couple and approval publishes B
   assert.deepEqual([orderA.srEventId, orderB.srEventId].sort(), srEvents.flat().map((event) => event.id).sort());
 });
 
-test("PH-16D NEGATIVE non-reciprocal pair: pairing without a matching counterpart request throws ERR-G05-MUTUAL-PAIR", () => {
+test("PH-16D NEGATIVE non-reciprocal pair: pairing without a matching counterpart request throws ERR-G05-MUTUAL-PAIR", async () => {
   const { services } = servicesWithClock();
   const stranger = newEmployee(services, "Farhan");
   const first = services.transferCounselling.fileMutualRequest(actor(), {
@@ -439,7 +439,7 @@ test("PH-16D NEGATIVE non-reciprocal pair: pairing without a matching counterpar
   );
 });
 
-test("PH-16D NEGATIVE asymmetric completion: joining one side while the counterpart has not been relieved throws ERR-G05-MUTUAL-PAIR", () => {
+test("PH-16D NEGATIVE asymmetric completion: joining one side while the counterpart has not been relieved throws ERR-G05-MUTUAL-PAIR", async () => {
   const { services } = servicesWithClock();
   const { first, second } = reciprocalRequests(services);
   const paired = services.transferCounselling.pairMutualRequests(actor(), {

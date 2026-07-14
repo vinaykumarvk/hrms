@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G14 nl_query: a recognised question maps to a whitelisted metric and executes", () => {
+test("G14 nl_query: a recognised question maps to a whitelisted metric and executes", async () => {
   const s = createFoundationServices();
   const res = s.nlQuery.ask(actor(), { question: "What is the current staff strength and headcount?" });
   assert.equal(res.status, "EXECUTED");
@@ -29,7 +29,7 @@ test("G14 nl_query: a recognised question maps to a whitelisted metric and execu
   assert.ok(res.confidence >= 0.6);
 });
 
-test("G14 nl_query: a low-confidence question is logged but NOT executed", () => {
+test("G14 nl_query: a low-confidence question is logged but NOT executed", async () => {
   const s = createFoundationServices();
   const res = s.nlQuery.ask(actor(), { question: "Tell me something interesting about the weather today" });
   assert.equal(res.status, "LOW_CONFIDENCE");
@@ -38,7 +38,7 @@ test("G14 nl_query: a low-confidence question is logged but NOT executed", () =>
   assert.ok(s.nlQuery.listLog(actor()).some((l) => l.id === res.logId && l.status === "LOW_CONFIDENCE"));
 });
 
-test("G14 nl_query_log: the logged question strips PII", () => {
+test("G14 nl_query_log: the logged question strips PII", async () => {
   const s = createFoundationServices();
   const res = s.nlQuery.ask(actor(), { question: "headcount for employee with aadhaar 123456789012 and pan ABCDE1234F" });
   const log = s.nlQuery.listLog(actor()).find((l) => l.id === res.logId);

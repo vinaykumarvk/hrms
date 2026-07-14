@@ -22,7 +22,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G02 retro_impact_events: fan-out is per-target and idempotent; dispatch acks", () => {
+test("G02 retro_impact_events: fan-out is per-target and idempotent; dispatch acks", async () => {
   const s = createFoundationServices();
   const events = s.retroImpact.fanOut(actor(), { changeRequestId: "cr-25b-1", effectiveDate: "2026-01-01", targets: ["G10", "G11", "G06"] });
   assert.equal(events.length, 3);
@@ -36,7 +36,7 @@ test("G02 retro_impact_events: fan-out is per-target and idempotent; dispatch ac
   assert.equal(s.retroImpact.dispatch(actor(), g10.id, { success: true }).status, "ACKED");
 });
 
-test("G02 retro_impact_events: retryable failures exhaust into DEAD_LETTER", () => {
+test("G02 retro_impact_events: retryable failures exhaust into DEAD_LETTER", async () => {
   const s = createFoundationServices();
   const events = s.retroImpact.fanOut(actor(), { changeRequestId: "cr-25b-2", effectiveDate: "2026-01-01", targets: ["G11"], maxAttempts: 2 });
   const e = events[0];

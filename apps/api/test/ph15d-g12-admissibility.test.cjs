@@ -74,7 +74,7 @@ function issueStatutoryExtract(services, scope, employeeId) {
 // FR-18: sr_authenticity_certificates — issuance binds digest + anchor + generated custody.
 // ---------------------------------------------------------------------------------------
 
-test("PH-15D FR-18 §65B certificate issuance binds content_digest + covering anchor_id + generated chain-of-custody and is access-logged GENERATE_65B", () => {
+test("PH-15D FR-18 §65B certificate issuance binds content_digest + covering anchor_id + generated chain-of-custody and is access-logged GENERATE_65B", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const scope = actor("user-ph15d-cert");
@@ -82,7 +82,7 @@ test("PH-15D FR-18 §65B certificate issuance binds content_digest + covering an
   ingest(services, scope, "emp-ph15d-0001", 2);
   const extract = issueStatutoryExtract(services, scope, "emp-ph15d-0001");
 
-  const response = api.dispatch({
+  const response = await api.dispatch({
     method: "POST",
     path: `/api/v1/sr/extracts/${extract.id}/authenticity-certificate`,
     headers: { "X-Correlation-Id": "corr-ph15d", "Idempotency-Key": "idem-ph15d-cert-1" },
@@ -120,7 +120,7 @@ test("PH-15D FR-18 §65B certificate issuance binds content_digest + covering an
   assert.notEqual(generate65bLog, undefined);
 
   // Read-back via the GET route.
-  const fetched = api.dispatch({
+  const fetched = await api.dispatch({
     method: "GET",
     path: `/api/v1/sr/authenticity-certificates/${certificate.id}`,
     headers: { "X-Correlation-Id": "corr-ph15d" },
@@ -130,7 +130,7 @@ test("PH-15D FR-18 §65B certificate issuance binds content_digest + covering an
   assert.equal(fetched.body.certificate.certificateNo, certificate.certificateNo);
 });
 
-test("PH-15D FR-18 NEGATIVE: issuance is refused fail-closed for a tampered chain (verify path runs first) and for a digest mismatch", () => {
+test("PH-15D FR-18 NEGATIVE: issuance is refused fail-closed for a tampered chain (verify path runs first) and for a digest mismatch", async () => {
   const services = createFoundationServices();
   const scope = actor("user-ph15d-tamper");
   ingest(services, scope, "emp-ph15d-0002", 1);
@@ -180,7 +180,7 @@ test("PH-15D FR-18 NEGATIVE: issuance is refused fail-closed for a tampered chai
 // FR-13: sr_subscriptions + authenticated pull feed with since_seq/last_delivered_seq.
 // ---------------------------------------------------------------------------------------
 
-test("PH-15D FR-13 pull feed is scoped per subscriber: category filter, minimised payload, and no cross-subscriber/cross-tenant leak", () => {
+test("PH-15D FR-13 pull feed is scoped per subscriber: category filter, minimised payload, and no cross-subscriber/cross-tenant leak", async () => {
   const services = createFoundationServices();
   const scopeA = actor("user-ph15d-feed");
   // Subscriber A (G11): pension-relevant categories only. Subscriber B (G06): promotions.
@@ -222,7 +222,7 @@ test("PH-15D FR-13 pull feed is scoped per subscriber: category filter, minimise
   assert.throws(() => services.srAdmissibility.pullFeed(scopeOther, subA.id), (error) => error.code === "NOT_FOUND");
 });
 
-test("PH-15D FR-13 cursor resume: since_seq replays, last_delivered_seq advances durably, and corrigenda re-emit", () => {
+test("PH-15D FR-13 cursor resume: since_seq replays, last_delivered_seq advances durably, and corrigenda re-emit", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const scope = actor("user-ph15d-cursor");
@@ -233,7 +233,7 @@ test("PH-15D FR-13 cursor resume: since_seq replays, last_delivered_seq advances
   ingest(services, scope, "emp-ph15d-0004", 2, "INCREMENT", { basicPay: 58000 });
 
   // First pull: everything from the durable cursor (0); cursor advances.
-  const firstPull = api.dispatch({
+  const firstPull = await api.dispatch({
     method: "GET",
     path: "/api/v1/sr/feed",
     query: { subscription_id: sub.id },
@@ -251,7 +251,7 @@ test("PH-15D FR-13 cursor resume: since_seq replays, last_delivered_seq advances
 
   // New append (a corrigendum annotation referencing the first entry) re-emits on the feed.
   ingest(services, scope, "emp-ph15d-0004", 3, "CORRIGENDUM", { reason: "typo", originalEventId: first.id });
-  const resumed = api.dispatch({
+  const resumed = await api.dispatch({
     method: "GET",
     path: "/api/v1/sr/feed",
     query: { subscription_id: sub.id, since_seq: "2" },
@@ -273,7 +273,7 @@ test("PH-15D FR-13 cursor resume: since_seq replays, last_delivered_seq advances
   assert.equal(replay.lastDeliveredSeq, 3);
 });
 
-test("PH-15D FR-13 NEGATIVE: WEBHOOK/MESSAGE_BUS registration is rejected with SR_DELIVERY_MODE_DEFERRED; paused subscribers receive nothing", () => {
+test("PH-15D FR-13 NEGATIVE: WEBHOOK/MESSAGE_BUS registration is rejected with SR_DELIVERY_MODE_DEFERRED; paused subscribers receive nothing", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const scope = actor("user-ph15d-deferred");
@@ -285,7 +285,7 @@ test("PH-15D FR-13 NEGATIVE: WEBHOOK/MESSAGE_BUS registration is rejected with S
     );
   }
   // Same rejection over the wire.
-  const response = api.dispatch({
+  const response = await api.dispatch({
     method: "POST",
     path: "/api/v1/sr/subscriptions",
     headers: { "X-Correlation-Id": "corr-ph15d", "Idempotency-Key": "idem-ph15d-webhook" },
@@ -307,7 +307,7 @@ test("PH-15D FR-13 NEGATIVE: WEBHOOK/MESSAGE_BUS registration is rejected with S
 // FR-19: sr_ltv_renewals — additive re-anchoring; history never rewritten.
 // ---------------------------------------------------------------------------------------
 
-test("PH-15D FR-19 LTV renewal: RE_ANCHOR/ALGORITHM_MIGRATION write sr_ltv_renewals + a NEW anchor while every pre-renewal entry still verifies unchanged", () => {
+test("PH-15D FR-19 LTV renewal: RE_ANCHOR/ALGORITHM_MIGRATION write sr_ltv_renewals + a NEW anchor while every pre-renewal entry still verifies unchanged", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   const scope = actor("user-ph15d-ltv");
@@ -323,7 +323,7 @@ test("PH-15D FR-19 LTV renewal: RE_ANCHOR/ALGORITHM_MIGRATION write sr_ltv_renew
   const originalAnchor = anchorsBefore[0];
 
   // Crypto-migration renewal over the extract via the route (RFC 4998 evidence record).
-  const response = api.dispatch({
+  const response = await api.dispatch({
     method: "POST",
     path: "/api/v1/sr/ltv/renew",
     headers: { "X-Correlation-Id": "corr-ph15d", "Idempotency-Key": "idem-ph15d-ltv-1" },

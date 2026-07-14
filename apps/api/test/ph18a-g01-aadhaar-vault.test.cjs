@@ -26,7 +26,7 @@ function actor(userId, extra = {}) {
 const VALID_AADHAAR = "412345678900"; // Verhoeff-valid
 const INVALID_AADHAAR = "412345678901"; // fails Verhoeff
 
-test("G01 aadhaar_vault: capture tokenises and stores only the last-4, never the raw number", () => {
+test("G01 aadhaar_vault: capture tokenises and stores only the last-4, never the raw number", async () => {
   const s = createFoundationServices();
   const entry = s.aadhaarVault.captureAadhaar(actor(CLERK), { employeeId: ph03Ids.employee, rawAadhaar: VALID_AADHAAR });
   assert.equal(entry.lastFour, "8900");
@@ -35,7 +35,7 @@ test("G01 aadhaar_vault: capture tokenises and stores only the last-4, never the
   assert.ok(entry.token && entry.token.length === 64); // one-way SHA-256 token
 });
 
-test("G01 aadhaar_vault: an invalid Aadhaar (Verhoeff) is rejected fail-closed", () => {
+test("G01 aadhaar_vault: an invalid Aadhaar (Verhoeff) is rejected fail-closed", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.aadhaarVault.captureAadhaar(actor(CLERK), { employeeId: ph03Ids.employee, rawAadhaar: INVALID_AADHAAR }),
@@ -43,7 +43,7 @@ test("G01 aadhaar_vault: an invalid Aadhaar (Verhoeff) is rejected fail-closed",
   );
 });
 
-test("G01 aadhaar_vault: reveal is 4-eyes — the requester cannot approve their own reveal", () => {
+test("G01 aadhaar_vault: reveal is 4-eyes — the requester cannot approve their own reveal", async () => {
   const s = createFoundationServices();
   const entry = s.aadhaarVault.captureAadhaar(actor(CLERK), { employeeId: ph03Ids.employee, rawAadhaar: VALID_AADHAAR });
   const req = s.aadhaarVault.requestReveal(actor(CLERK), entry.id, { purpose: "Pension KYC verification." });

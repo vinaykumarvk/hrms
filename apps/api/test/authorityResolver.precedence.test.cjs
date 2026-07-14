@@ -6,7 +6,7 @@ const test = require("node:test");
 const { authorityResolverPrecedenceCases } = require("../../../dist/apps/api/src/platform/authority-resolution/authorityResolver.precedence.test");
 
 for (const testCase of authorityResolverPrecedenceCases) {
-  test(`authority-resolver precedence: ${testCase.name}`, () => {
+  test(`authority-resolver precedence: ${testCase.name}`, async () => {
     testCase.run();
   });
 }

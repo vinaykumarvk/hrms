@@ -8,7 +8,7 @@ const {
 } = require("../../../dist/apps/api/src/migration/staging/migrationStagingReconciliation.test");
 
 for (const testCase of migrationStagingReconciliationCases) {
-  test(`migration staging reconciliation: ${testCase.name}`, () => {
+  test(`migration staging reconciliation: ${testCase.name}`, async () => {
     testCase.run();
   });
 }

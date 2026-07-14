@@ -43,7 +43,7 @@ function computedRun(services) {
 
 // ---- PAYROLL_APPROVE (newly enforced) + PAYROLL_SOD (pre-existing) -------------------------------
 
-test("ENFORCED PAYROLL_APPROVE: a payroll_officer holding g10.payroll.approve cannot approve; only payroll_approver can", () => {
+test("ENFORCED PAYROLL_APPROVE: a payroll_officer holding g10.payroll.approve cannot approve; only payroll_approver can", async () => {
   const services = createFoundationServices();
   const run = computedRun(services);
   assert.equal(run.status, "COMPUTED");
@@ -59,7 +59,7 @@ test("ENFORCED PAYROLL_APPROVE: a payroll_officer holding g10.payroll.approve ca
   assert.equal(approved.approvedByUserId, "pf-approver");
 });
 
-test("ENFORCED PAYROLL_SOD: the run maker cannot approve their own run even with the payroll_approver role", () => {
+test("ENFORCED PAYROLL_SOD: the run maker cannot approve their own run even with the payroll_approver role", async () => {
   const services = createFoundationServices();
   const run = computedRun(services); // makerUserId === "pf-sys"
   const makerAsApprover = actor("pf-sys", ["payroll_approver"], ["g10.payroll.approve"]);
@@ -68,7 +68,7 @@ test("ENFORCED PAYROLL_SOD: the run maker cannot approve their own run even with
 
 // ---- PAYROLL_DISBURSE (newly enforced) -----------------------------------------------------------
 
-test("ENFORCED PAYROLL_DISBURSE: transmitting the bank file requires payroll_disburser, not the maker/approver role", () => {
+test("ENFORCED PAYROLL_DISBURSE: transmitting the bank file requires payroll_disburser, not the maker/approver role", async () => {
   const services = createFoundationServices();
   const run = computedRun(services);
   services.payrollEngine.approveEngineRun(actor("pf-approver", ["payroll_approver"], ["g10.payroll.approve"]), run.id);
@@ -87,7 +87,7 @@ test("ENFORCED PAYROLL_DISBURSE: transmitting the bank file requires payroll_dis
 
 // ---- DDO_SANCTION (newly enforced on loans) ------------------------------------------------------
 
-test("ENFORCED DDO_SANCTION: sanctioning a loan/advance requires hod/sanctioning_authority; payroll_officer is FORBIDDEN", () => {
+test("ENFORCED DDO_SANCTION: sanctioning a loan/advance requires hod/sanctioning_authority; payroll_officer is FORBIDDEN", async () => {
   const services = createFoundationServices();
   const loanInput = { employeeId: ph03Ids.employee, loanType: "CAR", principalPaise: 1000000, instalmentPaise: 10000 };
 
@@ -102,7 +102,7 @@ test("ENFORCED DDO_SANCTION: sanctioning a loan/advance requires hod/sanctioning
 
 // ---- FNF_SOD (pre-existing, 3-way: creator ≠ sanctioner, creator ≠ approver) --------------------
 
-test("ENFORCED FNF_SOD: the settlement creator cannot sanction or approve; distinct roles can", () => {
+test("ENFORCED FNF_SOD: the settlement creator cannot sanction or approve; distinct roles can", async () => {
   const services = createFoundationServices();
   const maker = actor("pf-fnf-maker", ["payroll_officer"], ["g10.fnf.settle"]);
   const settlement = services.compensationIntegration.settleFnf(maker, {
@@ -130,7 +130,7 @@ test("ENFORCED FNF_SOD: the settlement creator cannot sanction or approve; disti
 
 // ---- PENSION_SOD (pre-existing) + role-string DRIFT (pension sanction is permission-only) --------
 
-test("ENFORCED PENSION_SOD + DRIFT role-string: the maker cannot sanction, but a non-sanctioning-authority actor with the permission can", () => {
+test("ENFORCED PENSION_SOD + DRIFT role-string: the maker cannot sanction, but a non-sanctioning-authority actor with the permission can", async () => {
   // seedTestEmployees seeds Arjun's G10 last-drawn-pay + E35/E36 pension rules, so a case can reach
   // the computed (sanctionable) state without re-seeding substrate.
   const services = createFoundationServices({ seedTestEmployees: true });

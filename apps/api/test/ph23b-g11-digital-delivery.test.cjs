@@ -22,7 +22,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G11 digital_deliveries: DigiLocker delivery succeeds and DBT status advances to CREDITED", () => {
+test("G11 digital_deliveries: DigiLocker delivery succeeds and DBT status advances to CREDITED", async () => {
   const s = createFoundationServices();
   const d = s.digitalDelivery.queueDelivery(actor(), { pensionerId: ph03Ids.employee, artefactRef: "PPO-2026-1", channel: "DIGILOCKER" });
   assert.equal(d.status, "QUEUED");
@@ -32,7 +32,7 @@ test("G11 digital_deliveries: DigiLocker delivery succeeds and DBT status advanc
   assert.equal(credited.dbtStatus, "CREDITED");
 });
 
-test("G11 digital_deliveries: retryable failures re-queue up to the cap then dead-letter", () => {
+test("G11 digital_deliveries: retryable failures re-queue up to the cap then dead-letter", async () => {
   const s = createFoundationServices();
   const d = s.digitalDelivery.queueDelivery(actor(), { pensionerId: ph03Ids.employee, artefactRef: "PPO-2026-2", channel: "DIGILOCKER", maxAttempts: 2 });
   const r1 = s.digitalDelivery.attemptDelivery(actor(), d.id, { success: false });
@@ -46,7 +46,7 @@ test("G11 digital_deliveries: retryable failures re-queue up to the cap then dea
   );
 });
 
-test("G11 digital_deliveries: a permanent failure dead-letters immediately", () => {
+test("G11 digital_deliveries: a permanent failure dead-letters immediately", async () => {
   const s = createFoundationServices();
   const d = s.digitalDelivery.queueDelivery(actor(), { pensionerId: ph03Ids.employee, artefactRef: "PPO-2026-3", channel: "DIGILOCKER" });
   const dead = s.digitalDelivery.attemptDelivery(actor(), d.id, { success: false, permanent: true, error: "ACCOUNT_NOT_LINKED" });

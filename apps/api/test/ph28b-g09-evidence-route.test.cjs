@@ -18,13 +18,13 @@ function actor(extra = {}) {
     ...extra,
   };
 }
-function call(api, request) {
-  return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph28b", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
+async function call(api, request) {
+  return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph28b", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
 }
 
-test("PH-28B GET /api/v1/disciplinary/cases/{id}/evidence lists the case artefacts", () => {
+test("PH-28B GET /api/v1/disciplinary/cases/{id}/evidence lists the case artefacts", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const opened = call(api, {
+  const opened = await call(api, {
     method: "POST",
     path: "/api/v1/disciplinary/cases",
     headers: { "Idempotency-Key": "idem-ph28b-open" },
@@ -33,17 +33,17 @@ test("PH-28B GET /api/v1/disciplinary/cases/{id}/evidence lists the case artefac
   assert.equal(opened.status, 201);
   const caseId = opened.body.disciplinaryCase.id;
   // No artefacts yet.
-  const empty = call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/evidence` });
+  const empty = await call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/evidence` });
   assert.equal(empty.status, 200);
   assert.equal(empty.body.items.length, 0);
   // Serve a charge memo -> a CHARGE_MEMO artefact appears.
-  call(api, {
+  await call(api, {
     method: "POST",
     path: `/api/v1/disciplinary/cases/${caseId}:charge`,
     headers: { "Idempotency-Key": "idem-ph28b-charge" },
     body: { servedOn: "2026-08-01", articles: ["Article I"] },
   });
-  const listed = call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/evidence` });
+  const listed = await call(api, { method: "GET", path: `/api/v1/disciplinary/cases/${caseId}/evidence` });
   assert.equal(listed.status, 200);
   assert.equal(listed.body.items.length, 1);
   assert.equal(listed.body.items[0].artefactType, "CHARGE_MEMO");

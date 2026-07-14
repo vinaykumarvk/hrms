@@ -21,7 +21,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G08 continuous_feedback: an entry is recorded against a cycle and listed", () => {
+test("G08 continuous_feedback: an entry is recorded against a cycle and listed", async () => {
   const s = createFoundationServices();
   const fb = s.continuousFeedback.recordFeedback(actor(), {
     cycleId: "cycle-2026",
@@ -35,7 +35,7 @@ test("G08 continuous_feedback: an entry is recorded against a cycle and listed",
   assert.equal(list.length, 1);
 });
 
-test("G08 continuous_feedback: an empty note is rejected", () => {
+test("G08 continuous_feedback: an empty note is rejected", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.continuousFeedback.recordFeedback(actor(), { cycleId: "cycle-2026", appraiseeId: ph03Ids.employee, direction: "PEER", note: "   ", recordedAt: "2026-07-03" }),
@@ -43,7 +43,7 @@ test("G08 continuous_feedback: an empty note is rejected", () => {
   );
 });
 
-test("G08 check_ins: a check-in is recorded with a mandatory note", () => {
+test("G08 check_ins: a check-in is recorded with a mandatory note", async () => {
   const s = createFoundationServices();
   const ci = s.continuousFeedback.recordCheckIn(actor(), {
     cycleId: "cycle-2026",

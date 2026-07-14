@@ -22,7 +22,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G07 LMS/xAPI: enrolment ingests statements idempotently and completes on the completed verb", () => {
+test("G07 LMS/xAPI: enrolment ingests statements idempotently and completes on the completed verb", async () => {
   const s = createFoundationServices();
   const lrs = s.lmsIntegration.registerLrs(actor(), { name: "MoodleLRS", endpoint: "https://lrs.example/xapi", isPrimary: true });
   const enr = s.lmsIntegration.enrol(actor(), { lrsId: lrs.id, employeeId: ph03Ids.employee, courseRef: "COURSE-ETHICS-101" });
@@ -39,7 +39,7 @@ test("G07 LMS/xAPI: enrolment ingests statements idempotently and completes on t
   assert.equal(done.enrollment.status, "COMPLETED");
 });
 
-test("G07 LMS/xAPI: only a single primary learning_record_stores entry is allowed", () => {
+test("G07 LMS/xAPI: only a single primary learning_record_stores entry is allowed", async () => {
   const s = createFoundationServices();
   s.lmsIntegration.registerLrs(actor(), { name: "Primary", endpoint: "https://a", isPrimary: true });
   assert.throws(

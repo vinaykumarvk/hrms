@@ -22,15 +22,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph08-g06", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-08 G06 seniority tie-breaks are deterministic", () => {
+test("PH-08 G06 seniority tie-breaks are deterministic", async () => {
   const services = createFoundationServices();
   const list = services.promotion.createSeniorityList(actor(), {
     cadreId: ph03Ids.cadreRevenue,
@@ -44,7 +44,7 @@ test("PH-08 G06 seniority tie-breaks are deterministic", () => {
   assert.equal(list.entries[0].rank, 1);
 });
 
-test("PH-08 G06 DPC enforces QUORUM_NOT_MET and PANEL_CONFLICT_OF_INTEREST before promotion SR posting", () => {
+test("PH-08 G06 DPC enforces QUORUM_NOT_MET and PANEL_CONFLICT_OF_INTEREST before promotion SR posting", async () => {
   const services = createFoundationServices();
   const list = services.promotion.createSeniorityList(actor(), {
     cadreId: ph03Ids.cadreRevenue,
@@ -97,7 +97,7 @@ test("PH-08 G06 DPC enforces QUORUM_NOT_MET and PANEL_CONFLICT_OF_INTEREST befor
   assert.equal(timeline[0].eventTypeCode, "PROMOTION_EFFECTED");
 });
 
-test("PH-08 G06 MACP effect emits MACP_EFFECTED and G06_PAY_IMPACT_SIGNAL", () => {
+test("PH-08 G06 MACP effect emits MACP_EFFECTED and G06_PAY_IMPACT_SIGNAL", async () => {
   const services = createFoundationServices();
   const macp = services.promotion.effectMacp(actor(), {
     employeeId: ph03Ids.employee,
@@ -112,10 +112,10 @@ test("PH-08 G06 MACP effect emits MACP_EFFECTED and G06_PAY_IMPACT_SIGNAL", () =
   assert.ok(services.audit.listAudit(actor()).some((entry) => entry.action === "G06_PAY_IMPACT_SIGNAL"));
 });
 
-test("PH-08 G06 routes drive seniority and promotion summary", () => {
+test("PH-08 G06 routes drive seniority and promotion summary", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/seniority-lists",
     headers: { "Idempotency-Key": "idem-ph08-g06-route-list-001" },
@@ -125,14 +125,14 @@ test("PH-08 G06 routes drive seniority and promotion summary", () => {
     },
   });
   assert.equal(created.status, 201);
-  const published = call(api, {
+  const published = await call(api, {
     method: "POST",
     path: `/api/v1/promotions/seniority-lists/${created.body.seniorityList.id}:publish`,
     headers: { "Idempotency-Key": "idem-ph08-g06-route-publish-001" },
     body: {},
   });
   assert.equal(published.status, 202);
-  const summary = call(api, { method: "GET", path: "/api/v1/promotions/summary" });
+  const summary = await call(api, { method: "GET", path: "/api/v1/promotions/summary" });
   assert.equal(summary.status, 200);
   assert.equal(summary.body.seniorityLists, 1);
 });

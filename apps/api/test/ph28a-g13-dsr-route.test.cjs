@@ -18,18 +18,18 @@ function actor(extra = {}) {
     ...extra,
   };
 }
-function call(api, request) {
-  return api.dispatch({ headers: { "X-Correlation-Id": "corr-ph28a", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
+async function call(api, request) {
+  return await api.dispatch({ headers: { "X-Correlation-Id": "corr-ph28a", ...(request.headers ?? {}) }, actor: actor(request.actor ?? {}), ...request });
 }
 
-test("PH-28A GET /api/v1/dsr returns the paged DSR list after a register", () => {
+test("PH-28A GET /api/v1/dsr returns the paged DSR list after a register", async () => {
   const api = createFoundationApi(createFoundationServices());
   // Empty to start.
-  const empty = call(api, { method: "GET", path: "/api/v1/dsr" });
+  const empty = await call(api, { method: "GET", path: "/api/v1/dsr" });
   assert.equal(empty.status, 200);
   assert.equal(empty.body.items.length, 0);
   // Register one DSR through the existing POST route.
-  const reg = call(api, {
+  const reg = await call(api, {
     method: "POST",
     path: "/api/v1/dsr",
     headers: { "Idempotency-Key": "idem-ph28a-1" },
@@ -37,7 +37,7 @@ test("PH-28A GET /api/v1/dsr returns the paged DSR list after a register", () =>
   });
   assert.equal(reg.status, 201);
   // The list route now surfaces it.
-  const listed = call(api, { method: "GET", path: "/api/v1/dsr" });
+  const listed = await call(api, { method: "GET", path: "/api/v1/dsr" });
   assert.equal(listed.status, 200);
   assert.equal(listed.body.items.length, 1);
   assert.equal(listed.body.next_cursor, null);

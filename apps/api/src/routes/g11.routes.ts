@@ -73,11 +73,11 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.case.create",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
           pensionCase: toWirePensionCase(
-            context.services.pension.createCase(context.actor, {
+            await context.services.pension.createCase(context.actor, {
               employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
               separationDate: requiredString(body, "separationDate"),
               scheme: readPensionScheme(body),
@@ -94,11 +94,11 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.service.verify",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           pensionCase: toWirePensionCase(
-            context.services.pension.verifyService(context.actor, requiredParam(context.params, "id"), {
+            await context.services.pension.verifyService(context.actor, requiredParam(context.params, "id"), {
               totalServiceMonths: optionalNumber(body, "totalServiceMonths") ?? 360,
               penaltyExclusionMonths: optionalNumber(body, "penaltyExclusionMonths"),
               srCertified: readBoolean(body, "srCertified", true),
@@ -115,11 +115,11 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           pensionCase: toWirePensionCase(
-            context.services.pension.computeBenefits(context.actor, requiredParam(context.params, "id"), {
+            await context.services.pension.computeBenefits(context.actor, requiredParam(context.params, "id"), {
               ruleVersion: optionalString(body, "ruleVersion") ?? "PENSION-RULE-2026-01",
               asOf: optionalString(body, "asOf"),
               scheme: optionalString(body, "scheme") === undefined ? undefined : readPensionSchemeValue(requiredString(body, "scheme")),
@@ -139,10 +139,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.self.read",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          estimate: context.services.pension.estimateBenefits(context.actor, {
+          estimate: await context.services.pension.estimateBenefits(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             scheme: readPensionScheme(body),
             asOf: requiredString(body, "asOf"),
@@ -160,7 +160,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.listMyPensionCases",
       protected: true,
       permission: "g11.pension.self.read",
-      handler: (context) => ok({ items: context.services.pension.listMyCases(context.actor, requiredParam(context.params, "id")).map(toWirePensionCase) }),
+      handler: async (context) => ok({ items: await context.services.pension.listMyCases(context.actor, requiredParam(context.params, "id")).map(toWirePensionCase) }),
     },
     // ---- PH-09C / FR-G11-06: commutation (factor lookup by age-next-birthday) ----
     {
@@ -171,10 +171,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          commutation: context.services.pensionBenefits.computeCommutation(context.actor, requiredParam(context.params, "id"), {
+          commutation: await context.services.pensionBenefits.computeCommutation(context.actor, requiredParam(context.params, "id"), {
             commutedFractionBps: requiredNumber(body, "commutedFractionBps"),
             ageNextBirthday: requiredNumber(body, "ageNextBirthday"),
             reductionEffectiveDate: requiredString(body, "reductionEffectiveDate"),
@@ -192,10 +192,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          gratuity: context.services.pensionBenefits.computeGratuity(context.actor, requiredParam(context.params, "id"), {
+          gratuity: await context.services.pensionBenefits.computeGratuity(context.actor, requiredParam(context.params, "id"), {
             gratuityType: readGratuityType(requiredString(body, "gratuityType")),
             asOf: optionalString(body, "asOf"),
             serviceSlabFactorTenThousandths: optionalNumber(body, "serviceSlabFactorTenThousandths"),
@@ -213,10 +213,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          familyPension: context.services.pensionBenefits.computeFamilyPension(context.actor, requiredParam(context.params, "id"), {
+          familyPension: await context.services.pensionBenefits.computeFamilyPension(context.actor, requiredParam(context.params, "id"), {
             enhancedBasis: readEnhancedBasis(requiredString(body, "enhancedBasis")),
             eventDate: requiredString(body, "eventDate"),
             dateOfBirth: optionalString(body, "dateOfBirth"),
@@ -235,10 +235,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          provisionalPension: context.services.pensionBenefits.createProvisionalPension(context.actor, requiredParam(context.params, "id"), {
+          provisionalPension: await context.services.pensionBenefits.createProvisionalPension(context.actor, requiredParam(context.params, "id"), {
             proceedingsRef: requiredString(body, "proceedingsRef"),
             proceedingsType: readProceedingsType(requiredString(body, "proceedingsType")),
             commencedOn: requiredString(body, "commencedOn"),
@@ -253,7 +253,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.getProvisionalPension",
       protected: true,
       permission: "g11.pension.read",
-      handler: (context) => ok({ provisionalPensions: context.services.pensionBenefits.getProvisionalPension(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ provisionalPensions: await context.services.pensionBenefits.getProvisionalPension(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -263,10 +263,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.sanction",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          provisionalPension: context.services.pensionBenefits.concludeProvisionalPension(context.actor, requiredParam(context.params, "id"), {
+          provisionalPension: await context.services.pensionBenefits.concludeProvisionalPension(context.actor, requiredParam(context.params, "id"), {
             conclusionOutcome: readProvisionalOutcome(requiredString(body, "conclusionOutcome")),
             concludedOn: requiredString(body, "concludedOn"),
             finalRecoveryAmountCents: optionalNumber(body, "finalRecoveryAmountCents"),
@@ -282,7 +282,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pension.sanction",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ pensionCase: toWirePensionCase(context.services.pension.sanction(context.actor, requiredParam(context.params, "id"))) }),
+      handler: async (context) => accepted({ pensionCase: toWirePensionCase(await context.services.pension.sanction(context.actor, requiredParam(context.params, "id"))) }),
     },
     {
       method: "POST",
@@ -292,10 +292,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.ppo.issue",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) =>
+      handler: async (context) =>
         accepted({
           pensionCase: toWirePensionCase(
-            context.services.pension.issuePpo(context.actor, requiredParam(context.params, "id"), {
+            await context.services.pension.issuePpo(context.actor, requiredParam(context.params, "id"), {
               idempotencyKey: requiredString({ key: context.idempotencyKey }, "key"),
             })
           ),
@@ -307,7 +307,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.summary",
       protected: true,
       permission: "g11.pension.read",
-      handler: (context) => ok(context.services.pension.summary(context.scope)),
+      handler: async (context) => ok(await context.services.pension.summary(context.scope)),
     },
     // ---- PH-15B / FR-G11-12: pensioner master & lifecycle (pen_pensioners, E14) ----
     {
@@ -316,7 +316,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.getPensioner",
       protected: true,
       permission: "g11.pension.read",
-      handler: (context) => ok({ pensioner: context.services.pensionerLifecycle.getPensioner(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ pensioner: await context.services.pensionerLifecycle.getPensioner(context.scope, requiredParam(context.params, "id")) }),
     },
     // ---- PH-15B / FR-G11-12 E26: statutory family register consumed by conversion ----
     {
@@ -327,10 +327,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pensioner.maintain",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          familyMember: context.services.pensionerLifecycle.registerFamilyMember(context.actor, {
+          familyMember: await context.services.pensionerLifecycle.registerFamilyMember(context.actor, {
             employeeId: optionalString(body, "employeeId") ?? ph03Ids.employee,
             memberName: requiredString(body, "memberName"),
             relation: requiredString(body, "relation"),
@@ -349,10 +349,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pensioner.maintain",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          suspended: context.services.pensionerLifecycle.evaluateLifeCertificates(context.actor, {
+          suspended: await context.services.pensionerLifecycle.evaluateLifeCertificates(context.actor, {
             asOf: requiredString(body, "asOf"),
             graceDays: optionalNumber(body, "graceDays"),
           }),
@@ -368,10 +368,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pensioner.maintain",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          submission: context.services.pensionerLifecycle.submitLifeCertificate(context.actor, requiredParam(context.params, "id"), {
+          submission: await context.services.pensionerLifecycle.submitLifeCertificate(context.actor, requiredParam(context.params, "id"), {
             certificateYear: requiredNumber(body, "certificateYear"),
             method: readLcMethod(requiredString(body, "method")),
             submittedOn: requiredString(body, "submittedOn"),
@@ -389,10 +389,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pensioner.maintain",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          conversion: context.services.pensionerLifecycle.reportDeath(context.actor, requiredParam(context.params, "id"), {
+          conversion: await context.services.pensionerLifecycle.reportDeath(context.actor, requiredParam(context.params, "id"), {
             dateOfDeath: requiredString(body, "dateOfDeath"),
             source: readDeathSource(optionalString(body, "source")),
           }),
@@ -408,10 +408,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.revision.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          revisionBatch: context.services.pensionRevisions.createBatch(context.actor, {
+          revisionBatch: await context.services.pensionRevisions.createBatch(context.actor, {
             revisionType: readRevisionType(requiredString(body, "revisionType")),
             effectiveDate: requiredString(body, "effectiveDate"),
             fitmentFactorTenThousandths: optionalNumber(body, "fitmentFactorTenThousandths"),
@@ -425,10 +425,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.getRevisionBatch",
       protected: true,
       permission: "g11.pension.read",
-      handler: (context) =>
+      handler: async (context) =>
         ok({
-          revisionBatch: context.services.pensionRevisions.getBatch(context.scope, requiredParam(context.params, "id")),
-          lines: context.services.pensionRevisions.listLines(context.scope, requiredParam(context.params, "id")),
+          revisionBatch: await context.services.pensionRevisions.getBatch(context.scope, requiredParam(context.params, "id")),
+          lines: await context.services.pensionRevisions.listLines(context.scope, requiredParam(context.params, "id")),
         }),
     },
     {
@@ -439,10 +439,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.revision.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          lines: context.services.pensionRevisions.computeBatch(context.actor, requiredParam(context.params, "id"), {
+          lines: await context.services.pensionRevisions.computeBatch(context.actor, requiredParam(context.params, "id"), {
             asOf: requiredString(body, "asOf"),
           }),
         });
@@ -456,7 +456,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.revision.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ revisionBatch: context.services.pensionRevisions.approveBatch(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ revisionBatch: await context.services.pensionRevisions.approveBatch(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -466,10 +466,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.revision.approve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          revisionBatch: context.services.pensionRevisions.applyBatch(context.actor, requiredParam(context.params, "id"), {
+          revisionBatch: await context.services.pensionRevisions.applyBatch(context.actor, requiredParam(context.params, "id"), {
             appliedOn: requiredString(body, "appliedOn"),
             jobRunRef: optionalString(body, "jobRunRef"),
           }),
@@ -485,7 +485,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.rules.write",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => createRuleRow(context),
+      handler: async (context) => createRuleRow(context),
     },
     // ---- PH-09A / FR-G11-19 AC5: as-of resolution (fails closed off-window) ----
     {
@@ -494,7 +494,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.resolveRuleRow",
       protected: true,
       permission: "g11.pension.read",
-      handler: (context) => resolveRuleRow(context),
+      handler: async (context) => resolveRuleRow(context),
     },
     // PH-29B — G11 disbursing-authority registry + proactive death detection (route exposure).
     {
@@ -505,10 +505,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pda.register",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          pda: context.services.pensionTreasury.registerPda(context.actor, {
+          pda: await context.services.pensionTreasury.registerPda(context.actor, {
             pdaCode: requiredString(body, "pdaCode"),
             name: requiredString(body, "name"),
             pdaDisbursementModel: requiredString(body, "pdaDisbursementModel") as "M11_COMPUTES_FULL" | "PDA_APPLIES_RELIEF",
@@ -524,10 +524,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.death.reconcile",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          vital: context.services.deathRecovery.reconcileDeath(context.actor, {
+          vital: await context.services.deathRecovery.reconcileDeath(context.actor, {
             pensionerId: requiredString(body, "pensionerId"),
             dateOfDeath: requiredString(body, "dateOfDeath"),
           }),
@@ -542,10 +542,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.grievance.raise",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          grievance: context.services.pensionTreasury.raiseGrievance(context.actor, {
+          grievance: await context.services.pensionTreasury.raiseGrievance(context.actor, {
             pensionerId: requiredString(body, "pensionerId"),
             category: requiredString(body, "category"),
             description: requiredString(body, "description"),
@@ -564,7 +564,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pda.certify",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ pda: context.services.pensionTreasury.certifyPdaSandbox(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ pda: await context.services.pensionTreasury.certifyPdaSandbox(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -574,7 +574,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pda.activate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ pda: context.services.pensionTreasury.activatePda(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ pda: await context.services.pensionTreasury.activatePda(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -582,7 +582,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.getPda",
       protected: true,
       permission: "g11.pension.read",
-      handler: (context) => ok({ pda: context.services.pensionTreasury.getPda(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ pda: await context.services.pensionTreasury.getPda(context.scope, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -592,9 +592,9 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.grievance.raise",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return accepted({ grievance: context.services.pensionTreasury.closeGrievance(context.actor, requiredParam(context.params, "id"), { resolutionComment: requiredString(body, "resolutionComment") }) });
+        return accepted({ grievance: await context.services.pensionTreasury.closeGrievance(context.actor, requiredParam(context.params, "id"), { resolutionComment: requiredString(body, "resolutionComment") }) });
       },
     },
     {
@@ -605,10 +605,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.pensioner.maintain",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          verification: context.services.pensionDisbursement.recordAccountVerification(context.actor, {
+          verification: await context.services.pensionDisbursement.recordAccountVerification(context.actor, {
             caseId: requiredString(body, "caseId"),
             accountNoMasked: requiredString(body, "accountNoMasked"),
             ifsc: requiredString(body, "ifsc"),
@@ -627,7 +627,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.listVerifications",
       protected: true,
       permission: "g11.pension.read",
-      handler: (context) => ok({ items: context.services.pensionDisbursement.listVerifications(context.scope, requiredParam(context.params, "caseId")) }),
+      handler: async (context) => ok({ items: await context.services.pensionDisbursement.listVerifications(context.scope, requiredParam(context.params, "caseId")) }),
     },
     // PH-58A — G11 pension disbursement (transmit + list) + pensioner lifecycle reads (life certificates,
     // pensioner-by-case). Route exposure for already-tested pensionDisbursement / pensionerLifecycle.
@@ -639,10 +639,10 @@ export function registerG11Routes(kernel: ApiKernel): void {
       permission: "g11.disbursement.transmit",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          disbursement: context.services.pensionDisbursement.disburse(context.actor, {
+          disbursement: await context.services.pensionDisbursement.disburse(context.actor, {
             caseId: requiredString(body, "caseId"),
             lineType: requiredString(body, "lineType") as PenDisbursementLineType,
             accountNoMasked: requiredString(body, "accountNoMasked"),
@@ -658,7 +658,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.listDisbursements",
       protected: true,
       permission: "g11.pension.read",
-      handler: (context) => ok({ items: context.services.pensionDisbursement.listDisbursements(context.scope, requiredParam(context.params, "caseId")) }),
+      handler: async (context) => ok({ items: await context.services.pensionDisbursement.listDisbursements(context.scope, requiredParam(context.params, "caseId")) }),
     },
     {
       method: "GET",
@@ -666,7 +666,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.listLifeCertificates",
       protected: true,
       permission: "g11.pension.read",
-      handler: (context) => ok({ items: context.services.pensionerLifecycle.listLifeCertificates(context.scope, requiredParam(context.params, "pensionerId")) }),
+      handler: async (context) => ok({ items: await context.services.pensionerLifecycle.listLifeCertificates(context.scope, requiredParam(context.params, "pensionerId")) }),
     },
     {
       method: "GET",
@@ -674,7 +674,7 @@ export function registerG11Routes(kernel: ApiKernel): void {
       operationId: "g11.findPensionerByCase",
       protected: true,
       permission: "g11.pension.read",
-      handler: (context) => ok({ pensioner: context.services.pensionerLifecycle.findPensionerByCase(context.scope, requiredParam(context.params, "caseId")) ?? null }),
+      handler: async (context) => ok({ pensioner: await context.services.pensionerLifecycle.findPensionerByCase(context.scope, requiredParam(context.params, "caseId")) ?? null }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

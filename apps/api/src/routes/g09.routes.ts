@@ -60,10 +60,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.case.open",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          disciplinaryCase: context.services.disciplinary.openCase(context.actor, {
+          disciplinaryCase: await context.services.disciplinary.openCase(context.actor, {
             chargedEmployeeId: optionalString(body, "chargedEmployeeId") ?? ph03Ids.employee,
             disciplinaryAuthorityId: optionalString(body, "disciplinaryAuthorityId") ?? ph03Ids.manager,
             allegations: requiredString(body, "allegations"),
@@ -82,10 +82,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.charge.serve",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          disciplinaryCase: context.services.disciplinary.serveChargeMemo(context.actor, requiredParam(context.params, "id"), {
+          disciplinaryCase: await context.services.disciplinary.serveChargeMemo(context.actor, requiredParam(context.params, "id"), {
             articles: optionalStringArray(body, "articles") ?? ["Article I"],
             servedOn: requiredString(body, "servedOn"),
           }),
@@ -100,10 +100,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.inquiry.report",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          disciplinaryCase: context.services.disciplinary.recordInquiryReport(context.actor, requiredParam(context.params, "id"), {
+          disciplinaryCase: await context.services.disciplinary.recordInquiryReport(context.actor, requiredParam(context.params, "id"), {
             findings: readFindings(body),
             reportDate: requiredString(body, "reportDate"),
           }),
@@ -118,10 +118,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.penalty.impose",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.disciplinary.imposePenalty(context.actor, requiredParam(context.params, "id"), {
+          await context.services.disciplinary.imposePenalty(context.actor, requiredParam(context.params, "id"), {
             penaltyType: readPenaltyType(body),
             orderDate: requiredString(body, "orderDate"),
             reason: requiredString(body, "reason"),
@@ -138,10 +138,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.appeal.decide",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.disciplinary.decideAppeal(context.actor, requiredParam(context.params, "id"), {
+          await context.services.disciplinary.decideAppeal(context.actor, requiredParam(context.params, "id"), {
             appellateAuthorityId: optionalString(body, "appellateAuthorityId") ?? "appellate-authority-001",
             decision: readAppealDecision(body),
             decidedOn: requiredString(body, "decidedOn"),
@@ -156,7 +156,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.summary",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok(context.services.disciplinary.summary(context.scope)),
+      handler: async (context) => ok(await context.services.disciplinary.summary(context.scope)),
     },
     // Self-service "view my disciplinary case status" (own cases only, self-or-override).
     {
@@ -165,8 +165,8 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.listMyCases",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) =>
-        ok({ items: context.services.disciplinary.listMyCases(context.actor, requiredParam(context.params, "id")).map(toWireDisciplinaryCase) }),
+      handler: async (context) =>
+        ok({ items: await context.services.disciplinary.listMyCases(context.actor, requiredParam(context.params, "id")).map(toWireDisciplinaryCase) }),
     },
     {
       method: "GET",
@@ -174,8 +174,8 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.listMyShowCauseNotices",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) =>
-        ok({ items: context.services.disciplinary.listMyShowCauseNotices(context.actor, requiredParam(context.params, "id")).map(toWireShowCauseNotice) }),
+      handler: async (context) =>
+        ok({ items: await context.services.disciplinary.listMyShowCauseNotices(context.actor, requiredParam(context.params, "id")).map(toWireShowCauseNotice) }),
     },
     // PH-28B — case evidence-vault listing (consumed by the G09 evidence-vault UI, PH-27C).
     {
@@ -184,7 +184,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.listCaseEvidence",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok({ items: context.services.disciplinary.listCaseEvidence(context.actor, requiredParam(context.params, "id")), limit: 25, next_cursor: null }),
+      handler: async (context) => ok({ items: await context.services.disciplinary.listCaseEvidence(context.actor, requiredParam(context.params, "id")), limit: 25, next_cursor: null }),
     },
     // ---------------------------------------------------------------------------------
     // PH-08E natural-justice chain (FR-G09-002/003/018/019/027/028)
@@ -197,10 +197,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.preliminary-inquiry.order",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          preliminaryInquiry: context.services.disciplinary.orderPreliminaryInquiry(context.actor, requiredParam(context.params, "id"), {
+          preliminaryInquiry: await context.services.disciplinary.orderPreliminaryInquiry(context.actor, requiredParam(context.params, "id"), {
             piOfficerId: requiredString(body, "piOfficerId"),
             orderedDate: requiredString(body, "orderedDate"),
             dueDate: requiredString(body, "dueDate"),
@@ -216,10 +216,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.preliminary-inquiry.update",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          preliminaryInquiry: context.services.disciplinary.submitPreliminaryInquiry(context.actor, requiredParam(context.params, "id"), {
+          preliminaryInquiry: await context.services.disciplinary.submitPreliminaryInquiry(context.actor, requiredParam(context.params, "id"), {
             findingsSummary: requiredString(body, "findingsSummary"),
             recommendation: readPiRecommendation(body),
             submittedAt: requiredString(body, "submittedAt"),
@@ -235,10 +235,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.suspension.order",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          suspension: context.services.disciplinary.orderSuspension(context.actor, requiredParam(context.params, "id"), {
+          suspension: await context.services.disciplinary.orderSuspension(context.actor, requiredParam(context.params, "id"), {
             effectiveFrom: requiredString(body, "effectiveFrom"),
             subsistenceRatePct: optionalNumber(body, "subsistenceRatePct"),
           }),
@@ -253,10 +253,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.suspension.update",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          suspension: context.services.disciplinary.reviseSubsistenceRate(context.actor, requiredParam(context.params, "id"), {
+          suspension: await context.services.disciplinary.reviseSubsistenceRate(context.actor, requiredParam(context.params, "id"), {
             newRatePct: optionalNumber(body, "newRatePct") ?? 50,
             revisionDate: requiredString(body, "revisionDate"),
           }),
@@ -271,10 +271,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.show-cause.issue",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          showCauseNotice: context.services.disciplinary.issueShowCauseNotice(context.actor, requiredParam(context.params, "id"), {
+          showCauseNotice: await context.services.disciplinary.issueShowCauseNotice(context.actor, requiredParam(context.params, "id"), {
             proposedPenalties: readPenaltyItems(body, "proposedPenalties"),
             issuedDate: requiredString(body, "issuedDate"),
             responseDueDate: requiredString(body, "responseDueDate"),
@@ -290,10 +290,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.consultation.require",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          consultation: context.services.disciplinary.requireConsultation(context.actor, requiredParam(context.params, "id"), {
+          consultation: await context.services.disciplinary.requireConsultation(context.actor, requiredParam(context.params, "id"), {
             consultationType: readConsultationType(body),
             isMandatory: optionalBoolean(body, "isMandatory"),
             requestedDate: optionalString(body, "requestedDate"),
@@ -309,10 +309,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.disagreement-memo.issue",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          disagreementMemo: context.services.disciplinary.recordDisagreementMemo(context.actor, requiredParam(context.params, "id"), {
+          disagreementMemo: await context.services.disciplinary.recordDisagreementMemo(context.actor, requiredParam(context.params, "id"), {
             tentativeDisagreement: requiredString(body, "tentativeDisagreement"),
             articlesAffected: optionalStringArray(body, "articlesAffected"),
             servedDate: requiredString(body, "servedDate"),
@@ -328,10 +328,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.case.abate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          disciplinaryCase: context.services.disciplinary.recordRespondentDeath(context.actor, requiredParam(context.params, "id"), {
+          disciplinaryCase: await context.services.disciplinary.recordRespondentDeath(context.actor, requiredParam(context.params, "id"), {
             deathDate: requiredString(body, "deathDate"),
           }),
         });
@@ -345,10 +345,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.order.finalise",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.disciplinary.finaliseOrder(context.actor, requiredParam(context.params, "id"), {
+          await context.services.disciplinary.finaliseOrder(context.actor, requiredParam(context.params, "id"), {
             showCauseNoticeId: requiredString(body, "showCauseNoticeId"),
             penalties: readPenaltyItems(body, "penalties"),
             passedBy: requiredString(body, "passedBy"),
@@ -366,7 +366,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.verifyCaseTimeline",
       protected: true,
       permission: "g09.timeline.verify",
-      handler: (context) => ok(context.services.disciplinary.verifyCaseTimeline(context.actor, requiredParam(context.params, "id"))),
+      handler: async (context) => ok(await context.services.disciplinary.verifyCaseTimeline(context.actor, requiredParam(context.params, "id"))),
     },
     // ---------------------------------------------------------------------------------
     // PH-15F FR-G09-023: ICC constitution on the ICC_POSH route (composition validated).
@@ -379,10 +379,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.icc.constitute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          iccAppointments: context.services.disciplinary.constituteIcc(context.actor, requiredParam(context.params, "id"), {
+          iccAppointments: await context.services.disciplinary.constituteIcc(context.actor, requiredParam(context.params, "id"), {
             appointedDate: requiredString(body, "appointedDate"),
             members: readIccMembers(body),
           }),
@@ -398,11 +398,11 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.personal-hearing.request",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
           personalHearing: toWirePersonalHearing(
-            context.services.disciplinary.requestPersonalHearing(context.actor, requiredParam(context.params, "id"), {
+            await context.services.disciplinary.requestPersonalHearing(context.actor, requiredParam(context.params, "id"), {
               stage: readHearingStage(body),
               requestedOn: requiredString(body, "requestedOn"),
               showCauseNoticeId: optionalString(body, "showCauseNoticeId"),
@@ -419,10 +419,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.personal-hearing.decide",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          personalHearing: context.services.disciplinary.decidePersonalHearing(context.actor, requiredParam(context.params, "id"), {
+          personalHearing: await context.services.disciplinary.decidePersonalHearing(context.actor, requiredParam(context.params, "id"), {
             decision: readHearingDecision(body),
             decidedOn: requiredString(body, "decidedOn"),
             denialReason: optionalString(body, "denialReason"),
@@ -441,10 +441,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.sla.pause",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          slaPause: context.services.disciplinary.pauseSla(context.actor, requiredParam(context.params, "id"), {
+          slaPause: await context.services.disciplinary.pauseSla(context.actor, requiredParam(context.params, "id"), {
             stage: requiredString(body, "stage"),
             reason: readSlaPauseReason(body),
             pausedFrom: requiredString(body, "pausedFrom"),
@@ -461,10 +461,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.sla.pause",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.disciplinary.resumeSla(context.actor, requiredParam(context.params, "id"), {
+          await context.services.disciplinary.resumeSla(context.actor, requiredParam(context.params, "id"), {
             stage: requiredString(body, "stage"),
             resumedAt: requiredString(body, "resumedAt"),
           })
@@ -477,7 +477,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.listSlaPauses",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok({ slaPauses: context.services.disciplinary.listSlaPauses(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ slaPauses: await context.services.disciplinary.listSlaPauses(context.scope, requiredParam(context.params, "id")) }),
     },
     // PH-36A FR-G09-023 BR-2: POSH conciliation (opted by complainant, before inquiry, never monetary).
     {
@@ -488,10 +488,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.conciliation.record",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created(
-          context.services.disciplinary.recordConciliation(context.actor, requiredParam(context.params, "id"), {
+          await context.services.disciplinary.recordConciliation(context.actor, requiredParam(context.params, "id"), {
             opted: optionalBoolean(body, "opted") ?? true,
             outcome: (requiredString(body, "outcome") as "SETTLED" | "FAILED"),
             settlementBasis: requiredString(body, "settlementBasis"),
@@ -507,7 +507,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.listConciliations",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok({ items: context.services.disciplinary.listConciliations(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ items: await context.services.disciplinary.listConciliations(context.scope, requiredParam(context.params, "id")) }),
     },
     // PH-53A — G09 suspension review + show-cause response + consultation close/waive + hearing minutes +
     // case reads (timeline / ICC appointments / personal hearings / penalty order). Tested disciplinary backing.
@@ -519,10 +519,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.suspension.order",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          suspension: context.services.disciplinary.reviewSuspension(context.actor, requiredParam(context.params, "id"), {
+          suspension: await context.services.disciplinary.reviewSuspension(context.actor, requiredParam(context.params, "id"), {
             outcome: requiredString(body, "outcome") as "CONTINUE" | "REVOKE",
             reviewDate: requiredString(body, "reviewDate"),
             reason: optionalString(body, "reason"),
@@ -538,11 +538,11 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.show-cause.respond",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
           notice: toWireShowCauseNotice(
-            context.services.disciplinary.respondToShowCause(context.actor, requiredParam(context.params, "id"), {
+            await context.services.disciplinary.respondToShowCause(context.actor, requiredParam(context.params, "id"), {
               representationText: requiredString(body, "representationText"),
               respondedAt: requiredString(body, "respondedAt"),
             })
@@ -558,10 +558,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.consultation.require",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          consultation: context.services.disciplinary.closeConsultation(context.actor, requiredParam(context.params, "id"), {
+          consultation: await context.services.disciplinary.closeConsultation(context.actor, requiredParam(context.params, "id"), {
             receivedDate: requiredString(body, "receivedDate"),
             adviceSummary: optionalString(body, "adviceSummary"),
           }),
@@ -576,10 +576,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.consultation.require",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          consultation: context.services.disciplinary.waiveConsultation(context.actor, requiredParam(context.params, "id"), {
+          consultation: await context.services.disciplinary.waiveConsultation(context.actor, requiredParam(context.params, "id"), {
             waiverReason: requiredString(body, "waiverReason"),
             waivedOn: requiredString(body, "waivedOn"),
           }),
@@ -594,10 +594,10 @@ export function registerG09Routes(kernel: ApiKernel): void {
       permission: "g09.personal-hearing.request",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          personalHearing: context.services.disciplinary.recordPersonalHearingMinutes(context.actor, requiredParam(context.params, "id"), {
+          personalHearing: await context.services.disciplinary.recordPersonalHearingMinutes(context.actor, requiredParam(context.params, "id"), {
             heldDate: requiredString(body, "heldDate"),
             minutesText: requiredString(body, "minutesText"),
           }),
@@ -610,7 +610,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.listCaseTimeline",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok({ items: context.services.disciplinary.listCaseTimeline(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ items: await context.services.disciplinary.listCaseTimeline(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -618,7 +618,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.listIccAppointments",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok({ items: context.services.disciplinary.listIccAppointments(context.scope, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ items: await context.services.disciplinary.listIccAppointments(context.scope, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -626,7 +626,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.listPersonalHearings",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok({ items: context.services.disciplinary.listPersonalHearings(context.actor, requiredParam(context.params, "id")).map(toWirePersonalHearing) }),
+      handler: async (context) => ok({ items: await context.services.disciplinary.listPersonalHearings(context.actor, requiredParam(context.params, "id")).map(toWirePersonalHearing) }),
     },
     {
       method: "GET",
@@ -634,7 +634,7 @@ export function registerG09Routes(kernel: ApiKernel): void {
       operationId: "g09.getPenaltyOrder",
       protected: true,
       permission: "g09.case.read",
-      handler: (context) => ok({ penaltyOrder: toWirePenaltyOrder(context.services.disciplinary.getPenaltyOrder(context.actor, requiredParam(context.params, "id"))) }),
+      handler: async (context) => ok({ penaltyOrder: toWirePenaltyOrder(await context.services.disciplinary.getPenaltyOrder(context.actor, requiredParam(context.params, "id"))) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

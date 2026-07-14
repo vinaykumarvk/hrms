@@ -22,8 +22,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph09-g10", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -72,7 +72,7 @@ function seedPayroll(services, period = "2026-08") {
   return { computed, disbursed };
 }
 
-test("PH-09 G10 computes deterministic PAYROLL_TRACE with RULE_VERSION_SNAPSHOT and G03_LOP_PAYROLL_IMPACT", () => {
+test("PH-09 G10 computes deterministic PAYROLL_TRACE with RULE_VERSION_SNAPSHOT and G03_LOP_PAYROLL_IMPACT", async () => {
   const services = createFoundationServices();
   const { computed, disbursed } = seedPayroll(services);
   assert.equal(computed.status, "COMPUTED");
@@ -91,7 +91,7 @@ test("PH-09 G10 computes deterministic PAYROLL_TRACE with RULE_VERSION_SNAPSHOT 
   assert.ok(services.audit.listAudit(actor()).some((entry) => entry.action === "G10_PAYROLL_COMPUTED" && entry.metadata.marker === "PAYROLL_TRACE"));
 });
 
-test("PH-09 G10 reproducibility gives identical totals for same snapshot inputs", () => {
+test("PH-09 G10 reproducibility gives identical totals for same snapshot inputs", async () => {
   const first = createFoundationServices();
   const second = createFoundationServices();
   const firstRun = seedPayroll(first, "2026-09").computed;
@@ -100,19 +100,19 @@ test("PH-09 G10 reproducibility gives identical totals for same snapshot inputs"
   assert.equal(firstRun.inputSnapshotHash, secondRun.inputSnapshotHash);
 });
 
-test("PH-09 G10 routes expose protected payroll run lifecycle and summary", () => {
+test("PH-09 G10 routes expose protected payroll run lifecycle and summary", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   assert.equal(
-    call(api, {
+    (await call(api, {
       method: "POST",
       path: "/api/v1/payroll/salary-structures",
       headers: { "Idempotency-Key": "idem-ph09-g10-salary-001" },
       body: { effectiveFrom: "2026-07-01" },
-    }).status,
+    })).status,
     201
   );
-  const run = call(api, {
+  const run = await call(api, {
     method: "POST",
     path: "/api/v1/payroll/runs",
     headers: { "Idempotency-Key": "idem-ph09-g10-run-001" },
@@ -120,24 +120,24 @@ test("PH-09 G10 routes expose protected payroll run lifecycle and summary", () =
   });
   assert.equal(run.status, 201);
   assert.equal(
-    call(api, {
+    (await call(api, {
       method: "POST",
       path: `/api/v1/payroll/runs/${run.body.payrollRun.id}:lock-inputs`,
       headers: { "Idempotency-Key": "idem-ph09-g10-lock-inputs-001" },
       body: {},
-    }).body.payrollRun.status,
+    })).body.payrollRun.status,
     "INPUT_LOCKED"
   );
   assert.equal(
-    call(api, {
+    (await call(api, {
       method: "POST",
       path: `/api/v1/payroll/runs/${run.body.payrollRun.id}:compute`,
       headers: { "Idempotency-Key": "idem-ph09-g10-compute-001" },
       body: {},
-    }).body.payrollRun.status,
+    })).body.payrollRun.status,
     "COMPUTED"
   );
-  const summary = call(api, { method: "GET", path: "/api/v1/payroll/summary" });
+  const summary = await call(api, { method: "GET", path: "/api/v1/payroll/summary" });
   assert.equal(summary.status, 200);
   assert.equal(summary.body.calculationMarker, "PAYROLL_TRACE");
   assert.equal(summary.body.ruleSnapshotMarker, "RULE_VERSION_SNAPSHOT");

@@ -21,15 +21,15 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph07d-g03", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-07D FR-04 attendance day status is DERIVED: HOLIDAY, ON_LEAVE, HALF_DAY, PRESENT, ABSENT, ANOMALY", () => {
+test("PH-07D FR-04 attendance day status is DERIVED: HOLIDAY, ON_LEAVE, HALF_DAY, PRESENT, ABSENT, ANOMALY", async () => {
   const services = createFoundationServices();
 
   // FR-02 holiday calendar drives HOLIDAY derivation — the caller passes no status.
@@ -73,7 +73,7 @@ test("PH-07D FR-04 attendance day status is DERIVED: HOLIDAY, ON_LEAVE, HALF_DAY
   assert.equal(anomaly.anomalyCode, "MISSING_OUT");
 });
 
-test("PH-07D FR-05 regularisation enforces the backdate window (WINDOW_EXPIRED) and per-period cap (REGULARISATION_LIMIT)", () => {
+test("PH-07D FR-05 regularisation enforces the backdate window (WINDOW_EXPIRED) and per-period cap (REGULARISATION_LIMIT)", async () => {
   const services = createFoundationServices();
 
   // Outside the 30-day backdate window -> WINDOW_EXPIRED, day untouched.
@@ -99,7 +99,7 @@ test("PH-07D FR-05 regularisation enforces the backdate window (WINDOW_EXPIRED) 
   );
 });
 
-test("PH-07D FR-17 payroll feed: generation, period lock (PERIOD_ALREADY_LOCKED), and locked-period adjustment emission (R6)", () => {
+test("PH-07D FR-17 payroll feed: generation, period lock (PERIOD_ALREADY_LOCKED), and locked-period adjustment emission (R6)", async () => {
   const services = createFoundationServices();
 
   // Build July inputs: approved leave (LEAVE_DEBIT), present day, overtime.
@@ -171,18 +171,18 @@ test("PH-07D FR-17 payroll feed: generation, period lock (PERIOD_ALREADY_LOCKED)
   assert.equal(regularised.adjustment.appliedInPayPeriod, "2026-08");
 });
 
-test("PH-07D API routes expose feed generation, period lock, feed rows, and adjustments", () => {
+test("PH-07D API routes expose feed generation, period lock, feed rows, and adjustments", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
 
-  const submitted = call(api, {
+  const submitted = await call(api, {
     method: "POST",
     path: "/api/v1/atl/leave-applications",
     headers: { "Idempotency-Key": "idem-ph07d-route-submit-001" },
     body: { employeeId: ph03Ids.employee, leaveTypeId: "EL", fromDate: "2026-09-07", toDate: "2026-09-08" },
   });
   assert.equal(submitted.status, 201);
-  const decided = call(api, {
+  const decided = await call(api, {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${submitted.body.application.id}/decision`,
     headers: { "Idempotency-Key": "idem-ph07d-route-approve-001" },
@@ -190,7 +190,7 @@ test("PH-07D API routes expose feed generation, period lock, feed rows, and adju
   });
   assert.equal(decided.status, 202);
 
-  const generated = call(api, {
+  const generated = await call(api, {
     method: "POST",
     path: "/api/v1/atl/payroll-feed:generate",
     headers: { "Idempotency-Key": "idem-ph07d-route-feedgen-001" },
@@ -200,7 +200,7 @@ test("PH-07D API routes expose feed generation, period lock, feed rows, and adju
   assert.equal(generated.body.items.length, 1);
   assert.equal(generated.body.items[0].lwpDays, 2);
 
-  const lock = call(api, {
+  const lock = await call(api, {
     method: "POST",
     path: "/api/v1/atl/payroll-feed:lock",
     headers: { "Idempotency-Key": "idem-ph07d-route-feedlock-001" },
@@ -210,7 +210,7 @@ test("PH-07D API routes expose feed generation, period lock, feed rows, and adju
   assert.equal(lock.body.lockedRows, 1);
 
   // NEGATIVE over the wire: locked period rejects generation with 409 PERIOD_ALREADY_LOCKED.
-  const relocked = call(api, {
+  const relocked = await call(api, {
     method: "POST",
     path: "/api/v1/atl/payroll-feed:generate",
     headers: { "Idempotency-Key": "idem-ph07d-route-feedgen-002" },
@@ -220,7 +220,7 @@ test("PH-07D API routes expose feed generation, period lock, feed rows, and adju
   assert.equal(relocked.body.error.code, "PERIOD_ALREADY_LOCKED");
 
   // Locked-period cancellation emits an adjustment visible through the API.
-  const cancelled = call(api, {
+  const cancelled = await call(api, {
     method: "POST",
     path: `/api/v1/atl/leave-applications/${submitted.body.application.id}/decision`,
     headers: { "Idempotency-Key": "idem-ph07d-route-cancel-001" },
@@ -228,25 +228,25 @@ test("PH-07D API routes expose feed generation, period lock, feed rows, and adju
   });
   assert.equal(cancelled.status, 202);
 
-  const feed = call(api, { method: "GET", path: "/api/v1/atl/payroll-feed", query: { payPeriod: "2026-09" } });
+  const feed = await call(api, { method: "GET", path: "/api/v1/atl/payroll-feed", query: { payPeriod: "2026-09" } });
   assert.equal(feed.status, 200);
   assert.equal(feed.body.items[0].isLocked, true);
   assert.equal(feed.body.items[0].lwpDays, 2);
 
-  const adjustments = call(api, { method: "GET", path: "/api/v1/atl/payroll-feed-adjustments" });
+  const adjustments = await call(api, { method: "GET", path: "/api/v1/atl/payroll-feed-adjustments" });
   assert.equal(adjustments.status, 200);
   assert.equal(adjustments.body.items.length, 1);
   assert.equal(adjustments.body.items[0].appliedInPayPeriod, "2026-10");
 
   // WINDOW_EXPIRED negative over the wire (422).
-  const anomaly = call(api, {
+  const anomaly = await call(api, {
     method: "POST",
     path: "/api/v1/atl/attendance-captures",
     headers: { "Idempotency-Key": "idem-ph07d-route-att-001" },
     body: { employeeId: ph03Ids.employee, attendanceDate: "2026-01-05", inTime: "09:00" },
   });
   assert.equal(anomaly.status, 201);
-  const expired = call(api, {
+  const expired = await call(api, {
     method: "POST",
     path: `/api/v1/atl/attendance-captures/${anomaly.body.attendance.id}:regularise`,
     headers: { "Idempotency-Key": "idem-ph07d-route-reg-001" },

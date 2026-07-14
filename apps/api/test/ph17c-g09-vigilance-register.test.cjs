@@ -22,7 +22,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G09 vigilance_records: clearance lifecycle PENDING -> CLEARED and the lookup reflects it", () => {
+test("G09 vigilance_records: clearance lifecycle PENDING -> CLEARED and the lookup reflects it", async () => {
   const s = createFoundationServices();
   const emp = ph03Ids.employee;
   s.vigilanceRegister.upsertVigilance(actor(), { employeeId: emp, integrityGrade: "NOT_ASSESSED" });
@@ -35,7 +35,7 @@ test("G09 vigilance_records: clearance lifecycle PENDING -> CLEARED and the look
   assert.doesNotThrow(() => s.vigilanceRegister.assertClearedForPromotion(actor(), emp));
 });
 
-test("G09 sealed cover / NOT_CLEARED blocks clearance (fail closed)", () => {
+test("G09 sealed cover / NOT_CLEARED blocks clearance (fail closed)", async () => {
   const s = createFoundationServices();
   const emp = ph03Ids.manager;
   s.vigilanceRegister.upsertVigilance(actor(), { employeeId: emp });

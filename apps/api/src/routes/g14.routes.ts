@@ -23,7 +23,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.analytics.refresh",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ mart: context.services.analytics.refreshMart(context.actor) }),
+      handler: async (context) => accepted({ mart: await context.services.analytics.refreshMart(context.actor) }),
     },
     {
       method: "GET",
@@ -31,7 +31,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.getExecutiveDashboard",
       protected: true,
       permission: "g14.analytics.read",
-      handler: (context) => ok({ dashboard: context.services.analytics.getDashboard(context.actor) }),
+      handler: async (context) => ok({ dashboard: await context.services.analytics.getDashboard(context.actor) }),
     },
     {
       method: "GET",
@@ -39,7 +39,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.getMyDashboard",
       protected: true,
       permission: "g14.analytics.read.self",
-      handler: (context) => ok({ dashboard: context.services.analytics.getMyDashboard(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => ok({ dashboard: await context.services.analytics.getMyDashboard(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "GET",
@@ -48,7 +48,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g14.analytics.drill_through",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => ok(context.services.analytics.drillThrough(context.actor, context.request.query?.widgetCode ?? "EMPLOYEE_HEADCOUNT")),
+      handler: async (context) => ok(await context.services.analytics.drillThrough(context.actor, context.request.query?.widgetCode ?? "EMPLOYEE_HEADCOUNT")),
     },
     {
       method: "GET",
@@ -56,7 +56,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.dataHealth",
       protected: true,
       permission: "g14.analytics.read",
-      handler: (context) => ok(context.services.analytics.dataHealth(context.actor)),
+      handler: async (context) => ok(await context.services.analytics.dataHealth(context.actor)),
     },
     {
       method: "GET",
@@ -64,7 +64,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.summary",
       protected: true,
       permission: "g14.analytics.read",
-      handler: (context) => ok(context.services.analytics.summary(context.scope)),
+      handler: async (context) => ok(await context.services.analytics.summary(context.scope)),
     },
     // ---- PH-10D analytics engine (BRD G14 FR-02/03/04/17/23) --------------------------------
     {
@@ -75,10 +75,10 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.kpi.manage",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          kpi: context.services.analyticsEngine.defineKpi(context.actor, {
+          kpi: await context.services.analyticsEngine.defineKpi(context.actor, {
             kpiCode: requiredString(body, "kpiCode"),
             name: requiredString(body, "name"),
             description: requiredString(body, "description"),
@@ -99,8 +99,8 @@ export function registerG14Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g14.analytics.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) =>
-        ok(pageItems(context.services.analyticsEngine.listKpis(context.scope, context.request.query?.kpiCode), context.pagination ?? { limit: 25 })),
+      handler: async (context) =>
+        ok(pageItems(await context.services.analyticsEngine.listKpis(context.scope, context.request.query?.kpiCode), context.pagination ?? { limit: 25 })),
     },
     {
       method: "POST",
@@ -110,13 +110,13 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.kpi.activate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         const version = optionalNumber(body, "version");
         if (version === undefined) {
           throw new FoundationError("VALIDATION_FAILED", "version is required", { field: "version" });
         }
-        return accepted({ kpi: context.services.analyticsEngine.activateKpi(context.actor, { kpiCode: requiredParam(context.params, "code"), version }) });
+        return accepted({ kpi: await context.services.analyticsEngine.activateKpi(context.actor, { kpiCode: requiredParam(context.params, "code"), version }) });
       },
     },
     {
@@ -127,10 +127,10 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.kpi.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          snapshot: context.services.analyticsEngine.computeKpiSnapshot(context.actor, {
+          snapshot: await context.services.analyticsEngine.computeKpiSnapshot(context.actor, {
             kpiCode: requiredParam(context.params, "code"),
             periodKey: requiredString(body, "periodKey"),
             validTime: requiredString(body, "validTime"),
@@ -147,10 +147,10 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.kpi.compute",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted({
-          snapshot: context.services.analyticsEngine.restateKpiSnapshot(context.actor, {
+          snapshot: await context.services.analyticsEngine.restateKpiSnapshot(context.actor, {
             kpiCode: requiredParam(context.params, "code"),
             periodKey: requiredString(body, "periodKey"),
             reason: requiredString(body, "reason"),
@@ -164,14 +164,14 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.kpiValueAsOfKnowledge",
       protected: true,
       permission: "g14.analytics.read",
-      handler: (context) => {
+      handler: async (context) => {
         const periodKey = context.request.query?.periodKey;
         const asOf = context.request.query?.asOf;
         if (!periodKey || !asOf) {
           throw new FoundationError("VALIDATION_FAILED", "periodKey and asOf are required", { field: !periodKey ? "periodKey" : "asOf" });
         }
         return ok({
-          result: context.services.analyticsEngine.kpiValueAsOfKnowledge(context.scope, {
+          result: await context.services.analyticsEngine.kpiValueAsOfKnowledge(context.scope, {
             kpiCode: requiredParam(context.params, "code"),
             periodKey,
             asOfKnowledgeTime: asOf,
@@ -186,13 +186,13 @@ export function registerG14Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g14.analytics.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => {
+      handler: async (context) => {
         const martCode = context.request.query?.martCode;
         const dimension = context.request.query?.dimension;
         if (!martCode || !dimension) {
           throw new FoundationError("VALIDATION_FAILED", "martCode and dimension are required", { field: !martCode ? "martCode" : "dimension" });
         }
-        const result = context.services.analyticsEngine.queryAggregate(context.actor, { martCode, dimension });
+        const result = await context.services.analyticsEngine.queryAggregate(context.actor, { martCode, dimension });
         return ok({ ...result, cells: pageItems(result.cells, context.pagination ?? { limit: 25 }) });
       },
     },
@@ -204,10 +204,10 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.analytics.refresh",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return accepted(
-          context.services.analyticsEngine.refreshDatamarts(context.actor, {
+          await context.services.analyticsEngine.refreshDatamarts(context.actor, {
             runType: (optionalString(body, "runType") as G14RefreshRunType | undefined) ?? "MANUAL",
             runKey: context.idempotencyKey ?? requiredString(body, "runKey"),
           })
@@ -221,7 +221,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       protected: true,
       permission: "g14.analytics.read",
       list: { defaultLimit: 25, maxLimit: 100 },
-      handler: (context) => ok(pageItems(context.services.analyticsEngine.listRefreshLogs(context.scope), context.pagination ?? { limit: 25 })),
+      handler: async (context) => ok(pageItems(await context.services.analyticsEngine.listRefreshLogs(context.scope), context.pagination ?? { limit: 25 })),
     },
     {
       method: "POST",
@@ -231,10 +231,10 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.scope.manage",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          policy: context.services.analyticsEngine.createScopePolicy(context.actor, {
+          policy: await context.services.analyticsEngine.createScopePolicy(context.actor, {
             role: requiredString(body, "role"),
             scopeDimensions: optionalStringArray(body, "scopeDimensions") ?? [],
             martCode: optionalString(body, "martCode"),
@@ -251,7 +251,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.scope.activate",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => accepted({ policy: context.services.analyticsEngine.activateScopePolicy(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => accepted({ policy: await context.services.analyticsEngine.activateScopePolicy(context.actor, requiredParam(context.params, "id")) }),
     },
     // PH-29C — G14 natural-language query + probabilistic attrition (route exposure).
     {
@@ -262,9 +262,9 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.nlquery.ask",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
-        return ok(context.services.nlQuery.ask(context.actor, { question: requiredString(body, "question") }));
+        return ok(await context.services.nlQuery.ask(context.actor, { question: requiredString(body, "question") }));
       },
     },
     {
@@ -275,10 +275,10 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.predict.attrition",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created(
-          context.services.predictiveAnalytics.scoreAttrition(context.actor, {
+          await context.services.predictiveAnalytics.scoreAttrition(context.actor, {
             employeeId: requiredString(body, "employeeId"),
             features: {
               tenureMonths: optionalNumber(body, "tenureMonths") ?? 0,
@@ -298,10 +298,10 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.predict.fairness",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return ok(
-          context.services.predictiveAnalytics.fairnessReport(context.actor, {
+          await context.services.predictiveAnalytics.fairnessReport(context.actor, {
             attribute: requiredString(body, "attribute"),
             observations: Array.isArray(body.observations) ? (body.observations as Array<{ group: string; riskScore: number }>) : [],
           })
@@ -314,7 +314,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.listBiKpis",
       protected: true,
       permission: "g14.analytics.read",
-      handler: (context) => ok({ items: context.services.analytics.listBiKpis(context.scope), limit: 25, next_cursor: null }),
+      handler: async (context) => ok({ items: await context.services.analytics.listBiKpis(context.scope), limit: 25, next_cursor: null }),
     },
     // PH-43A — G14 analytics-engine reads + KPI target-setting + predictive-score reads (route exposure
     // for already-tested backing: kpiSeries, listDatamarts, setKpiTarget, drillCohort, listScopePolicies,
@@ -325,9 +325,9 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.kpiSeries",
       protected: true,
       permission: "g14.analytics.read",
-      handler: (context) =>
+      handler: async (context) =>
         ok(
-          context.services.analyticsEngine.kpiSeries(context.scope, {
+          await context.services.analyticsEngine.kpiSeries(context.scope, {
             kpiCode: requiredParam(context.params, "code"),
             periodKeys: (context.request.query?.periodKeys ?? "").split(",").map((k) => k.trim()).filter((k) => k.length > 0),
             acknowledgeCrossVersion: context.request.query?.acknowledgeCrossVersion === "true",
@@ -340,7 +340,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.listDatamarts",
       protected: true,
       permission: "g14.analytics.read",
-      handler: (context) => ok({ items: context.services.analyticsEngine.listDatamarts(context.scope) }),
+      handler: async (context) => ok({ items: await context.services.analyticsEngine.listDatamarts(context.scope) }),
     },
     {
       method: "GET",
@@ -348,13 +348,13 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.drillCohort",
       protected: true,
       permission: "g14.analytics.drill_through",
-      handler: (context) => {
+      handler: async (context) => {
         const dimension = context.request.query?.dimension;
         const key = context.request.query?.key;
         if (!dimension || !key) {
           throw new FoundationError("VALIDATION_FAILED", "dimension and key query parameters are required", { field: "dimension" });
         }
-        return ok(context.services.analyticsEngine.drillCohort(context.actor, { martCode: requiredParam(context.params, "martCode"), dimension, key }));
+        return ok(await context.services.analyticsEngine.drillCohort(context.actor, { martCode: requiredParam(context.params, "martCode"), dimension, key }));
       },
     },
     {
@@ -365,10 +365,10 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.kpi.manage",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          target: context.services.analyticsEngine.setKpiTarget(context.actor, {
+          target: await context.services.analyticsEngine.setKpiTarget(context.actor, {
             kpiCode: requiredParam(context.params, "code"),
             scopeType: optionalString(body, "scopeType") as G14ScopeType | undefined,
             scopeId: optionalString(body, "scopeId"),
@@ -385,7 +385,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.listScopePolicies",
       protected: true,
       permission: "g14.scope.manage",
-      handler: (context) => ok({ items: context.services.analyticsEngine.listScopePolicies(context.scope) }),
+      handler: async (context) => ok({ items: await context.services.analyticsEngine.listScopePolicies(context.scope) }),
     },
     {
       method: "GET",
@@ -393,7 +393,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.listAttritionScores",
       protected: true,
       permission: "g14.predict.attrition",
-      handler: (context) => ok({ items: context.services.predictiveAnalytics.listScores(context.scope) }),
+      handler: async (context) => ok({ items: await context.services.predictiveAnalytics.listScores(context.scope) }),
     },
     // hr_admin `g14.report.build` capability — self-service report builder over existing mart cards.
     {
@@ -404,14 +404,14 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.report.build",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         const format = optionalString(body, "format") ?? "JSON";
         if (format !== "JSON" && format !== "CSV") {
           throw new FoundationError("VALIDATION_FAILED", "format must be JSON or CSV", { field: "format" });
         }
         return created({
-          report: context.services.analytics.defineReport(context.actor, {
+          report: await context.services.analytics.defineReport(context.actor, {
             name: requiredString(body, "name"),
             cardCodes: optionalStringArray(body, "cardCodes") ?? [],
             format,
@@ -425,7 +425,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.listReportDefinitions",
       protected: true,
       permission: "g14.report.build",
-      handler: (context) => ok({ items: context.services.analytics.listReportDefinitions(context.actor) }),
+      handler: async (context) => ok({ items: await context.services.analytics.listReportDefinitions(context.actor) }),
     },
     {
       method: "POST",
@@ -435,7 +435,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.report.build",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => created({ output: context.services.analytics.buildReport(context.actor, requiredParam(context.params, "id")) }),
+      handler: async (context) => created({ output: await context.services.analytics.buildReport(context.actor, requiredParam(context.params, "id")) }),
     },
     {
       method: "POST",
@@ -445,10 +445,10 @@ export function registerG14Routes(kernel: ApiKernel): void {
       permission: "g14.report.build",
       unsafe: true,
       requiresIdempotencyKey: true,
-      handler: (context) => {
+      handler: async (context) => {
         const body = readBodyRecord(context.request.body);
         return created({
-          schedule: context.services.analytics.scheduleReport(context.actor, {
+          schedule: await context.services.analytics.scheduleReport(context.actor, {
             reportDefinitionId: requiredParam(context.params, "id"),
             cronExpression: requiredString(body, "cronExpression"),
             recipients: optionalStringArray(body, "recipients") ?? [],
@@ -462,7 +462,7 @@ export function registerG14Routes(kernel: ApiKernel): void {
       operationId: "g14.listScheduledReports",
       protected: true,
       permission: "g14.report.build",
-      handler: (context) => ok({ items: context.services.analytics.listScheduledReports(context.actor) }),
+      handler: async (context) => ok({ items: await context.services.analytics.listScheduledReports(context.actor) }),
     },
   ];
   routes.forEach((route) => kernel.register(route));

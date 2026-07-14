@@ -22,7 +22,7 @@ function actor(userId, extra = {}) {
   };
 }
 
-test("G07 vendor_empanelments: lifecycle APPLIED -> UNDER_REVIEW -> EMPANELLED with a contract ref", () => {
+test("G07 vendor_empanelments: lifecycle APPLIED -> UNDER_REVIEW -> EMPANELLED with a contract ref", async () => {
   const s = createFoundationServices();
   const emp = s.vendorEmpanelment.applyForEmpanelment(actor(APPLICANT), { vendorName: "TrainCo", category: "LEADERSHIP", procurementRef: "PROC-9" });
   assert.equal(emp.status, "APPLIED");
@@ -33,7 +33,7 @@ test("G07 vendor_empanelments: lifecycle APPLIED -> UNDER_REVIEW -> EMPANELLED w
   assert.equal(done.contractRef, "CON-77");
 });
 
-test("G07 vendor_empanelments: the requester cannot approve their own empanelment (SoD)", () => {
+test("G07 vendor_empanelments: the requester cannot approve their own empanelment (SoD)", async () => {
   const s = createFoundationServices();
   const emp = s.vendorEmpanelment.applyForEmpanelment(actor(APPLICANT), { vendorName: "SelfCo", category: "TECHNICAL" });
   s.vendorEmpanelment.reviewEmpanelment(actor(APPROVER), emp.id);

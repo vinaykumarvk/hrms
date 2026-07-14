@@ -17,17 +17,17 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph60a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-60A G03 configure attendance policy via the kernel", () => {
+test("PH-60A G03 configure attendance policy via the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/attendance/policy",
     headers: { "Idempotency-Key": "pol-1" },
@@ -38,9 +38,9 @@ test("PH-60A G03 configure attendance policy via the kernel", () => {
   assert.equal(res.body.policy.regularisationCapPerPeriod, 3);
 });
 
-test("PH-60A G03 attendance policy rejects a non-positive window (VALIDATION_FAILED)", () => {
+test("PH-60A G03 attendance policy rejects a non-positive window (VALIDATION_FAILED)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const bad = call(api, {
+  const bad = await call(api, {
     method: "POST",
     path: "/api/v1/attendance/policy",
     headers: { "Idempotency-Key": "pol-bad" },
@@ -50,15 +50,15 @@ test("PH-60A G03 attendance policy rejects a non-positive window (VALIDATION_FAI
   assert.equal(bad.body.error.code, "VALIDATION_FAILED");
 });
 
-test("PH-60A G03 leave-ledger / attendance / comp-off-balance reads respond through the kernel", () => {
+test("PH-60A G03 leave-ledger / attendance / comp-off-balance reads respond through the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
   for (const path of ["/api/v1/leave/ledger", "/api/v1/attendance/records"]) {
-    const res = call(api, { method: "GET", path });
+    const res = await call(api, { method: "GET", path });
     assert.equal(res.status, 200, path);
     assert.ok(Array.isArray(res.body.items), path);
   }
 
-  const balance = call(api, { method: "GET", path: `/api/v1/attendance/employees/${ph03Ids.employee}/comp-off-balance`, query: { asOfDate: "2026-07-02" } });
+  const balance = await call(api, { method: "GET", path: `/api/v1/attendance/employees/${ph03Ids.employee}/comp-off-balance`, query: { asOfDate: "2026-07-02" } });
   assert.equal(balance.status, 200);
   assert.ok(balance.body.availableBalance !== undefined || balance.body.employeeId !== undefined);
 });

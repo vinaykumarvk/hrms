@@ -35,7 +35,7 @@ function actor(extra = {}) {
 
 // ── G10 loans_advances / loan_repayments ───────────────────────────────────────
 
-test("G10 loan_repayments: instalment recovery honours the closure invariant and foreclosure settles the rest", () => {
+test("G10 loan_repayments: instalment recovery honours the closure invariant and foreclosure settles the rest", async () => {
   const s = createFoundationServices();
   const loan = s.loanPerquisiteGl.sanctionLoan(actor(), {
     employeeId: ph03Ids.employee,
@@ -54,7 +54,7 @@ test("G10 loan_repayments: instalment recovery honours the closure invariant and
   assert.equal(ledger.length, 2);
 });
 
-test("G10 ERR-G10-RECOVERY-NET: zero net headroom fails closed and the shortfall carries forward", () => {
+test("G10 ERR-G10-RECOVERY-NET: zero net headroom fails closed and the shortfall carries forward", async () => {
   const s = createFoundationServices();
   const loan = s.loanPerquisiteGl.sanctionLoan(actor(), {
     employeeId: ph03Ids.employee,
@@ -74,7 +74,7 @@ test("G10 ERR-G10-RECOVERY-NET: zero net headroom fails closed and the shortfall
 
 // ── G10 perquisites (Rule-3, is_concessional) ──────────────────────────────────
 
-test("G10 perquisites: a concessional Rule-3 benefit values against a reference rate; missing one fails ERR-G10-PERQ-REFRATE", () => {
+test("G10 perquisites: a concessional Rule-3 benefit values against a reference rate; missing one fails ERR-G10-PERQ-REFRATE", async () => {
   const s = createFoundationServices();
   const perq = s.loanPerquisiteGl.valuePerquisite(actor(), {
     employeeId: ph03Ids.employee,
@@ -101,7 +101,7 @@ test("G10 perquisites: a concessional Rule-3 benefit values against a reference 
 
 // ── G10 gl_journals (balanced, POSTED -> ACKNOWLEDGED) ─────────────────────────
 
-test("G10 gl_journals: an unbalanced journal is rejected; a balanced one posts and is acknowledged", () => {
+test("G10 gl_journals: an unbalanced journal is rejected; a balanced one posts and is acknowledged", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.loanPerquisiteGl.postGlJournal(actor(), {
@@ -128,7 +128,7 @@ test("G10 gl_journals: an unbalanced journal is rejected; a balanced one posts a
 
 // ── G10 bank-file positive-pay (SUSPECTED_PROCESSED) ───────────────────────────
 
-test("G10 positive-pay: an ambiguous acknowledgement marks the line SUSPECTED_PROCESSED and blocks a resend", () => {
+test("G10 positive-pay: an ambiguous acknowledgement marks the line SUSPECTED_PROCESSED and blocks a resend", async () => {
   const s = createFoundationServices();
   const line = s.loanPerquisiteGl.prepareBankLine(actor(), {
     employeeId: ph03Ids.employee,
@@ -147,7 +147,7 @@ test("G10 positive-pay: an ambiguous acknowledgement marks the line SUSPECTED_PR
 
 // ── G11 pen_disbursing_authorities (sandbox_certified gate) ─────────────────────
 
-test("G11 PDA: go-live is gated on sandbox_certified; an uncertified PDA cannot be activated", () => {
+test("G11 PDA: go-live is gated on sandbox_certified; an uncertified PDA cannot be activated", async () => {
   const s = createFoundationServices();
   const pda = s.pensionTreasury.registerPda(actor(), {
     pdaCode: "TREASURY-DL",
@@ -167,7 +167,7 @@ test("G11 PDA: go-live is gated on sandbox_certified; an uncertified PDA cannot 
 
 // ── G11 pen_grievances (sla_due_at, VAL-COMMENT) ───────────────────────────────
 
-test("G11 pen_grievances: intake sets sla_due_at; closing without a resolution fails VAL-COMMENT", () => {
+test("G11 pen_grievances: intake sets sla_due_at; closing without a resolution fails VAL-COMMENT", async () => {
   const s = createFoundationServices();
   const grievance = s.pensionTreasury.raiseGrievance(actor(), {
     pensionerId: ph03Ids.employee,
@@ -187,7 +187,7 @@ test("G11 pen_grievances: intake sets sla_due_at; closing without a resolution f
 
 // ── G11 pen_audit_objections (calc_trace_ref, ACCEPTED_CORRECTED) ──────────────
 
-test("G11 pen_audit_objections: an objection links calc_trace_ref and resolves ACCEPTED_CORRECTED", () => {
+test("G11 pen_audit_objections: an objection links calc_trace_ref and resolves ACCEPTED_CORRECTED", async () => {
   const s = createFoundationServices();
   const objection = s.pensionTreasury.raiseAuditObjection(actor(), {
     caseId: "pen-case-ph16f",

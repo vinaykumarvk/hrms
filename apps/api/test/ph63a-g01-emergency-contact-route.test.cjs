@@ -17,44 +17,44 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph63a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-function addContact(api, key, body) {
-  return call(api, { method: "POST", path: `/api/v1/employees/${ph03Ids.employee}/emergency-contacts`, headers: { "Idempotency-Key": key }, body });
+async function addContact(api, key, body) {
+  return await call(api, { method: "POST", path: `/api/v1/employees/${ph03Ids.employee}/emergency-contacts`, headers: { "Idempotency-Key": key }, body });
 }
 
-test("PH-63A G01 emergency contacts hold distinct call-order priorities (CONFLICT on clash)", () => {
+test("PH-63A G01 emergency contacts hold distinct call-order priorities (CONFLICT on clash)", async () => {
   const api = createFoundationApi(createFoundationServices());
 
-  const first = addContact(api, "ec-1", { name: "Spouse", phone: "+91-90000-00001", priority: 1 });
+  const first = await addContact(api, "ec-1", { name: "Spouse", phone: "+91-90000-00001", priority: 1 });
   assert.equal(first.status, 201);
   assert.equal(first.body.emergencyContact.priority, 1);
 
-  const second = addContact(api, "ec-2", { name: "Sibling", phone: "+91-90000-00002", priority: 2 });
+  const second = await addContact(api, "ec-2", { name: "Sibling", phone: "+91-90000-00002", priority: 2 });
   assert.equal(second.status, 201);
 
   // Priority 1 is taken -> CONFLICT.
-  const clash = addContact(api, "ec-3", { name: "Parent", phone: "+91-90000-00003", priority: 1 });
+  const clash = await addContact(api, "ec-3", { name: "Parent", phone: "+91-90000-00003", priority: 1 });
   assert.equal(clash.status, 409);
   assert.equal(clash.body.error.code, "CONFLICT");
 
-  const list = call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.employee}/emergency-contacts` });
+  const list = await call(api, { method: "GET", path: `/api/v1/employees/${ph03Ids.employee}/emergency-contacts` });
   assert.equal(list.status, 200);
   assert.deepEqual(list.body.items.map((c) => c.priority), [1, 2]);
 });
 
-test("PH-63A G01 emergency-contact update uses row_version optimistic locking", () => {
+test("PH-63A G01 emergency-contact update uses row_version optimistic locking", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const created = addContact(api, "eu-1", { name: "Spouse", phone: "+91-90000-00001", priority: 1 });
+  const created = await addContact(api, "eu-1", { name: "Spouse", phone: "+91-90000-00001", priority: 1 });
   const id = created.body.emergencyContact.id;
 
-  const updated = call(api, {
+  const updated = await call(api, {
     method: "PATCH",
     path: `/api/v1/employees/${ph03Ids.employee}/emergency-contacts/${id}`,
     headers: { "Idempotency-Key": "eu-u" },
@@ -64,7 +64,7 @@ test("PH-63A G01 emergency-contact update uses row_version optimistic locking", 
   assert.equal(updated.body.emergencyContact.phone, "+91-90000-99999");
   assert.equal(updated.body.emergencyContact.rowVersion, 2);
 
-  const stale = call(api, {
+  const stale = await call(api, {
     method: "PATCH",
     path: `/api/v1/employees/${ph03Ids.employee}/emergency-contacts/${id}`,
     headers: { "Idempotency-Key": "eu-s" },
@@ -73,17 +73,17 @@ test("PH-63A G01 emergency-contact update uses row_version optimistic locking", 
   assert.equal(stale.status, 409);
 });
 
-test("PH-63A G01 soft-delete frees the emergency-contact priority", () => {
+test("PH-63A G01 soft-delete frees the emergency-contact priority", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const created = addContact(api, "ed-1", { name: "Spouse", phone: "+91-90000-00001", priority: 1 });
+  const created = await addContact(api, "ed-1", { name: "Spouse", phone: "+91-90000-00001", priority: 1 });
   const id = created.body.emergencyContact.id;
 
   // Priority 1 is taken.
-  assert.equal(addContact(api, "ed-2", { name: "Parent", phone: "+91-90000-00003", priority: 1 }).status, 409);
+  assert.equal((await addContact(api, "ed-2", { name: "Parent", phone: "+91-90000-00003", priority: 1 })).status, 409);
 
-  const removed = call(api, { method: "POST", path: `/api/v1/employees/${ph03Ids.employee}/emergency-contacts/${id}:remove`, headers: { "Idempotency-Key": "ed-r" }, body: {} });
+  const removed = await call(api, { method: "POST", path: `/api/v1/employees/${ph03Ids.employee}/emergency-contacts/${id}:remove`, headers: { "Idempotency-Key": "ed-r" }, body: {} });
   assert.equal(removed.status, 200);
 
   // The freed priority is available again.
-  assert.equal(addContact(api, "ed-3", { name: "Parent", phone: "+91-90000-00003", priority: 1 }).status, 201);
+  assert.equal((await addContact(api, "ed-3", { name: "Parent", phone: "+91-90000-00003", priority: 1 })).status, 201);
 });

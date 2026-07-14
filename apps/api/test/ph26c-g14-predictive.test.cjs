@@ -22,7 +22,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G14 attrition: risk is scored from job features and banded", () => {
+test("G14 attrition: risk is scored from job features and banded", async () => {
   const s = createFoundationServices();
   const high = s.predictiveAnalytics.scoreAttrition(actor(), {
     employeeId: "emp-1",
@@ -36,7 +36,7 @@ test("G14 attrition: risk is scored from job features and banded", () => {
   assert.ok(["LOW", "MEDIUM", "HIGH"].includes(high.band));
 });
 
-test("G14 attrition: a protected feature as a model input is rejected", () => {
+test("G14 attrition: a protected feature as a model input is rejected", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.predictiveAnalytics.scoreAttrition(actor(), {
@@ -47,7 +47,7 @@ test("G14 attrition: a protected feature as a model input is rejected", () => {
   );
 });
 
-test("G14 fairness: disparity across a monitored protected attribute is computed and flagged", () => {
+test("G14 fairness: disparity across a monitored protected attribute is computed and flagged", async () => {
   const s = createFoundationServices();
   const fair = s.predictiveAnalytics.fairnessReport(actor(), {
     attribute: "gender",

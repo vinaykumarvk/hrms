@@ -27,7 +27,7 @@ const DELHI = { lat: 28.6139, lon: 77.209 };
 const CHENNAI = { lat: 13.0827, lon: 80.2707 };
 const t0 = 1_760_000_000_000;
 
-test("G03 punch_anomaly_reviews: impossible travel is FLAGGED and resolves to CONFIRMED_FRAUD", () => {
+test("G03 punch_anomaly_reviews: impossible travel is FLAGGED and resolves to CONFIRMED_FRAUD", async () => {
   const s = createFoundationServices();
   const flagged = s.punchAnomaly.screenPunchPair(actor(REVIEWER), {
     employeeId: SUBJECT,
@@ -41,7 +41,7 @@ test("G03 punch_anomaly_reviews: impossible travel is FLAGGED and resolves to CO
   assert.equal(resolved.status, "CONFIRMED_FRAUD");
 });
 
-test("G03 punch_anomaly_reviews: a plausible commute is not flagged", () => {
+test("G03 punch_anomaly_reviews: a plausible commute is not flagged", async () => {
   const s = createFoundationServices();
   const near = s.punchAnomaly.screenPunchPair(actor(REVIEWER), {
     employeeId: SUBJECT,
@@ -51,7 +51,7 @@ test("G03 punch_anomaly_reviews: a plausible commute is not flagged", () => {
   assert.equal(near, null);
 });
 
-test("G03 punch_anomaly_reviews: the subject cannot review their own case (SoD)", () => {
+test("G03 punch_anomaly_reviews: the subject cannot review their own case (SoD)", async () => {
   const s = createFoundationServices();
   const flagged = s.punchAnomaly.screenPunchPair(actor(REVIEWER), {
     employeeId: SUBJECT,

@@ -24,8 +24,8 @@ function checker() {
   return actor({ userId: CHECKER_ID, actorUserId: CHECKER_ID });
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph43a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -46,12 +46,12 @@ function defineActiveKpi(services, kpiCode) {
   services.analyticsEngine.activateKpi(checker(), { kpiCode, version: 1 });
 }
 
-test("PH-43A G14 set KPI target + read KPI series through the kernel", () => {
+test("PH-43A G14 set KPI target + read KPI series through the kernel", async () => {
   const services = createFoundationServices();
   const api = createFoundationApi(services);
   defineActiveKpi(services, "ATT_DAYS");
 
-  const target = call(api, {
+  const target = await call(api, {
     method: "POST",
     path: "/api/v1/analytics/kpis/ATT_DAYS/targets",
     headers: { "Idempotency-Key": "kpi-tgt-1" },
@@ -61,24 +61,24 @@ test("PH-43A G14 set KPI target + read KPI series through the kernel", () => {
   assert.equal(target.body.target.targetValue, 20);
   assert.equal(target.body.target.status, "ACTIVE");
 
-  const series = call(api, { method: "GET", path: "/api/v1/analytics/kpis/ATT_DAYS/series", query: { periodKeys: "2026-06,2026-07" } });
+  const series = await call(api, { method: "GET", path: "/api/v1/analytics/kpis/ATT_DAYS/series", query: { periodKeys: "2026-06,2026-07" } });
   assert.equal(series.status, 200);
   assert.equal(series.body.kpiCode, "ATT_DAYS");
   assert.ok(Array.isArray(series.body.points));
 });
 
-test("PH-43A G14 analytics-engine read endpoints respond through the kernel", () => {
+test("PH-43A G14 analytics-engine read endpoints respond through the kernel", async () => {
   const api = createFoundationApi(createFoundationServices());
   for (const path of ["/api/v1/analytics/datamarts", "/api/v1/analytics/scope-policies", "/api/v1/analytics/attrition-scores"]) {
-    const res = call(api, { method: "GET", path });
+    const res = await call(api, { method: "GET", path });
     assert.equal(res.status, 200, path);
     assert.ok(Array.isArray(res.body.items), path);
   }
 });
 
-test("PH-43A G14 drill-cohort route requires dimension and key (VALIDATION_FAILED)", () => {
+test("PH-43A G14 drill-cohort route requires dimension and key (VALIDATION_FAILED)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const bad = call(api, { method: "GET", path: "/api/v1/analytics/datamarts/MART_ATTENDANCE/cohort", query: { dimension: "orgUnit" } });
+  const bad = await call(api, { method: "GET", path: "/api/v1/analytics/datamarts/MART_ATTENDANCE/cohort", query: { dimension: "orgUnit" } });
   assert.equal(bad.status, 400);
   assert.equal(bad.body.error.code, "VALIDATION_FAILED");
 });

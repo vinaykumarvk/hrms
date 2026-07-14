@@ -35,8 +35,8 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph10c-g13", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
@@ -69,13 +69,13 @@ function fakeScanProvider(plan = {}) {
   };
 }
 
-test("PH-10C content_hash is server-side SHA-256 of the bytes; a caller hash is never trusted; CLEAN promotes to ACTIVE", () => {
+test("PH-10C content_hash is server-side SHA-256 of the bytes; a caller hash is never trusted; CLEAN promotes to ACTIVE", async () => {
   const scanProvider = fakeScanProvider();
   const services = createFoundationServices({ g13ScanProvider: scanProvider });
   const api = createFoundationApi(services);
   const content = "Transfer order PH-10C body bytes v1";
 
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": "idem-ph10c-ingest-001" },
@@ -101,12 +101,12 @@ test("PH-10C content_hash is server-side SHA-256 of the bytes; a caller hash is 
   assert.equal(scans[0].integrityVerified, true);
 });
 
-test("PH-10C scan gate is fail-closed: PENDING_SCAN content is unfetchable until a CLEAN verdict promotes it", () => {
+test("PH-10C scan gate is fail-closed: PENDING_SCAN content is unfetchable until a CLEAN verdict promotes it", async () => {
   const plan = { always: "PENDING" };
   const services = createFoundationServices({ g13ScanProvider: fakeScanProvider(plan) });
   const api = createFoundationApi(services);
 
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": "idem-ph10c-pending-001" },
@@ -116,7 +116,7 @@ test("PH-10C scan gate is fail-closed: PENDING_SCAN content is unfetchable until
   assert.equal(created.body.document.status, "PENDING_SCAN");
   const documentId = created.body.document.id;
 
-  const blocked = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
+  const blocked = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
   assert.equal(blocked.status, 412);
   assert.equal(blocked.body.error.code, "PRECONDITION_FAILED");
   assert.equal(blocked.body.error.details.status, "PENDING_SCAN");
@@ -125,15 +125,15 @@ test("PH-10C scan gate is fail-closed: PENDING_SCAN content is unfetchable until
   plan.always = "CLEAN";
   const rescanned = services.documentVault.rescan(scope(), documentId);
   assert.equal(rescanned.status, "ACTIVE");
-  const view = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
+  const view = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
   assert.equal(view.status, 200);
 });
 
-test("PH-10C NEGATIVE: an INFECTED verdict quarantines the document and fetch stays blocked", () => {
+test("PH-10C NEGATIVE: an INFECTED verdict quarantines the document and fetch stays blocked", async () => {
   const services = createFoundationServices({ g13ScanProvider: fakeScanProvider() });
   const api = createFoundationApi(services);
 
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": "idem-ph10c-infected-001" },
@@ -148,13 +148,13 @@ test("PH-10C NEGATIVE: an INFECTED verdict quarantines the document and fetch st
   assert.equal(scans[0].verdict, "INFECTED");
   assert.equal(scans[0].threatName, "Fake.Test.Threat");
 
-  const blocked = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "DOWNLOAD" } });
+  const blocked = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "DOWNLOAD" } });
   assert.equal(blocked.status, 422);
   assert.equal(blocked.body.error.code, "ERR-G13-MALWARE_DETECTED");
   assert.equal(blocked.body.error.details.messageId, "ERR-G13-MALWARE_DETECTED");
 });
 
-test("PH-10C NEGATIVE: fetch re-verifies the stored bytes and withholds content on hash mismatch", () => {
+test("PH-10C NEGATIVE: fetch re-verifies the stored bytes and withholds content on hash mismatch", async () => {
   const repository = new InMemoryDocumentSecurityRepository();
   const vault = new DocumentVaultService([], new AuditService(), repository, fakeScanProvider());
   const tenantScope = scope();
@@ -187,11 +187,11 @@ test("PH-10C NEGATIVE: fetch re-verifies the stored bytes and withholds content 
   assert.equal(denied[0].action, "DOWNLOAD");
 });
 
-test("PH-10C NEGATIVE: classification gate denies fail-closed without an ACTIVE clearance row", () => {
+test("PH-10C NEGATIVE: classification gate denies fail-closed without an ACTIVE clearance row", async () => {
   const services = createFoundationServices({ g13ScanProvider: fakeScanProvider() });
   const api = createFoundationApi(services);
 
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": "idem-ph10c-clearance-doc-001" },
@@ -206,7 +206,7 @@ test("PH-10C NEGATIVE: classification gate denies fail-closed without an ACTIVE 
 
   // Deny-by-default: NO security_clearances row exists for this actor => access denied,
   // even though the RBAC permission check itself passed.
-  const denied = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
+  const denied = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
   assert.equal(denied.status, 403);
   assert.equal(denied.body.error.code, "ERR-G13-CLEARANCE_INSUFFICIENT");
   const deniedRows = services.documentVault.listAccessAudit(scope(), documentId).filter((row) => row.result === "DENIED");
@@ -214,7 +214,7 @@ test("PH-10C NEGATIVE: classification gate denies fail-closed without an ACTIVE 
   assert.equal(deniedRows[0].denialReason, "ERR-G13-CLEARANCE_INSUFFICIENT");
 
   // DI-16 SoD on the clearance grant itself: granter cannot self-approve.
-  const selfApproved = call(api, {
+  const selfApproved = await call(api, {
     method: "POST",
     path: "/api/v1/security-clearances",
     headers: { "Idempotency-Key": "idem-ph10c-clearance-self-001" },
@@ -230,7 +230,7 @@ test("PH-10C NEGATIVE: classification gate denies fail-closed without an ACTIVE 
   assert.equal(selfApproved.body.error.code, "ERR-G13-SOD_VIOLATION");
 
   // An insufficient level (CONFIDENTIAL < SECRET) still denies.
-  const grantedLow = call(api, {
+  const grantedLow = await call(api, {
     method: "POST",
     path: "/api/v1/security-clearances",
     headers: { "Idempotency-Key": "idem-ph10c-clearance-low-001" },
@@ -243,12 +243,12 @@ test("PH-10C NEGATIVE: classification gate denies fail-closed without an ACTIVE 
     },
   });
   assert.equal(grantedLow.status, 201);
-  const stillDenied = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
+  const stillDenied = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
   assert.equal(stillDenied.status, 403);
   assert.equal(stillDenied.body.error.code, "ERR-G13-CLEARANCE_INSUFFICIENT");
 
   // An ACTIVE clearance at the document's level opens access.
-  const granted = call(api, {
+  const granted = await call(api, {
     method: "POST",
     path: "/api/v1/security-clearances",
     headers: { "Idempotency-Key": "idem-ph10c-clearance-ok-001" },
@@ -262,15 +262,15 @@ test("PH-10C NEGATIVE: classification gate denies fail-closed without an ACTIVE 
   });
   assert.equal(granted.status, 201);
   assert.equal(granted.body.clearance.status, "ACTIVE");
-  const allowed = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
+  const allowed = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
   assert.equal(allowed.status, 200);
 });
 
-test("PH-10C :fetch?intent= lands VIEW/DOWNLOAD access events on the hash-chained document_audit ledger", () => {
+test("PH-10C :fetch?intent= lands VIEW/DOWNLOAD access events on the hash-chained document_audit ledger", async () => {
   const services = createFoundationServices({ g13ScanProvider: fakeScanProvider() });
   const api = createFoundationApi(services);
 
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": "idem-ph10c-audit-doc-001" },
@@ -278,9 +278,9 @@ test("PH-10C :fetch?intent= lands VIEW/DOWNLOAD access events on the hash-chaine
   });
   const documentId = created.body.document.id;
 
-  const view = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
+  const view = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "VIEW" } });
   assert.equal(view.status, 200);
-  const download = call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "DOWNLOAD" } });
+  const download = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}:fetch`, query: { intent: "DOWNLOAD" } });
   assert.equal(download.status, 200);
 
   const trail = services.documentVault.listAccessAudit(scope(), documentId);
@@ -294,11 +294,11 @@ test("PH-10C :fetch?intent= lands VIEW/DOWNLOAD access events on the hash-chaine
   assert.equal(trail[1].rowHash.length, 64);
 });
 
-test("PH-10C NEGATIVE: disposition approval by the proposing maker is rejected (maker!=checker SoD)", () => {
+test("PH-10C NEGATIVE: disposition approval by the proposing maker is rejected (maker!=checker SoD)", async () => {
   const services = createFoundationServices({ g13ScanProvider: fakeScanProvider() });
   const api = createFoundationApi(services);
 
-  const retentionClass = call(api, {
+  const retentionClass = await call(api, {
     method: "POST",
     path: "/api/v1/retention-classes",
     headers: { "Idempotency-Key": "idem-ph10c-rc-001" },
@@ -306,7 +306,7 @@ test("PH-10C NEGATIVE: disposition approval by the proposing maker is rejected (
   });
   assert.equal(retentionClass.status, 201);
 
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": "idem-ph10c-sod-doc-001" },
@@ -315,7 +315,7 @@ test("PH-10C NEGATIVE: disposition approval by the proposing maker is rejected (
   const documentId = created.body.document.id;
 
   // Disposition needs a retention-class binding first (eligibility is class-driven).
-  const noClass = call(api, {
+  const noClass = await call(api, {
     method: "POST",
     path: `/api/v1/documents/${documentId}:propose-disposition`,
     headers: { "Idempotency-Key": "idem-ph10c-sod-early-001" },
@@ -323,7 +323,7 @@ test("PH-10C NEGATIVE: disposition approval by the proposing maker is rejected (
   });
   assert.equal(noClass.status, 412);
 
-  const assigned = call(api, {
+  const assigned = await call(api, {
     method: "POST",
     path: `/api/v1/documents/${documentId}:assign-retention-class`,
     headers: { "Idempotency-Key": "idem-ph10c-sod-assign-001" },
@@ -332,7 +332,7 @@ test("PH-10C NEGATIVE: disposition approval by the proposing maker is rejected (
   assert.equal(assigned.status, 202);
   assert.equal(assigned.body.document.retentionClassCode, "RC-3Y");
 
-  const proposed = call(api, {
+  const proposed = await call(api, {
     method: "POST",
     path: `/api/v1/documents/${documentId}:propose-disposition`,
     headers: { "Idempotency-Key": "idem-ph10c-sod-propose-001" },
@@ -344,7 +344,7 @@ test("PH-10C NEGATIVE: disposition approval by the proposing maker is rejected (
   const dispositionId = proposed.body.disposition.id;
 
   // NEGATIVE (DI-10): the same actor who proposed cannot approve.
-  const selfApprove = call(api, {
+  const selfApprove = await call(api, {
     method: "POST",
     path: `/api/v1/dispositions/${dispositionId}:approve`,
     headers: { "Idempotency-Key": "idem-ph10c-sod-self-001" },
@@ -354,7 +354,7 @@ test("PH-10C NEGATIVE: disposition approval by the proposing maker is rejected (
   assert.equal(selfApprove.body.error.details.messageId, "ERR-G13-SOD_VIOLATION");
 
   // A DIFFERENT checker approves; execution disposes the document.
-  const checkerApprove = call(api, {
+  const checkerApprove = await call(api, {
     method: "POST",
     path: `/api/v1/dispositions/${dispositionId}:approve`,
     headers: { "Idempotency-Key": "idem-ph10c-sod-checker-001" },
@@ -364,7 +364,7 @@ test("PH-10C NEGATIVE: disposition approval by the proposing maker is rejected (
   assert.equal(checkerApprove.body.disposition.status, "APPROVED");
   assert.equal(checkerApprove.body.disposition.approvedBy, "user-ph10c-records-mgr");
 
-  const executed = call(api, {
+  const executed = await call(api, {
     method: "POST",
     path: `/api/v1/dispositions/${dispositionId}:execute`,
     headers: { "Idempotency-Key": "idem-ph10c-sod-exec-001" },
@@ -373,46 +373,46 @@ test("PH-10C NEGATIVE: disposition approval by the proposing maker is rejected (
   assert.equal(executed.status, 202);
   assert.equal(executed.body.disposition.status, "EXECUTED");
   assert.equal(executed.body.disposition.evidenceHash, "1234".repeat(16));
-  const after = call(api, { method: "GET", path: `/api/v1/documents/${documentId}` });
+  const after = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}` });
   assert.equal(after.body.document.status, "DISPOSED");
 });
 
-test("PH-10C legal hold still blocks disposition execution after checker approval", () => {
+test("PH-10C legal hold still blocks disposition execution after checker approval", async () => {
   const services = createFoundationServices({ g13ScanProvider: fakeScanProvider() });
   const api = createFoundationApi(services);
-  call(api, {
+  await call(api, {
     method: "POST",
     path: "/api/v1/retention-classes",
     headers: { "Idempotency-Key": "idem-ph10c-hold-rc-001" },
     body: { code: "RC-1Y", name: "Short-lived records", retentionPeriodMonths: 12, dispositionAction: "DESTROY" },
   });
-  const created = call(api, {
+  const created = await call(api, {
     method: "POST",
     path: "/api/v1/documents",
     headers: { "Idempotency-Key": "idem-ph10c-hold-doc-001" },
     body: { title: "Held memo", classification: "INTERNAL", contentHash: "5678".repeat(16) },
   });
   const documentId = created.body.document.id;
-  call(api, {
+  await call(api, {
     method: "POST",
     path: `/api/v1/documents/${documentId}:assign-retention-class`,
     headers: { "Idempotency-Key": "idem-ph10c-hold-assign-001" },
     body: { retentionClassCode: "RC-1Y" },
   });
-  const proposed = call(api, {
+  const proposed = await call(api, {
     method: "POST",
     path: `/api/v1/documents/${documentId}:propose-disposition`,
     headers: { "Idempotency-Key": "idem-ph10c-hold-propose-001" },
     body: {},
   });
-  const approved = call(api, {
+  const approved = await call(api, {
     method: "POST",
     path: `/api/v1/dispositions/${proposed.body.disposition.id}:approve`,
     headers: { "Idempotency-Key": "idem-ph10c-hold-approve-001" },
     actor: { userId: "user-ph10c-records-mgr", actorUserId: "user-ph10c-records-mgr" },
   });
   assert.equal(approved.status, 202);
-  const held = call(api, {
+  const held = await call(api, {
     method: "POST",
     path: "/api/v1/legal-holds",
     headers: { "Idempotency-Key": "idem-ph10c-hold-place-001" },
@@ -420,7 +420,7 @@ test("PH-10C legal hold still blocks disposition execution after checker approva
   });
   assert.equal(held.status, 202);
 
-  const blocked = call(api, {
+  const blocked = await call(api, {
     method: "POST",
     path: `/api/v1/dispositions/${proposed.body.disposition.id}:execute`,
     headers: { "Idempotency-Key": "idem-ph10c-hold-exec-001" },
@@ -428,6 +428,6 @@ test("PH-10C legal hold still blocks disposition execution after checker approva
   });
   assert.equal(blocked.status, 412);
   assert.equal(blocked.body.error.details.messageId, "ERR-G13-LEGAL_HOLD_ACTIVE");
-  const after = call(api, { method: "GET", path: `/api/v1/documents/${documentId}` });
+  const after = await call(api, { method: "GET", path: `/api/v1/documents/${documentId}` });
   assert.equal(after.body.document.status, "ACTIVE");
 });

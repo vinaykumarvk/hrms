@@ -29,7 +29,7 @@ const balances = [
   { leaveTypeId: "HPL", closingBalanceDays: 20, carryForwardCapDays: 240, isHalfPay: true, hplConversionRatioPct: 50 },
 ];
 
-test("G03 leave_year_close: simulate computes carry-forward + lapse without committing", () => {
+test("G03 leave_year_close: simulate computes carry-forward + lapse without committing", async () => {
   const s = createFoundationServices();
   const sim = s.leaveYearClose.simulateYearClose(actor(), {
     orgUnitId: ph03Ids.orgRevenue,
@@ -54,7 +54,7 @@ test("G03 leave_year_close: simulate computes carry-forward + lapse without comm
   assert.equal(committed.totalLapsedDays, 15);
 });
 
-test("G03 leave_year_close: pending leave blocks the close (PENDING_LEAVE_BLOCKS_CLOSE)", () => {
+test("G03 leave_year_close: pending leave blocks the close (PENDING_LEAVE_BLOCKS_CLOSE)", async () => {
   const s = createFoundationServices();
   assert.throws(
     () => s.leaveYearClose.commitYearClose(actor(), {
@@ -67,7 +67,7 @@ test("G03 leave_year_close: pending leave blocks the close (PENDING_LEAVE_BLOCKS
   );
 });
 
-test("G03 leave_year_close: a second commit for the same year fails YEAR_ALREADY_CLOSED", () => {
+test("G03 leave_year_close: a second commit for the same year fails YEAR_ALREADY_CLOSED", async () => {
   const s = createFoundationServices();
   s.leaveYearClose.commitYearClose(actor(), { orgUnitId: ph03Ids.orgRevenue, leaveYear: 2027, pendingLeaveCount: 0, balances });
   assert.throws(
@@ -76,7 +76,7 @@ test("G03 leave_year_close: a second commit for the same year fails YEAR_ALREADY
   );
 });
 
-test("G03 leave_encashment: cap and encashability are enforced", () => {
+test("G03 leave_encashment: cap and encashability are enforced", async () => {
   const s = createFoundationServices();
   // Over the cap -> ENCASHMENT_CAP_EXCEEDED.
   assert.throws(

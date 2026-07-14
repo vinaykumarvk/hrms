@@ -22,7 +22,7 @@ function actor(extra = {}) {
   };
 }
 
-test("G06 correction_events: a corrected appointment date cascades a re-rank into a new snapshot", () => {
+test("G06 correction_events: a corrected appointment date cascades a re-rank into a new snapshot", async () => {
   const s = createFoundationServices();
   s.correctionCascade.finaliseList(actor(), {
     listCode: "REV-2026",
@@ -43,7 +43,7 @@ test("G06 correction_events: a corrected appointment date cascades a re-rank int
   assert.equal(out.correction.newValue, "2019-01-01");
 });
 
-test("G06 correction_events: a correction on a non-FINALISED (DRAFT) list is rejected (SENIORITY_LIST_NOT_FINAL)", () => {
+test("G06 correction_events: a correction on a non-FINALISED (DRAFT) list is rejected (SENIORITY_LIST_NOT_FINAL)", async () => {
   const s = createFoundationServices();
   s.correctionCascade.createDraftList(actor(), { listCode: "DRAFT-2026", entries: [{ employeeId: "e1", appointmentDate: "2020-01-01", serviceNo: "S1" }] });
   assert.throws(

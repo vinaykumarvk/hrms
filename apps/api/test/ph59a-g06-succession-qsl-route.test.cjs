@@ -17,21 +17,21 @@ function actor(extra = {}) {
   };
 }
 
-function call(api, request) {
-  return api.dispatch({
+async function call(api, request) {
+  return await api.dispatch({
     ...request,
     headers: { "X-Correlation-Id": "corr-ph59a", ...(request.headers ?? {}) },
     actor: actor(request.actor ?? {}),
   });
 }
 
-test("PH-59A G06 succession plan: create -> add candidate -> read", () => {
+test("PH-59A G06 succession plan: create -> add candidate -> read", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const created = call(api, { method: "POST", path: "/api/v1/promotions/succession-plans", headers: { "Idempotency-Key": "sp-1" }, body: { positionId: "POS-DIR", incumbentEmployeeId: ph03Ids.employee } });
+  const created = await call(api, { method: "POST", path: "/api/v1/promotions/succession-plans", headers: { "Idempotency-Key": "sp-1" }, body: { positionId: "POS-DIR", incumbentEmployeeId: ph03Ids.employee } });
   assert.equal(created.status, 201);
   const id = created.body.plan.id;
 
-  const added = call(api, {
+  const added = await call(api, {
     method: "POST",
     path: `/api/v1/promotions/succession-plans/${id}:add-candidate`,
     headers: { "Idempotency-Key": "sp-c" },
@@ -40,29 +40,29 @@ test("PH-59A G06 succession plan: create -> add candidate -> read", () => {
   assert.equal(added.status, 202);
   assert.equal(added.body.plan.candidates.length, 1);
 
-  const read = call(api, { method: "GET", path: `/api/v1/promotions/succession-plans/${id}` });
+  const read = await call(api, { method: "GET", path: `/api/v1/promotions/succession-plans/${id}` });
   assert.equal(read.status, 200);
   assert.equal(read.body.plan.id, id);
 
-  const path = call(api, { method: "GET", path: "/api/v1/promotions/career-paths/unknown" });
+  const path = await call(api, { method: "GET", path: "/api/v1/promotions/career-paths/unknown" });
   assert.equal(path.status, 200);
   assert.equal(path.body.careerPath, null);
 });
 
-test("PH-59A G06 promotion-order list + qualifying-service reads", () => {
+test("PH-59A G06 promotion-order list + qualifying-service reads", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const orders = call(api, { method: "GET", path: "/api/v1/promotions/orders" });
+  const orders = await call(api, { method: "GET", path: "/api/v1/promotions/orders" });
   assert.equal(orders.status, 200);
   assert.ok(Array.isArray(orders.body.items));
 
   // Qualifying-service snapshot read for an unknown snapshot fails closed (NOT_FOUND).
-  const snap = call(api, { method: "GET", path: "/api/v1/promotions/qualifying-service/unknown" });
+  const snap = await call(api, { method: "GET", path: "/api/v1/promotions/qualifying-service/unknown" });
   assert.equal(snap.status, 404);
 });
 
-test("PH-59A G06 qualifying-service compute fails closed on an unknown exclusion rule (NOT_FOUND)", () => {
+test("PH-59A G06 qualifying-service compute fails closed on an unknown exclusion rule (NOT_FOUND)", async () => {
   const api = createFoundationApi(createFoundationServices());
-  const res = call(api, {
+  const res = await call(api, {
     method: "POST",
     path: "/api/v1/promotions/qualifying-service:compute",
     headers: { "Idempotency-Key": "qsl-x" },
