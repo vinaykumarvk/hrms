@@ -12,36 +12,34 @@
 
 -- SECTION 1 — ENUM TYPES (module-unique closed enumerations; g02_ prefix)
 -- =====================================================================================
-CREATE TYPE g02_request_origin  AS ENUM ('SELF_SERVICE','HR_ON_BEHALF','BULK','REVERSAL');
-CREATE TYPE g02_change_type     AS ENUM ('UPDATE','CORRECTION','REVERSAL');
-CREATE TYPE g02_sensitivity     AS ENUM ('LOW','MEDIUM','HIGH','STATUTORY');
-CREATE TYPE g02_cr_status       AS ENUM ('DRAFT','SUBMITTED','PENDING_DOCS','IN_REVIEW','NOTICE_HOLD',
-                                         'OBJECTED','RETURNED','APPROVED','REJECTED','WITHDRAWN',
-                                         'COMMITTED','PARTIALLY_COMMITTED','COMMIT_FAILED','REVERSED','CANCELLED');
-CREATE TYPE g02_value_datatype  AS ENUM ('STRING','DATE','NUMBER','ENUM','BOOLEAN','JSON');
-CREATE TYPE g02_item_status     AS ENUM ('PENDING','APPROVED','REJECTED','COMMITTED','FAILED','REVERSED');
-CREATE TYPE g02_rbac_field_access AS ENUM ('V','M','H','E','AR');
-CREATE TYPE g02_field_group     AS ENUM ('DEMOGRAPHIC','CONTACT','FINANCIAL','IDENTITY','QUALIFICATION');
-CREATE TYPE g02_node_type       AS ENUM ('RECOMMEND','APPROVE','SANCTION','VERIFY');
-CREATE TYPE g02_topology        AS ENUM ('SEQUENTIAL','PARALLEL_ALL_OF','PARALLEL_ANY_OF');
-CREATE TYPE g02_decision        AS ENUM ('PENDING','APPROVED','REJECTED','RETURNED','SKIPPED');
-CREATE TYPE g02_matrix_status   AS ENUM ('DRAFT','ACTIVE','RETIRED');
+
+
+
+
+
+
+
+
+
+
+
+
 
 -- SECTION 2 — CONFIGURATION TABLES (created first; referenced by the transactional set)
 -- =====================================================================================
 
 -- E5 — field_sensitivity_catalog (versioned config; replaces the hardcoded sensitivity ternary)
 CREATE TABLE field_sensitivity_catalog (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id       uuid REFERENCES entities(id) ON DELETE RESTRICT,        -- null = tenant default
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       text REFERENCES entities(id) ON DELETE RESTRICT,        -- null = tenant default
     field_key       varchar(80) NOT NULL,                                   -- G02 catalog key
     m01_field_key   varchar(120) NOT NULL,                                  -- canonical G01/M01 path
     is_composite    boolean NOT NULL DEFAULT false,
     display_label   varchar(120) NOT NULL,
-    field_group     g02_field_group NOT NULL,
-    sensitivity     g02_sensitivity NOT NULL,                               -- G02 approval-routing axis
-    rbac_field_access g02_rbac_field_access,
+    field_group     text NOT NULL,
+    sensitivity     text NOT NULL,                               -- G02 approval-routing axis
+    rbac_field_access text,
     is_auth_bearing boolean NOT NULL DEFAULT false,
     notify_old_value boolean NOT NULL DEFAULT false,
     requires_document boolean NOT NULL DEFAULT false,
@@ -51,8 +49,8 @@ CREATE TABLE field_sensitivity_catalog (
     effective_from  date NOT NULL DEFAULT CURRENT_DATE,
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
-    created_by      uuid,
-    updated_by      uuid,
+    created_by      text,
+    updated_by      text,
     is_deleted      boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_fsc_key_version UNIQUE (tenant_id, field_key, version),
     CONSTRAINT ck_fsc_authbearing CHECK (NOT is_auth_bearing OR sensitivity IN ('MEDIUM','HIGH','STATUTORY'))
@@ -65,19 +63,19 @@ COMMENT ON TABLE field_sensitivity_catalog IS 'G02 E5. Versioned per-field sensi
 
 -- E6 — approval_matrix_config (versioned; bound to a W.1 P01 flow) ----------------------
 CREATE TABLE approval_matrix_config (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),             -- matrix_id
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id       uuid REFERENCES entities(id) ON DELETE RESTRICT,        -- null = tenant default
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,             -- matrix_id
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       text REFERENCES entities(id) ON DELETE RESTRICT,        -- null = tenant default
     name            varchar(120) NOT NULL,
     workflow_code   varchar(60),                                            -- bound P01 workflow_code (W.1)
-    status          g02_matrix_status NOT NULL DEFAULT 'DRAFT',
+    status          text NOT NULL DEFAULT 'DRAFT',
     version         integer NOT NULL DEFAULT 1,                             -- in-flight instances pin their version (P01)
     effective_from  date NOT NULL DEFAULT CURRENT_DATE,
     effective_to    date,
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
-    created_by      uuid,
-    updated_by      uuid,
+    created_by      text,
+    updated_by      text,
     is_deleted      boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_amc_name_version UNIQUE (tenant_id, name, version)
 );
@@ -88,26 +86,26 @@ COMMENT ON TABLE approval_matrix_config IS 'G02 E6. Versioned approval matrix co
 
 -- E7 — approval_matrix_rules (per sensitivity x scope route -> P01 stage) ---------------
 CREATE TABLE approval_matrix_rules (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),          -- rule_id
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    matrix_id          uuid NOT NULL REFERENCES approval_matrix_config(id) ON DELETE CASCADE,
-    sensitivity        g02_sensitivity NOT NULL,
-    field_group        g02_field_group,                                     -- optional override
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,          -- rule_id
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
+    matrix_id          text NOT NULL REFERENCES approval_matrix_config(id) ON DELETE CASCADE,
+    sensitivity        text NOT NULL,
+    field_group        text,                                     -- optional override
     field_key          varchar(80),                                         -- precedence: field_key > field_group > sensitivity
-    change_type        g02_change_type,
+    change_type        text,
     employment_status_scope varchar(40),
     level_no           smallint NOT NULL,                                   -- P01 stage sequence
-    node_type          g02_node_type NOT NULL,
-    topology           g02_topology NOT NULL DEFAULT 'SEQUENTIAL',
+    node_type          text NOT NULL,
+    topology           text NOT NULL DEFAULT 'SEQUENTIAL',
     required_role      varchar(60) NOT NULL,                                -- RBAC role key / capability flag
     sla_hours          integer NOT NULL DEFAULT 48,
     escalation_role    varchar(60),
     auto_apply_on_low  boolean NOT NULL DEFAULT false,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT ck_amr_sla_positive CHECK (sla_hours > 0)
 );
@@ -121,28 +119,28 @@ CREATE INDEX ix_amr_field_key   ON approval_matrix_rules(field_key);
 
 -- E1 — change_requests (header = subject of one P01 workflow_instance) ------------------
 CREATE TABLE change_requests (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),          -- change_request_id (P01 subject_ref)
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,          -- change_request_id (P01 subject_ref)
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     cr_number          varchar(24) NOT NULL,                                -- tenant-unique
-    target_employee_id uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    requested_by       uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,  -- maker (SoD anchor)
-    request_origin     g02_request_origin NOT NULL DEFAULT 'SELF_SERVICE',
-    change_type        g02_change_type NOT NULL DEFAULT 'UPDATE',
-    highest_sensitivity g02_sensitivity NOT NULL,                           -- MAX across items
-    status             g02_cr_status NOT NULL DEFAULT 'DRAFT',
+    target_employee_id text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    requested_by       text NOT NULL REFERENCES users(id) ON DELETE RESTRICT,  -- maker (SoD anchor)
+    request_origin     text NOT NULL DEFAULT 'SELF_SERVICE',
+    change_type        text NOT NULL DEFAULT 'UPDATE',
+    highest_sensitivity text NOT NULL,                           -- MAX across items
+    status             text NOT NULL DEFAULT 'DRAFT',
     employment_status_at_submit varchar(20),
     effective_date     date,
     reason             varchar(1000),
-    workflow_instance_id uuid REFERENCES workflow_instances(id) ON DELETE SET NULL,
+    workflow_instance_id text REFERENCES workflow_instances(id) ON DELETE SET NULL,
     sla_due_at         timestamptz,
     submitted_at       timestamptz,
     decided_at         timestamptz,
     committed_at       timestamptz,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_cr_number UNIQUE (tenant_id, cr_number)
 );
@@ -156,26 +154,26 @@ COMMENT ON TABLE change_requests IS 'G02 E1. Header for a change request = subje
 
 -- E2 — change_request_items (per-field before/after diff lines) -------------------------
 CREATE TABLE change_request_items (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    change_request_id  uuid NOT NULL REFERENCES change_requests(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    change_request_id  text NOT NULL REFERENCES change_requests(id) ON DELETE RESTRICT,
     field_key          varchar(80) NOT NULL,                                -- catalog key (resolved to fsc)
     m01_field_key      varchar(120) NOT NULL,
-    parent_item_id     uuid REFERENCES change_request_items(id) ON DELETE SET NULL,
+    parent_item_id     text REFERENCES change_request_items(id) ON DELETE SET NULL,
     old_value          text,
     new_value          text,
     clear_intent       boolean NOT NULL DEFAULT false,
     old_value_hash     char(64),
-    value_datatype     g02_value_datatype NOT NULL DEFAULT 'STRING',
-    sensitivity        g02_sensitivity NOT NULL,
+    value_datatype     text NOT NULL DEFAULT 'STRING',
+    sensitivity        text NOT NULL,
     requires_document  boolean NOT NULL DEFAULT false,
-    item_status        g02_item_status NOT NULL DEFAULT 'PENDING',
+    item_status        text NOT NULL DEFAULT 'PENDING',
     commit_idempotency_key varchar(80),
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT ck_cri_clear_intent CHECK (new_value IS NOT NULL OR clear_intent = true),
     CONSTRAINT uq_cri_commit_idem UNIQUE (tenant_id, commit_idempotency_key)
@@ -188,22 +186,22 @@ COMMENT ON TABLE change_request_items IS 'G02 E2. Per-field diff line; feeds the
 
 -- E4 — change_request_approvals (append-only per-node decision ledger) ------------------
 CREATE TABLE change_request_approvals (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    change_request_id  uuid NOT NULL REFERENCES change_requests(id) ON DELETE RESTRICT,
-    workflow_action_id uuid REFERENCES workflow_actions(id) ON DELETE SET NULL,  -- subset: nullable (frozen model: NOT NULL, one row per P01 action)
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    change_request_id  text NOT NULL REFERENCES change_requests(id) ON DELETE RESTRICT,
+    workflow_action_id text REFERENCES workflow_actions(id) ON DELETE SET NULL,  -- subset: nullable (frozen model: NOT NULL, one row per P01 action)
     level_no           smallint NOT NULL,
-    node_type          g02_node_type NOT NULL,
-    topology           g02_topology NOT NULL DEFAULT 'SEQUENTIAL',
+    node_type          text NOT NULL,
+    topology           text NOT NULL DEFAULT 'SEQUENTIAL',
     required_role      varchar(60) NOT NULL,
-    assigned_to        uuid REFERENCES users(id) ON DELETE SET NULL,
-    delegated_from     uuid REFERENCES users(id) ON DELETE SET NULL,
-    decision           g02_decision NOT NULL DEFAULT 'PENDING',
+    assigned_to        text REFERENCES users(id) ON DELETE SET NULL,
+    delegated_from     text REFERENCES users(id) ON DELETE SET NULL,
+    decision           text NOT NULL DEFAULT 'PENDING',
     decision_comment   varchar(1000),                                       -- mandatory on REJECT/RETURN (VAL-COMMENT/ERR-REASON-REQ)
     acted_at           timestamptz,
     created_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid
+    created_by         text
     -- SoD (assigned_to <> requested_by, <> target.user_id) is enforced by P01/P02 + the G02
     -- service decision path (ERR-G02-SOD); cannot be a single-row CHECK here (BRD §5.6 rule 1).
 );

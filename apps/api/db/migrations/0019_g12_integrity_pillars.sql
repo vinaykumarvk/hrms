@@ -22,20 +22,20 @@
 
 -- SECTION 1 — ENUM TYPES (g12_ prefix; UPPER_SNAKE values, CONVENTIONS §4).
 -- g12_transition_kind already exists (0018_g12_g13_integrity_substrate.sql).
-CREATE TYPE g12_severity           AS ENUM ('INFO','WARN','CRITICAL');
-CREATE TYPE g12_rule_status        AS ENUM ('DRAFT','PUBLISHED','RETIRED');
-CREATE TYPE g12_gap_status         AS ENUM ('GAP_FLAGGED','UNDER_REVIEW','EXPLAINED','CLOSED_RECORDED','CLOSED_FALSE_POSITIVE');
-CREATE TYPE g12_attestation_subject AS ENUM ('EVENT','VERIFICATION_CYCLE','EXTRACT');
-CREATE TYPE g12_attestation_kind   AS ENUM ('CUSTODIAN_ATTEST','EMPLOYEE_VERIFY','EMPLOYEE_DISPUTE','EXTRACT_SIGN','HEIR_VERIFY','ASSISTED_VERIFY');
-CREATE TYPE g12_signature_method   AS ENUM ('PKI_QUALIFIED','OTP_CONFIRMED','SERVER_SIGNED');
-CREATE TYPE g12_extract_scope      AS ENUM ('FULL_SR','DATE_RANGE','EVENT_CATEGORY','SINGLE_EVENT');
-CREATE TYPE g12_redaction_policy   AS ENUM ('NONE','LOAN_EXCLUDE_DISCIPLINARY','PUBLIC_MINIMAL','PENSION_FULL','COURT_FULL');
+
+
+
+
+
+
+
+
 
 -- SECTION 2 — E20 sr_anchors (BRD G12 FR-04 amended) — APPEND-ONLY -------------------
 CREATE TABLE sr_anchors (
-    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),   -- anchor_id
-    tenant_id                uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id                uuid REFERENCES entities(id) ON DELETE RESTRICT, -- null = tenant-wide anchor
+    id                       text PRIMARY KEY DEFAULT gen_random_uuid()::text,   -- anchor_id
+    tenant_id                text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                text REFERENCES entities(id) ON DELETE RESTRICT, -- null = tenant-wide anchor
     anchor_seq               bigint NOT NULL,                               -- monotonic per tenant
     period_from              timestamptz NOT NULL,
     period_to                timestamptz NOT NULL,
@@ -44,11 +44,11 @@ CREATE TABLE sr_anchors (
     head_snapshot_digest     char(64) NOT NULL,                             -- digest of ordered head-leaf list (reconstruction)
     tsa_timestamp_token      text NOT NULL,                                 -- RFC 3161 token over merkle_root (TSA seam)
     tsa_authority            varchar(120) NOT NULL,                         -- TSA identity / policy OID
-    worm_document_id         uuid REFERENCES documents(id) ON DELETE RESTRICT, -- WORM export (G13); nullable until writer lands
+    worm_document_id         text REFERENCES documents(id) ON DELETE RESTRICT, -- WORM export (G13); nullable until writer lands
     prev_anchor_hash         char(64) NOT NULL,                             -- chains anchors (64-zero genesis for first)
     anchor_hash              char(64) NOT NULL,                             -- SHA-256(canonical(anchor) incl. prev_anchor_hash)
     created_at               timestamptz NOT NULL DEFAULT now(),            -- append timestamp; NO updated_at/is_deleted
-    created_by               uuid,
+    created_by               text,
     CONSTRAINT uq_sr_anchor_seq      UNIQUE (tenant_id, anchor_seq),
     CONSTRAINT uq_sr_anchor_hash     UNIQUE (tenant_id, anchor_hash),
     CONSTRAINT ck_sr_anchor_hash_len CHECK (length(merkle_root) = 64 AND length(anchor_hash) = 64 AND length(prev_anchor_hash) = 64),
@@ -61,23 +61,23 @@ COMMENT ON TABLE sr_anchors IS 'G12 E20: append-only external Merkle-root anchor
 
 -- SECTION 3 — E21 sr_expected_event_rule (BRD G12 FR-17) ------------------------------
 CREATE TABLE sr_expected_event_rule (
-    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),   -- rule_id
-    tenant_id                uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id                uuid REFERENCES entities(id) ON DELETE RESTRICT, -- null = tenant-wide
+    id                       text PRIMARY KEY DEFAULT gen_random_uuid()::text,   -- rule_id
+    tenant_id                text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                text REFERENCES entities(id) ON DELETE RESTRICT, -- null = tenant-wide
     rule_code                varchar(48) NOT NULL,                          -- e.g. ANNUAL_INCREMENT
     applies_to_cadre         varchar(48)[],                                 -- cadres in scope (null = all)
     expected_event_category  varchar(48) NOT NULL,                          -- event type code expected each cadence period
     cadence                  jsonb NOT NULL,                                -- recurrence spec
     suppressed_by_categories varchar(48)[],                                 -- events that legitimately explain absence
     source_rule_ref          varchar(120),                                  -- pointer to G06/G10/service-rule master
-    severity                 g12_severity NOT NULL DEFAULT 'WARN',
-    status                   g12_rule_status NOT NULL DEFAULT 'DRAFT',
+    severity                 text NOT NULL DEFAULT 'WARN',
+    status                   text NOT NULL DEFAULT 'DRAFT',
     effective_from           date NOT NULL,
     effective_to             date,
     created_at               timestamptz NOT NULL DEFAULT now(),
     updated_at               timestamptz NOT NULL DEFAULT now(),
-    created_by               uuid,
-    updated_by               uuid,
+    created_by               text,
+    updated_by               text,
     is_deleted               boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_sr_exp_rule_code UNIQUE (tenant_id, rule_code, effective_from)
 );
@@ -87,25 +87,25 @@ COMMENT ON TABLE sr_expected_event_rule IS 'G12 E21: expected-event model for co
 
 -- SECTION 4 — E22 sr_gap_register (BRD G12 FR-17) — lifecycle rows, never deleted -----
 CREATE TABLE sr_gap_register (
-    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),   -- gap_id
-    tenant_id                uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id                uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    employee_id              uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    rule_id                  uuid NOT NULL REFERENCES sr_expected_event_rule(id) ON DELETE RESTRICT,
+    id                       text PRIMARY KEY DEFAULT gen_random_uuid()::text,   -- gap_id
+    tenant_id                text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                text REFERENCES entities(id) ON DELETE RESTRICT,
+    employee_id              text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    rule_id                  text NOT NULL REFERENCES sr_expected_event_rule(id) ON DELETE RESTRICT,
     expected_period_from     date NOT NULL,
     expected_period_to       date NOT NULL,
     expected_event_category  varchar(48) NOT NULL,
-    gap_status               g12_gap_status NOT NULL DEFAULT 'GAP_FLAGGED', -- raised by JOB-G12-GAPSCAN
+    gap_status               text NOT NULL DEFAULT 'GAP_FLAGGED', -- raised by JOB-G12-GAPSCAN
     explanation_code         varchar(48),                                   -- WITHHELD/NOT_DUE/LEGACY_MISSING/RECORDED_LATE
-    resolved_event_id        uuid REFERENCES service_register_events(id) ON DELETE RESTRICT, -- entry closing the gap
+    resolved_event_id        text REFERENCES service_register_events(id) ON DELETE RESTRICT, -- entry closing the gap
     corroborated_by          varchar(64),                                   -- employee/heir who corroborated
-    severity                 g12_severity NOT NULL DEFAULT 'WARN',          -- inherited from rule
+    severity                 text NOT NULL DEFAULT 'WARN',          -- inherited from rule
     detected_at              timestamptz NOT NULL DEFAULT now(),
     closed_at                timestamptz,
     created_at               timestamptz NOT NULL DEFAULT now(),
     updated_at               timestamptz NOT NULL DEFAULT now(),
-    created_by               uuid,
-    updated_by               uuid
+    created_by               text,
+    updated_by               text
 );
 CREATE INDEX ix_sr_gap_tenant     ON sr_gap_register(tenant_id);
 CREATE INDEX ix_sr_gap_employee   ON sr_gap_register(tenant_id, employee_id);
@@ -115,16 +115,16 @@ COMMENT ON TABLE sr_gap_register IS 'G12 E22: detected completeness gaps + corro
 
 -- SECTION 5 — E11 sr_attestations (BRD G12 FR-07) — APPEND-ONLY ------------------------
 CREATE TABLE sr_attestations (
-    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),   -- attestation_id
-    tenant_id                uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id                uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    subject_type             g12_attestation_subject NOT NULL,             -- EVENT/VERIFICATION_CYCLE/EXTRACT
-    subject_id               uuid NOT NULL,                                 -- polymorphic ref (no single FK target)
-    employee_id              uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT, -- SR owner
-    attestation_kind         g12_attestation_kind NOT NULL,
+    id                       text PRIMARY KEY DEFAULT gen_random_uuid()::text,   -- attestation_id
+    tenant_id                text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                text REFERENCES entities(id) ON DELETE RESTRICT,
+    subject_type             text NOT NULL,             -- EVENT/VERIFICATION_CYCLE/EXTRACT
+    subject_id               text NOT NULL,                                 -- polymorphic ref (no single FK target)
+    employee_id              text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT, -- SR owner
+    attestation_kind         text NOT NULL,
     attested_by              varchar(64) NOT NULL,                          -- custodian/employee/heir user id
     attested_role            varchar(48) NOT NULL,                          -- SR_CUSTODIAN/EMPLOYEE/HEIR
-    signature_method         g12_signature_method NOT NULL,                 -- SERVER_SIGNED banned for statutory kinds
+    signature_method         text NOT NULL,                 -- SERVER_SIGNED banned for statutory kinds
     signature_value          text,                                          -- detached signature / signed digest
     certificate_serial       varchar(80),                                   -- PKI cert serial if PKI_QUALIFIED
     tsa_timestamp_token      text,                                          -- RFC 3161 token over signed_digest (TSA seam)
@@ -132,7 +132,7 @@ CREATE TABLE sr_attestations (
     signed_digest            char(64) NOT NULL,                             -- SHA-256 of attested content (chain head / event hash)
     attested_at              timestamptz NOT NULL DEFAULT now(),
     created_at               timestamptz NOT NULL DEFAULT now(),            -- append timestamp; NO updated_at/is_deleted
-    created_by               uuid,
+    created_by               text,
     CONSTRAINT ck_sr_attest_digest_len CHECK (length(signed_digest) = 64)
 );
 CREATE INDEX ix_sr_attest_tenant   ON sr_attestations(tenant_id);
@@ -142,22 +142,22 @@ COMMENT ON TABLE sr_attestations IS 'G12 E11: append-only qualified-signature at
 
 -- SECTION 6 — E14 sr_certified_extracts (BRD G12 FR-10) — managed (revocation only) ---
 CREATE TABLE sr_certified_extracts (
-    id                          uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- extract_id
-    tenant_id                   uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id                   uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                          text PRIMARY KEY DEFAULT gen_random_uuid()::text, -- extract_id
+    tenant_id                   text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                   text REFERENCES entities(id) ON DELETE RESTRICT,
     extract_no                  varchar(40) NOT NULL,                       -- human-readable cert number (unique)
-    employee_id                 uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    scope                       g12_extract_scope NOT NULL,
+    employee_id                 text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    scope                       text NOT NULL,
     scope_params                jsonb,                                      -- date range / category filters
     event_count                 integer NOT NULL DEFAULT 0,
     content_digest              char(64) NOT NULL,                          -- SHA-256 of rendered ordered content (binds copy)
-    redaction_policy            g12_redaction_policy NOT NULL DEFAULT 'NONE', -- purpose-driven redaction (FR-10, P02 mask)
+    redaction_policy            text NOT NULL DEFAULT 'NONE', -- purpose-driven redaction (FR-10, P02 mask)
     redacted_categories         varchar(48)[],                              -- categories excluded by the policy
     redacted_fields             varchar(80)[],                              -- payload fields the P02 field mask redacted (fail-closed)
     chain_head_hash             char(64) NOT NULL,                          -- entry-chain head the extract certifies (PH-10B)
     status_chain_head_hash      char(64) NOT NULL,                          -- status sub-chain head at issue time (PH-10B)
-    document_id                 uuid REFERENCES documents(id) ON DELETE RESTRICT, -- signed PDF (G13); nullable until DocumentGen lands
-    anchor_id                   uuid REFERENCES sr_anchors(id) ON DELETE RESTRICT, -- embedded anchor ref (offline verify)
+    document_id                 text REFERENCES documents(id) ON DELETE RESTRICT, -- signed PDF (G13); nullable until DocumentGen lands
+    anchor_id                   text REFERENCES sr_anchors(id) ON DELETE RESTRICT, -- embedded anchor ref (offline verify)
     qr_verification_token       varchar(64) NOT NULL,                       -- opaque token -> verification endpoint (unique)
     issued_to                   varchar(160) NOT NULL,                      -- requestor / purpose
     purpose                     varchar(120),                               -- pension/loan/court
@@ -166,8 +166,8 @@ CREATE TABLE sr_certified_extracts (
     issued_at                   timestamptz NOT NULL DEFAULT now(),
     created_at                  timestamptz NOT NULL DEFAULT now(),
     updated_at                  timestamptz NOT NULL DEFAULT now(),
-    created_by                  uuid,
-    updated_by                  uuid,
+    created_by                  text,
+    updated_by                  text,
     CONSTRAINT uq_sr_extract_no  UNIQUE (tenant_id, extract_no),
     CONSTRAINT uq_sr_extract_qr  UNIQUE (qr_verification_token),
     CONSTRAINT ck_sr_extract_dig CHECK (length(content_digest) = 64 AND length(chain_head_hash) = 64 AND length(status_chain_head_hash) = 64)

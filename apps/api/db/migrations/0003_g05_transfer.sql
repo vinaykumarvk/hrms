@@ -8,93 +8,89 @@
 -- value sets (rule_code, drive_code, department catalog) remain text codes on master tables.
 
 -- Taxonomy axes (BRD §5.5: orthogonal mechanism / ground / protection) -----------------
-CREATE TYPE g05_transfer_type        AS ENUM ('REQUEST','ADMINISTRATIVE','MUTUAL','DEPUTATION','PROMOTION_LINKED','COMPASSIONATE');
-CREATE TYPE g05_request_origin       AS ENUM ('SELF','MANAGER','ADMIN','SYSTEM');
-CREATE TYPE g05_ground               AS ENUM ('SPOUSE','MEDICAL','ADMINISTRATIVE','OWN_REQUEST','PROMOTION','DEPUTATION','COMPASSIONATE','OTHER');
-CREATE TYPE g05_priority_category    AS ENUM ('PROTECTED_SPOUSE','MEDICAL','DIFFERENTLY_ABLED','NEAR_RETIREMENT','SINGLE_PARENT','NONE');
+
+
+
+
 
 -- Request / order lifecycle -----------------------------------------------------------
-CREATE TYPE g05_transfer_request_status AS ENUM ('DRAFT','SUBMITTED','ELIGIBILITY_CHECK','RECOMMENDED','APPROVED','REJECTED','WITHDRAWN','ORDER_ISSUED','CANCELLED');
-CREATE TYPE g05_order_class          AS ENUM ('SUBSTANTIVE','ADDITIONAL_CHARGE','DEPUTATION','REPATRIATION');
-CREATE TYPE g05_transfer_order_status AS ENUM ('DRAFT','PENDING_APPROVAL','APPROVED','PUBLISHED','SERVED','STAY_HOLD','RELIEVING_IN_PROGRESS','RELIEVED','IN_TRANSIT','JOINED','REVERTED_TO_SOURCE','ABANDONED','AMENDED','CANCELLED','REVOKED');
-CREATE TYPE g05_distance_band        AS ENUM ('LOCAL','SHORT','MEDIUM','LONG','OUTSTATION');
+
+
+
+
 
 -- Policy / ban / drive ----------------------------------------------------------------
-CREATE TYPE g05_policy_rule_type     AS ENUM ('MIN_TENURE','MAX_TENURE','BAN_WINDOW','PROTECTED_CATEGORY','SANCTIONED_STRENGTH','COOLING_PERIOD','STATION_RETENTION','JOINING_TIME_PAY');
-CREATE TYPE g05_enforcement          AS ENUM ('HARD_BLOCK','SOFT_WARN','REQUIRE_OVERRIDE');
-CREATE TYPE g05_ban_type             AS ENUM ('ELECTION_MCC','BUDGET','EXAM','DISASTER','OTHER');
-CREATE TYPE g05_drive_type           AS ENUM ('ANNUAL','SEASONAL','AD_HOC','COUNSELLING');
-CREATE TYPE g05_allotment_method     AS ENUM ('SENIORITY','MERIT','PREFERENCE','MANUAL','COUNSELLING');
-CREATE TYPE g05_drive_status         AS ENUM ('DRAFT','OPEN','COUNSELLING','ALLOTTED','ORDERS_ISSUED','CLOSED','CANCELLED');
-CREATE TYPE g05_strength_source      AS ENUM ('G06','G01','MANUAL_FALLBACK');
+
+
+
+
+
+
+
 
 -- Clearance (P01 PARALLEL_ALL_OF) -----------------------------------------------------
-CREATE TYPE g05_clearance_checklist_status AS ENUM ('OPEN','IN_PROGRESS','BLOCKED','CLEARED','CLEARED_WITH_DUES','CLEARED_WITH_DEEMED','CANCELLED');
-CREATE TYPE g05_clearance_department AS ENUM ('IT','LIBRARY','ACCOUNTS','STORES','ADVANCES','ESTATE_QUARTERS','HR','OTHER');
-CREATE TYPE g05_clearance_item_status AS ENUM ('PENDING','CLEARED','DUES_OUTSTANDING','WAIVED','DEEMED_CLEARED');
-CREATE TYPE g05_escalation_tier      AS ENUM ('NONE','OFFICER','DEPT_HEAD','AUTHORITY');
-CREATE TYPE g05_forced_action_type   AS ENUM ('DEEMED_CLEARED','HANDOVER_UNDER_PROTEST','DEEMED_RELIEF');
+
+
+
+
+
 
 -- Charge handover ---------------------------------------------------------------------
-CREATE TYPE g05_charge_phase         AS ENUM ('HANDOVER_SOURCE','ASSUMPTION_DEST');
-CREATE TYPE g05_charge_type          AS ENUM ('FULL','ADDITIONAL','CURRENT_DUTIES');
-CREATE TYPE g05_charge_handover_status AS ENUM ('DRAFT','SUBMITTED','ACCEPTED','DISPUTED','UNDER_PROTEST');
+
+
+
 
 -- Relieving / joining -----------------------------------------------------------------
-CREATE TYPE g05_day_half             AS ENUM ('FORENOON','AFTERNOON');
-CREATE TYPE g05_relieving_order_status AS ENUM ('DRAFT','PENDING_CLEARANCE','PENDING_APPROVAL','ISSUED','RELIEVED','DEEMED_RELIEVED','CANCELLED');
-CREATE TYPE g05_joining_report_status AS ENUM ('DRAFT','SUBMITTED','UNDER_VERIFICATION','JOINED_CONFIRMED','REJECTED','LATE_JOINING_REVIEW','ABANDONED');
+
+
+
 
 -- Deputation --------------------------------------------------------------------------
-CREATE TYPE g05_repatriation_status  AS ENUM ('ACTIVE','EXTENSION_REQUESTED','EXTENDED','REPATRIATION_DUE','REPATRIATED');
+
 
 -- Representation / holds ---------------------------------------------------------------
-CREATE TYPE g05_representation_type   AS ENUM ('REPRESENTATION','COURT_STAY','RETENTION_REQUEST');
-CREATE TYPE g05_representation_filed_by AS ENUM ('EMPLOYEE','AUTHORITY','COURT','UNION');
-CREATE TYPE g05_hold_from_stage       AS ENUM ('PRE_RELIEF','PRE_JOIN','ANY');
-CREATE TYPE g05_representation_status  AS ENUM ('FILED','UNDER_REVIEW','HOLD_ACTIVE','UPHELD','REJECTED','VACATED','WITHDRAWN');
-CREATE TYPE g05_representation_decision AS ENUM ('ALLOW','DENY','MODIFY','VACATE');
+
+
+
+
+
 
 -- SR / signal outbox (frozen G12 write contract — BRD §5.2.15 R2/R3/R4) ----------------
-CREATE TYPE g05_outbox_aggregate_type AS ENUM ('TRANSFER_ORDER','RELIEVING_ORDER','JOINING_REPORT');
-CREATE TYPE g05_outbox_target_system  AS ENUM ('G12_SR','G10_PAYROLL','G01_MASTER','G09_DISCIPLINARY');
-CREATE TYPE g05_outbox_event_type     AS ENUM (
-    -- G12 SR codes (verbatim from the G12 catalog):
-    'TRANSFER','RELIEVING','JOINING','MUTUAL_TRANSFER','TRANSFER_CANCELLED','RELIEVING_CANCELLED','JOINING_CANCELLED',
-    -- Non-SR signal codes (G10/G01/G06/G09 targets):
-    'PAY_CONTINUITY','ENTITLEMENT','LPC_REQUEST','POSTING_UPDATE','LICENCE_FEE_RECOVERY','SENIORITY_FEED','DISCIPLINARY_TRIGGER');
-CREATE TYPE g05_outbox_status         AS ENUM ('PENDING','IN_FLIGHT','DELIVERED','FAILED','DEAD_LETTERED');
+
+
+
+
 
 -- Vacancy / counselling / acknowledgement / quarters / sequences -----------------------
-CREATE TYPE g05_reservation_state     AS ENUM ('RESERVED','VACATED_ON_RELIEF','FILLED_ON_JOIN','RELEASED','EXPIRED');
-CREATE TYPE g05_ack_channel           AS ENUM ('IN_APP','EMAIL','SMS','REGISTERED_POST','HAND_DELIVERY','PUBLISHED_NOTICE');
-CREATE TYPE g05_ack_status            AS ENUM ('SERVED','ACKNOWLEDGED','DEEMED_SERVED','REFUSED');
-CREATE TYPE g05_sequence_scope        AS ENUM ('TRANSFER_ORDER','RELIEVING_ORDER','JOINING_REPORT','CLEARANCE','REPRESENTATION');
-CREATE TYPE g05_turn_order_method     AS ENUM ('SENIORITY','MERIT');
-CREATE TYPE g05_counselling_session_status AS ENUM ('SCHEDULED','IN_PROGRESS','PAUSED','COMPLETED','CANCELLED');
-CREATE TYPE g05_choice_action         AS ENUM ('CHOSEN','PASSED','DECLINED','AUTO_PASS_TIMEOUT','ABSENT');
-CREATE TYPE g05_quarter_retention_status AS ENUM ('OCCUPIED','RETENTION_REQUESTED','RETENTION_APPROVED','VACATION_DUE','VACATED','OVERSTAY');
+
+
+
+
+
+
+
+
 
 -- -------------------------------------------------------------------------------------
 -- 2.3  transfer_drives (bulk drive header)  [BRD §5.2.5]
 -- -------------------------------------------------------------------------------------
 CREATE TABLE transfer_drives (
-    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id                uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id                       text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     drive_code               varchar(30) NOT NULL,                       -- VAL-MASTER-UNIQUE
     title                    varchar(160) NOT NULL,
     cadre                    varchar(40),
-    drive_type               g05_drive_type NOT NULL,
+    drive_type               text NOT NULL,
     preference_window_start  date,
     preference_window_end    date,
-    allotment_method         g05_allotment_method NOT NULL DEFAULT 'SENIORITY',
-    status                   g05_drive_status NOT NULL DEFAULT 'DRAFT',
+    allotment_method         text NOT NULL DEFAULT 'SENIORITY',
+    status                   text NOT NULL DEFAULT 'DRAFT',
     total_positions          integer,
     created_at               timestamptz NOT NULL DEFAULT now(),
     updated_at               timestamptz NOT NULL DEFAULT now(),
-    created_by               uuid,
-    updated_by               uuid,
+    created_by               text,
+    updated_by               text,
     is_deleted               boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_transfer_drives_code   UNIQUE (tenant_id, drive_code),
     CONSTRAINT ck_transfer_drives_window CHECK (preference_window_end IS NULL OR preference_window_start IS NULL OR preference_window_end >= preference_window_start)
@@ -107,32 +103,32 @@ CREATE INDEX ix_transfer_drives_status ON transfer_drives(status);
 -- 2.4  transfer_requests (pre-order intent)  [BRD §5.2.1]
 -- -------------------------------------------------------------------------------------
 CREATE TABLE transfer_requests (
-    id                              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id                       uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id                              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                       text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     request_no                      varchar(30) NOT NULL,                -- e.g. TRQ-2026-000123
-    employee_id                     uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    transfer_type                   g05_transfer_type NOT NULL,
-    request_origin                  g05_request_origin NOT NULL,
-    source_org_unit_id              uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
-    requested_dest_org_unit_id      uuid REFERENCES org_units(id) ON DELETE RESTRICT,
-    mutual_counterpart_employee_id  uuid REFERENCES employees(id) ON DELETE RESTRICT,
-    ground                          g05_ground,
+    employee_id                     text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    transfer_type                   text NOT NULL,
+    request_origin                  text NOT NULL,
+    source_org_unit_id              text NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
+    requested_dest_org_unit_id      text REFERENCES org_units(id) ON DELETE RESTRICT,
+    mutual_counterpart_employee_id  text REFERENCES employees(id) ON DELETE RESTRICT,
+    ground                          text,
     ground_details                  text,                                -- VAL-LEN(4000)
-    supporting_document_ids         uuid[],                              -- G13 refs (non-sensitive)
-    sensitive_document_ids          uuid[],                              -- G13 sensitive-class refs
+    supporting_document_ids         text[],                              -- G13 refs (non-sensitive)
+    sensitive_document_ids          text[],                              -- G13 sensitive-class refs
     sensitive_ground                boolean NOT NULL DEFAULT false,      -- derived; gates restricted access + P05 logging
-    linked_promotion_id             uuid,                                -- G06 reference
-    linked_drive_id                 uuid REFERENCES transfer_drives(id) ON DELETE SET NULL,
-    priority_category               g05_priority_category,
-    status                          g05_transfer_request_status NOT NULL DEFAULT 'DRAFT',
+    linked_promotion_id             text,                                -- G06 reference
+    linked_drive_id                 text REFERENCES transfer_drives(id) ON DELETE SET NULL,
+    priority_category               text,
+    status                          text NOT NULL DEFAULT 'DRAFT',
     eligibility_result              jsonb,                               -- cached policy-check outcome
-    workflow_instance_id            uuid REFERENCES workflow_instances(id) ON DELETE SET NULL,
+    workflow_instance_id            text REFERENCES workflow_instances(id) ON DELETE SET NULL,
     requested_effective_date        date,                                -- VAL-EFFECTIVE
     created_at                      timestamptz NOT NULL DEFAULT now(),
     updated_at                      timestamptz NOT NULL DEFAULT now(),
-    created_by                      uuid,
-    updated_by                      uuid,
+    created_by                      text,
+    updated_by                      text,
     is_deleted                      boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_transfer_requests_no  UNIQUE (tenant_id, request_no),
     CONSTRAINT ck_transfer_requests_len CHECK (ground_details IS NULL OR length(ground_details) <= 4000)
@@ -152,44 +148,44 @@ CREATE INDEX ix_transfer_requests_wf         ON transfer_requests(workflow_insta
 --      status written ONLY by TransferOrderStateService (calls P01 + P05) — §16.6 / rule 19.
 -- -------------------------------------------------------------------------------------
 CREATE TABLE transfer_orders (
-    id                            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                     uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id                     uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id                            text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                     text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                     text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     order_no                      varchar(30) NOT NULL,                  -- gapless statutory no. (§2.16)
-    order_class                   g05_order_class NOT NULL,
-    transfer_request_id           uuid REFERENCES transfer_requests(id) ON DELETE SET NULL,  -- null for direct admin orders
-    employee_id                   uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    transfer_type                 g05_transfer_type NOT NULL,
-    source_org_unit_id            uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
-    dest_org_unit_id              uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
-    source_designation_id         uuid NOT NULL REFERENCES designations(id) ON DELETE RESTRICT,
-    dest_designation_id           uuid NOT NULL REFERENCES designations(id) ON DELETE RESTRICT,
+    order_class                   text NOT NULL,
+    transfer_request_id           text REFERENCES transfer_requests(id) ON DELETE SET NULL,  -- null for direct admin orders
+    employee_id                   text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    transfer_type                 text NOT NULL,
+    source_org_unit_id            text NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
+    dest_org_unit_id              text NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
+    source_designation_id         text NOT NULL REFERENCES designations(id) ON DELETE RESTRICT,
+    dest_designation_id           text NOT NULL REFERENCES designations(id) ON DELETE RESTRICT,
     order_date                    date NOT NULL,
     served_on_date                date,                                  -- FR-G05-020; basis for relieve-by
     acknowledged_at               timestamptz,
     relieve_by_date               date NOT NULL,                         -- statutory deadline
     expected_joining_date         date,
-    joining_distance_band         g05_distance_band,
+    joining_distance_band         text,
     joining_time_days             integer,
     joining_time_pay_admissible   boolean NOT NULL DEFAULT true,         -- FR-G05-015
     entitlement_ref               varchar(60),                           -- G10 entitlement signal ref
-    in_transit_custody_org_unit_id uuid REFERENCES org_units(id) ON DELETE RESTRICT,
+    in_transit_custody_org_unit_id text REFERENCES org_units(id) ON DELETE RESTRICT,
     is_deputation                 boolean NOT NULL DEFAULT false,
-    mutual_pair_order_id          uuid REFERENCES transfer_orders(id) ON DELETE SET NULL,     -- reciprocal (MUTUAL)
-    drive_id                      uuid REFERENCES transfer_drives(id) ON DELETE SET NULL,
-    status                        g05_transfer_order_status NOT NULL DEFAULT 'DRAFT',
+    mutual_pair_order_id          text REFERENCES transfer_orders(id) ON DELETE SET NULL,     -- reciprocal (MUTUAL)
+    drive_id                      text REFERENCES transfer_drives(id) ON DELETE SET NULL,
+    status                        text NOT NULL DEFAULT 'DRAFT',
     hold_active                   boolean NOT NULL DEFAULT false,        -- true under STAY_HOLD
-    order_document_id             uuid REFERENCES documents(id) ON DELETE SET NULL,
-    approved_by                   uuid REFERENCES users(id) ON DELETE SET NULL,               -- Transfer Authority
+    order_document_id             text REFERENCES documents(id) ON DELETE SET NULL,
+    approved_by                   text REFERENCES users(id) ON DELETE SET NULL,               -- Transfer Authority
     approved_at                   timestamptz,
-    workflow_instance_id          uuid REFERENCES workflow_instances(id) ON DELETE SET NULL,
+    workflow_instance_id          text REFERENCES workflow_instances(id) ON DELETE SET NULL,
     revision_no                   integer NOT NULL DEFAULT 0,
-    superseded_by_order_id        uuid REFERENCES transfer_orders(id) ON DELETE SET NULL,
+    superseded_by_order_id        text REFERENCES transfer_orders(id) ON DELETE SET NULL,
     g05_source_id                 varchar(80),                           -- P06 legacy traceability/dedup
     created_at                    timestamptz NOT NULL DEFAULT now(),
     updated_at                    timestamptz NOT NULL DEFAULT now(),
-    created_by                    uuid,
-    updated_by                    uuid,
+    created_by                    text,
+    updated_by                    text,
     is_deleted                    boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_transfer_orders_no       UNIQUE (tenant_id, order_no),
     CONSTRAINT ck_transfer_orders_served   CHECK (served_on_date IS NULL OR served_on_date >= order_date),         -- rule 4
@@ -224,11 +220,11 @@ CREATE UNIQUE INDEX uq_transfer_orders_active_substantive
 -- 2.6  order_number_sequences (gapless reserve-then-commit)  [BRD §5.2.18]  *** headline ***
 -- -------------------------------------------------------------------------------------
 CREATE TABLE order_number_sequences (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id           uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    sequence_scope      g05_sequence_scope NOT NULL,
-    office_org_unit_id  uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
+    id                  text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id           text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id           text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    sequence_scope      text NOT NULL,
+    office_org_unit_id  text NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
     fiscal_year         integer NOT NULL,
     next_value          bigint NOT NULL DEFAULT 1,                       -- row-locked counter
     reserved_high_water bigint NOT NULL DEFAULT 0,                       -- highest reserved
@@ -236,8 +232,8 @@ CREATE TABLE order_number_sequences (
     gap_audit_last_run  timestamptz,                                     -- JOB-G05-GAPAUDIT
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now(),
-    created_by          uuid,
-    updated_by          uuid,
+    created_by          text,
+    updated_by          text,
     is_deleted          boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_order_number_sequences UNIQUE (tenant_id, sequence_scope, office_org_unit_id, fiscal_year),
     CONSTRAINT ck_order_number_sequences_hw CHECK (reserved_high_water >= 0 AND next_value >= 1)
@@ -251,15 +247,15 @@ CREATE INDEX ix_order_number_sequences_office ON order_number_sequences(office_o
 -- 2.12 clearance_checklists (no-dues header; subject of P01 PARALLEL_ALL_OF)  [BRD §5.2.8]  *** headline (no_dues) ***
 -- -------------------------------------------------------------------------------------
 CREATE TABLE clearance_checklists (
-    id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id            uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id            uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id                   text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id            text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id            text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     checklist_no         varchar(30) NOT NULL,                          -- e.g. NOD-2026-000789
-    transfer_order_id    uuid NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
-    employee_id          uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    source_org_unit_id   uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
-    workflow_instance_id uuid REFERENCES workflow_instances(id) ON DELETE SET NULL,  -- the PARALLEL_ALL_OF instance
-    status               g05_clearance_checklist_status NOT NULL DEFAULT 'OPEN',
+    transfer_order_id    text NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
+    employee_id          text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    source_org_unit_id   text NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
+    workflow_instance_id text REFERENCES workflow_instances(id) ON DELETE SET NULL,  -- the PARALLEL_ALL_OF instance
+    status               text NOT NULL DEFAULT 'OPEN',
     total_items          integer NOT NULL DEFAULT 0,
     cleared_items        integer NOT NULL DEFAULT 0,
     deemed_items         integer NOT NULL DEFAULT 0,                    -- DEEMED_CLEARED/WAIVED count
@@ -267,8 +263,8 @@ CREATE TABLE clearance_checklists (
     dues_recovery_ref    varchar(60),                                   -- G10 recovery linkage
     created_at           timestamptz NOT NULL DEFAULT now(),
     updated_at           timestamptz NOT NULL DEFAULT now(),
-    created_by           uuid,
-    updated_by           uuid,
+    created_by           text,
+    updated_by           text,
     is_deleted           boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_clearance_checklists_no UNIQUE (tenant_id, checklist_no)
 );
@@ -284,29 +280,29 @@ CREATE INDEX ix_clearance_checklists_wf       ON clearance_checklists(workflow_i
 -- 2.13 clearance_items (one per P01 parallel branch; SLA/escalation/deemed)  [BRD §5.2.9]  *** headline (no_dues) ***
 -- -------------------------------------------------------------------------------------
 CREATE TABLE clearance_items (
-    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id              uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id              uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    clearance_checklist_id uuid NOT NULL REFERENCES clearance_checklists(id) ON DELETE RESTRICT,
-    department_code        g05_clearance_department NOT NULL,
+    id                     text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id              text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id              text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    clearance_checklist_id text NOT NULL REFERENCES clearance_checklists(id) ON DELETE RESTRICT,
+    department_code        text NOT NULL,
     workflow_branch_ref    varchar(60),                                 -- P01 PARALLEL_ALL_OF branch
-    assigned_officer_id    uuid REFERENCES users(id) ON DELETE SET NULL,  -- Clearance Officer (P01 assignee)
-    status                 g05_clearance_item_status NOT NULL DEFAULT 'PENDING',
+    assigned_officer_id    text REFERENCES users(id) ON DELETE SET NULL,  -- Clearance Officer (P01 assignee)
+    status                 text NOT NULL DEFAULT 'PENDING',
     sla_due_at             timestamptz,                                 -- per-branch SLA (P01 runtime)
-    escalation_tier        g05_escalation_tier NOT NULL DEFAULT 'NONE',
+    escalation_tier        text NOT NULL DEFAULT 'NONE',
     escalated_at           timestamptz,
-    forced_action_type     g05_forced_action_type,                      -- DEEMED_CLEARED when Authority-granted
+    forced_action_type     text,                      -- DEEMED_CLEARED when Authority-granted
     forced_action_reason   text,                                        -- mandatory when deemed (ERR-G05-REASON-REQ)
-    forced_action_by       uuid REFERENCES users(id) ON DELETE SET NULL,
-    dues_amount            numeric(14,2),                               -- INR (VAL-CURRENCY)
+    forced_action_by       text REFERENCES users(id) ON DELETE SET NULL,
+    dues_amount            bigint,                               -- INR (VAL-CURRENCY)
     dues_description       text,
     remarks                text,
-    evidence_document_id   uuid REFERENCES documents(id) ON DELETE SET NULL,
+    evidence_document_id   text REFERENCES documents(id) ON DELETE SET NULL,
     cleared_at             timestamptz,
     created_at             timestamptz NOT NULL DEFAULT now(),
     updated_at             timestamptz NOT NULL DEFAULT now(),
-    created_by             uuid,
-    updated_by             uuid,
+    created_by             text,
+    updated_by             text,
     is_deleted             boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_clearance_items UNIQUE (clearance_checklist_id, department_code),
     CONSTRAINT ck_clearance_items_deemed_reason CHECK (forced_action_type IS NULL OR forced_action_reason IS NOT NULL)
@@ -325,29 +321,29 @@ CREATE INDEX ix_clearance_items_doc       ON clearance_items(evidence_document_i
 --      Faithful subset of docs/data-model/05-G05-transfer-relieving-joining.sql.
 -- -------------------------------------------------------------------------------------
 CREATE TABLE relieving_orders (
-    id                          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                   uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id                   uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id                          text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                   text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                   text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     relieving_order_no          varchar(30) NOT NULL,                   -- gapless, e.g. RO/2026/00456
-    transfer_order_id           uuid NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
-    employee_id                 uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    clearance_checklist_id      uuid NOT NULL REFERENCES clearance_checklists(id) ON DELETE RESTRICT,
+    transfer_order_id           text NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
+    employee_id                 text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    clearance_checklist_id      text NOT NULL REFERENCES clearance_checklists(id) ON DELETE RESTRICT,
     last_working_day            date NOT NULL,                          -- VAL-EFFECTIVE
-    relieving_time              g05_day_half NOT NULL DEFAULT 'AFTERNOON',
+    relieving_time              text NOT NULL DEFAULT 'AFTERNOON',
     relieved                    boolean NOT NULL DEFAULT false,
     deemed_relief               boolean NOT NULL DEFAULT false,         -- FR-G05-016
     forced_action_reason        text,                                   -- mandatory when deemed_relief
-    forced_action_by            uuid REFERENCES users(id) ON DELETE SET NULL,
+    forced_action_by            text REFERENCES users(id) ON DELETE SET NULL,
     pay_continuity_signalled    boolean NOT NULL DEFAULT false,         -- G10 continue pay
     lpc_requested               boolean NOT NULL DEFAULT false,         -- LPC trigger to G10
-    relieving_order_document_id uuid REFERENCES documents(id) ON DELETE SET NULL,
-    status                      g05_relieving_order_status NOT NULL DEFAULT 'DRAFT',
-    issued_by                   uuid REFERENCES users(id) ON DELETE SET NULL,
-    workflow_instance_id        uuid REFERENCES workflow_instances(id) ON DELETE SET NULL,
+    relieving_order_document_id text REFERENCES documents(id) ON DELETE SET NULL,
+    status                      text NOT NULL DEFAULT 'DRAFT',
+    issued_by                   text REFERENCES users(id) ON DELETE SET NULL,
+    workflow_instance_id        text REFERENCES workflow_instances(id) ON DELETE SET NULL,
     created_at                  timestamptz NOT NULL DEFAULT now(),
     updated_at                  timestamptz NOT NULL DEFAULT now(),
-    created_by                  uuid,
-    updated_by                  uuid,
+    created_by                  text,
+    updated_by                  text,
     is_deleted                  boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_relieving_orders_no        UNIQUE (tenant_id, relieving_order_no),
     CONSTRAINT ck_relieving_orders_deemed_reason CHECK (deemed_relief = false OR forced_action_reason IS NOT NULL)
@@ -365,36 +361,36 @@ CREATE INDEX ix_relieving_orders_wf        ON relieving_orders(workflow_instance
 
 -- -------------------------------------------------------------------------------------
 -- 2.16 joining_reports (joining sequence; continuity)  [BRD §5.2.12]  *** headline ***
---      Faithful subset; charge_assumption_id kept as a plain uuid (charge_handovers is
+--      Faithful subset; charge_assumption_id kept as a plain text (charge_handovers is
 --      outside the PH-06A migration subset, so no FK yet).
 -- -------------------------------------------------------------------------------------
 CREATE TABLE joining_reports (
-    id                          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                   uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id                   uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id                          text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                   text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                   text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     joining_report_no           varchar(30) NOT NULL,                   -- gapless, e.g. JR/2026/00456
-    transfer_order_id           uuid NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
-    relieving_order_id          uuid REFERENCES relieving_orders(id) ON DELETE SET NULL,
-    employee_id                 uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    dest_org_unit_id            uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
+    transfer_order_id           text NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
+    relieving_order_id          text REFERENCES relieving_orders(id) ON DELETE SET NULL,
+    employee_id                 text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    dest_org_unit_id            text NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
     reported_date               date NOT NULL,
     joining_date                date NOT NULL,                          -- statutory; VAL-EFFECTIVE
-    joining_time                g05_day_half NOT NULL DEFAULT 'FORENOON',
+    joining_time                text NOT NULL DEFAULT 'FORENOON',
     joining_sequence_no         integer,                                -- inter-se order (FR-G05-021)
     inter_se_tiebreak_key       varchar(60),                            -- deterministic tie-break; exposed to G06
     transit_days                integer,                                -- derived: joining_date - LWD - holidays
     transit_within_admissible   boolean,                                -- vs joining_time_days
     service_continuity_asserted boolean NOT NULL DEFAULT false,         -- SR JOINING asserts no break
-    charge_assumption_id        uuid,                                   -- charge_handovers ref (subset: no FK)
+    charge_assumption_id        text,                                   -- charge_handovers ref (subset: no FK)
     pay_continuity_resumed      boolean NOT NULL DEFAULT false,         -- G10 confirmed at destination
-    joining_document_id         uuid REFERENCES documents(id) ON DELETE SET NULL,
-    status                      g05_joining_report_status NOT NULL DEFAULT 'DRAFT',
-    verified_by                 uuid REFERENCES users(id) ON DELETE SET NULL,  -- HR Destination
-    workflow_instance_id        uuid REFERENCES workflow_instances(id) ON DELETE SET NULL,
+    joining_document_id         text REFERENCES documents(id) ON DELETE SET NULL,
+    status                      text NOT NULL DEFAULT 'DRAFT',
+    verified_by                 text REFERENCES users(id) ON DELETE SET NULL,  -- HR Destination
+    workflow_instance_id        text REFERENCES workflow_instances(id) ON DELETE SET NULL,
     created_at                  timestamptz NOT NULL DEFAULT now(),
     updated_at                  timestamptz NOT NULL DEFAULT now(),
-    created_by                  uuid,
-    updated_by                  uuid,
+    created_by                  text,
+    updated_by                  text,
     is_deleted                  boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_joining_reports_no       UNIQUE (tenant_id, joining_report_no),
     CONSTRAINT ck_joining_reports_dates    CHECK (joining_date >= reported_date)

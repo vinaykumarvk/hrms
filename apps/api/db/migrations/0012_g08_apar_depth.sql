@@ -9,34 +9,34 @@
 --         g08_appraisal_report_periods (E19: multi-RO part-period; No-Report below threshold;
 --         is_escalated_author for SLA authoring-right transfer R9/FR-G08-19).
 -- NOTE: apar forms are not yet table-backed (service-layer entities), so form references are
---       plain uuid columns validated in the service layer.
+--       plain text columns validated in the service layer.
 
 -- SECTION 1 — ENUM TYPES (g08_ prefix; UPPER_SNAKE values, CONVENTIONS §4)
-CREATE TYPE g08_cycle_status          AS ENUM ('DRAFT','ACTIVE','CLOSED');
-CREATE TYPE g08_template_status       AS ENUM ('DRAFT','PUBLISHED','RETIRED');
-CREATE TYPE g08_scale_status          AS ENUM ('ACTIVE','RETIRED');
-CREATE TYPE g08_goal_type             AS ENUM ('PERFORMANCE','DEVELOPMENT');
-CREATE TYPE g08_goal_status           AS ENUM ('DRAFT','APPROVED','LOCKED');
-CREATE TYPE g08_disclosure_event_type AS ENUM ('DISPATCHED','ACKNOWLEDGED','REPRESENTATION_FILED','REPRESENTATION_DISPOSED');
-CREATE TYPE g08_representation_status AS ENUM ('FILED','UNDER_REVIEW','DISPOSED','REJECTED_LATE');
-CREATE TYPE g08_report_period_status  AS ENUM ('DRAFT','ASSESSED','NO_REPORT');
+
+
+
+
+
+
+
+
 
 -- SECTION 2 — E3 rating_scales
 CREATE TABLE g08_rating_scales (
-    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id         uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id         text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id         text REFERENCES entities(id) ON DELETE RESTRICT,
     scale_code        varchar(40) NOT NULL,
     name              varchar(120) NOT NULL,
     min_value         numeric(4,2) NOT NULL,
     max_value         numeric(4,2) NOT NULL,
     benchmark_grade   numeric(4,2) NOT NULL,
     adverse_threshold numeric(4,2) NOT NULL,
-    status            g08_scale_status NOT NULL DEFAULT 'ACTIVE',
+    status            text NOT NULL DEFAULT 'ACTIVE',
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
-    created_by        uuid,
-    updated_by        uuid,
+    created_by        text,
+    updated_by        text,
     is_deleted        boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_g08_rating_scales_code UNIQUE (tenant_id, scale_code),
     CONSTRAINT ck_g08_rating_scales_bounds CHECK (max_value > min_value
@@ -47,18 +47,18 @@ CREATE INDEX ix_g08_rating_scales_tenant ON g08_rating_scales(tenant_id);
 
 -- SECTION 3 — E2 appraisal_templates (weightage_policy R21: VAL-WEIGHTAGE/WSUM)
 CREATE TABLE g08_appraisal_templates (
-    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id        uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id        uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id               text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id        text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id        text REFERENCES entities(id) ON DELETE RESTRICT,
     template_code    varchar(40) NOT NULL,
     name             varchar(160) NOT NULL,
     version          integer NOT NULL DEFAULT 1,
     weightage_policy jsonb NOT NULL,  -- {performance_sum:100, goal_split_pct, competency_split_pct, development_in_sum:false}
-    status           g08_template_status NOT NULL DEFAULT 'PUBLISHED',
+    status           text NOT NULL DEFAULT 'PUBLISHED',
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
-    created_by       uuid,
-    updated_by       uuid,
+    created_by       text,
+    updated_by       text,
     is_deleted       boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_g08_appraisal_templates_code UNIQUE (tenant_id, template_code, version)
 );
@@ -66,23 +66,23 @@ CREATE INDEX ix_g08_appraisal_templates_tenant ON g08_appraisal_templates(tenant
 
 -- SECTION 4 — E1 appraisal_cycles (representation window + No-Report threshold)
 CREATE TABLE g08_appraisal_cycles (
-    id                         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                  uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id                  uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                         text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                  text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                  text REFERENCES entities(id) ON DELETE RESTRICT,
     cycle_code                 varchar(40) NOT NULL,
     name                       varchar(160) NOT NULL,
     fiscal_year                varchar(9) NOT NULL,
     appraisal_period_start     date NOT NULL,
     appraisal_period_end       date NOT NULL,
-    template_id                uuid NOT NULL REFERENCES g08_appraisal_templates(id) ON DELETE RESTRICT,
-    rating_scale_id            uuid NOT NULL REFERENCES g08_rating_scales(id) ON DELETE RESTRICT,
+    template_id                text NOT NULL REFERENCES g08_appraisal_templates(id) ON DELETE RESTRICT,
+    rating_scale_id            text NOT NULL REFERENCES g08_rating_scales(id) ON DELETE RESTRICT,
     representation_window_days integer NOT NULL DEFAULT 30,   -- VAL-G08-REPWINDOW
     min_supervision_months     numeric(4,1) NOT NULL DEFAULT 3.0,  -- VAL-G08-SUPV
-    status                     g08_cycle_status NOT NULL DEFAULT 'DRAFT',
+    status                     text NOT NULL DEFAULT 'DRAFT',
     created_at                 timestamptz NOT NULL DEFAULT now(),
     updated_at                 timestamptz NOT NULL DEFAULT now(),
-    created_by                 uuid,
-    updated_by                 uuid,
+    created_by                 text,
+    updated_by                 text,
     is_deleted                 boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_g08_appraisal_cycles_code UNIQUE (tenant_id, cycle_code),
     CONSTRAINT ck_g08_appraisal_cycles_period CHECK (appraisal_period_end >= appraisal_period_start),
@@ -95,20 +95,20 @@ CREATE INDEX ix_g08_appraisal_cycles_scale    ON g08_appraisal_cycles(rating_sca
 
 -- SECTION 5 — E5 goals (weightage governed by VAL-WEIGHTAGE/WSUM at lock)
 CREATE TABLE g08_goals (
-    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id    uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    form_id      uuid NOT NULL,
-    appraisee_id uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    goal_type    g08_goal_type NOT NULL,
+    id           text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id    text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id    text REFERENCES entities(id) ON DELETE RESTRICT,
+    form_id      text NOT NULL,
+    appraisee_id text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    goal_type    text NOT NULL,
     title        varchar(200) NOT NULL,
     weightage    numeric(5,2) NOT NULL DEFAULT 0,   -- VAL-WEIGHTAGE/WSUM
     snapshotted  boolean NOT NULL DEFAULT false,
-    status       g08_goal_status NOT NULL DEFAULT 'DRAFT',
+    status       text NOT NULL DEFAULT 'DRAFT',
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now(),
-    created_by   uuid,
-    updated_by   uuid,
+    created_by   text,
+    updated_by   text,
     is_deleted   boolean NOT NULL DEFAULT false,
     CONSTRAINT ck_g08_goals_weightage CHECK (weightage >= 0)
 );
@@ -118,16 +118,16 @@ CREATE INDEX ix_g08_goals_appraisee ON g08_goals(appraisee_id);
 
 -- SECTION 6 — E20 form_goal_snapshots (APPEND-ONLY: INSERT only; no updated_at/is_deleted)
 CREATE TABLE g08_form_goal_snapshots (
-    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id  uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    form_id    uuid NOT NULL,
-    goal_id    uuid NOT NULL REFERENCES g08_goals(id) ON DELETE RESTRICT,
-    goal_type  g08_goal_type NOT NULL,
+    id         text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id  text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    form_id    text NOT NULL,
+    goal_id    text NOT NULL REFERENCES g08_goals(id) ON DELETE RESTRICT,
+    goal_type  text NOT NULL,
     title      varchar(200) NOT NULL,
     weightage  numeric(5,2) NOT NULL,
     locked_at  date NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
-    created_by uuid,
+    created_by text,
     CONSTRAINT uq_g08_form_goal_snapshots UNIQUE (tenant_id, form_id, goal_id)
 );
 CREATE INDEX ix_g08_fgs_tenant ON g08_form_goal_snapshots(tenant_id);
@@ -136,15 +136,15 @@ COMMENT ON TABLE g08_form_goal_snapshots IS 'E20 immutable snapshot-on-lock; the
 
 -- SECTION 7 — apar_disclosure_log (append-only; monotonic seq_no per form)
 CREATE TABLE g08_apar_disclosure_log (
-    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id  uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    form_id    uuid NOT NULL,
+    id         text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id  text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    form_id    text NOT NULL,
     seq_no     bigint NOT NULL,
-    event_type g08_disclosure_event_type NOT NULL,
-    actor_id   uuid NOT NULL,
+    event_type text NOT NULL,
+    actor_id   text NOT NULL,
     event_at   date NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
-    created_by uuid,
+    created_by text,
     CONSTRAINT uq_g08_apar_disclosure_log_seq UNIQUE (tenant_id, form_id, seq_no)
 );
 CREATE INDEX ix_g08_disclosure_tenant ON g08_apar_disclosure_log(tenant_id);
@@ -153,23 +153,23 @@ COMMENT ON TABLE g08_apar_disclosure_log IS 'G08 disclosure/custody domain ledge
 
 -- SECTION 8 — E13 representations (window enforcement: is_late/condoned; ERR-G08-REPWINDOW)
 CREATE TABLE g08_representations (
-    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id        uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id        uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id               text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id        text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id        text REFERENCES entities(id) ON DELETE RESTRICT,
     rep_no           varchar(60) NOT NULL,
-    form_id          uuid NOT NULL,
-    appraisee_id     uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    form_id          text NOT NULL,
+    appraisee_id     text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
     grounds          text NOT NULL,
     filed_at         date NOT NULL,
     sla_due_at       date NOT NULL,        -- VAL-G08-REPWINDOW
     is_late          boolean NOT NULL DEFAULT false,
     condoned         boolean NOT NULL DEFAULT false,
     escalation_level integer NOT NULL DEFAULT 1,
-    status           g08_representation_status NOT NULL DEFAULT 'FILED',
+    status           text NOT NULL DEFAULT 'FILED',
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
-    created_by       uuid,
-    updated_by       uuid,
+    created_by       text,
+    updated_by       text,
     is_deleted       boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_g08_representations_rep_no UNIQUE (tenant_id, rep_no),
     -- Fail-closed data guard: a late representation persists only when condoned.
@@ -180,26 +180,26 @@ CREATE INDEX ix_g08_representations_form   ON g08_representations(form_id);
 
 -- SECTION 9 — E19 appraisal_report_periods (multi-RO part-period; No-Report; SLA escalation)
 CREATE TABLE g08_appraisal_report_periods (
-    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id             uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id             uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    form_id               uuid NOT NULL,
+    id                    text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id             text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id             text REFERENCES entities(id) ON DELETE RESTRICT,
+    form_id               text NOT NULL,
     sequence_no           integer NOT NULL,
     period_start          date NOT NULL,
     period_end            date NOT NULL,
-    reporting_officer_id  uuid REFERENCES employees(id) ON DELETE SET NULL,  -- null if No-Report
+    reporting_officer_id  text REFERENCES employees(id) ON DELETE SET NULL,  -- null if No-Report
     supervision_months    numeric(4,1) NOT NULL,       -- VAL-G08-SUPV
     part_period_grade     numeric(4,2),
     weight_in_aggregate   numeric(5,2),                -- supervision-weighted proportion
     no_report_certificate boolean NOT NULL DEFAULT false,
     no_report_reason      text,
     is_escalated_author   boolean NOT NULL DEFAULT false,  -- R9: authoring right transferred by SLA
-    escalated_author_id   uuid REFERENCES employees(id) ON DELETE SET NULL,
-    status                g08_report_period_status NOT NULL DEFAULT 'DRAFT',
+    escalated_author_id   text REFERENCES employees(id) ON DELETE SET NULL,
+    status                text NOT NULL DEFAULT 'DRAFT',
     created_at            timestamptz NOT NULL DEFAULT now(),
     updated_at            timestamptz NOT NULL DEFAULT now(),
-    created_by            uuid,
-    updated_by            uuid,
+    created_by            text,
+    updated_by            text,
     is_deleted            boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_g08_report_periods_seq UNIQUE (tenant_id, form_id, sequence_no),
     CONSTRAINT ck_g08_report_periods_dates CHECK (period_end >= period_start),

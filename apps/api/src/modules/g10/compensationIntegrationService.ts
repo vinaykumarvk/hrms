@@ -346,6 +346,12 @@ export class CompensationIntegrationService {
    */
   completeDisbursement(actor: ActorContext, runId: string): BankDisbursement {
     this.authorization.check(actor, "g10.payroll.disburse", actor);
+    // PAYROLL_DISBURSE capability: completing/transmitting the bank file is a payroll_disburser
+    // action, distinct from the run maker and approver (3-way SoD) per auth-matrix.yaml
+    // g10.bankfile.sign_transmit. Mirrors the disburser gate on payrollEngine.markRunTransmitted.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "payroll_disburser" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Completing the bank disbursement requires the payroll_disburser capability (PAYROLL_DISBURSE)", { field: "actor" });
+    }
     const disbursement = this.repository.findDisbursementByRun(actor, runId);
     if (!disbursement) {
       throw new FoundationError("PRECONDITION_FAILED", "No bank disbursement batch exists for this run");

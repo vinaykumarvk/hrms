@@ -83,6 +83,29 @@ export interface SrIngestResult {
   semanticDuplicate: boolean;
 }
 
+/**
+ * BRD G12 `g12.correction.approve` — a custodian-raised corrigendum against a target ledger entry.
+ * The correction is proposed by an `sr_custodian` and only committed to the append-only ledger once
+ * an INDEPENDENT `sr_second_custodian` approves it (maker != checker != second-custodian SoD). Until
+ * approved, it is PENDING and writes nothing to the chain; on approval it is committed as a
+ * CORRIGENDUM annotation event against the target.
+ */
+export interface SrCorrigendum {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  targetEventId: string;
+  employeeId: string;
+  correctionNote: string;
+  proposedByUserId: string;
+  proposedAt: string;
+  status: "PENDING" | "APPROVED";
+  approvedByUserId?: string;
+  approvedAt?: string;
+  /** The CORRIGENDUM annotation event appended to the chain on approval. */
+  corrigendumEventId?: string;
+}
+
 interface IdempotencyRecord {
   payloadHash: string;
   eventId: string;
@@ -96,6 +119,7 @@ const ANNOTATION_EVENT_TYPES = ["CORRIGENDUM", "DISPUTE", "DISPUTE_RESOLUTION"];
 export class ServiceRegisterService {
   private readonly events: SrEvent[] = [];
   private readonly statusEvents: SrStatusEvent[] = [];
+  private readonly corrigenda: SrCorrigendum[] = [];
   private readonly idempotency = new Map<string, IdempotencyRecord>();
 
   constructor(private readonly audit: AuditService) {}
@@ -325,6 +349,82 @@ export class ServiceRegisterService {
   count(scope: TenantScope): number {
     requireTenantScope(scope);
     return this.events.filter((event) => event.tenantId === scope.tenantId && (!scope.entityId || event.entityId === scope.entityId)).length;
+  }
+
+  /**
+   * `g12.correction.approve` maker step: an sr_custodian proposes a corrigendum against a target
+   * ledger entry. Writes nothing to the chain — the correction stays PENDING until an independent
+   * sr_second_custodian approves it (approveCorrigendum). The route layer enforces the
+   * `g12.correction.approve` permission; this method enforces the sr_custodian capability.
+   */
+  proposeCorrigendum(actor: ActorContext, input: { targetEventId: string; correctionNote: string }): SrCorrigendum {
+    requireTenantScope(actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "sr_custodian" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Proposing an SR corrigendum requires the sr_custodian capability", { field: "actor" });
+    }
+    const target = this.requireEvent(actor, input.targetEventId);
+    if (!input.correctionNote?.trim()) {
+      throw new FoundationError("VALIDATION_FAILED", "correctionNote is required", { field: "correctionNote" });
+    }
+    const corrigendum: SrCorrigendum = {
+      id: nextId("sr-corrigendum", this.corrigenda.length),
+      tenantId: actor.tenantId,
+      entityId: actor.entityId,
+      targetEventId: target.id,
+      employeeId: target.employeeId,
+      correctionNote: input.correctionNote.trim(),
+      proposedByUserId: actor.userId,
+      proposedAt: new Date().toISOString(),
+      status: "PENDING",
+    };
+    this.corrigenda.push(corrigendum);
+    this.audit.recordMutation(actor, { action: "G12_CORRIGENDUM_PROPOSED", subjectRef: `g12_sr_corrigenda:${corrigendum.id}`, metadata: { targetEventId: target.id } });
+    return { ...corrigendum };
+  }
+
+  /**
+   * `g12.correction.approve` checker step: an INDEPENDENT sr_second_custodian approves a proposed
+   * corrigendum, which commits it to the append-only ledger as a CORRIGENDUM annotation event
+   * against the target. Enforces the 3-way SoD (source wrote the original, sr_custodian proposed,
+   * sr_second_custodian approves, proposer != approver).
+   */
+  approveCorrigendum(actor: ActorContext, corrigendumId: string): SrCorrigendum {
+    requireTenantScope(actor);
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "sr_second_custodian" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Approving an SR corrigendum requires the independent sr_second_custodian capability", { field: "actor" });
+    }
+    const corrigendum = this.corrigenda.find((item) => item.tenantId === actor.tenantId && (!actor.entityId || item.entityId === actor.entityId) && item.id === corrigendumId);
+    if (!corrigendum) {
+      throw new FoundationError("NOT_FOUND", "SR corrigendum not found");
+    }
+    if (corrigendum.status !== "PENDING") {
+      throw new FoundationError("CONFLICT", "Corrigendum is not pending approval");
+    }
+    if (corrigendum.proposedByUserId === actor.userId) {
+      throw new FoundationError("FORBIDDEN", "The second custodian approving a corrigendum must differ from the custodian who proposed it (SR 3-way SoD)", { details: { marker: "SR_CORRIGENDUM_SOD" } });
+    }
+    // Commit the correction to the append-only chain as a CORRIGENDUM annotation on the target.
+    const committed = this.ingest(actor, `corrigendum-commit-${corrigendum.id}`, {
+      sourceModule: "G12_MANUAL",
+      sourceReferenceId: `CORRIGENDUM:${corrigendum.targetEventId}:${corrigendum.id}`,
+      sourceEventVersion: 1,
+      employeeId: corrigendum.employeeId,
+      eventTypeCode: "CORRIGENDUM",
+      eventDate: corrigendum.proposedAt.slice(0, 10),
+      payload: { originalEventId: corrigendum.targetEventId, correctionNote: corrigendum.correctionNote, corrigendumId: corrigendum.id },
+    });
+    corrigendum.status = "APPROVED";
+    corrigendum.approvedByUserId = actor.userId;
+    corrigendum.approvedAt = new Date().toISOString();
+    corrigendum.corrigendumEventId = committed.event.id;
+    this.audit.recordMutation(actor, { action: "G12_CORRIGENDUM_APPROVED", subjectRef: `g12_sr_corrigenda:${corrigendum.id}`, metadata: { corrigendumEventId: committed.event.id, marker: "SR_CORRIGENDUM_SOD" } });
+    return { ...corrigendum };
+  }
+
+  /** Read accessor for proposed/approved corrigenda within the caller's tenant/entity scope. */
+  listCorrigenda(scope: TenantScope): SrCorrigendum[] {
+    requireTenantScope(scope);
+    return this.corrigenda.filter((item) => item.tenantId === scope.tenantId && (!scope.entityId || item.entityId === scope.entityId)).map((item) => ({ ...item }));
   }
 
   private requireEvent(scope: TenantScope, eventId: string): SrEvent {

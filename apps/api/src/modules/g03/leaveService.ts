@@ -336,20 +336,10 @@ export class LeaveService {
     const balance = this.getOrCreateBalance(actor, application.employeeId, application.leaveTypeId, yearOf(application.fromDate));
     this.assertBalanceVersion(balance, expectedVersion);
     const action = this.workflow.actOnInstance(actor, { instanceId: application.workflowInstanceId, action: "APPROVE" });
-    balance.reserved -= application.totalDays;
-    balance.debited += application.totalDays;
-    balance.availableBalance = balance.currentBalance - balance.reserved - balance.debited;
-    balance.version += 1;
-    this.repository.saveBalance(balance);
-    this.repository.appendLedgerEntry({
-      id: nextId("leave-ledger", this.repository.countLedgerEntries()),
-      employeeId: application.employeeId,
-      leaveApplicationId: application.id,
-      entryType: "DEBIT",
-      units: application.totalDays,
-      balanceAfter: balance.availableBalance,
-    });
-    application.status = "APPROVED";
+    // G04 outbox enqueue + relay happen BEFORE any persisted balance/ledger/status mutation, so a
+    // relay failure (e.g. g04.relay.write denied) cannot leave the leave half-approved with the
+    // balance already debited (a double-debit on retry). The workflow-instance advance is the only
+    // side-effect that precedes relay here, and re-approve is idempotent on an already-APPROVED instance.
     const payload = {
       applicationNo: application.applicationNo,
       leaveTypeId: application.leaveTypeId,
@@ -365,6 +355,20 @@ export class LeaveService {
       leaveSpellLineageId: application.leaveSpellLineageId,
     });
     const postedOutbox = this.leaveSrRelay.relayEvent(actor, readyOutbox.id);
+    balance.reserved -= application.totalDays;
+    balance.debited += application.totalDays;
+    balance.availableBalance = balance.currentBalance - balance.reserved - balance.debited;
+    balance.version += 1;
+    this.repository.saveBalance(balance);
+    this.repository.appendLedgerEntry({
+      id: nextId("leave-ledger", this.repository.countLedgerEntries()),
+      employeeId: application.employeeId,
+      leaveApplicationId: application.id,
+      entryType: "DEBIT",
+      units: application.totalDays,
+      balanceAfter: balance.availableBalance,
+    });
+    application.status = "APPROVED";
     application.srEventId = postedOutbox.srEventId;
     application.g04OutboxEventId = postedOutbox.id;
     this.repository.updateApplication(application);

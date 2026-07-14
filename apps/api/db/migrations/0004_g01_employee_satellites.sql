@@ -10,32 +10,32 @@
 
 CREATE EXTENSION IF NOT EXISTS btree_gist;   -- ex_attr_history_nooverlap (uuid/varchar =) with daterange
 
-CREATE TYPE g01_contact_type          AS ENUM ('MOBILE','ALT_MOBILE','PERSONAL_EMAIL','OFFICIAL_EMAIL','LANDLINE');
-CREATE TYPE g01_field_visibility      AS ENUM ('PUBLIC','INTERNAL','RESTRICTED','PRIVATE');
-CREATE TYPE g01_address_type          AS ENUM ('PERMANENT','PRESENT','MAILING','OVERSEAS');
-CREATE TYPE g01_attribute_change_reason AS ENUM ('HIRE','MARRIAGE','GAZETTE','COURT_ORDER','CORRECTION','GENDER_AFFIRMATION','MIGRATION');
+
+
+
+
 
 -- =====================================================================================
 -- SECTION 2 — E2 employee_contacts
 -- =====================================================================================
 
 CREATE TABLE employee_contacts (
-    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id     uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id     uuid REFERENCES entities(id)          ON DELETE RESTRICT,
-    employee_id   uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    contact_type  g01_contact_type NOT NULL,
+    id            text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id     text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id     text REFERENCES entities(id)          ON DELETE RESTRICT,
+    employee_id   text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    contact_type  text NOT NULL,
     contact_value varchar(120) NOT NULL,
     country_code  varchar(5) DEFAULT '+91',
     is_primary    boolean NOT NULL DEFAULT false,
     is_verified   boolean NOT NULL DEFAULT false,
     verified_at   timestamptz,
-    visibility    g01_field_visibility NOT NULL DEFAULT 'INTERNAL',
+    visibility    text NOT NULL DEFAULT 'INTERNAL',
     row_version   integer NOT NULL DEFAULT 1,
     created_at    timestamptz NOT NULL DEFAULT now(),
     updated_at    timestamptz NOT NULL DEFAULT now(),
-    created_by    uuid,
-    updated_by    uuid,
+    created_by    text,
+    updated_by    text,
     is_deleted    boolean NOT NULL DEFAULT false
 );
 CREATE INDEX ix_employee_contacts_tenant   ON employee_contacts(tenant_id);
@@ -55,11 +55,11 @@ CREATE UNIQUE INDEX uq_employee_contacts_official_email
 -- =====================================================================================
 
 CREATE TABLE employee_addresses (
-    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id        uuid NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
-    entity_id        uuid REFERENCES entities(id)           ON DELETE RESTRICT,
-    employee_id      uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    address_type     g01_address_type NOT NULL,
+    id               text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id        text NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
+    entity_id        text REFERENCES entities(id)           ON DELETE RESTRICT,
+    employee_id      text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    address_type     text NOT NULL,
     line1            varchar(160) NOT NULL,
     line2            varchar(160),
     landmark         varchar(120),
@@ -75,8 +75,8 @@ CREATE TABLE employee_addresses (
     row_version      integer NOT NULL DEFAULT 1,
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
-    created_by       uuid,
-    updated_by       uuid,
+    created_by       text,
+    updated_by       text,
     is_deleted       boolean NOT NULL DEFAULT false,
     CONSTRAINT ck_employee_addresses_dates CHECK (valid_to IS NULL OR valid_to >= valid_from)
 );
@@ -90,23 +90,23 @@ CREATE INDEX ix_employee_addresses_type     ON employee_addresses(address_type);
 -- =====================================================================================
 
 CREATE TABLE employee_attribute_history (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id       uuid NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
-    entity_id       uuid REFERENCES entities(id)           ON DELETE RESTRICT,
-    employee_id     uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       text NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
+    entity_id       text REFERENCES entities(id)           ON DELETE RESTRICT,
+    employee_id     text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
     attribute_path  varchar(60) NOT NULL,
     value_text      text,
     value_date      date,
     effective_from  date NOT NULL,
     effective_to    date,
-    change_reason   g01_attribute_change_reason NOT NULL,
+    change_reason   text NOT NULL,
     source          varchar(20) NOT NULL,
     gazette_ref     varchar(120),
-    governed_change_id uuid,                                 -- FK to E32 wired when E32 is migrated
-    proof_document_id  uuid REFERENCES documents(id)        ON DELETE SET NULL,
-    recorded_by     uuid NOT NULL,
+    governed_change_id text,                                 -- FK to E32 wired when E32 is migrated
+    proof_document_id  text REFERENCES documents(id)        ON DELETE SET NULL,
+    recorded_by     text NOT NULL,
     created_at      timestamptz NOT NULL DEFAULT now(),      -- append-only
-    created_by      uuid,
+    created_by      text,
     CONSTRAINT ck_attr_history_dates CHECK (effective_to IS NULL OR effective_to >= effective_from),
     -- r15/r7: no overlapping windows per (employee, attribute)
     CONSTRAINT ex_attr_history_nooverlap EXCLUDE USING gist (
@@ -127,9 +127,9 @@ CREATE INDEX ix_attr_history_govchg   ON employee_attribute_history(governed_cha
 
 CREATE TABLE outbox_events (
     event_id        bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id       uuid REFERENCES entities(id)         ON DELETE RESTRICT,
-    aggregate_id    uuid NOT NULL,                        -- employee_id / position_id
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       text REFERENCES entities(id)         ON DELETE RESTRICT,
+    aggregate_id    text NOT NULL,                        -- employee_id / position_id
     event_type      varchar(40) NOT NULL,
     payload         jsonb NOT NULL,                       -- minimal, no raw PII
     is_tombstone    boolean NOT NULL DEFAULT false,
@@ -139,7 +139,7 @@ CREATE TABLE outbox_events (
     dead_lettered   boolean NOT NULL DEFAULT false,
     retention_until timestamptz NOT NULL,
     created_at      timestamptz NOT NULL DEFAULT now(),   -- append-only
-    created_by      uuid
+    created_by      text
 );
 CREATE INDEX ix_outbox_events_tenant     ON outbox_events(tenant_id);
 CREATE INDEX ix_outbox_events_aggregate  ON outbox_events(aggregate_id);

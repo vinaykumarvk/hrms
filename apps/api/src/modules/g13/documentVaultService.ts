@@ -765,6 +765,21 @@ export class DocumentVaultService {
         details: { messageId: "ERR-G13-SOD_VIOLATION" },
       });
     }
+    // Service-level idempotency (ck_clearance_unique_active): re-granting the same ACTIVE clearance
+    // to the same principal+level returns the existing row instead of creating a duplicate. Previously
+    // only the seed wrapper pre-checked this; any other direct caller could create duplicate ACTIVE rows.
+    const existingActive = this.security
+      .listClearances(scope.tenantId)
+      .find(
+        (clearance) =>
+          clearance.principalType === input.principalType &&
+          clearance.principalRef === input.principalRef &&
+          clearance.clearanceLevel === input.clearanceLevel &&
+          clearance.status === "ACTIVE"
+      );
+    if (existingActive) {
+      return existingActive;
+    }
     const clearance = this.security.saveClearance({
       tenantId: scope.tenantId,
       entityId: scope.entityId,

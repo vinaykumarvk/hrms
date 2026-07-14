@@ -37,6 +37,10 @@ export interface EmployeeAssignment {
   positionId: string;
   orgUnitId: string;
   reportingManagerId?: string;
+  /** Secondary/matrix reporting line (BRD RBAC §2.3 dotted_line_manager) — distinct from the
+   *  primary reportingManagerId. A dotted-line manager has read-only visibility of the reportee,
+   *  never approval authority. */
+  dottedLineManagerId?: string;
   effectiveFrom: string;
   effectiveTo?: string;
 }
@@ -184,6 +188,88 @@ export class AuthorityResolutionService {
       default:
         throw new FoundationError("VALIDATION_FAILED", "Unsupported resolver mechanism");
     }
+  }
+
+  /**
+   * BRD RBAC §2.3 reporting SUBTREE: every employee whose reporting chain (primary
+   * reportingManagerId OR dottedLineManagerId) reaches the given manager, transitively. Backs
+   * manager/skip-level team visibility. Returns distinct reportee employee ids (excluding the
+   * manager themselves); order is not guaranteed.
+   */
+  resolveReportingSubtree(scope: TenantScope, managerEmployeeId: string): string[] {
+    requireTenantScope(scope);
+    const scoped = this.assignments.filter((assignment) => inScope(assignment, scope));
+    const reportees = new Set<string>();
+    const seen = new Set<string>([managerEmployeeId]);
+    let frontier = [managerEmployeeId];
+    while (frontier.length > 0) {
+      const next: string[] = [];
+      for (const managerId of frontier) {
+        for (const assignment of scoped) {
+          const reportsToManager =
+            (assignment.reportingManagerId !== undefined && assignment.reportingManagerId === managerId) ||
+            (assignment.dottedLineManagerId !== undefined && assignment.dottedLineManagerId === managerId);
+          if (reportsToManager && assignment.employeeId !== managerEmployeeId && !seen.has(assignment.employeeId)) {
+            seen.add(assignment.employeeId);
+            reportees.add(assignment.employeeId);
+            next.push(assignment.employeeId);
+          }
+        }
+      }
+      frontier = next;
+    }
+    return [...reportees];
+  }
+
+  /**
+   * BRD RBAC §2.3 dotted_line_manager: resolves the secondary/matrix manager for an employee, if
+   * one is assigned. Dotted-line managers have read-only visibility of the reportee — never
+   * approval authority (the primary REPORTING_CHAIN resolver remains the authority path).
+   */
+  resolveDottedLineManager(scope: TenantScope, rule: ResolverRule): AuthorityResolution {
+    requireTenantScope(scope);
+    const subjectEmployeeId = requireValue(rule.subjectEmployeeId, "subjectEmployeeId");
+    const assignment = this.assignments.find((item) => inScope(item, scope) && item.employeeId === subjectEmployeeId);
+    if (!assignment) {
+      throw new FoundationError("NOT_FOUND", "Employee assignment not found");
+    }
+    if (!assignment.dottedLineManagerId) {
+      throw new FoundationError("PRECONDITION_FAILED", "No dotted-line manager is assigned for this employee");
+    }
+    const assignee = { type: "EMPLOYEE" as const, employeeId: assignment.dottedLineManagerId };
+    return {
+      resolverType: "REPORTING_CHAIN",
+      selectedAssignees: [assignee],
+      candidates: [assignee],
+      fallbackApplied: false,
+      evidence: { source: "employee_job_assignments.dotted_line_manager_id", assignmentId: assignment.id },
+    };
+  }
+
+  /**
+   * BRD RBAC §2.3 skip-level managers: the chain of managers two-or-more levels above the employee
+   * (excludes the direct reporting manager). Walks the primary reportingManagerId chain upward.
+   */
+  resolveSkipLevelManagers(scope: TenantScope, employeeId: string): string[] {
+    requireTenantScope(scope);
+    const chain: string[] = [];
+    const seen = new Set<string>();
+    let current: string | undefined = employeeId;
+    while (current !== undefined) {
+      const assignment = this.assignments.find((item) => inScope(item, scope) && item.employeeId === current);
+      if (!assignment) {
+        break;
+      }
+      const manager = assignment.reportingManagerId;
+      if (!manager || seen.has(manager)) {
+        break;
+      }
+      seen.add(manager);
+      chain.push(manager);
+      current = manager;
+    }
+    // Skip index 0 (the direct reporting manager); the rest are skip-level.
+    return chain.slice(1);
   }
 
   private resolveReportingChain(scope: TenantScope, rule: ResolverRule): AuthorityResolution {

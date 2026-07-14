@@ -443,17 +443,17 @@ export function computeAccessAuditRowHash(
 
 const INSERT_SCAN_RESULT = `
   INSERT INTO scan_results (tenant_id, entity_id, version_id, engine, malware_verdict, threat_name, integrity_verified)
-  VALUES ($1, $2, $3, $4, $5::scan_status, $6, $7)
+  VALUES ($1, $2, $3, $4, $5, $6, $7)
   RETURNING id, scanned_at`;
 
 const UPDATE_DOCUMENT_SCAN_STATE = `
-  UPDATE documents SET scan_status = $2::scan_status, status = $3::document_status, updated_at = now()
+  UPDATE documents SET scan_status = $2, status = $3, updated_at = now()
   WHERE id = $1`;
 
 const INSERT_CLEARANCE = `
   INSERT INTO security_clearances
     (tenant_id, entity_id, principal_type, principal_ref, clearance_level, status, justification, granted_by, approved_by, valid_from, valid_until)
-  VALUES ($1, $2, $3::g13_clearance_principal_type, $4, $5::classification_level, $6::g13_clearance_status, $7, $8, $9, $10, $11)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
   RETURNING id`;
 
 const SELECT_LATEST_AUDIT_ROW = `
@@ -462,13 +462,13 @@ const SELECT_LATEST_AUDIT_ROW = `
 const INSERT_ACCESS_AUDIT = `
   INSERT INTO document_audit
     (tenant_id, entity_id, document_id, version_no, action, actor_user_id, correlation_id, result, denial_reason, prev_hash, row_hash, occurred_at)
-  VALUES ($1, $2, $3, $4, $5::g13_doc_audit_action, $6, $7, $8::g13_audit_result, $9, $10, $11, $12)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
   RETURNING id, seq_no`;
 
 const INSERT_RETENTION_CLASS = `
   INSERT INTO document_retention_policies
     (tenant_id, policy_code, name, retention_period_months, is_permanent, disposition_action)
-  VALUES ($1, $2, $3, $4, $5, $6::g13_disposition_action)
+  VALUES ($1, $2, $3, $4, $5, $6)
   ON CONFLICT (tenant_id, policy_code)
   DO UPDATE SET name = EXCLUDED.name, retention_period_months = EXCLUDED.retention_period_months,
                 is_permanent = EXCLUDED.is_permanent, disposition_action = EXCLUDED.disposition_action, updated_at = now()`;
@@ -476,12 +476,12 @@ const INSERT_RETENTION_CLASS = `
 const INSERT_DISPOSITION = `
   INSERT INTO disposition_records
     (tenant_id, entity_id, document_id, retention_class_code, action, proposed_by, approved_by, status, executed_at, evidence_hash)
-  VALUES ($1, $2, $3, $4, $5::g13_disposition_action, $6, $7, $8::g13_disposition_status, $9, $10)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
   RETURNING id`;
 
 const UPDATE_DISPOSITION = `
   UPDATE disposition_records
-  SET approved_by = $2, status = $3::g13_disposition_status, executed_at = $4, evidence_hash = $5, updated_at = now()
+  SET approved_by = $2, status = $3, executed_at = $4, evidence_hash = $5, updated_at = now()
   WHERE id = $1`;
 
 const INSERT_STORAGE_OBJECT = `
@@ -503,17 +503,17 @@ const UPDATE_STORAGE_OBJECT_SHRED = `
 const INSERT_DSR = `
   INSERT INTO data_subject_requests
     (tenant_id, entity_id, dsr_no, data_subject_employee_id, request_type, consent_ref_id, received_at, status)
-  VALUES ($1, $2, $3, $4, $5::g13_dsr_type, $6, $7, $8::g13_dsr_status)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
   RETURNING id`;
 
 const UPDATE_DSR_RESOLUTION = `
   UPDATE data_subject_requests
-  SET status = $2::g13_dsr_status, legal_basis_exemption = $3, affected_document_count = $4,
-      resolution_note = $5, erasure_method = $6::g13_erasure_method, adjudicated_by = $7, updated_at = now()
+  SET status = $2, legal_basis_exemption = $3, affected_document_count = $4,
+      resolution_note = $5, erasure_method = $6, adjudicated_by = $7, updated_at = now()
   WHERE id = $1`;
 
 const UPDATE_DOCUMENT_ERASURE_STATE = `
-  UPDATE documents SET dpdp_erasure_state = $2::erasure_method, updated_at = now()
+  UPDATE documents SET dpdp_erasure_state = $2, updated_at = now()
   WHERE id = $1`;
 
 /** FR-018 AC5 / P05: the SOLE UPDATE ever issued against document_audit — the DPDP redaction marker. */

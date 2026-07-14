@@ -209,6 +209,11 @@ export class LoanPerquisiteGlService {
     input: { employeeId: string; loanType: string; principalPaise: number; instalmentPaise: number; isConcessional?: boolean }
   ): LoanAdvance {
     this.authorization.check(actor, "g10.loan.sanction", actor);
+    // DDO_SANCTION capability: loan/advance sanction is a Drawing & Disbursement Officer
+    // (HOD / sanctioning authority) action per auth-matrix.yaml g10.loan.sanction allowed_roles.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "sanctioning_authority" || role === "hod" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Sanctioning a loan/advance requires the DDO sanctioning authority (DDO_SANCTION) capability", { field: "actor" });
+    }
     if (!this.employeeMaster.getById(actor, input.employeeId)) {
       throw new FoundationError("NOT_FOUND", "Employee not found");
     }

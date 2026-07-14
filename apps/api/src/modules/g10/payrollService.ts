@@ -276,6 +276,11 @@ export class PayrollService {
 
   approveRun(actor: ActorContext, runId: string): PayrollRun {
     this.authorization.check(actor, "g10.payroll.approve", actor);
+    // PAYROLL_APPROVE capability: approving a run is a payroll_approver (checker) action,
+    // distinct from the run maker (SoD) per auth-matrix.yaml g10.run.approve.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "payroll_approver" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Approving a payroll run requires the payroll_approver capability (PAYROLL_APPROVE)", { field: "actor" });
+    }
     const run = this.requireRun(actor, runId);
     this.requireStatus(run, "RECONCILED");
     if (run.makerUserId === actor.userId) {
@@ -298,6 +303,12 @@ export class PayrollService {
 
   disburseRun(actor: ActorContext, runId: string): PayrollRun {
     this.authorization.check(actor, "g10.payroll.disburse", actor);
+    // PAYROLL_DISBURSE capability: disbursing/transmitting the bank file is a payroll_disburser
+    // action, distinct from the run maker and approver (3-way SoD) per auth-matrix.yaml
+    // g10.bankfile.sign_transmit.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "payroll_disburser" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Disbursing a payroll run requires the payroll_disburser capability (PAYROLL_DISBURSE)", { field: "actor" });
+    }
     const run = this.requireRun(actor, runId);
     this.requireStatus(run, "LOCKED");
     run.status = "DISBURSED";

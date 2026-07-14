@@ -14,15 +14,15 @@
 
 -- SECTION 1 — ENUM TYPES (frozen; g04_ prefix)
 -- =====================================================================================
-CREATE TYPE g04_mapping_event_type       AS ENUM ('APPROVED','CANCELLED','AMENDED');
-CREATE TYPE g04_mapping_disposition      AS ENUM ('POST_SR','EXCLUDED_NON_SR');
-CREATE TYPE g04_qualifying_service_rule  AS ENUM ('QUALIFYING','NON_QUALIFYING','PARTIAL','RULE_REF');
-CREATE TYPE g04_straddle_handling        AS ENUM ('SPLIT_BY_EFFECTIVE','PIN_TO_SPELL_START');
-CREATE TYPE g04_mapping_status           AS ENUM ('DRAFT','PUBLISHED','RETIRED');
-CREATE TYPE g04_lease_status             AS ENUM ('ACTIVE','RELEASED','EXPIRED');
-CREATE TYPE g04_pass_fail                AS ENUM ('PASS','FAIL');
-CREATE TYPE g04_record_confidence         AS ENUM ('HIGH','MEDIUM','LOW');
-CREATE TYPE g04_record_adjudication_state AS ENUM ('PROVISIONAL','ADJUDICATED_CONFIRMED','ADJUDICATED_REJECTED');
+
+
+
+
+
+
+
+
+
 
 -- SECTION 2 — E9 sr_event_mapping (FR-G04-02)
 -- =====================================================================================
@@ -30,27 +30,27 @@ CREATE TYPE g04_record_adjudication_state AS ENUM ('PROVISIONAL','ADJUDICATED_CO
 -- one G12-published event_type_code OR EXCLUDED_NON_SR. Mutable CONFIG entity while DRAFT;
 -- immutable once PUBLISHED (changes create a new version; in-flight pinning).
 CREATE TABLE sr_event_mapping (
-    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),    -- mapping_id
-    tenant_id              uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id              uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id                     text PRIMARY KEY DEFAULT gen_random_uuid()::text,    -- mapping_id
+    tenant_id              text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id              text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     mapping_version        integer NOT NULL,                       -- monotonic per ruleset (in-flight pinning)
     leave_type_code        varchar(32) NOT NULL,                   -- match key
-    event_type             g04_mapping_event_type NOT NULL,
+    event_type             text NOT NULL,
     spell_predicate        jsonb,                                  -- e.g. days_count >= 120 => LONG_LEAVE
-    disposition            g04_mapping_disposition NOT NULL,
+    disposition            text NOT NULL,
     sr_entry_type          varchar(48),                            -- G12-published code; NULL when EXCLUDED
-    qualifying_service_rule g04_qualifying_service_rule,
+    qualifying_service_rule text,
     qualifying_rule_ref    varchar(64),                            -- statutory rule for PARTIAL
     statutory_rule_ref     varchar(120),                           -- citation; mandatory for POST_SR (VAL-G04-CITATION)
-    straddle_handling      g04_straddle_handling NOT NULL DEFAULT 'SPLIT_BY_EFFECTIVE',
+    straddle_handling      text NOT NULL DEFAULT 'SPLIT_BY_EFFECTIVE',
     annotation_template    text,
     effective_from         date NOT NULL,                          -- VAL-EFFECTIVE
     effective_to           date,                                   -- NULL = open
-    status                 g04_mapping_status NOT NULL DEFAULT 'DRAFT',
+    status                 text NOT NULL DEFAULT 'DRAFT',
     created_at             timestamptz NOT NULL DEFAULT now(),
     updated_at             timestamptz NOT NULL DEFAULT now(),
-    created_by             uuid,
-    updated_by             uuid,
+    created_by             text,
+    updated_by             text,
     is_deleted             boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_sr_mapping_version UNIQUE (tenant_id, entity_id, leave_type_code, event_type, mapping_version),
     -- VAL-G04-CITATION: a POST_SR mapping must carry a target code + a statutory citation.
@@ -89,19 +89,19 @@ CREATE INDEX ix_outbox_reaper ON leave_event_outbox(lease_expires_at) WHERE stat
 -- Per-partition (employee/lineage) in-order processing lease. The reaper reclaims expired
 -- leases. State-transitioning work table; append-only history (no is_deleted).
 CREATE TABLE relay_partition_lease (
-    id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),   -- lease_id
-    tenant_id               uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id               uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id                      text PRIMARY KEY DEFAULT gen_random_uuid()::text,   -- lease_id
+    tenant_id               text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id               text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     partition_key           varchar(64) NOT NULL,
     owner_worker_id         varchar(64) NOT NULL,                  -- X.1 job instance holding the partition
     acquired_at             timestamptz NOT NULL DEFAULT now(),
     lease_expires_at        timestamptz NOT NULL,                  -- visibility timeout; reaper reclaims
     last_processed_sequence integer,                               -- highest in-order event_sequence processed
-    status                  g04_lease_status NOT NULL DEFAULT 'ACTIVE',
+    status                  text NOT NULL DEFAULT 'ACTIVE',
     created_at              timestamptz NOT NULL DEFAULT now(),
     updated_at              timestamptz NOT NULL DEFAULT now(),
-    created_by              uuid,
-    updated_by              uuid
+    created_by              text,
+    updated_by              text
 );
 CREATE INDEX ix_relay_lease_tenant  ON relay_partition_lease(tenant_id);
 CREATE INDEX ix_relay_lease_entity  ON relay_partition_lease(entity_id);
@@ -119,26 +119,26 @@ COMMENT ON TABLE relay_partition_lease IS
 -- A staged legacy leave record: PROVISIONAL until SR-Custodian adjudicated; excluded from
 -- final pension until confirmed. The pre-pension PASS gate requires zero PROVISIONAL rows.
 CREATE TABLE historical_leave_record (
-    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),    -- record_id
-    tenant_id              uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id              uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    batch_id               uuid,                                   -- LOGICAL ref to historical_leave_batch (FR-11)
-    employee_id            uuid REFERENCES employees(id) ON DELETE RESTRICT,
-    leave_spell_lineage_id uuid,
+    id                     text PRIMARY KEY DEFAULT gen_random_uuid()::text,    -- record_id
+    tenant_id              text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id              text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    batch_id               text,                                   -- LOGICAL ref to historical_leave_batch (FR-11)
+    employee_id            text REFERENCES employees(id) ON DELETE RESTRICT,
+    leave_spell_lineage_id text,
     gov_source_id          varchar(64),                            -- P06 traceability
     leave_type_code        varchar(32) NOT NULL,
     spell_start            date,
     spell_end              date,
     days_count             numeric(6,1) NOT NULL,
-    qualifying_flag        g04_qualifying_service_rule,            -- derived via mapping
+    qualifying_flag        text,            -- derived via mapping
     statutory_rule_ref     varchar(120),
-    confidence             g04_record_confidence,
-    adjudication_state     g04_record_adjudication_state NOT NULL DEFAULT 'PROVISIONAL',
-    posted_sr_event_id     uuid,                                   -- LOGICAL ref (after posting)
+    confidence             text,
+    adjudication_state     text NOT NULL DEFAULT 'PROVISIONAL',
+    posted_sr_event_id     text,                                   -- LOGICAL ref (after posting)
     created_at             timestamptz NOT NULL DEFAULT now(),
     updated_at             timestamptz NOT NULL DEFAULT now(),
-    created_by             uuid,
-    updated_by             uuid,
+    created_by             text,
+    updated_by             text,
     CONSTRAINT ck_hist_record_window CHECK (spell_start IS NULL OR spell_end IS NULL OR spell_end >= spell_start)
 );
 CREATE INDEX ix_hist_rec_tenant   ON historical_leave_record(tenant_id);
@@ -155,24 +155,24 @@ COMMENT ON TABLE historical_leave_record IS
 -- ledger (BRD G04 integrity rule 4): consumed_by_g11_at is the only mutable column;
 -- rows are never updated otherwise, never deleted. No is_deleted column by design.
 CREATE TABLE prepension_certificate (
-    id                          uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- certificate_id
-    tenant_id                   uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id                   uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    employee_id                 uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,  -- retiring employee
-    run_id                      uuid NOT NULL REFERENCES reconciliation_run(id) ON DELETE RESTRICT,  -- the PRE_PENSION run
+    id                          text PRIMARY KEY DEFAULT gen_random_uuid()::text,  -- certificate_id
+    tenant_id                   text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                   text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    employee_id                 text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,  -- retiring employee
+    run_id                      text NOT NULL REFERENCES reconciliation_run(id) ON DELETE RESTRICT,  -- the PRE_PENSION run
     open_high_critical_findings integer NOT NULL,                  -- must be 0 for PASS
     total_non_qualifying_days   numeric(8,1) NOT NULL,             -- net from SR leave entries
     lineage_complete            boolean NOT NULL,                  -- all lineages resolvable
     provisional_entries_remaining integer NOT NULL,                -- must be 0 for PASS
-    result                      g04_pass_fail NOT NULL,
+    result                      text NOT NULL,
     checksum                    varchar(64) NOT NULL,              -- SHA-256 over evidence bundle
-    signed_by                   uuid NOT NULL,                     -- LOGICAL ref to users(id); SR-Custodian signer
+    signed_by                   text NOT NULL,                     -- LOGICAL ref to users(id); SR-Custodian signer
     signed_at                   timestamptz NOT NULL DEFAULT now(),
     consumed_by_g11_at          timestamptz,                       -- when G11 gated on it
     created_at                  timestamptz NOT NULL DEFAULT now(),
     updated_at                  timestamptz NOT NULL DEFAULT now(),
-    created_by                  uuid,
-    updated_by                  uuid,
+    created_by                  text,
+    updated_by                  text,
     -- FR-18 AC2 fail-closed at the storage layer too: a PASS row cannot carry blockers.
     CONSTRAINT ck_prepension_pass_gate CHECK (
         result <> 'PASS'

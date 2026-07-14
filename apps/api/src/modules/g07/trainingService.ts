@@ -191,6 +191,16 @@ export class TrainingService {
       throw new FoundationError("NOT_FOUND", "Employee not found");
     }
     this.assertCanNominate(actor, input.employeeId);
+    const alreadyNominated = this.nominations.some(
+      (nomination) =>
+        this.inScope(nomination, actor) &&
+        nomination.sessionId === input.sessionId &&
+        nomination.employeeId === input.employeeId &&
+        nomination.status !== "REJECTED"
+    );
+    if (alreadyNominated) {
+      throw new FoundationError("CONFLICT", "Employee already has an active nomination for this training session", { field: "sessionId" });
+    }
     const started = this.workflow.start(actor, {
       workflowCode: "WF-G07-NOMINATION",
       subjectRef: `g07_training_nominations:${input.employeeId}:${session.id}`,

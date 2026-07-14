@@ -51,6 +51,8 @@ interface ManagerHierarchySpec {
   assignmentId: string;
   /** Direct reporting manager key, or "ph03-manager" to anchor the top of the chain. */
   reportsToKey: ManagerHierarchyKey | "ph03-manager";
+  /** Optional secondary/matrix (dotted-line) manager key. */
+  dottedLineManagerKey?: ManagerHierarchyKey | "ph03-manager";
 }
 
 const SPECS: ManagerHierarchySpec[] = [
@@ -67,6 +69,9 @@ const SPECS: ManagerHierarchySpec[] = [
     positionId: managerHierarchySeedIds.positionLeaf,
     assignmentId: managerHierarchySeedIds.assignmentLeaf,
     reportsToKey: "l1",
+    // Matrix/dotted-line reporting to L3 (two levels up) — exercises dotted-line resolution + the
+    // subtree reaching a reportee via its secondary manager.
+    dottedLineManagerKey: "l3",
   },
   {
     key: "l1",
@@ -203,6 +208,11 @@ export function managerHierarchyAuthorityFacts(ids: ManagerHierarchyIdMap): {
     positionId: spec.positionId,
     orgUnitId: managerHierarchySeedIds.orgUnit,
     reportingManagerId: spec.reportsToKey === "ph03-manager" ? ph03Ids.manager : ids[spec.reportsToKey],
+    dottedLineManagerId: spec.dottedLineManagerKey
+      ? spec.dottedLineManagerKey === "ph03-manager"
+        ? ph03Ids.manager
+        : ids[spec.dottedLineManagerKey]
+      : undefined,
     effectiveFrom: spec.dateOfJoining,
   }));
   return { orgUnits, positions, assignments };

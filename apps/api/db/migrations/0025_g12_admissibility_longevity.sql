@@ -22,25 +22,25 @@
 --     is needed inside this subset.
 
 -- SECTION 1 — ENUM TYPES (g12_ prefix; UPPER_SNAKE values, CONVENTIONS §4) -------------
-CREATE TYPE g12_ltv_subject         AS ENUM ('EXTRACT','ATTESTATION','ANCHOR');
-CREATE TYPE g12_ltv_renewal_kind    AS ENUM ('LTV_INITIAL','ARCHIVE_TIMESTAMP','ALGORITHM_MIGRATION','RE_ANCHOR');
-CREATE TYPE g12_ltv_trigger         AS ENUM ('SCHEDULE','CERT_EXPIRY','ALGO_DEPRECATION','MANUAL');
-CREATE TYPE g12_subscription_mode   AS ENUM ('PULL_FEED','WEBHOOK','MESSAGE_BUS');
-CREATE TYPE g12_subscription_status AS ENUM ('ACTIVE','PAUSED','RETIRED');
+
+
+
+
+
 
 -- SECTION 2 — E24 sr_authenticity_certificates (BRD G12 FR-18) — APPEND-ONLY -----------
 -- Machine-generated electronic-record authenticity certificate per certified extract,
 -- citing content digest, covering anchor, signer, generated chain of custody, and the
 -- statutory system description. INSERT-only: no updated_at, no is_deleted.
 CREATE TABLE sr_authenticity_certificates (
-    id                         uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- certificate_id
-    tenant_id                  uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id                  uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    extract_id                 uuid NOT NULL REFERENCES sr_certified_extracts(id) ON DELETE RESTRICT,
+    id                         text PRIMARY KEY DEFAULT gen_random_uuid()::text,  -- certificate_id
+    tenant_id                  text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                  text REFERENCES entities(id) ON DELETE RESTRICT,
+    extract_id                 text NOT NULL REFERENCES sr_certified_extracts(id) ON DELETE RESTRICT,
     certificate_no             varchar(48) NOT NULL,                        -- human-readable (unique)
     statute_reference          varchar(80) NOT NULL,                        -- IT Act 2000 s.65B / BSA 2023 s.63
     content_digest             char(64) NOT NULL,                           -- matches extract content_digest (AC4)
-    anchor_id                  uuid NOT NULL REFERENCES sr_anchors(id) ON DELETE RESTRICT, -- tamper-evident state at issue (AC5)
+    anchor_id                  text NOT NULL REFERENCES sr_anchors(id) ON DELETE RESTRICT, -- tamper-evident state at issue (AC5)
     anchor_lag_noted           boolean NOT NULL DEFAULT false,              -- most recent covering anchor cited with a noted lag
     signer_identity            varchar(160) NOT NULL,                       -- custodian + role from the EXTRACT_SIGN attestation
     signing_certificate_serial varchar(80) NOT NULL,
@@ -48,10 +48,10 @@ CREATE TABLE sr_authenticity_certificates (
     tsa_authority              varchar(120) NOT NULL,
     chain_of_custody           jsonb NOT NULL,                              -- GENERATED provenance/attestation/supersession lineage (BR-18.2)
     system_description         text NOT NULL,                               -- statutory statement of the producing system
-    document_id                uuid,                                        -- signed certificate PDF (G13; writer pending)
+    document_id                text,                                        -- signed certificate PDF (G13; writer pending)
     issued_at                  timestamptz NOT NULL DEFAULT now(),
     created_at                 timestamptz NOT NULL DEFAULT now(),
-    created_by                 uuid,
+    created_by                 text,
     CONSTRAINT uq_sr_cert_no      UNIQUE (tenant_id, certificate_no),
     CONSTRAINT ck_sr_cert_dig_len CHECK (length(content_digest) = 64)
 );
@@ -63,20 +63,20 @@ COMMENT ON TABLE sr_authenticity_certificates IS 'G12 E24: append-only §65B/BSA
 
 -- SECTION 3 — E16 sr_subscriptions (BRD G12 FR-13, single pull-feed at launch) ----------
 CREATE TABLE sr_subscriptions (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),          -- subscription_id
-    tenant_id          uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,    -- null = tenant-wide
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,          -- subscription_id
+    tenant_id          text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,    -- null = tenant-wide
     subscriber_module  varchar(16) NOT NULL,                               -- G11/G06/G14 etc.
     event_categories   varchar(32)[] NOT NULL,                             -- subscribed categories; ALL = every event
-    delivery_mode      g12_subscription_mode NOT NULL DEFAULT 'PULL_FEED', -- only PULL_FEED enabled (BR-13.4)
+    delivery_mode      text NOT NULL DEFAULT 'PULL_FEED', -- only PULL_FEED enabled (BR-13.4)
     endpoint_url       varchar(300),                                       -- for WEBHOOK (deferred)
     secret_ref         varchar(120),                                       -- env-ref to HMAC secret (never the secret, BR-13.1)
     last_delivered_seq bigint NOT NULL DEFAULT 0,                          -- per-subscriber durable cursor (since_seq resume)
-    status             g12_subscription_status NOT NULL DEFAULT 'PAUSED',  -- ACTIVE only after custodian activation (AC1)
+    status             text NOT NULL DEFAULT 'PAUSED',  -- ACTIVE only after custodian activation (AC1)
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_sr_sub_module UNIQUE (tenant_id, subscriber_module)
 );
@@ -90,22 +90,22 @@ COMMENT ON TABLE sr_subscriptions IS 'G12 E16: pull-feed subscriptions + per-sub
 -- renewal ADDS evidence (new row + optionally a new sr_anchors row over EXISTING heads);
 -- historical entry_hash values are never recomputed or overwritten (BR-19.1/BR-19.3).
 CREATE TABLE sr_ltv_renewals (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),         -- renewal_id
-    tenant_id           uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id           uuid REFERENCES entities(id) ON DELETE RESTRICT,   -- null = tenant-wide (anchor renewals)
-    subject_type        g12_ltv_subject NOT NULL,                          -- EXTRACT/ATTESTATION/ANCHOR
-    subject_id          uuid NOT NULL,                                     -- polymorphic ref to the renewed artefact
-    renewal_kind        g12_ltv_renewal_kind NOT NULL,                     -- RE_ANCHOR / ALGORITHM_MIGRATION / ...
+    id                  text PRIMARY KEY DEFAULT gen_random_uuid()::text,         -- renewal_id
+    tenant_id           text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id           text REFERENCES entities(id) ON DELETE RESTRICT,   -- null = tenant-wide (anchor renewals)
+    subject_type        text NOT NULL,                          -- EXTRACT/ATTESTATION/ANCHOR
+    subject_id          text NOT NULL,                                     -- polymorphic ref to the renewed artefact
+    renewal_kind        text NOT NULL,                     -- RE_ANCHOR / ALGORITHM_MIGRATION / ...
     prior_algorithm     varchar(16),
     new_algorithm       varchar(16),
     evidence_record_ref varchar(160) NOT NULL,                             -- RFC 4998 ERS / archive timestamp id
     tsa_timestamp_token text NOT NULL,                                     -- fresh RFC 3161 token at renewal (TSA seam)
     tsa_authority       varchar(120) NOT NULL,
-    new_anchor_id       uuid REFERENCES sr_anchors(id) ON DELETE RESTRICT, -- anchor re-issued on RE_ANCHOR/migration
-    triggered_by        g12_ltv_trigger NOT NULL,
+    new_anchor_id       text REFERENCES sr_anchors(id) ON DELETE RESTRICT, -- anchor re-issued on RE_ANCHOR/migration
+    triggered_by        text NOT NULL,
     renewed_at          timestamptz NOT NULL DEFAULT now(),
     created_at          timestamptz NOT NULL DEFAULT now(),
-    created_by          uuid
+    created_by          text
 );
 CREATE INDEX ix_sr_ltv_tenant     ON sr_ltv_renewals(tenant_id);
 CREATE INDEX ix_sr_ltv_entity     ON sr_ltv_renewals(entity_id);

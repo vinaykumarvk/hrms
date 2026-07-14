@@ -12,34 +12,34 @@
 -- SECTION 1 — ENUM TYPES (g01_ prefix, frozen names from the data model)
 -- =====================================================================================
 
-CREATE TYPE g01_dedup_status       AS ENUM ('OPEN','MERGED','DISMISSED');
-CREATE TYPE g01_validation_profile AS ENUM ('STRICT','MIGRATION');
-CREATE TYPE g01_import_status      AS ENUM ('UPLOADED','VALIDATING','VALIDATED','COMMITTING','COMMITTED','FAILED','ROLLED_BACK');
-CREATE TYPE g01_row_status         AS ENUM ('VALID','PROVISIONAL','ERROR','COMMITTED','SKIPPED');
-CREATE TYPE g01_hold_type          AS ENUM ('DISCIPLINARY','LITIGATION','PENSION','AUDIT','RTI');
-CREATE TYPE g01_hold_status        AS ENUM ('ACTIVE','RELEASED');
+
+
+
+
+
+
 
 -- =====================================================================================
 -- SECTION 2 — E19 dedup_candidates (FR-EPM-015 AC1/AC6)
 -- =====================================================================================
 
 CREATE TABLE dedup_candidates (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id)           ON DELETE RESTRICT,
-    employee_a_id      uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    employee_b_id      uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id)           ON DELETE RESTRICT,
+    employee_a_id      text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    employee_b_id      text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
     match_score        numeric(5,2) NOT NULL,
     matched_attributes jsonb NOT NULL,
-    status             g01_dedup_status NOT NULL DEFAULT 'OPEN',
+    status             text NOT NULL DEFAULT 'OPEN',
     resolution         varchar(24),
-    resolved_by        uuid,
+    resolved_by        text,
     resolved_at        timestamptz,
     row_version        integer NOT NULL DEFAULT 1,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_dedup_candidates_pair UNIQUE (employee_a_id, employee_b_id),
     CONSTRAINT ck_dedup_candidates_distinct CHECK (employee_a_id <> employee_b_id),
@@ -53,31 +53,31 @@ CREATE INDEX ix_dedup_candidates_status ON dedup_candidates(status);
 ALTER TABLE dedup_candidates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dedup_candidates FORCE ROW LEVEL SECURITY;
 CREATE POLICY rls_dedup_candidates_tenant ON dedup_candidates
-    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::text);
 
 -- =====================================================================================
 -- SECTION 3 — E20a employee_import_batches (FR-EPM-017 AC1/AC4)
 -- =====================================================================================
 
 CREATE TABLE employee_import_batches (
-    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id         uuid REFERENCES entities(id)         ON DELETE RESTRICT,
-    file_document_id  uuid REFERENCES documents(id)        ON DELETE SET NULL,
+    id                text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id         text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id         text REFERENCES entities(id)         ON DELETE RESTRICT,
+    file_document_id  text REFERENCES documents(id)        ON DELETE SET NULL,
     template_version  varchar(16) NOT NULL,
-    validation_profile g01_validation_profile NOT NULL DEFAULT 'STRICT',
+    validation_profile text NOT NULL DEFAULT 'STRICT',
     total_rows        integer NOT NULL DEFAULT 0,
     valid_rows        integer NOT NULL DEFAULT 0,
     provisional_rows  integer NOT NULL DEFAULT 0,
     error_rows        integer NOT NULL DEFAULT 0,
-    status            g01_import_status NOT NULL DEFAULT 'UPLOADED',
+    status            text NOT NULL DEFAULT 'UPLOADED',
     committed_at      timestamptz,
-    committed_by      uuid,
+    committed_by      text,
     row_version       integer NOT NULL DEFAULT 1,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
-    created_by        uuid,
-    updated_by        uuid,
+    created_by        text,
+    updated_by        text,
     is_deleted        boolean NOT NULL DEFAULT false,
     CONSTRAINT ck_import_batches_counts CHECK (total_rows >= 0 AND valid_rows >= 0 AND provisional_rows >= 0 AND error_rows >= 0)
 );
@@ -88,29 +88,29 @@ CREATE INDEX ix_import_batches_doc    ON employee_import_batches(file_document_i
 ALTER TABLE employee_import_batches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE employee_import_batches FORCE ROW LEVEL SECURITY;
 CREATE POLICY rls_employee_import_batches_tenant ON employee_import_batches
-    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::text);
 
 -- =====================================================================================
 -- SECTION 4 — E20b import_staging_rows (FR-EPM-017 AC2/AC5 remediation queue)
 -- =====================================================================================
 
 CREATE TABLE import_staging_rows (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id           uuid REFERENCES entities(id)         ON DELETE RESTRICT,
-    batch_id            uuid NOT NULL REFERENCES employee_import_batches(id) ON DELETE CASCADE,
+    id                  text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id           text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id           text REFERENCES entities(id)         ON DELETE RESTRICT,
+    batch_id            text NOT NULL REFERENCES employee_import_batches(id) ON DELETE CASCADE,
     row_number          integer NOT NULL,
     raw_payload         jsonb NOT NULL,
-    validation_status   g01_row_status NOT NULL DEFAULT 'VALID',
+    validation_status   text NOT NULL DEFAULT 'VALID',
     validation_errors   jsonb,
     remediation_state   varchar(16),                          -- QUEUED | RESOLVED (PROVISIONAL glide path)
-    resolved_employee_id uuid REFERENCES employees(id)       ON DELETE SET NULL,
-    dedup_match_id      uuid REFERENCES dedup_candidates(id) ON DELETE SET NULL,
+    resolved_employee_id text REFERENCES employees(id)       ON DELETE SET NULL,
+    dedup_match_id      text REFERENCES dedup_candidates(id) ON DELETE SET NULL,
     row_version         integer NOT NULL DEFAULT 1,
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now(),
-    created_by          uuid,
-    updated_by          uuid,
+    created_by          text,
+    updated_by          text,
     is_deleted          boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_import_staging_row UNIQUE (batch_id, row_number)
 );
@@ -123,7 +123,7 @@ CREATE INDEX ix_import_staging_remediation ON import_staging_rows(remediation_st
 ALTER TABLE import_staging_rows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE import_staging_rows FORCE ROW LEVEL SECURITY;
 CREATE POLICY rls_import_staging_rows_tenant ON import_staging_rows
-    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::text);
 
 -- =====================================================================================
 -- SECTION 5 — E21 employee_id_aliases (FR-EPM-015 AC3/AC4/AC5)
@@ -132,23 +132,23 @@ CREATE POLICY rls_import_staging_rows_tenant ON import_staging_rows
 -- =====================================================================================
 
 CREATE TABLE employee_id_aliases (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           uuid NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
-    entity_id           uuid REFERENCES entities(id)           ON DELETE RESTRICT,
-    loser_id            uuid NOT NULL,                          -- retired record's employee_id (soft-deleted)
-    survivor_id         uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    dedup_candidate_id  uuid REFERENCES dedup_candidates(id)   ON DELETE SET NULL,
+    id                  text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id           text NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
+    entity_id           text REFERENCES entities(id)           ON DELETE RESTRICT,
+    loser_id            text NOT NULL,                          -- retired record's employee_id (soft-deleted)
+    survivor_id         text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    dedup_candidate_id  text REFERENCES dedup_candidates(id)   ON DELETE SET NULL,
     merged_at           timestamptz NOT NULL DEFAULT now(),
-    merged_by           uuid NOT NULL,
-    approved_by         uuid,                                   -- 4-eyes checker (maker != checker)
+    merged_by           text NOT NULL,
+    approved_by         text,                                   -- 4-eyes checker (maker != checker)
     mergeable_back_until timestamptz NOT NULL,                  -- undo window (default 7 days)
     is_reversed         boolean NOT NULL DEFAULT false,
     merge_snapshot      jsonb NOT NULL,                         -- loser row + moved satellite ids
     row_version         integer NOT NULL DEFAULT 1,
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now(),
-    created_by          uuid,
-    updated_by          uuid,
+    created_by          text,
+    updated_by          text,
     is_deleted          boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_employee_id_aliases_loser UNIQUE (tenant_id, loser_id),   -- r11: one alias per loser
     CONSTRAINT ck_employee_id_aliases_distinct CHECK (loser_id <> survivor_id)
@@ -160,29 +160,29 @@ CREATE INDEX ix_employee_id_aliases_dedup    ON employee_id_aliases(dedup_candid
 ALTER TABLE employee_id_aliases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE employee_id_aliases FORCE ROW LEVEL SECURITY;
 CREATE POLICY rls_employee_id_aliases_tenant ON employee_id_aliases
-    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::text);
 
 -- =====================================================================================
 -- SECTION 6 — E31 legal_holds (FR-EPM-018 AC6 / FR-EPM-021 archive gate)
 -- =====================================================================================
 
 CREATE TABLE legal_holds (
-    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id     uuid NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
-    entity_id     uuid REFERENCES entities(id)           ON DELETE RESTRICT,
-    employee_id   uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    hold_type     g01_hold_type NOT NULL,
+    id            text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id     text NOT NULL REFERENCES tenants(id)   ON DELETE RESTRICT,
+    entity_id     text REFERENCES entities(id)           ON DELETE RESTRICT,
+    employee_id   text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    hold_type     text NOT NULL,
     reason        varchar(200) NOT NULL,
-    placed_by     uuid NOT NULL,
+    placed_by     text NOT NULL,
     source_module varchar(10),
     placed_at     timestamptz NOT NULL DEFAULT now(),
     released_at   timestamptz,
-    status        g01_hold_status NOT NULL DEFAULT 'ACTIVE',
+    status        text NOT NULL DEFAULT 'ACTIVE',
     row_version   integer NOT NULL DEFAULT 1,
     created_at    timestamptz NOT NULL DEFAULT now(),
     updated_at    timestamptz NOT NULL DEFAULT now(),
-    created_by    uuid,
-    updated_by    uuid,
+    created_by    text,
+    updated_by    text,
     is_deleted    boolean NOT NULL DEFAULT false
 );
 CREATE INDEX ix_legal_holds_tenant   ON legal_holds(tenant_id);
@@ -193,4 +193,4 @@ CREATE INDEX ix_legal_holds_status   ON legal_holds(status) WHERE status = 'ACTI
 ALTER TABLE legal_holds ENABLE ROW LEVEL SECURITY;
 ALTER TABLE legal_holds FORCE ROW LEVEL SECURITY;
 CREATE POLICY rls_legal_holds_tenant ON legal_holds
-    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::text);

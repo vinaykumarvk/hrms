@@ -339,18 +339,18 @@ export interface ChangeRequestApprovalRow {
 
 const INSERT_CATALOG_ENTRY =
   "INSERT INTO field_sensitivity_catalog (tenant_id, entity_id, field_key, m01_field_key, display_label, field_group, sensitivity, self_service_editable, version) " +
-  "VALUES ($1, $2, $3, $4, $5, $6::g02_field_group, $7::g02_sensitivity, $8, $9) RETURNING *";
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *";
 
 const SELECT_CATALOG_BY_FIELD =
   "SELECT * FROM field_sensitivity_catalog WHERE tenant_id = $1 AND field_key = $2 AND is_deleted = false ORDER BY version DESC LIMIT 1";
 
 const INSERT_MATRIX =
   "INSERT INTO approval_matrix_config (tenant_id, entity_id, name, workflow_code, status, version) " +
-  "VALUES ($1, $2, $3, $4, $5::g02_matrix_status, $6) RETURNING *";
+  "VALUES ($1, $2, $3, $4, $5, $6) RETURNING *";
 
 const INSERT_MATRIX_RULE =
   "INSERT INTO approval_matrix_rules (tenant_id, entity_id, matrix_id, sensitivity, field_group, field_key, level_no, node_type, topology, required_role, sla_hours) " +
-  "VALUES ($1, $2, $3, $4::g02_sensitivity, $5::g02_field_group, $6, $7, $8::g02_node_type, 'SEQUENTIAL', $9, $10) RETURNING *";
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'SEQUENTIAL', $9, $10) RETURNING *";
 
 const SELECT_ACTIVE_MATRIX_RULES =
   "SELECT r.* FROM approval_matrix_rules r JOIN approval_matrix_config c ON c.id = r.matrix_id " +
@@ -358,20 +358,20 @@ const SELECT_ACTIVE_MATRIX_RULES =
 
 const INSERT_CHANGE_REQUEST =
   "INSERT INTO change_requests (tenant_id, entity_id, cr_number, target_employee_id, requested_by, highest_sensitivity, status, reason) " +
-  "VALUES ($1, $2, $3, $4, $5, $6::g02_sensitivity, $7::g02_cr_status, $8) RETURNING *";
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *";
 
 const INSERT_CHANGE_REQUEST_ITEM =
   "INSERT INTO change_request_items (tenant_id, entity_id, change_request_id, field_key, m01_field_key, old_value, new_value, sensitivity, commit_idempotency_key) " +
-  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8::g02_sensitivity, $9) RETURNING *";
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *";
 
 const SELECT_CHANGE_REQUEST = "SELECT * FROM change_requests WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
 
 const UPDATE_CHANGE_REQUEST_STATUS =
-  "UPDATE change_requests SET status = $3::g02_cr_status, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *";
+  "UPDATE change_requests SET status = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *";
 
 const INSERT_APPROVAL =
   "INSERT INTO change_request_approvals (tenant_id, entity_id, change_request_id, level_no, node_type, required_role, assigned_to, decision, decision_comment) " +
-  "VALUES ($1, $2, $3, $4, $5::g02_node_type, $6, $7, $8::g02_decision, $9) RETURNING *";
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *";
 
 /**
  * Postgres-backed G02 repository over the frozen config + workflow tables. The decision

@@ -6,9 +6,9 @@
 -- ── G10 loans / advances instalment recovery ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS g10_loans_advances (
   id                text PRIMARY KEY,
-  tenant_id         uuid NOT NULL,
-  entity_id         uuid,
-  employee_id       uuid NOT NULL,
+  tenant_id         text NOT NULL,
+  entity_id         text,
+  employee_id       text NOT NULL,
   loan_type         text NOT NULL,
   principal_paise   bigint NOT NULL CHECK (principal_paise > 0),
   instalment_paise  bigint NOT NULL CHECK (instalment_paise > 0),
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS g10_loans_advances (
 
 CREATE TABLE IF NOT EXISTS g10_loan_repayments (
   id                     text PRIMARY KEY,
-  tenant_id              uuid NOT NULL,
+  tenant_id              text NOT NULL,
   loan_id                text NOT NULL REFERENCES g10_loans_advances(id),
   recovered_paise        bigint NOT NULL CHECK (recovered_paise >= 0),
   outstanding_after_paise bigint NOT NULL CHECK (outstanding_after_paise >= 0),
@@ -31,8 +31,8 @@ CREATE TABLE IF NOT EXISTS g10_loan_repayments (
 -- ── G10 Rule-3 concessional perquisites ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS g10_perquisites (
   id                  text PRIMARY KEY,
-  tenant_id           uuid NOT NULL,
-  employee_id         uuid NOT NULL,
+  tenant_id           text NOT NULL,
+  employee_id         text NOT NULL,
   perquisite_type     text NOT NULL CHECK (perquisite_type IN ('CONCESSIONAL_LOAN','ACCOMMODATION','OTHER')),
   is_concessional     boolean NOT NULL DEFAULT false,
   base_amount_paise   bigint NOT NULL CHECK (base_amount_paise >= 0),
@@ -46,8 +46,8 @@ CREATE TABLE IF NOT EXISTS g10_perquisites (
 -- ── G10 balanced GL journals ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS g10_gl_journals (
   id                 text PRIMARY KEY,
-  tenant_id          uuid NOT NULL,
-  entity_id          uuid,
+  tenant_id          text NOT NULL,
+  entity_id          text,
   reference          text NOT NULL,
   total_debit_paise  bigint NOT NULL CHECK (total_debit_paise >= 0),
   total_credit_paise bigint NOT NULL CHECK (total_credit_paise >= 0),
@@ -68,8 +68,8 @@ CREATE TABLE IF NOT EXISTS g10_gl_journal_lines (
 -- ── G10 bank-file positive-pay lines + holds ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS g10_bank_disbursement_lines (
   id                 text PRIMARY KEY,
-  tenant_id          uuid NOT NULL,
-  employee_id        uuid NOT NULL,
+  tenant_id          text NOT NULL,
+  employee_id        text NOT NULL,
   amount_paise       bigint NOT NULL CHECK (amount_paise > 0),
   account_ref        text NOT NULL,
   positive_pay_token text NOT NULL,
@@ -80,8 +80,8 @@ CREATE TABLE IF NOT EXISTS g10_bank_disbursement_lines (
 -- ── G11 pen_disbursing_authorities (PDA registry) ───────────────────────────────
 CREATE TABLE IF NOT EXISTS pen_disbursing_authorities (
   id                     text PRIMARY KEY,
-  tenant_id              uuid NOT NULL,
-  entity_id              uuid,
+  tenant_id              text NOT NULL,
+  entity_id              text,
   pda_code               text NOT NULL,
   name                   text NOT NULL,
   pda_disbursement_model text NOT NULL CHECK (pda_disbursement_model IN ('M11_COMPUTES_FULL','PDA_APPLIES_RELIEF')),
@@ -94,10 +94,10 @@ CREATE TABLE IF NOT EXISTS pen_disbursing_authorities (
 -- ── G11 pensioner grievances ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS pen_grievances (
   id                 text PRIMARY KEY,
-  tenant_id          uuid NOT NULL,
-  entity_id          uuid,
+  tenant_id          text NOT NULL,
+  entity_id          text,
   grievance_no       text NOT NULL,
-  pensioner_id       uuid NOT NULL,
+  pensioner_id       text NOT NULL,
   category           text NOT NULL,
   description        text NOT NULL,
   sla_due_at         date NOT NULL,
@@ -110,12 +110,12 @@ CREATE TABLE IF NOT EXISTS pen_grievances (
 -- ── G11 audit objections ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS pen_audit_objections (
   id             text PRIMARY KEY,
-  tenant_id      uuid NOT NULL,
-  entity_id      uuid,
+  tenant_id      text NOT NULL,
+  entity_id      text,
   objection_no   text NOT NULL,
   case_id        text NOT NULL,
   calc_trace_ref text NOT NULL,
-  raised_by      uuid NOT NULL,
+  raised_by      text NOT NULL,
   ground         text NOT NULL,
   response_note  text,
   status         text NOT NULL CHECK (status IN ('RAISED','UNDER_REVIEW','ACCEPTED_CORRECTED','REJECTED'))

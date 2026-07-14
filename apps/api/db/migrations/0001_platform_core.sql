@@ -56,13 +56,13 @@
 -- =====================================================================================
 -- CONVENTIONS (authoritative — module schemas inherit these; see CONVENTIONS.md)
 -- =====================================================================================
---  1. PRIMARY KEYS. Every table: `id uuid PRIMARY KEY DEFAULT gen_random_uuid()`.
+--  1. PRIMARY KEYS. Every table: `id text PRIMARY KEY DEFAULT gen_random_uuid()::text`.
 --     Human/business keys (service_no, doc_no, order_no, case_no, workflow_code, ...) are
 --     SEPARATE columns with their own UNIQUE constraint (scoped by tenant where relevant).
 --     EXCEPTIONS: append-only ledgers keep their domain-named PK (sr_event_id, log_id) for
---     fidelity with the owning module BRD, still uuid + gen_random_uuid().
---  2. TENANCY (Platform §0.1). Every business table carries `tenant_id uuid NOT NULL
---     REFERENCES tenants(id)`. Entity-scoped tables also carry `entity_id uuid REFERENCES
+--     fidelity with the owning module BRD, still text + gen_random_uuid().
+--  2. TENANCY (Platform §0.1). Every business table carries `tenant_id text NOT NULL
+--     REFERENCES tenants(id)`. Entity-scoped tables also carry `entity_id text REFERENCES
 --     entities(id)`. Scoping is enforced at the DATA layer via RLS (Section 11), never only
 --     in app code. A query without a resolvable tenant scope is REJECTED, not defaulted to all.
 --  3. TIMESTAMPS/AUDIT COLUMNS. Every business table: `created_at/updated_at timestamptz
@@ -125,71 +125,67 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- gen_random_uuid()
 -- =====================================================================================
 
 -- Tenancy / org -----------------------------------------------------------------------
-CREATE TYPE tenancy_model      AS ENUM ('STANDALONE', 'GROUP_COMPANY', 'MULTI_TENANT');
-CREATE TYPE tenant_status      AS ENUM ('PROVISIONING', 'ACTIVE', 'SUSPENDED', 'INACTIVE');
-CREATE TYPE entity_status      AS ENUM ('ACTIVE', 'INACTIVE', 'MERGED', 'DISSOLVED');
-CREATE TYPE org_unit_type      AS ENUM ('DIRECTORATE', 'DEPARTMENT', 'DIVISION', 'SECTION', 'OFFICE', 'UNIT');
-CREATE TYPE geo_type           AS ENUM ('COUNTRY', 'STATE', 'DISTRICT', 'TALUK', 'CITY', 'ZONE');
-CREATE TYPE separation_type    AS ENUM ('VOLUNTARY', 'INVOLUNTARY');   -- RECON: Deactivation_Reasons
+
+
+
+
+
+   -- RECON: Deactivation_Reasons
 
 -- Identity / RBAC ---------------------------------------------------------------------
-CREATE TYPE user_status        AS ENUM ('PENDING', 'ACTIVE', 'LOCKED', 'DISABLED', 'DELETED');
-CREATE TYPE auth_method        AS ENUM ('PASSWORD', 'GOOGLE_SSO', 'SAML', 'SERVICE_PRINCIPAL');
-CREATE TYPE scope_dimension    AS ENUM ('REPORTING_CHAIN', 'ORG_UNIT', 'UAG', 'CONTRIBUTION_LEVEL', 'ENTITY', 'GLOBAL');
-CREATE TYPE entitlement_status AS ENUM ('ACTIVE', 'EXPIRED', 'REVOKED');
+
+
+
+
 
 -- Employee master ---------------------------------------------------------------------
-CREATE TYPE record_state       AS ENUM ('PROVISIONAL', 'ACTIVE', 'ARCHIVED', 'PURGE_PENDING');
-CREATE TYPE employment_status  AS ENUM ('ACTIVE','ON_LEAVE','SUSPENDED','TRANSFERRED','RETIRED','RESIGNED','DECEASED','TERMINATED');
-CREATE TYPE employment_type    AS ENUM ('PERMANENT','CONTRACT','DEPUTATION','TEMPORARY','CONSULTANT','PROBATION');
-CREATE TYPE gender             AS ENUM ('MALE','FEMALE','OTHER','UNDISCLOSED');
-CREATE TYPE marital_status     AS ENUM ('SINGLE','MARRIED','DIVORCED','WIDOWED','SEPARATED','OTHER');
-CREATE TYPE social_category    AS ENUM ('GEN','OBC','SC','ST','EWS');
-CREATE TYPE dependent_relationship AS ENUM ('SPOUSE','SON','DAUGHTER','FATHER','MOTHER','BROTHER','SISTER','GUARDIAN','OTHER');
+
+
+
+
+
+
+
 
 -- Workflow (P01) ----------------------------------------------------------------------
-CREATE TYPE workflow_pattern         AS ENUM ('SEQUENTIAL','PARALLEL_ALL_OF','PARALLEL_ANY_OF','CONDITIONAL','DYNAMIC_APPROVER');
-CREATE TYPE workflow_def_status      AS ENUM ('DRAFT','ACTIVE','DEPRECATED');
-CREATE TYPE workflow_instance_status AS ENUM ('RUNNING','APPROVED','REJECTED','SENT_BACK','CANCELLED','ESCALATED','COMPLETED');
-CREATE TYPE workflow_action_type     AS ENUM ('START','ADVANCE','APPROVE','REJECT','SEND_BACK','DELEGATE','CANCEL','ESCALATE','QUERY');
-CREATE TYPE approver_resolution      AS ENUM ('WORK_QUEUE','NAMED_ROLE','REPORTING_CHAIN','STATUTORY_AUTHORITY','NAMED_INDIVIDUAL','COST_CENTRE_HEAD');
-CREATE TYPE workflow_task_status     AS ENUM ('PENDING','IN_PROGRESS','COMPLETED','CANCELLED','DELEGATED','RETURNED');
-CREATE TYPE workflow_wait_status     AS ENUM ('WAITING','SATISFIED','CANCELLED','EXPIRED');
-CREATE TYPE workflow_fork_status     AS ENUM ('OPEN','JOINED','CANCELLED');
-CREATE TYPE workflow_fork_branch_status AS ENUM ('OPEN','COMPLETED','CANCELLED');
-CREATE TYPE workflow_reference_status AS ENUM ('OPEN','RESPONDED','CANCELLED','EXPIRED');
+
+
+
+
+
+
+
+
+
+
 
 -- Audit (P05) / consent ---------------------------------------------------------------
-CREATE TYPE audit_operation     AS ENUM ('INSERT','UPDATE','SOFT_DELETE','REDACT');
-CREATE TYPE security_event_type AS ENUM ('LOGIN','LOGOUT','LOGIN_FAILED','MFA_CHALLENGE','RBAC_CHANGE',
-                                          'PERMISSION_DENIED','IMPERSONATION','BREAK_GLASS','TOKEN_ROTATION','SESSION_REVOKED');
-CREATE TYPE consent_status      AS ENUM ('GRANTED','WITHDRAWN','SUPERSEDED');
+
+
+
 
 -- Documents (G13/P13) -----------------------------------------------------------------
-CREATE TYPE classification_level AS ENUM ('PUBLIC','INTERNAL','CONFIDENTIAL','SECRET','TOP_SECRET');
-CREATE TYPE document_status      AS ENUM ('DRAFT','ACTIVE','SUPERSEDED','ORPHANED','DISPOSED','QUARANTINED');
-CREATE TYPE scan_status          AS ENUM ('PENDING','CLEAN','INFECTED','QUARANTINED','SKIPPED');
-CREATE TYPE source_channel       AS ENUM ('WEB_UPLOAD','BULK','SCANNER','MOBILE','API','SYSTEM_GENERATED');
-CREATE TYPE erasure_method       AS ENUM ('NONE','REDACTED','CRYPTO_SHRED','ANONYMISED');
-CREATE TYPE version_kind         AS ENUM ('ORIGINAL','NEW_VERSION','SUPERSEDE','CERTIFIED_COPY','REDACTED','SIGNED');
-CREATE TYPE ocr_status           AS ENUM ('PENDING','DONE','FAILED','NOT_APPLICABLE');
+
+
+
+
+
+
+
 
 -- Service Register ledger (G12) -------------------------------------------------------
-CREATE TYPE sr_event_category      AS ENUM ('APPOINTMENT','CONFIRMATION','PROMOTION','TRANSFER','POSTING','PAY','INCREMENT',
-                                            'LEAVE','TRAINING','AWARD','PUNISHMENT','SUSPENSION','DEPUTATION','IDENTITY',
-                                            'QUALIFICATION','APPRAISAL','SEPARATION','OTHER');  -- 18 categories (§5.5)
-CREATE TYPE sr_entry_status        AS ENUM ('ACTIVE','SUPERSEDED','ANNOTATED');
-CREATE TYPE sr_attestation_status  AS ENUM ('UNATTESTED','ATTESTED','EMPLOYEE_VERIFIED','DISPUTED');
-CREATE TYPE sr_confidence_status   AS ENUM ('VERIFIED','RECONSTRUCTED','LEGACY_UNVERIFIABLE');
-CREATE TYPE sr_qualifying_impact   AS ENUM ('QUALIFYING','NON_QUALIFYING','PARTIAL','NOT_APPLICABLE');
-CREATE TYPE sr_chain_origin        AS ENUM ('GENESIS','CONTINUED');
+  -- 18 categories (§5.5)
+
+
+
+
+
 
 -- Cross-cutting infra -----------------------------------------------------------------
-CREATE TYPE notification_channel  AS ENUM ('IN_APP','EMAIL','SMS');
-CREATE TYPE notification_status   AS ENUM ('PENDING','SENT','DELIVERED','READ','FAILED','DEAD_LETTER');
-CREATE TYPE job_run_status        AS ENUM ('SCHEDULED','RUNNING','SUCCEEDED','FAILED','RETRYING','DEAD_LETTER','SKIPPED');
-CREATE TYPE migration_run_status  AS ENUM ('CREATED','EXTRACTING','VALIDATING','TRANSFORMING','LOADING','VERIFYING',
-                                           'COMPLETED','FAILED','ROLLED_BACK');
+
+
+
+
 
 
 -- =====================================================================================
@@ -200,12 +196,12 @@ CREATE TYPE migration_run_status  AS ENUM ('CREATED','EXTRACTING','VALIDATING','
 -- The tenant is the root scope. The government deployment is typically one tenant; each
 -- department/directorate is an `entity`. (Platform §0.1; PLATFORM_FOUNDATION §2)
 CREATE TABLE tenants (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
     tenant_code        text NOT NULL,                 -- business key, e.g. 'GOV-KA'
     legal_name         text NOT NULL,
     display_name       text NOT NULL,
-    tenancy_model      tenancy_model NOT NULL DEFAULT 'STANDALONE',
-    status             tenant_status NOT NULL DEFAULT 'PROVISIONING',
+    tenancy_model      text NOT NULL DEFAULT 'STANDALONE',
+    status             text NOT NULL DEFAULT 'PROVISIONING',
     segment_code       text,                          -- immutable post-provisioning (P04)
     primary_geo_code   text,                          -- default geography
     default_locale     text NOT NULL DEFAULT 'en-IN',
@@ -213,8 +209,8 @@ CREATE TABLE tenants (
     provisioned_at     timestamptz,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_tenants_code UNIQUE (tenant_code)
 );
@@ -223,33 +219,33 @@ COMMENT ON TABLE tenants IS 'Root tenant scope (P04). Every business table FKs t
 -- segment_master ----------------------------------------------------------------------
 -- Business/geography segment used by the config cascade (platform->tenant->entity->employee).
 CREATE TABLE segment_master (
-    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id     uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id            text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id     text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     segment_code  text NOT NULL,
     name          text NOT NULL,
     description    text,
     is_active     boolean NOT NULL DEFAULT true,
     created_at    timestamptz NOT NULL DEFAULT now(),
     updated_at    timestamptz NOT NULL DEFAULT now(),
-    created_by    uuid,
-    updated_by    uuid,
+    created_by    text,
+    updated_by    text,
     is_deleted    boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_segment_code UNIQUE (tenant_id, segment_code)   -- VAL-MASTER-UNIQUE
 );
 
 -- geo_master (hierarchical geography) -------------------------------------------------
 CREATE TABLE geo_master (
-    id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id      uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id             text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id      text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     geo_code       text NOT NULL,
-    geo_type       geo_type NOT NULL,
+    geo_type       text NOT NULL,
     name           text NOT NULL,
-    parent_geo_id  uuid REFERENCES geo_master(id) ON DELETE RESTRICT,  -- hierarchy
+    parent_geo_id  text REFERENCES geo_master(id) ON DELETE RESTRICT,  -- hierarchy
     is_active      boolean NOT NULL DEFAULT true,
     created_at     timestamptz NOT NULL DEFAULT now(),
     updated_at     timestamptz NOT NULL DEFAULT now(),
-    created_by     uuid,
-    updated_by     uuid,
+    created_by     text,
+    updated_by     text,
     is_deleted     boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_geo_code UNIQUE (tenant_id, geo_code)
 );
@@ -258,19 +254,19 @@ CREATE INDEX ix_geo_master_parent       ON geo_master(parent_geo_id);
 
 -- entities (legal entities / directorates) --------------------------------------------
 CREATE TABLE entities (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     entity_code        text NOT NULL,                 -- business key
     legal_name         text NOT NULL,
     display_name       text NOT NULL,
     entity_type        text,                          -- e.g. DIRECTORATE / SECRETARIAT
-    status             entity_status NOT NULL DEFAULT 'ACTIVE',
-    primary_geo_id     uuid REFERENCES geo_master(id) ON DELETE RESTRICT,
-    parent_entity_id   uuid REFERENCES entities(id) ON DELETE RESTRICT,  -- group-company
+    status             text NOT NULL DEFAULT 'ACTIVE',
+    primary_geo_id     text REFERENCES geo_master(id) ON DELETE RESTRICT,
+    parent_entity_id   text REFERENCES entities(id) ON DELETE RESTRICT,  -- group-company
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_entities_code UNIQUE (tenant_id, entity_code)
 );
@@ -280,27 +276,27 @@ CREATE INDEX ix_entities_geo    ON entities(primary_geo_id);
 
 -- org_units (hierarchical organisation structure) -------------------------------------
 CREATE TABLE org_units (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     org_unit_code      text NOT NULL,                 -- business key
     name               text NOT NULL,
-    org_unit_type      org_unit_type NOT NULL DEFAULT 'DEPARTMENT',
-    parent_org_unit_id uuid REFERENCES org_units(id) ON DELETE RESTRICT,  -- VAL-ORG-NOCYCLE
+    org_unit_type      text NOT NULL DEFAULT 'DEPARTMENT',
+    parent_org_unit_id text REFERENCES org_units(id) ON DELETE RESTRICT,  -- VAL-ORG-NOCYCLE
     business_unit_code text,                          -- RECON: Department "Business Unit Code"
-    head_employee_id   uuid,                          -- HOD; FK added in Section 10 (employees)
-    performance_hod_employee_id  uuid,                -- RECON: Department "Performance HOD"; FK in Section 10
-    functional_head_employee_id  uuid,                -- RECON: Department "Functional Head"; FK in Section 10
-    head_hr_employee_id          uuid,                -- RECON: Department "Head HR"; FK in Section 10
-    group_hr_head_employee_id    uuid,                -- RECON: Department "Group HR Head"; FK in Section 10
+    head_employee_id   text,                          -- HOD; FK added in Section 10 (employees)
+    performance_hod_employee_id  text,                -- RECON: Department "Performance HOD"; FK in Section 10
+    functional_head_employee_id  text,                -- RECON: Department "Functional Head"; FK in Section 10
+    head_hr_employee_id          text,                -- RECON: Department "Head HR"; FK in Section 10
+    group_hr_head_employee_id    text,                -- RECON: Department "Group HR Head"; FK in Section 10
     cost_centre_code   text,
     depth_level        smallint NOT NULL DEFAULT 0,
     path               text,                          -- materialised path for subtree queries
     is_active          boolean NOT NULL DEFAULT true,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_org_units_code UNIQUE (tenant_id, org_unit_code)
 );
@@ -315,16 +311,16 @@ CREATE INDEX ix_org_units_grp_hr     ON org_units(group_hr_head_employee_id);
 
 -- cadres ------------------------------------------------------------------------------
 CREATE TABLE cadres (
-    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id           text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id    text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     cadre_code   text NOT NULL,
     name         text NOT NULL,
     description  text,
     is_active    boolean NOT NULL DEFAULT true,
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now(),
-    created_by   uuid,
-    updated_by   uuid,
+    created_by   text,
+    updated_by   text,
     is_deleted   boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_cadres_code UNIQUE (tenant_id, cadre_code)
 );
@@ -332,19 +328,19 @@ CREATE INDEX ix_cadres_tenant ON cadres(tenant_id);
 
 -- grades (pay band / level) -----------------------------------------------------------
 CREATE TABLE grades (
-    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id           text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id    text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     grade_code   text NOT NULL,
     name         text NOT NULL,
     level_order  smallint NOT NULL,                   -- seniority ordering within tenant
     pay_band     text,                                -- e.g. 'PB-3' (govt pay-band label; distinct from Band master)
-    band_id      uuid,                                -- RECON: Grade "Band Name" -> bands.id (FK added below, after bands)
+    band_id      text,                                -- RECON: Grade "Band Name" -> bands.id (FK added below, after bands)
     band_code    text,                                -- RECON: Grade "Band Code" (denormalised)
     is_active    boolean NOT NULL DEFAULT true,
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now(),
-    created_by   uuid,
-    updated_by   uuid,
+    created_by   text,
+    updated_by   text,
     is_deleted   boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_grades_code  UNIQUE (tenant_id, grade_code),
     CONSTRAINT uq_grades_level UNIQUE (tenant_id, level_order)
@@ -353,21 +349,21 @@ CREATE INDEX ix_grades_tenant ON grades(tenant_id);
 
 -- pay_scales --------------------------------------------------------------------------
 CREATE TABLE pay_scales (
-    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id                text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id         text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     pay_scale_code    text NOT NULL,
     name              text NOT NULL,
-    grade_id          uuid REFERENCES grades(id) ON DELETE RESTRICT,   -- VAL-GRADE-BAND
-    min_basic         numeric(14,2),
-    max_basic         numeric(14,2),
-    increment_amount  numeric(14,2),
+    grade_id          text REFERENCES grades(id) ON DELETE RESTRICT,   -- VAL-GRADE-BAND
+    min_basic         bigint,
+    max_basic         bigint,
+    increment_amount  bigint,
     currency          char(3) NOT NULL DEFAULT 'INR',
     pay_commission    text,                            -- e.g. '7CPC'
     is_active         boolean NOT NULL DEFAULT true,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
-    created_by        uuid,
-    updated_by        uuid,
+    created_by        text,
+    updated_by        text,
     is_deleted        boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_pay_scales_code UNIQUE (tenant_id, pay_scale_code),
     CONSTRAINT ck_pay_scales_band CHECK (max_basic IS NULL OR min_basic IS NULL OR max_basic >= min_basic)
@@ -377,18 +373,18 @@ CREATE INDEX ix_pay_scales_grade  ON pay_scales(grade_id);
 
 -- designations ------------------------------------------------------------------------
 CREATE TABLE designations (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     designation_code text NOT NULL,
     name            text NOT NULL,
-    cadre_id        uuid REFERENCES cadres(id) ON DELETE RESTRICT,
-    grade_id        uuid REFERENCES grades(id) ON DELETE RESTRICT,
+    cadre_id        text REFERENCES cadres(id) ON DELETE RESTRICT,
+    grade_id        text REFERENCES grades(id) ON DELETE RESTRICT,
     effective_from  date,                             -- RECON: Designation_Names "Effective From" (effective-dating)
     is_active       boolean NOT NULL DEFAULT true,
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
-    created_by      uuid,
-    updated_by      uuid,
+    created_by      text,
+    updated_by      text,
     is_deleted      boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_designations_code UNIQUE (tenant_id, designation_code)
 );
@@ -403,23 +399,23 @@ CREATE INDEX ix_designations_effective ON designations(effective_from);
 -- =====================================================================================
 -- Net-new tenant-configurable org masters surfaced by the Darwinbox Organisation exports
 -- (see docs/data-model/reconciliation/organisation-masters.md). All follow CONVENTIONS:
--- uuid PK, tenant_id, audit cols, is_deleted, tenant-scoped UNIQUE business key, indexed
+-- text PK, tenant_id, audit cols, is_deleted, tenant-scoped UNIQUE business key, indexed
 -- FKs, and RLS applied in Section 11. Value lists are seeded from the CSVs (migration
 -- source), not inlined here.
 
 -- bands (Grade "Band" master; grades.band_id FKs here) --------------------------------
 -- Source CSV: Band-Export.csv (header-only export) + Grade-Export.csv Band Name/Code.
 CREATE TABLE bands (
-    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id           text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id    text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     band_code    text NOT NULL,
     name         text NOT NULL,
     description  text,
     is_active    boolean NOT NULL DEFAULT true,
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now(),
-    created_by   uuid,
-    updated_by   uuid,
+    created_by   text,
+    updated_by   text,
     is_deleted   boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_bands_code UNIQUE (tenant_id, band_code)   -- VAL-MASTER-UNIQUE
 );
@@ -436,15 +432,15 @@ CREATE INDEX ix_grades_band ON grades(band_id);
 -- column here. region_code is nullable (several export rows have no code) -> unique key
 -- on name within tenant.
 CREATE TABLE regions (
-    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id           text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id    text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     region_code  text,
     name         text NOT NULL,
     is_active    boolean NOT NULL DEFAULT true,
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now(),
-    created_by   uuid,
-    updated_by   uuid,
+    created_by   text,
+    updated_by   text,
     is_deleted   boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_regions_name UNIQUE (tenant_id, name)
 );
@@ -456,9 +452,9 @@ CREATE INDEX ix_regions_tenant ON regions(tenant_id);
 -- Country-specific SSO/payroll fields (Thailand SSO branch) are policy config, not
 -- modelled here (see reconciliation report). location_code = Darwinbox "Work Area Code".
 CREATE TABLE locations (
-    id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                 uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id                 uuid REFERENCES entities(id) ON DELETE RESTRICT,   -- Company
+    id                        text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                 text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                 text REFERENCES entities(id) ON DELETE RESTRICT,   -- Company
     location_code             text NOT NULL,                    -- Work Area Code (business key)
     name                      text NOT NULL,                    -- Office Area / Location Area
     address                   text,                             -- Office Address
@@ -472,19 +468,19 @@ CREATE TABLE locations (
     city_code                 text,
     state_code                text,
     country_code              text,
-    city_geo_id               uuid REFERENCES geo_master(id) ON DELETE SET NULL,  -- optional geo link
-    region_id                 uuid REFERENCES regions(id) ON DELETE SET NULL,
-    parent_location_id        uuid REFERENCES locations(id) ON DELETE RESTRICT,   -- Parent Location
+    city_geo_id               text REFERENCES geo_master(id) ON DELETE SET NULL,  -- optional geo link
+    region_id                 text REFERENCES regions(id) ON DELETE SET NULL,
+    parent_location_id        text REFERENCES locations(id) ON DELETE RESTRICT,   -- Parent Location
     location_type             text,                             -- Location Type
     city_type                 text,                             -- City Type
     centre_type               text,                             -- Centre Type
-    location_head_employee_id uuid,                             -- FK added in Section 10 (employees)
+    location_head_employee_id text,                             -- FK added in Section 10 (employees)
     is_registered_office      boolean NOT NULL DEFAULT false,   -- Registered Office (Yes/No)
     is_active                 boolean NOT NULL DEFAULT true,
     created_at                timestamptz NOT NULL DEFAULT now(),
     updated_at                timestamptz NOT NULL DEFAULT now(),
-    created_by                uuid,
-    updated_by                uuid,
+    created_by                text,
+    updated_by                text,
     is_deleted                boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_locations_code UNIQUE (tenant_id, location_code)
 );
@@ -498,8 +494,8 @@ CREATE INDEX ix_locations_head     ON locations(location_head_employee_id);
 -- weekly_off_patterns (Weekly Off master) ---------------------------------------------
 -- Source CSV: Weekly_Off-Export.csv. No code column in the export -> name is the key.
 CREATE TABLE weekly_off_patterns (
-    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id        uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id               text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id        text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     weekly_off_code  text,
     name             text NOT NULL,                   -- Weekly Off Name
     description      text,
@@ -507,8 +503,8 @@ CREATE TABLE weekly_off_patterns (
     is_active        boolean NOT NULL DEFAULT true,
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
-    created_by       uuid,
-    updated_by       uuid,
+    created_by       text,
+    updated_by       text,
     is_deleted       boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_weekly_off_patterns_name UNIQUE (tenant_id, name)
 );
@@ -519,8 +515,8 @@ CREATE INDEX ix_weekly_off_patterns_tenant ON weekly_off_patterns(tenant_id);
 -- toggles (consider weekly offs/holidays/unpaid leave, calculate-from-resignation, etc.)
 -- are policy config captured in rule_config (jsonb), not query dimensions.
 CREATE TABLE notice_period_policies (
-    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id                       text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     notice_code              text,
     name                     text NOT NULL,           -- Notice Name
     applicable_for           text,
@@ -536,8 +532,8 @@ CREATE TABLE notice_period_policies (
     is_active                boolean NOT NULL DEFAULT true,
     created_at               timestamptz NOT NULL DEFAULT now(),
     updated_at               timestamptz NOT NULL DEFAULT now(),
-    created_by               uuid,
-    updated_by               uuid,
+    created_by               text,
+    updated_by               text,
     is_deleted               boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_notice_period_policies_name UNIQUE (tenant_id, name)
 );
@@ -546,8 +542,8 @@ CREATE INDEX ix_notice_period_policies_tenant ON notice_period_policies(tenant_i
 -- probation_policies (Probation master) -----------------------------------------------
 -- Source CSV: Probation-Export.csv.
 CREATE TABLE probation_policies (
-    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id                       text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     probation_code           text,
     name                     text NOT NULL,           -- Probation Name
     period_days              smallint,                -- Set Probation Period In (Days)
@@ -559,8 +555,8 @@ CREATE TABLE probation_policies (
     is_active                boolean NOT NULL DEFAULT true,
     created_at               timestamptz NOT NULL DEFAULT now(),
     updated_at               timestamptz NOT NULL DEFAULT now(),
-    created_by               uuid,
-    updated_by               uuid,
+    created_by               text,
+    updated_by               text,
     is_deleted               boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_probation_policies_name UNIQUE (tenant_id, name)
 );
@@ -570,15 +566,15 @@ CREATE INDEX ix_probation_policies_tenant ON probation_policies(tenant_id);
 -- Source CSV: Deactivation_Reasons-Export_1_.csv. The configurable pick-list behind the
 -- free-text employees.separation_reason on the golden record.
 CREATE TABLE separation_reasons (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    separation_type separation_type NOT NULL,         -- VOLUNTARY / INVOLUNTARY
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    separation_type text NOT NULL,         -- VOLUNTARY / INVOLUNTARY
     reason          text NOT NULL,
     is_active       boolean NOT NULL DEFAULT true,
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
-    created_by      uuid,
-    updated_by      uuid,
+    created_by      text,
+    updated_by      text,
     is_deleted      boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_separation_reasons UNIQUE (tenant_id, separation_type, reason)
 );
@@ -587,15 +583,15 @@ CREATE INDEX ix_separation_reasons_tenant ON separation_reasons(tenant_id);
 -- contribution_levels (Neev-Level master; RBAC CONTRIBUTION_LEVEL scope dimension) -----
 -- Source CSV: Neev-Level-Export_1_.csv (Darwinbox "Neev Level" == Contribution Level).
 CREATE TABLE contribution_levels (
-    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id           text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id    text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     level_code   text NOT NULL,
     name         text NOT NULL,
     is_active    boolean NOT NULL DEFAULT true,
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now(),
-    created_by   uuid,
-    updated_by   uuid,
+    created_by   text,
+    updated_by   text,
     is_deleted   boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_contribution_levels_code UNIQUE (tenant_id, level_code)
 );
@@ -610,7 +606,7 @@ CREATE INDEX ix_contribution_levels_tenant ON contribution_levels(tenant_id);
 -- The PII Protection Ceiling reference (RBAC §3.9/§6/§7, Appendix B). Closed reference
 -- data shared by all tenants; no tenant_id, no soft delete.
 CREATE TABLE pii_tiers (
-    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    id           text PRIMARY KEY DEFAULT gen_random_uuid()::text,
     tier_code    text NOT NULL UNIQUE,               -- TIER_1 / TIER_2 / TIER_3 / NON_PII
     name         text NOT NULL,
     description  text,
@@ -622,12 +618,12 @@ COMMENT ON TABLE pii_tiers IS 'Platform-global PII tier reference (RBAC §7). No
 -- permissions (PLATFORM-GLOBAL CATALOG — exempt from tenant scoping & RLS) -------------
 -- Action permissions catalog (module.action). Roles (per tenant) grant these.
 CREATE TABLE permissions (
-    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    id               text PRIMARY KEY DEFAULT gen_random_uuid()::text,
     permission_code  text NOT NULL UNIQUE,            -- e.g. 'document.view', 'leave.approve'
     module_code      text NOT NULL,                   -- G01..G14 / platform
     action           text NOT NULL,                   -- VIEW/EDIT/APPROVE/DOWNLOAD/ADMIN
     description      text,
-    pii_tier_id      uuid REFERENCES pii_tiers(id) ON DELETE RESTRICT,  -- field-access tier hint
+    pii_tier_id      text REFERENCES pii_tiers(id) ON DELETE RESTRICT,  -- field-access tier hint
     is_active        boolean NOT NULL DEFAULT true
 );
 CREATE INDEX ix_permissions_module ON permissions(module_code);
@@ -636,14 +632,14 @@ CREATE INDEX ix_permissions_module ON permissions(module_code);
 -- Authentication principal (P02/P04). 1:1 with an employee where the user is staff;
 -- service principals (source-module machine identities) have no employee.
 CREATE TABLE users (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
     username           text NOT NULL,
     official_email     text,                          -- tenant-unique, immutable (G01 note)
     password_hash      text,                          -- one-way hashed; null for SSO/service
-    auth_method        auth_method NOT NULL DEFAULT 'PASSWORD',
-    status             user_status NOT NULL DEFAULT 'PENDING',
+    auth_method        text NOT NULL DEFAULT 'PASSWORD',
+    status             text NOT NULL DEFAULT 'PENDING',
     is_service_principal boolean NOT NULL DEFAULT false,
     mfa_enabled        boolean NOT NULL DEFAULT false,
     force_password_change boolean NOT NULL DEFAULT false,
@@ -651,8 +647,8 @@ CREATE TABLE users (
     locked_until       timestamptz,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_users_username UNIQUE (tenant_id, username)
 );
@@ -665,19 +661,19 @@ CREATE INDEX ix_users_status ON users(status);
 -- roles -------------------------------------------------------------------------------
 -- RBAC v1.7 role taxonomy (platform + entity-scoped operational + gov additions).
 CREATE TABLE roles (
-    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id     uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id            text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id     text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     role_code     text NOT NULL,                       -- e.g. 'hr_admin', 'sr_custodian'
     name          text NOT NULL,
     description   text,
     is_platform_role boolean NOT NULL DEFAULT false,   -- platform_super_admin / org_admin
     is_system_seeded boolean NOT NULL DEFAULT false,
-    scope_default scope_dimension NOT NULL DEFAULT 'ENTITY',
+    scope_default text NOT NULL DEFAULT 'ENTITY',
     is_active     boolean NOT NULL DEFAULT true,
     created_at    timestamptz NOT NULL DEFAULT now(),
     updated_at    timestamptz NOT NULL DEFAULT now(),
-    created_by    uuid,
-    updated_by    uuid,
+    created_by    text,
+    updated_by    text,
     is_deleted    boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_roles_code UNIQUE (tenant_id, role_code)
 );
@@ -685,15 +681,15 @@ CREATE INDEX ix_roles_tenant ON roles(tenant_id);
 
 -- role_permissions --------------------------------------------------------------------
 CREATE TABLE role_permissions (
-    id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id      uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    role_id        uuid NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    permission_id  uuid NOT NULL REFERENCES permissions(id) ON DELETE RESTRICT,
-    scope_dimension scope_dimension NOT NULL DEFAULT 'ENTITY',
+    id             text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id      text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    role_id        text NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    permission_id  text NOT NULL REFERENCES permissions(id) ON DELETE RESTRICT,
+    scope_dimension text NOT NULL DEFAULT 'ENTITY',
     created_at     timestamptz NOT NULL DEFAULT now(),
     updated_at     timestamptz NOT NULL DEFAULT now(),
-    created_by     uuid,
-    updated_by     uuid,
+    created_by     text,
+    updated_by     text,
     is_deleted     boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_role_permissions UNIQUE (role_id, permission_id)
 );
@@ -704,19 +700,19 @@ CREATE INDEX ix_role_permissions_perm   ON role_permissions(permission_id);
 -- user_roles --------------------------------------------------------------------------
 -- Role assignment with optional data-scope binding (the five scoping dimensions).
 CREATE TABLE user_roles (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id       uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    user_id         uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role_id         uuid NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
-    scope_dimension scope_dimension NOT NULL DEFAULT 'ENTITY',
-    scope_org_unit_id uuid REFERENCES org_units(id) ON DELETE RESTRICT,  -- when scoped to a dept subtree
-    granted_by      uuid,
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       text REFERENCES entities(id) ON DELETE RESTRICT,
+    user_id         text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_id         text NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+    scope_dimension text NOT NULL DEFAULT 'ENTITY',
+    scope_org_unit_id text REFERENCES org_units(id) ON DELETE RESTRICT,  -- when scoped to a dept subtree
+    granted_by      text,
     granted_at      timestamptz NOT NULL DEFAULT now(),
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
-    created_by      uuid,
-    updated_by      uuid,
+    created_by      text,
+    updated_by      text,
     is_deleted      boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_user_roles UNIQUE (user_id, role_id, scope_dimension, scope_org_unit_id)
 );
@@ -727,8 +723,8 @@ CREATE INDEX ix_user_roles_orgunit  ON user_roles(scope_org_unit_id);
 
 -- capability_flags (catalog of grantable flags, RBAC §4.3) -----------------------------
 CREATE TABLE capability_flags (
-    id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id      uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id             text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id      text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     flag_code      text NOT NULL,                      -- e.g. 'BGV_REVIEW','SR_LEGACY_PROMOTE'
     name           text NOT NULL,
     description    text,
@@ -736,8 +732,8 @@ CREATE TABLE capability_flags (
     is_active      boolean NOT NULL DEFAULT true,
     created_at     timestamptz NOT NULL DEFAULT now(),
     updated_at     timestamptz NOT NULL DEFAULT now(),
-    created_by     uuid,
-    updated_by     uuid,
+    created_by     text,
+    updated_by     text,
     is_deleted     boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_capability_flags_code UNIQUE (tenant_id, flag_code)
 );
@@ -745,16 +741,16 @@ CREATE INDEX ix_capability_flags_tenant ON capability_flags(tenant_id);
 
 -- user_capability_flags (grant of a capability flag to a user) ------------------------
 CREATE TABLE user_capability_flags (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    user_id             uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    capability_flag_id  uuid NOT NULL REFERENCES capability_flags(id) ON DELETE RESTRICT,
-    granted_by          uuid,
+    id                  text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id           text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    user_id             text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    capability_flag_id  text NOT NULL REFERENCES capability_flags(id) ON DELETE RESTRICT,
+    granted_by          text,
     granted_at          timestamptz NOT NULL DEFAULT now(),
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now(),
-    created_by          uuid,
-    updated_by          uuid,
+    created_by          text,
+    updated_by          text,
     is_deleted          boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_user_capability_flags UNIQUE (user_id, capability_flag_id)
 );
@@ -764,23 +760,23 @@ CREATE INDEX ix_user_capability_flags_flag   ON user_capability_flags(capability
 
 -- individual_entitlements (time-bound, mandatory-expiry, auto-revoked; RBAC §3.2) -----
 CREATE TABLE individual_entitlements (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id       uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    user_id         uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    permission_id   uuid REFERENCES permissions(id) ON DELETE RESTRICT,
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       text REFERENCES entities(id) ON DELETE RESTRICT,
+    user_id         text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    permission_id   text REFERENCES permissions(id) ON DELETE RESTRICT,
     resource_ref    text,                              -- optional case/record scoping
-    scope_dimension scope_dimension NOT NULL DEFAULT 'GLOBAL',
+    scope_dimension text NOT NULL DEFAULT 'GLOBAL',
     reason          text NOT NULL,                     -- VAL-COMMENT / ERR-REASON-REQ
-    status          entitlement_status NOT NULL DEFAULT 'ACTIVE',
+    status          text NOT NULL DEFAULT 'ACTIVE',
     valid_from      timestamptz NOT NULL DEFAULT now(),
     expires_at      timestamptz NOT NULL,              -- MANDATORY expiry (RBAC §3.2)
-    approved_by     uuid,                              -- Org-Admin-approved
+    approved_by     text,                              -- Org-Admin-approved
     revoked_at      timestamptz,
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
-    created_by      uuid,
-    updated_by      uuid,
+    created_by      text,
+    updated_by      text,
     is_deleted      boolean NOT NULL DEFAULT false,
     CONSTRAINT ck_entitlement_window CHECK (expires_at > valid_from)
 );
@@ -800,11 +796,11 @@ CREATE INDEX ix_individual_entitlements_expiry  ON individual_entitlements(expir
 -- record_state = ACTIVE.
 
 CREATE TABLE employees (
-    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- == G01 employee_id
-    tenant_id             uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id             uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                    text PRIMARY KEY DEFAULT gen_random_uuid()::text,  -- == G01 employee_id
+    tenant_id             text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id             text REFERENCES entities(id) ON DELETE RESTRICT,
     service_no            varchar(20) NOT NULL,                  -- human business key (golden)
-    user_id               uuid REFERENCES users(id) ON DELETE SET NULL,  -- login 1:1
+    user_id               text REFERENCES users(id) ON DELETE SET NULL,  -- login 1:1
     salutation            text,
     first_name            varchar(80) NOT NULL,
     middle_name           varchar(80),
@@ -814,12 +810,12 @@ CREATE TABLE employees (
     preferred_name        varchar(80),
     name_local            varchar(160),                           -- official local script
     dob                   date,                                   -- PII; relaxed in PROVISIONAL
-    gender                gender,
-    marital_status        marital_status,
+    gender                text,
+    marital_status        text,
     blood_group           varchar(4),
     nationality           varchar(40) NOT NULL DEFAULT 'INDIAN',
     religion              varchar(40),                            -- sensitive PII (DPDP)
-    category              social_category,                        -- GEN/OBC/SC/ST/EWS
+    category              text,                        -- GEN/OBC/SC/ST/EWS
     is_differently_abled  boolean NOT NULL DEFAULT false,
     disability_type       varchar(40),
     aadhaar_ref_key       varchar(64),                            -- vault reference only (no raw number)
@@ -828,17 +824,17 @@ CREATE TABLE employees (
     date_of_joining       date,                                   -- relaxed in PROVISIONAL
     group_date_of_joining date,
     confirmation_date     date,
-    cadre_id              uuid REFERENCES cadres(id) ON DELETE RESTRICT,
-    designation_id        uuid REFERENCES designations(id) ON DELETE RESTRICT,  -- current cache
-    grade_id              uuid REFERENCES grades(id) ON DELETE RESTRICT,
-    pay_scale_id          uuid REFERENCES pay_scales(id) ON DELETE RESTRICT,    -- current cache
-    org_unit_id           uuid REFERENCES org_units(id) ON DELETE RESTRICT,     -- current placement
-    employment_type       employment_type,
-    employment_status     employment_status NOT NULL DEFAULT 'ACTIVE',
-    record_state          record_state NOT NULL DEFAULT 'ACTIVE',  -- PROVISIONAL/ACTIVE/ARCHIVED/PURGE_PENDING
-    reporting_manager_id  uuid REFERENCES employees(id) ON DELETE SET NULL,  -- row-scope anchor
-    previous_employee_id  uuid REFERENCES employees(id) ON DELETE SET NULL,  -- rehire link
-    primary_photo_id      uuid,                                   -- FK to G01 employee_photos (module schema)
+    cadre_id              text REFERENCES cadres(id) ON DELETE RESTRICT,
+    designation_id        text REFERENCES designations(id) ON DELETE RESTRICT,  -- current cache
+    grade_id              text REFERENCES grades(id) ON DELETE RESTRICT,
+    pay_scale_id          text REFERENCES pay_scales(id) ON DELETE RESTRICT,    -- current cache
+    org_unit_id           text REFERENCES org_units(id) ON DELETE RESTRICT,     -- current placement
+    employment_type       text,
+    employment_status     text NOT NULL DEFAULT 'ACTIVE',
+    record_state          text NOT NULL DEFAULT 'ACTIVE',  -- PROVISIONAL/ACTIVE/ARCHIVED/PURGE_PENDING
+    reporting_manager_id  text REFERENCES employees(id) ON DELETE SET NULL,  -- row-scope anchor
+    previous_employee_id  text REFERENCES employees(id) ON DELETE SET NULL,  -- rehire link
+    primary_photo_id      text,                                   -- FK to G01 employee_photos (module schema)
     profile_completeness_pct numeric(5,2) DEFAULT 0,              -- advisory
     data_quality_flag     varchar(16) DEFAULT 'CLEAN',            -- advisory; no pay gate
     separation_date       date,
@@ -848,8 +844,8 @@ CREATE TABLE employees (
     row_version           integer NOT NULL DEFAULT 1,             -- optimistic lock / etag
     created_at            timestamptz NOT NULL DEFAULT now(),
     updated_at            timestamptz NOT NULL DEFAULT now(),
-    created_by            uuid,
-    updated_by            uuid,
+    created_by            text,
+    updated_by            text,
     is_deleted            boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_employees_service_no UNIQUE (tenant_id, service_no),
     -- Statutory floors enforced only once the row is ACTIVE (migration glide path):
@@ -872,25 +868,25 @@ CREATE INDEX ix_employees_legacy_id     ON employees(legacy_id);
 
 -- employee_dependents (G01-owned satellite; G03/G11 reference read-only — D5) ----------
 CREATE TABLE employee_dependents (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- == G01 dependent_id
-    tenant_id           uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id           uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    employee_id         uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    id                  text PRIMARY KEY DEFAULT gen_random_uuid()::text,  -- == G01 dependent_id
+    tenant_id           text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id           text REFERENCES entities(id) ON DELETE RESTRICT,
+    employee_id         text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
     full_name           varchar(160) NOT NULL,
-    relationship        dependent_relationship NOT NULL,
+    relationship        text NOT NULL,
     dob                 date,
-    gender              gender,
+    gender              text,
     is_dependent        boolean NOT NULL DEFAULT true,
     is_minor            boolean,                                  -- derived from dob
     is_differently_abled boolean NOT NULL DEFAULT false,
     is_legal_heir       boolean NOT NULL DEFAULT false,           -- succession (FR-024)
     heir_succession_rank smallint,                                -- family-pension order
     national_id_masked  varchar(20),                              -- masked, no raw
-    proof_document_id   uuid,                                     -- FK -> documents (added Section 10)
+    proof_document_id   text,                                     -- FK -> documents (added Section 10)
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now(),
-    created_by          uuid,
-    updated_by          uuid,
+    created_by          text,
+    updated_by          text,
     is_deleted          boolean NOT NULL DEFAULT false
 );
 CREATE INDEX ix_employee_dependents_tenant   ON employee_dependents(tenant_id);
@@ -904,14 +900,14 @@ CREATE INDEX ix_employee_dependents_doc      ON employee_dependents(proof_docume
 
 -- workflows (definition; versioned; deprecation not deletion) --------------------------
 CREATE TABLE workflows (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
     workflow_code      text NOT NULL,                  -- e.g. 'WF-G12-CORRIGENDUM'
     version            integer NOT NULL DEFAULT 1,
     name               text NOT NULL,
-    pattern            workflow_pattern NOT NULL DEFAULT 'SEQUENTIAL',
-    status             workflow_def_status NOT NULL DEFAULT 'DRAFT',
+    pattern            text NOT NULL DEFAULT 'SEQUENTIAL',
+    status             text NOT NULL DEFAULT 'DRAFT',
     stages_definition  jsonb NOT NULL,                 -- ordered stages, assignee rules, actions
     sla_definition     jsonb,                          -- per-stage SLA timers
     config_level       text NOT NULL DEFAULT 'TENANT', -- cascade: PLATFORM/TENANT/ENTITY/EMPLOYEE
@@ -919,8 +915,8 @@ CREATE TABLE workflows (
     deprecated_at      timestamptz,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_workflows_code_version UNIQUE (tenant_id, workflow_code, version)
 );
@@ -930,28 +926,28 @@ CREATE INDEX ix_workflows_status ON workflows(status);
 
 -- workflow_instances (pins the definition version it began on) -------------------------
 CREATE TABLE workflow_instances (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    workflow_id        uuid NOT NULL REFERENCES workflows(id) ON DELETE RESTRICT,  -- pinned version
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
+    workflow_id        text NOT NULL REFERENCES workflows(id) ON DELETE RESTRICT,  -- pinned version
     workflow_code      text NOT NULL,
     pinned_version     integer NOT NULL,               -- in-flight version pinning
     subject_ref        text NOT NULL,                  -- table:id of the subject record
-    subject_employee_id uuid REFERENCES employees(id) ON DELETE RESTRICT,
-    status             workflow_instance_status NOT NULL DEFAULT 'RUNNING',
+    subject_employee_id text REFERENCES employees(id) ON DELETE RESTRICT,
+    status             text NOT NULL DEFAULT 'RUNNING',
     current_stage      text,
     current_assignees  jsonb,                          -- resolved assignee set
     context            jsonb,                          -- instance context for CONDITIONAL/DYNAMIC
     idempotency_key    text,                           -- dedup of workflow-initiating POSTs (24h)
     correlation_id     text,                           -- X-Correlation-Id
-    initiated_by       uuid,
+    initiated_by       text,
     started_at         timestamptz NOT NULL DEFAULT now(),
     completed_at       timestamptz,
     sla_due_at         timestamptz,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     -- ERR-DUP-INSTANCE: a duplicate workflow start within the idempotency window conflicts.
     CONSTRAINT uq_workflow_instances_idem UNIQUE (tenant_id, workflow_code, idempotency_key)
@@ -965,22 +961,22 @@ CREATE INDEX ix_workflow_instances_sla      ON workflow_instances(sla_due_at) WH
 
 -- workflow_actions (one row per action; idempotent) ------------------------------------
 CREATE TABLE workflow_actions (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    instance_id        uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    instance_id        text NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
     stage              text NOT NULL,
-    action_type        workflow_action_type NOT NULL,
-    actor_user_id      uuid,                            -- logical ref to users(id)
+    action_type        text NOT NULL,
+    actor_user_id      text,                            -- logical ref to users(id)
     actor_role_code    text,
     decision_comment   text,                            -- VAL-COMMENT (reason where mandatory)
-    delegated_to       uuid,
+    delegated_to       text,
     idempotency_key    text,                            -- a retried approve -> one row, not two
     correlation_id     text,
     acted_at           timestamptz NOT NULL DEFAULT now(),
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_workflow_actions_idem UNIQUE (instance_id, action_type, idempotency_key)
 );
@@ -990,16 +986,16 @@ CREATE INDEX ix_workflow_actions_actor    ON workflow_actions(actor_user_id);
 
 -- workflow_idempotency_records (unsafe P01 call dedup across instances/actions) --------
 CREATE TABLE workflow_idempotency_records (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
     idempotency_key    text NOT NULL,
     request_hash       text NOT NULL,
     owner_ref          text NOT NULL,                  -- e.g. workflow_instances:<id>
     response_payload   jsonb NOT NULL,
     expires_at         timestamptz NOT NULL,
     created_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
+    created_by         text,
     CONSTRAINT uq_workflow_idempotency_key UNIQUE (tenant_id, idempotency_key),
     CONSTRAINT ck_workflow_idempotency_expiry CHECK (expires_at > created_at)
 );
@@ -1008,12 +1004,12 @@ CREATE INDEX ix_workflow_idempotency_expiry ON workflow_idempotency_records(expi
 
 -- workflow_resolution_snapshots (immutable approver/queue resolution evidence) ---------
 CREATE TABLE workflow_resolution_snapshots (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    instance_id        uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
+    instance_id        text NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
     stage              text NOT NULL,
-    resolver_type      approver_resolution NOT NULL,
+    resolver_type      text NOT NULL,
     resolver_rule      jsonb NOT NULL,                 -- configured rule evaluated at stage entry
     candidates         jsonb NOT NULL DEFAULT '[]'::jsonb,
     selected_assignees jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -1021,7 +1017,7 @@ CREATE TABLE workflow_resolution_snapshots (
     evidence           jsonb NOT NULL DEFAULT '{}'::jsonb, -- immutable route proof for audit/disputes
     resolved_at        timestamptz NOT NULL DEFAULT now(),
     created_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid
+    created_by         text
 );
 CREATE INDEX ix_workflow_resolution_tenant   ON workflow_resolution_snapshots(tenant_id);
 CREATE INDEX ix_workflow_resolution_instance ON workflow_resolution_snapshots(instance_id);
@@ -1029,18 +1025,18 @@ CREATE INDEX ix_workflow_resolution_stage    ON workflow_resolution_snapshots(in
 
 -- workflow_tasks (durable task inbox rows derived from stage entry) --------------------
 CREATE TABLE workflow_tasks (
-    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id              uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id              uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    instance_id            uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
-    resolution_snapshot_id uuid REFERENCES workflow_resolution_snapshots(id) ON DELETE SET NULL,
+    id                     text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id              text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id              text REFERENCES entities(id) ON DELETE RESTRICT,
+    instance_id            text NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    resolution_snapshot_id text REFERENCES workflow_resolution_snapshots(id) ON DELETE SET NULL,
     stage                  text NOT NULL,
     task_key               text NOT NULL,
-    status                 workflow_task_status NOT NULL DEFAULT 'PENDING',
+    status                 text NOT NULL DEFAULT 'PENDING',
     assignment_mode        text NOT NULL,              -- WORK_QUEUE / SYSTEM_ROLE / future resolver-owned modes
-    assigned_user_id       uuid,
+    assigned_user_id       text,
     assigned_role_code     text,
-    org_unit_id            uuid REFERENCES org_units(id) ON DELETE RESTRICT,
+    org_unit_id            text REFERENCES org_units(id) ON DELETE RESTRICT,
     level_id               text,
     queue_key              text,
     due_at                 timestamptz,
@@ -1048,8 +1044,8 @@ CREATE TABLE workflow_tasks (
     completed_at           timestamptz,
     created_at             timestamptz NOT NULL DEFAULT now(),
     updated_at             timestamptz NOT NULL DEFAULT now(),
-    created_by             uuid,
-    updated_by             uuid,
+    created_by             text,
+    updated_by             text,
     is_deleted             boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_workflow_tasks_key UNIQUE (instance_id, task_key)
 );
@@ -1061,14 +1057,14 @@ CREATE INDEX ix_workflow_tasks_assignee  ON workflow_tasks(assigned_user_id) WHE
 
 -- workflow_waits (durable timer/manual wait rows) -------------------------------------
 CREATE TABLE workflow_waits (
-    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id             uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id             uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    instance_id           uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    id                    text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id             text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id             text REFERENCES entities(id) ON DELETE RESTRICT,
+    instance_id           text NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
     stage                 text NOT NULL,
     wait_key              text NOT NULL,
     kind                  text NOT NULL,                -- TIMER / MANUAL_EVENT; validated by workflow-config
-    status                workflow_wait_status NOT NULL DEFAULT 'WAITING',
+    status                text NOT NULL DEFAULT 'WAITING',
     event_key             text,
     due_at                timestamptz,
     resume_transition_id  text NOT NULL,
@@ -1077,8 +1073,8 @@ CREATE TABLE workflow_waits (
     satisfied_at          timestamptz,
     created_at            timestamptz NOT NULL DEFAULT now(),
     updated_at            timestamptz NOT NULL DEFAULT now(),
-    created_by            uuid,
-    updated_by            uuid,
+    created_by            text,
+    updated_by            text,
     is_deleted            boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_workflow_waits_key UNIQUE (instance_id, wait_key)
 );
@@ -1089,21 +1085,21 @@ CREATE INDEX ix_workflow_waits_event    ON workflow_waits(tenant_id, event_key) 
 
 -- workflow_fork_executions / workflow_fork_branches (durable parallel execution) -------
 CREATE TABLE workflow_fork_executions (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    instance_id        uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
+    instance_id        text NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
     fork_state_id      text NOT NULL,
     join_state_id      text NOT NULL,
-    status             workflow_fork_status NOT NULL DEFAULT 'OPEN',
+    status             text NOT NULL DEFAULT 'OPEN',
     required_branches  integer NOT NULL,
     completed_branches integer NOT NULL DEFAULT 0,
     context            jsonb NOT NULL DEFAULT '{}'::jsonb,
     joined_at          timestamptz,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT ck_workflow_fork_required CHECK (required_branches > 0),
     CONSTRAINT ck_workflow_fork_completed CHECK (completed_branches >= 0 AND completed_branches <= required_branches)
@@ -1113,19 +1109,19 @@ CREATE INDEX ix_workflow_forks_instance ON workflow_fork_executions(instance_id)
 CREATE INDEX ix_workflow_forks_status   ON workflow_fork_executions(status);
 
 CREATE TABLE workflow_fork_branches (
-    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id         uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    fork_execution_id uuid NOT NULL REFERENCES workflow_fork_executions(id) ON DELETE CASCADE,
+    id                text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id         text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id         text REFERENCES entities(id) ON DELETE RESTRICT,
+    fork_execution_id text NOT NULL REFERENCES workflow_fork_executions(id) ON DELETE CASCADE,
     branch_key        text NOT NULL,
     state_id          text NOT NULL,
-    task_id           uuid REFERENCES workflow_tasks(id) ON DELETE SET NULL,
-    status            workflow_fork_branch_status NOT NULL DEFAULT 'OPEN',
+    task_id           text REFERENCES workflow_tasks(id) ON DELETE SET NULL,
+    status            text NOT NULL DEFAULT 'OPEN',
     completed_at      timestamptz,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
-    created_by        uuid,
-    updated_by        uuid,
+    created_by        text,
+    updated_by        text,
     is_deleted        boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_workflow_fork_branch UNIQUE (fork_execution_id, branch_key)
 );
@@ -1135,21 +1131,21 @@ CREATE INDEX ix_workflow_fork_branches_task   ON workflow_fork_branches(task_id)
 
 -- workflow_references (department/reference fan-out from a source task) ---------------
 CREATE TABLE workflow_references (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    instance_id        uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
-    source_task_id     uuid NOT NULL REFERENCES workflow_tasks(id) ON DELETE CASCADE,
-    target_org_unit_id uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
-    status             workflow_reference_status NOT NULL DEFAULT 'OPEN',
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
+    instance_id        text NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    source_task_id     text NOT NULL REFERENCES workflow_tasks(id) ON DELETE CASCADE,
+    target_org_unit_id text NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
+    status             text NOT NULL DEFAULT 'OPEN',
     remarks            text NOT NULL,
     response_payload   jsonb,
     due_at             timestamptz,
     completed_at       timestamptz,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false
 );
 CREATE INDEX ix_workflow_references_tenant   ON workflow_references(tenant_id);
@@ -1159,10 +1155,10 @@ CREATE INDEX ix_workflow_references_target   ON workflow_references(target_org_u
 
 -- skip_settings (skip-condition subject/rule; reassign-to-role; §4.14.12) --------------
 CREATE TABLE skip_settings (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id       uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    workflow_id     uuid REFERENCES workflows(id) ON DELETE CASCADE,
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       text REFERENCES entities(id) ON DELETE RESTRICT,
+    workflow_id     text REFERENCES workflows(id) ON DELETE CASCADE,
     setting_code    text NOT NULL,
     skip_subject    text NOT NULL,                      -- what is evaluated
     skip_rule       jsonb NOT NULL,                     -- predicate resolved at stage entry
@@ -1170,8 +1166,8 @@ CREATE TABLE skip_settings (
     is_active       boolean NOT NULL DEFAULT true,
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
-    created_by      uuid,
-    updated_by      uuid,
+    created_by      text,
+    updated_by      text,
     is_deleted      boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_skip_settings_code UNIQUE (tenant_id, setting_code)
 );
@@ -1180,10 +1176,10 @@ CREATE INDEX ix_skip_settings_workflow ON skip_settings(workflow_id);
 
 -- sla_settings (SLA level, trigger, duration, breach output, escalation) ---------------
 CREATE TABLE sla_settings (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id           uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    workflow_id         uuid REFERENCES workflows(id) ON DELETE CASCADE,
+    id                  text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id           text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id           text REFERENCES entities(id) ON DELETE RESTRICT,
+    workflow_id         text REFERENCES workflows(id) ON DELETE CASCADE,
     setting_code        text NOT NULL,
     sla_level           text NOT NULL,
     trigger_when        text NOT NULL DEFAULT 'AFTER',  -- BEFORE / AFTER stage entry
@@ -1194,8 +1190,8 @@ CREATE TABLE sla_settings (
     is_active           boolean NOT NULL DEFAULT true,
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now(),
-    created_by          uuid,
-    updated_by          uuid,
+    created_by          text,
+    updated_by          text,
     is_deleted          boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_sla_settings_code UNIQUE (tenant_id, setting_code),
     CONSTRAINT ck_sla_duration CHECK (duration_minutes > 0)
@@ -1213,13 +1209,13 @@ CREATE INDEX ix_sla_settings_workflow ON sla_settings(workflow_id);
 -- old_value (operation = 'REDACT'). PII is stored MASKED. No is_deleted; no updated_at.
 
 CREATE TABLE audit_log (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- log_id
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id       uuid,
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,  -- log_id
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       text,
     table_name      text NOT NULL,
-    record_id       uuid NOT NULL,
-    operation       audit_operation NOT NULL,
-    actor_user_id   uuid,                               -- logical ref; no FK (must survive user removal)
+    record_id       text NOT NULL,
+    operation       text NOT NULL,
+    actor_user_id   text,                               -- logical ref; no FK (must survive user removal)
     actor_role_code text,
     old_value       jsonb,                              -- MASKED PII; redaction marker target
     new_value       jsonb,                              -- MASKED PII
@@ -1228,7 +1224,7 @@ CREATE TABLE audit_log (
     redacted_at     timestamptz,                        -- set only on DPDPA erasure redaction
     redaction_ref   text,
     created_at      timestamptz NOT NULL DEFAULT now(),
-    created_by      uuid
+    created_by      text
 );
 CREATE INDEX ix_audit_log_tenant     ON audit_log(tenant_id);
 CREATE INDEX ix_audit_log_record     ON audit_log(table_name, record_id);
@@ -1238,12 +1234,12 @@ CREATE INDEX ix_audit_log_correlation ON audit_log(correlation_id);
 COMMENT ON TABLE audit_log IS 'P05 immutable data-mutation log. Append-only; grant no UPDATE/DELETE to app roles. Sole mutation = DPDPA redaction marker on old_value.';
 
 CREATE TABLE security_audit_log (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id       uuid,
-    event_type      security_event_type NOT NULL,
-    actor_user_id   uuid,
-    target_user_id  uuid,                               -- for RBAC_CHANGE/impersonation
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       text,
+    event_type      text NOT NULL,
+    actor_user_id   text,
+    target_user_id  text,                               -- for RBAC_CHANGE/impersonation
     resource_ref    text,
     outcome         text,                               -- SUCCESS / DENIED / ERROR
     ip_address      inet,
@@ -1251,7 +1247,7 @@ CREATE TABLE security_audit_log (
     detail          jsonb,
     correlation_id  text,
     created_at      timestamptz NOT NULL DEFAULT now(),
-    created_by      uuid
+    created_by      text
 );
 CREATE INDEX ix_security_audit_tenant ON security_audit_log(tenant_id);
 CREATE INDEX ix_security_audit_actor  ON security_audit_log(actor_user_id);
@@ -1261,21 +1257,21 @@ COMMENT ON TABLE security_audit_log IS 'P05 immutable auth/permission/admin even
 
 -- consent_records (DPDPA; immutable — superseded, never deleted) ------------------------
 CREATE TABLE consent_records (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    employee_id        uuid REFERENCES employees(id) ON DELETE RESTRICT,
-    data_principal_user_id uuid,                        -- logical ref to users(id)
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
+    employee_id        text REFERENCES employees(id) ON DELETE RESTRICT,
+    data_principal_user_id text,                        -- logical ref to users(id)
     purpose_code       text NOT NULL,                   -- processing purpose
-    consent_status     consent_status NOT NULL,         -- GRANTED/WITHDRAWN/SUPERSEDED
+    consent_status     text NOT NULL,         -- GRANTED/WITHDRAWN/SUPERSEDED
     legal_basis        text,                            -- e.g. 'STATUTORY_OBLIGATION' (DPDP §17)
     consent_text_ref   text,                            -- versioned notice id
     granted_at         timestamptz,
     withdrawn_at       timestamptz,
-    supersedes_id      uuid REFERENCES consent_records(id) ON DELETE RESTRICT,
+    supersedes_id      text REFERENCES consent_records(id) ON DELETE RESTRICT,
     correlation_id     text,
     created_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid
+    created_by         text
     -- Immutable: superseded by a new row, never updated/deleted. No updated_at/is_deleted.
 );
 CREATE INDEX ix_consent_records_tenant   ON consent_records(tenant_id);
@@ -1292,21 +1288,21 @@ CREATE INDEX ix_consent_records_status   ON consent_records(consent_status);
 -- 13-G13. Other modules attach via document_id and store only the reference.
 
 CREATE TABLE documents (
-    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- == G13 document_id
-    tenant_id              uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id              uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                     text PRIMARY KEY DEFAULT gen_random_uuid()::text,  -- == G13 document_id
+    tenant_id              text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id              text REFERENCES entities(id) ON DELETE RESTRICT,
     doc_no                 varchar(40) NOT NULL,                  -- human key DOC/2026/0001234
     title                  varchar(255) NOT NULL,
     description            text,
-    document_type_id       uuid,                                  -- FK -> G13 document_types (module schema)
-    folder_id              uuid,                                  -- FK -> G13 folders (module schema)
-    owner_employee_id      uuid REFERENCES employees(id) ON DELETE SET NULL,
-    owning_org_unit_id     uuid REFERENCES org_units(id) ON DELETE RESTRICT,
-    current_version_id     uuid,                                  -- FK -> document_versions (added Section 10)
+    document_type_id       text,                                  -- FK -> G13 document_types (module schema)
+    folder_id              text,                                  -- FK -> G13 folders (module schema)
+    owner_employee_id      text REFERENCES employees(id) ON DELETE SET NULL,
+    owning_org_unit_id     text REFERENCES org_units(id) ON DELETE RESTRICT,
+    current_version_id     text,                                  -- FK -> document_versions (added Section 10)
     current_version_no     integer NOT NULL DEFAULT 1,
-    classification         classification_level NOT NULL DEFAULT 'INTERNAL',  -- gov EXTENSION
+    classification         text NOT NULL DEFAULT 'INTERNAL',  -- gov EXTENSION
     security_domain        varchar(40) NOT NULL DEFAULT 'DEFAULT',            -- key/dedup boundary
-    status                 document_status NOT NULL DEFAULT 'ACTIVE',
+    status                 text NOT NULL DEFAULT 'ACTIVE',
     link_count             integer NOT NULL DEFAULT 0,            -- 0 -> orphan candidate
     mime_type              varchar(120),
     size_bytes             bigint,
@@ -1315,17 +1311,17 @@ CREATE TABLE documents (
     is_worm                boolean NOT NULL DEFAULT false,        -- immutable statutory storage (gov)
     is_record_declared     boolean NOT NULL DEFAULT false,
     legal_hold_count       integer NOT NULL DEFAULT 0,            -- >0 -> disposition blocked
-    retention_assignment_id uuid,                                 -- FK -> G13 retention (module schema)
+    retention_assignment_id text,                                 -- FK -> G13 retention (module schema)
     disposition_due_date   date,
     anchor_confirmed       boolean NOT NULL DEFAULT false,
-    source_channel         source_channel NOT NULL DEFAULT 'WEB_UPLOAD',
-    scan_status            scan_status NOT NULL DEFAULT 'PENDING',
+    source_channel         text NOT NULL DEFAULT 'WEB_UPLOAD',
+    scan_status            text NOT NULL DEFAULT 'PENDING',
     language_code          varchar(8),
-    dpdp_erasure_state     erasure_method,                       -- set on DPDP request resolve
+    dpdp_erasure_state     text,                       -- set on DPDP request resolve
     created_at             timestamptz NOT NULL DEFAULT now(),
     updated_at             timestamptz NOT NULL DEFAULT now(),
-    created_by             uuid,
-    updated_by             uuid,
+    created_by             text,
+    updated_by             text,
     is_deleted             boolean NOT NULL DEFAULT false,        -- blocked while WORM/legal-hold
     CONSTRAINT uq_documents_doc_no UNIQUE (tenant_id, doc_no)
 );
@@ -1339,22 +1335,22 @@ CREATE INDEX ix_documents_classification ON documents(classification);
 CREATE INDEX ix_documents_content_hash ON documents(security_domain, content_hash);  -- domain-scoped dedup
 
 CREATE TABLE document_versions (
-    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- == G13 version_id
-    tenant_id              uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    document_id            uuid NOT NULL REFERENCES documents(id) ON DELETE RESTRICT,
+    id                     text PRIMARY KEY DEFAULT gen_random_uuid()::text,  -- == G13 version_id
+    tenant_id              text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    document_id            text NOT NULL REFERENCES documents(id) ON DELETE RESTRICT,
     version_no             integer NOT NULL,                      -- 1-based, monotonic
-    storage_object_id      uuid,                                  -- FK -> G13 storage_objects (module schema)
+    storage_object_id      text,                                  -- FK -> G13 storage_objects (module schema)
     mime_type              varchar(120),
     size_bytes             bigint,
     content_hash           char(64),                              -- SHA-256 of this version
     change_summary         varchar(500),
-    version_kind           version_kind NOT NULL DEFAULT 'ORIGINAL',
+    version_kind           text NOT NULL DEFAULT 'ORIGINAL',
     is_supersede           boolean NOT NULL DEFAULT false,
-    superseded_version_id  uuid REFERENCES document_versions(id) ON DELETE RESTRICT,
-    derived_from_version_id uuid REFERENCES document_versions(id) ON DELETE RESTRICT,
-    ocr_status             ocr_status NOT NULL DEFAULT 'PENDING',
+    superseded_version_id  text REFERENCES document_versions(id) ON DELETE RESTRICT,
+    derived_from_version_id text REFERENCES document_versions(id) ON DELETE RESTRICT,
+    ocr_status             text NOT NULL DEFAULT 'PENDING',
     created_at             timestamptz NOT NULL DEFAULT now(),
-    created_by             uuid,                                  -- append-only version history
+    created_by             text,                                  -- append-only version history
     CONSTRAINT uq_document_versions UNIQUE (document_id, version_no)
 );
 CREATE INDEX ix_document_versions_tenant   ON document_versions(tenant_id);
@@ -1377,14 +1373,14 @@ CREATE INDEX ix_document_versions_storage  ON document_versions(storage_object_i
 -- entry_hash EXCLUDES them so status changes never break the content chain.
 
 CREATE TABLE service_register_events (
-    id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- sr_event_id
-    tenant_id               uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id               uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    employee_id             uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    id                      text PRIMARY KEY DEFAULT gen_random_uuid()::text,  -- sr_event_id
+    tenant_id               text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id               text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    employee_id             text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
     service_no              varchar(32) NOT NULL,                  -- denormalised (golden in G01)
     sequence_no             bigint NOT NULL,                       -- monotonic per (tenant,employee)
     event_type_code         varchar(48) NOT NULL,                  -- FK -> G12 sr_event_type (module schema)
-    event_category          sr_event_category NOT NULL,
+    event_category          text NOT NULL,
     event_title             varchar(200) NOT NULL,
     event_description       text,
     event_date              date NOT NULL,                         -- legal effective date (no time)
@@ -1395,27 +1391,27 @@ CREATE TABLE service_register_events (
     source_module           varchar(16) NOT NULL,                  -- G01..G14 / G12_MANUAL / G12_LEGACY
     source_reference_id     varchar(64),                           -- originating order/transaction id
     source_event_version    integer NOT NULL DEFAULT 1,
-    reverses_event_id       uuid REFERENCES service_register_events(id) ON DELETE RESTRICT,
+    reverses_event_id       text REFERENCES service_register_events(id) ON DELETE RESTRICT,
     order_no                varchar(64),
     order_date              date,
     sanctioning_authority   varchar(160),
     payload                 jsonb NOT NULL,                        -- schema-validated event data
-    qualifying_service_impact sr_qualifying_impact NOT NULL DEFAULT 'NOT_APPLICABLE',
-    confidence_status       sr_confidence_status NOT NULL DEFAULT 'VERIFIED',
-    entry_status            sr_entry_status NOT NULL DEFAULT 'ACTIVE',         -- derived projection
-    attestation_status      sr_attestation_status NOT NULL DEFAULT 'UNATTESTED', -- derived projection
-    supersedes_event_id     uuid REFERENCES service_register_events(id) ON DELETE RESTRICT,
-    superseded_by_event_id  uuid REFERENCES service_register_events(id) ON DELETE RESTRICT, -- derived projection
-    chain_origin            sr_chain_origin NOT NULL DEFAULT 'GENESIS',
+    qualifying_service_impact text NOT NULL DEFAULT 'NOT_APPLICABLE',
+    confidence_status       text NOT NULL DEFAULT 'VERIFIED',
+    entry_status            text NOT NULL DEFAULT 'ACTIVE',         -- derived projection
+    attestation_status      text NOT NULL DEFAULT 'UNATTESTED', -- derived projection
+    supersedes_event_id     text REFERENCES service_register_events(id) ON DELETE RESTRICT,
+    superseded_by_event_id  text REFERENCES service_register_events(id) ON DELETE RESTRICT, -- derived projection
+    chain_origin            text NOT NULL DEFAULT 'GENESIS',
     prior_chain_head_hash   char(64),                              -- CONTINUED chain genesis ref
     prev_event_hash         char(64) NOT NULL,                     -- SHA-256 of previous entry
     entry_hash              char(64) NOT NULL,                     -- SHA-256(content || prev_event_hash)
     hash_algorithm          varchar(16) NOT NULL DEFAULT 'SHA-256',
     ledger_version          integer NOT NULL DEFAULT 1,
-    document_ids            uuid[],                                -- supporting docs (G13)
-    ingestion_request_id    uuid,                                  -- FK -> G12 sr_ingestion_requests (module)
+    document_ids            text[],                                -- supporting docs (G13)
+    ingestion_request_id    text,                                  -- FK -> G12 sr_ingestion_requests (module)
     is_legacy               boolean NOT NULL DEFAULT false,
-    legacy_batch_id         uuid,                                  -- FK -> G12 sr_legacy_digitisation_batch
+    legacy_batch_id         text,                                  -- FK -> G12 sr_legacy_digitisation_batch
     legacy_source_id        varchar(80),                           -- permanent migration traceability/dedup
     posted_by               varchar(64) NOT NULL,                  -- service principal or custodian
     created_at              timestamptz NOT NULL DEFAULT now(),    -- append timestamp; NO updated_at/is_deleted
@@ -1451,19 +1447,19 @@ COMMENT ON TABLE service_register_events IS 'G12 statutory SR ledger. Append-onl
 
 -- notifications (X.2) -----------------------------------------------------------------
 CREATE TABLE notifications (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    recipient_user_id  uuid REFERENCES users(id) ON DELETE CASCADE,
-    recipient_employee_id uuid REFERENCES employees(id) ON DELETE CASCADE,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
+    recipient_user_id  text REFERENCES users(id) ON DELETE CASCADE,
+    recipient_employee_id text REFERENCES employees(id) ON DELETE CASCADE,
     message_id         text NOT NULL,                   -- MSG-* template id (Foundation §5)
-    channel            notification_channel NOT NULL,
-    status             notification_status NOT NULL DEFAULT 'PENDING',
+    channel            text NOT NULL,
+    status             text NOT NULL DEFAULT 'PENDING',
     subject            text,
     body_merge_fields  jsonb,                           -- typed merge fields {like_this}
     is_statutory       boolean NOT NULL DEFAULT false,  -- mandatory/non-suppressible (X.2/§9.9)
     related_ref        text,                            -- table:id of triggering record
-    workflow_instance_id uuid REFERENCES workflow_instances(id) ON DELETE SET NULL,
+    workflow_instance_id text REFERENCES workflow_instances(id) ON DELETE SET NULL,
     retry_count        integer NOT NULL DEFAULT 0,      -- backoff up to 5 + DLQ
     sent_at            timestamptz,
     delivered_at       timestamptz,
@@ -1472,8 +1468,8 @@ CREATE TABLE notifications (
     correlation_id     text,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false
 );
 CREATE INDEX ix_notifications_tenant    ON notifications(tenant_id);
@@ -1485,12 +1481,12 @@ CREATE INDEX ix_notifications_unread    ON notifications(recipient_user_id) WHER
 
 -- jobs (X.1) — scheduled-job run ledger ------------------------------------------------
 CREATE TABLE jobs (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     job_id             text NOT NULL,                   -- registered id, e.g. 'JOB-G12-ANCHOR'
     run_key            text NOT NULL,                   -- per-period idempotency key
     schedule_cron      text,
-    status             job_run_status NOT NULL DEFAULT 'SCHEDULED',
+    status             text NOT NULL DEFAULT 'SCHEDULED',
     scheduled_for      timestamptz,
     started_at         timestamptz,
     finished_at        timestamptz,
@@ -1502,8 +1498,8 @@ CREATE TABLE jobs (
     correlation_id     text,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_jobs_run_key UNIQUE (tenant_id, job_id, run_key)   -- per-period run key (idempotent)
 );
@@ -1514,9 +1510,9 @@ CREATE INDEX ix_jobs_scheduled ON jobs(scheduled_for) WHERE status IN ('SCHEDULE
 
 -- integration_credentials (P04/X.3) — encrypted, per-integration scoped ----------------
 CREATE TABLE integration_credentials (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
     integration_code   text NOT NULL,                   -- e.g. 'TREASURY','TSA','CA','KMS'
     name               text NOT NULL,
     credential_type    text NOT NULL,                   -- OAUTH2 / API_KEY / MTLS / CERT
@@ -1528,8 +1524,8 @@ CREATE TABLE integration_credentials (
     is_active          boolean NOT NULL DEFAULT true,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_integration_credentials UNIQUE (tenant_id, integration_code)
 );
@@ -1538,14 +1534,14 @@ COMMENT ON COLUMN integration_credentials.secret_ref IS 'Reference to a secret i
 
 -- migration_runs (P06 ETL+V ledger) ----------------------------------------------------
 CREATE TABLE migration_runs (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text REFERENCES entities(id) ON DELETE RESTRICT,
     run_code           text NOT NULL,                   -- business key
     wave               text,                            -- Wave 1/2/3 (Appendix E)
     source_system      text NOT NULL,                   -- legacy register identity
     target_table       text NOT NULL,
-    status             migration_run_status NOT NULL DEFAULT 'CREATED',
+    status             text NOT NULL DEFAULT 'CREATED',
     is_dry_run         boolean NOT NULL DEFAULT true,   -- 3 mandatory staging dry runs gate cutover
     dry_run_seq        smallint,
     records_total      bigint,
@@ -1558,8 +1554,8 @@ CREATE TABLE migration_runs (
     correlation_id     text,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid,
-    updated_by         uuid,
+    created_by         text,
+    updated_by         text,
     is_deleted         boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_migration_runs_code UNIQUE (tenant_id, run_code)
 );
@@ -1629,11 +1625,11 @@ ALTER TABLE documents
 --   ALTER TABLE <table> FORCE ROW LEVEL SECURITY;
 --   CREATE POLICY tenant_isolation ON <table>
 --     USING (
---       tenant_id = current_setting('app.current_tenant_id', true)::uuid
+--       tenant_id = current_setting('app.current_tenant_id', true)::text
 --       OR current_setting('app.is_platform_admin', true) = 'true'
 --     )
 --     WITH CHECK (
---       tenant_id = current_setting('app.current_tenant_id', true)::uuid
+--       tenant_id = current_setting('app.current_tenant_id', true)::text
 --       OR current_setting('app.is_platform_admin', true) = 'true'
 --     );
 -- ------------------------------------------------------------------------------------
@@ -1663,11 +1659,11 @@ BEGIN
         EXECUTE format($f$
             CREATE POLICY tenant_isolation ON %I
             USING (
-                tenant_id = current_setting('app.current_tenant_id', true)::uuid
+                tenant_id = current_setting('app.current_tenant_id', true)::text
                 OR current_setting('app.is_platform_admin', true) = 'true'
             )
             WITH CHECK (
-                tenant_id = current_setting('app.current_tenant_id', true)::uuid
+                tenant_id = current_setting('app.current_tenant_id', true)::text
                 OR current_setting('app.is_platform_admin', true) = 'true'
             );
         $f$, t);
@@ -1680,7 +1676,7 @@ ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_self_isolation ON tenants
     USING (
-        id = current_setting('app.current_tenant_id', true)::uuid
+        id = current_setting('app.current_tenant_id', true)::text
         OR current_setting('app.is_platform_admin', true) = 'true'
     )
     WITH CHECK (

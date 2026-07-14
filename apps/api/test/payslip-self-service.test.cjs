@@ -119,7 +119,7 @@ test("G10 payslips: the enrolment route persists componentAmountsCents that a su
   const computed = call(api, payrollOfficer, { method: "POST", path: `/api/v1/payroll/engine-runs/${run.body.run.id}:compute`, headers: { "Idempotency-Key": "idem-enrol-compute" }, body: {} });
   assert.equal(computed.status, 202);
 
-  const approver = actor("payroll-officer-enrol-approver", ["g10.payroll.approve"], { roles: ["payroll_officer"] });
+  const approver = actor("payroll-officer-enrol-approver", ["g10.payroll.approve"], { roles: ["payroll_approver"] });
   call(api, approver, { method: "POST", path: `/api/v1/payroll/engine-runs/${run.body.run.id}:approve`, headers: { "Idempotency-Key": "idem-enrol-approve" }, body: {} });
   call(api, payrollOfficer, { method: "POST", path: `/api/v1/payroll/engine-runs/${run.body.run.id}:lock`, headers: { "Idempotency-Key": "idem-enrol-lock" }, body: {} });
 

@@ -304,11 +304,11 @@ const SELECT_OUTBOX_AFTER =
 
 const DEMOTE_PRIMARY_CONTACT =
   "UPDATE employee_contacts SET is_primary = false, row_version = row_version + 1, updated_at = now(), updated_by = $4 " +
-  "WHERE tenant_id = $1 AND employee_id = $2 AND contact_type = $3::g01_contact_type AND is_primary AND is_deleted = false";
+  "WHERE tenant_id = $1 AND employee_id = $2 AND contact_type = $3 AND is_primary AND is_deleted = false";
 
 const INSERT_CONTACT =
   "INSERT INTO employee_contacts (tenant_id, entity_id, employee_id, contact_type, contact_value, is_primary, visibility, created_by) " +
-  "VALUES ($1, $2, $3, $4::g01_contact_type, $5, $6, $7::g01_field_visibility, $8) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) " +
   "RETURNING id, tenant_id, entity_id, employee_id, contact_type, contact_value, is_primary, is_verified, visibility, row_version";
 
 const SELECT_CONTACTS =
@@ -317,11 +317,11 @@ const SELECT_CONTACTS =
 
 const CLOSE_CURRENT_ADDRESS =
   "UPDATE employee_addresses SET is_current = false, valid_to = $4::date - 1, row_version = row_version + 1, updated_at = now(), updated_by = $5 " +
-  "WHERE tenant_id = $1 AND employee_id = $2 AND address_type = $3::g01_address_type AND is_current AND is_deleted = false";
+  "WHERE tenant_id = $1 AND employee_id = $2 AND address_type = $3 AND is_current AND is_deleted = false";
 
 const INSERT_ADDRESS =
   "INSERT INTO employee_addresses (tenant_id, entity_id, employee_id, address_type, line1, line2, city, district, state, country, pincode, valid_from, created_by) " +
-  "VALUES ($1, $2, $3, $4::g01_address_type, $5, $6, $7, $8, $9, $10, $11, $12::date, $13) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::date, $13) " +
   "RETURNING id, tenant_id, entity_id, employee_id, address_type, line1, city, state, pincode, is_current, valid_from, valid_to, row_version";
 
 const SELECT_ADDRESSES =
@@ -330,7 +330,7 @@ const SELECT_ADDRESSES =
 
 const INSERT_DEPENDENT =
   "INSERT INTO employee_dependents (tenant_id, entity_id, employee_id, full_name, relationship, dob, is_minor, is_legal_heir, heir_succession_rank, national_id_masked, created_by) " +
-  "VALUES ($1, $2, $3, $4, $5::dependent_relationship, $6::date, $7, $8, $9, $10, $11) " +
+  "VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8, $9, $10, $11) " +
   "RETURNING id, tenant_id, entity_id, employee_id, full_name, relationship, dob, is_minor, is_legal_heir, heir_succession_rank";
 
 const SELECT_DEPENDENTS =
@@ -345,7 +345,7 @@ const CLOSE_ATTRIBUTE_WINDOW =
 
 const INSERT_ATTRIBUTE_HISTORY =
   "INSERT INTO employee_attribute_history (tenant_id, entity_id, employee_id, attribute_path, value_text, effective_from, change_reason, source, governed_change_id, recorded_by, created_by) " +
-  "VALUES ($1, $2, $3, $4, $5, $6::date, $7::g01_attribute_change_reason, $8, $9, $10, $10) " +
+  "VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8, $9, $10, $10) " +
   "RETURNING id, tenant_id, employee_id, attribute_path, value_text, effective_from, effective_to, change_reason, source";
 
 const SELECT_ATTRIBUTE_HISTORY =

@@ -442,19 +442,19 @@ export class InMemoryAnalyticsEngineRepository implements AnalyticsEngineReposit
 
 const INSERT_SOURCE_CONTRACT = `
   INSERT INTO source_data_contracts (tenant_id, entity_id, source_module, source_view, version, schema_json, breaking_change_policy, status)
-  VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::g14_contract_status)
+  VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
   RETURNING id`;
 
 const INSERT_DATAMART = `
   INSERT INTO analytics_datamarts
     (tenant_id, entity_id, mart_code, name, mart_type, grain, source_modules, source_objects, contract_id, refresh_strategy, refresh_job_id, freshness_sla_minutes, health_status, contains_pii)
-  VALUES ($1, $2, $3, $4, $5::g14_mart_type, $6, $7, $8, $9, $10::g14_refresh_strategy, $11, $12, $13::g14_mart_health, $14)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
   ON CONFLICT (tenant_id, mart_code) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
   RETURNING id`;
 
 const UPDATE_DATAMART_REFRESHED = `
   UPDATE analytics_datamarts
-  SET row_count = $3, last_refreshed_at = $4, health_status = $5::g14_mart_health, updated_at = now()
+  SET row_count = $3, last_refreshed_at = $4, health_status = $5, updated_at = now()
   WHERE tenant_id = $1 AND mart_code = $2`;
 
 const SELECT_ACTIVE_SUPPRESSION_POLICY = `
@@ -465,15 +465,15 @@ const SELECT_ACTIVE_SUPPRESSION_POLICY = `
 
 const INSERT_SUPPRESSION_POLICY = `
   INSERT INTO suppression_policies (tenant_id, entity_id, name, applies_to, min_cell_size_k, complementary, band_instead_of_hide, is_active)
-  VALUES ($1, $2, $3, $4::g14_suppression_applies, $5, $6, $7, $8)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
   RETURNING id`;
 
 const INSERT_KPI_DEFINITION = `
   INSERT INTO kpi_definitions
     (tenant_id, entity_id, kpi_code, name, description, domain, version, definition_hash, source_mart_id, expression, unit, grain, min_cell_size, sensitivity, status, created_by)
-  VALUES ($1, $2, $3, $4, $5, $6::g14_domain, $7, $8,
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
           (SELECT id FROM analytics_datamarts WHERE tenant_id = $1 AND mart_code = $9),
-          $10, $11::g14_kpi_unit, $12::g14_grain, $13, $14::g14_sensitivity, $15::g14_lifecycle_status, $16)
+          $10, $11, $12, $13, $14, $15, $16)
   RETURNING id`;
 
 const RETIRE_PRIOR_ACTIVE_KPI = `
@@ -487,7 +487,7 @@ const ACTIVATE_KPI_DEFINITION = `
 const INSERT_KPI_SNAPSHOT = `
   INSERT INTO kpi_snapshots
     (tenant_id, entity_id, kpi_id, kpi_version, definition_hash, scope_type, scope_id, period_key, valid_time, knowledge_time, value, cell_size, data_as_of)
-  VALUES ($1, $2, $3, $4, $5, $6::g14_scope_type, $7, $8, $9, $10, $11, $12, $13)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
   RETURNING id`;
 
 const SUPERSEDE_KPI_SNAPSHOT = `
@@ -502,17 +502,17 @@ const SELECT_KPI_AS_OF_KNOWLEDGE = `
 
 const SUPERSEDE_KPI_TARGETS = `
   UPDATE kpi_target_history SET status = 'SUPERSEDED', updated_at = now()
-  WHERE tenant_id = $1 AND kpi_id = $2 AND scope_type = $3::g14_scope_type AND scope_id IS NOT DISTINCT FROM $4 AND status = 'ACTIVE'`;
+  WHERE tenant_id = $1 AND kpi_id = $2 AND scope_type = $3 AND scope_id IS NOT DISTINCT FROM $4 AND status = 'ACTIVE'`;
 
 const INSERT_KPI_TARGET = `
   INSERT INTO kpi_target_history (tenant_id, entity_id, kpi_id, scope_type, scope_id, target_value, effective_from, effective_to, set_by, status)
-  VALUES ($1, $2, $3, $4::g14_scope_type, $5, $6, $7, $8, $9, $10::g14_target_status)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
   RETURNING id`;
 
 const INSERT_REFRESH_LOG = `
   INSERT INTO datamart_refresh_logs
     (tenant_id, entity_id, mart_id, run_type, started_at, finished_at, rows_read, rows_written, status, error_detail, triggered_by, correlation_id)
-  VALUES ($1, $2, $3, $4::g14_refresh_run_type, $5, $6, $7, $8, $9::g14_refresh_status, $10, $11, $12)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
   RETURNING id`;
 
 const INSERT_SCOPE_POLICY = `
@@ -520,7 +520,7 @@ const INSERT_SCOPE_POLICY = `
     (tenant_id, entity_id, role, scope_dimensions, mart_id, priority, version, status, created_by, is_active)
   VALUES ($1, $2, $3, $4,
           (SELECT id FROM analytics_datamarts WHERE tenant_id = $1 AND mart_code = $5),
-          $6, $7, $8::g14_scope_policy_status, $9, false)
+          $6, $7, $8, $9, false)
   RETURNING id`;
 
 const DEACTIVATE_PRIOR_SCOPE_POLICY = `
@@ -534,7 +534,7 @@ const ACTIVATE_SCOPE_POLICY = `
 
 const INSERT_ACCESS_LOG = `
   INSERT INTO analytics_access_log (tenant_id, entity_id, user_id, action, target_type, target_id, scope_snapshot_json, row_count, correlation_id)
-  VALUES ($1, $2, $3, $4::g14_access_action, $5::g14_access_target_type, $6, $7::jsonb, $8, $9)`;
+  VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)`;
 
 /**
  * Postgres-backed persistence for the analytics engine (parameterised statements only).

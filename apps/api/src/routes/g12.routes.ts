@@ -150,6 +150,48 @@ export function registerG12Routes(kernel: ApiKernel): void {
     handler: (context) => appendAnnotation(context, requiredParam(context.params, "id"), "DISPUTE_RESOLUTION"),
   });
 
+  // `g12.correction.approve` — the two-custodian SoD corrigendum flow: an sr_custodian proposes, an
+  // INDEPENDENT sr_second_custodian approves (maker != checker != second-custodian, BRD G12). The
+  // correction is committed to the append-only chain only on approval. Distinct from the legacy
+  // single-step g12.sr.corrigendum append above, which remains as a backward-compatible admin fast-path.
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/corrigenda",
+    operationId: "g12.proposeCorrigendum",
+    protected: true,
+    permission: "g12.correction.approve",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) => {
+      const body = readBodyRecord(context.request.body);
+      return created({
+        corrigendum: context.services.serviceRegister.proposeCorrigendum(context.actor, {
+          targetEventId: requiredString(body, "targetEventId"),
+          correctionNote: requiredString(body, "correctionNote"),
+        }),
+      });
+    },
+  });
+  kernel.register({
+    method: "POST",
+    path: "/api/v1/sr/corrigenda/{id}:approve",
+    operationId: "g12.approveCorrigendum",
+    protected: true,
+    permission: "g12.correction.approve",
+    unsafe: true,
+    requiresIdempotencyKey: true,
+    handler: (context) =>
+      accepted({ corrigendum: context.services.serviceRegister.approveCorrigendum(context.actor, requiredParam(context.params, "id")) }),
+  });
+  kernel.register({
+    method: "GET",
+    path: "/api/v1/sr/corrigenda",
+    operationId: "g12.listCorrigenda",
+    protected: true,
+    permission: "g12.correction.approve",
+    handler: (context) => ok({ items: context.services.serviceRegister.listCorrigenda(context.scope) }),
+  });
+
   // ------------------------------------------------------------------------------------
   // PH-10B integrity pillars (BRD G12 FR-04/07/10/17)
   // ------------------------------------------------------------------------------------

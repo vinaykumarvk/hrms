@@ -15,30 +15,30 @@
 -- the genesis previous-hash convention is the explicit 64-zero digest.
 
 -- SECTION 1 — ENUM TYPES (g12_/g13_ prefix; UPPER_SNAKE values, CONVENTIONS §4)
-CREATE TYPE g12_transition_kind AS ENUM ('ENTRY_STATUS','ATTESTATION_STATUS','SUPERSESSION');
-CREATE TYPE g13_lock_status     AS ENUM ('ACTIVE','RELEASED','EXPIRED','FORCE_RELEASED');
+
+
 
 -- SECTION 2 — E19 sr_status_events (BRD G12 FR-03/FR-04 amended) — APPEND-ONLY, hash-chained
 -- Hash-chained per (tenant_id, employee_id) status chain. Entry-status and supersession
 -- transitions are tamper-evident here; no UPDATE/DELETE — status changes append, never mutate.
 CREATE TABLE sr_status_events (
-    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),   -- status_event_id
-    tenant_id                uuid NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
-    entity_id                uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    employee_id              uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT, -- owner of the chain
-    target_event_id          uuid NOT NULL REFERENCES service_register_events(id) ON DELETE RESTRICT, -- entry whose status changed
+    id                       text PRIMARY KEY DEFAULT gen_random_uuid()::text,   -- status_event_id
+    tenant_id                text NOT NULL REFERENCES tenants(id)  ON DELETE RESTRICT,
+    entity_id                text REFERENCES entities(id) ON DELETE RESTRICT,
+    employee_id              text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT, -- owner of the chain
+    target_event_id          text NOT NULL REFERENCES service_register_events(id) ON DELETE RESTRICT, -- entry whose status changed
     status_sequence_no       bigint NOT NULL,                               -- monotonic per (tenant,employee) status chain
-    transition_kind          g12_transition_kind NOT NULL,
+    transition_kind          text NOT NULL,
     from_value               varchar(32),                                   -- null on first
     to_value                 varchar(32) NOT NULL,
-    related_event_id         uuid REFERENCES service_register_events(id) ON DELETE RESTRICT, -- e.g. reversal causing SUPERSEDED
+    related_event_id         text REFERENCES service_register_events(id) ON DELETE RESTRICT, -- e.g. reversal causing SUPERSEDED
     actor                    varchar(64) NOT NULL,                          -- who/what caused the transition
     prev_status_hash         char(64) NOT NULL,                             -- SHA-256 of prior chain entry (64-zero genesis for first)
     status_hash              char(64) NOT NULL,                             -- SHA-256(canonical(status content) || prev_status_hash)
     hash_algorithm           varchar(16) NOT NULL DEFAULT 'SHA-256',
     recorded_at              timestamptz NOT NULL DEFAULT now(),            -- trusted-time commit stamp (server clock)
     created_at               timestamptz NOT NULL DEFAULT now(),            -- append timestamp; NO updated_at/is_deleted
-    created_by               uuid,
+    created_by               text,
     CONSTRAINT uq_sr_status_seq      UNIQUE (tenant_id, employee_id, status_sequence_no),
     CONSTRAINT uq_sr_status_hash     UNIQUE (tenant_id, employee_id, status_hash),
     CONSTRAINT ck_sr_status_hash_len CHECK (length(status_hash) = 64 AND length(prev_status_hash) = 64)
@@ -51,19 +51,19 @@ COMMENT ON TABLE sr_status_events IS 'G12 E19: append-only hash-chained status/s
 
 -- SECTION 3 — E14 checkout_locks (BRD G13 FR-004) ------------------------------------
 CREATE TABLE checkout_locks (
-    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id   uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id   uuid REFERENCES entities(id) ON DELETE RESTRICT,
-    document_id uuid NOT NULL REFERENCES documents(id) ON DELETE RESTRICT,
-    locked_by   uuid NOT NULL,                                  -- logical user ref
+    id          text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id   text REFERENCES entities(id) ON DELETE RESTRICT,
+    document_id text NOT NULL REFERENCES documents(id) ON DELETE RESTRICT,
+    locked_by   text NOT NULL,                                  -- logical user ref
     locked_at   timestamptz NOT NULL DEFAULT now(),
     expires_at  timestamptz NOT NULL,                           -- auto-expire to avoid stuck locks
     intent_note varchar(255),
-    status      g13_lock_status NOT NULL DEFAULT 'ACTIVE',
+    status      text NOT NULL DEFAULT 'ACTIVE',
     created_at  timestamptz NOT NULL DEFAULT now(),
     updated_at  timestamptz NOT NULL DEFAULT now(),
-    created_by  uuid,
-    updated_by  uuid,
+    created_by  text,
+    updated_by  text,
     is_deleted  boolean NOT NULL DEFAULT false
 );
 CREATE INDEX ix_checkout_locks_tenant   ON checkout_locks(tenant_id);

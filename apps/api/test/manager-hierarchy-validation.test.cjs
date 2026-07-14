@@ -184,3 +184,36 @@ test("ENFORCED g10 FnF sanction: requires hod/sanctioning_authority; l1_manager 
   assert.ok(sanctioned.sanctionedBy);
   assert.ok(sanctioned.sanctionedAt);
 });
+
+// ---- Manager hierarchy platform capabilities: subtree, dotted-line, skip-level (CC-007) ----------
+
+test("ENFORCED manager hierarchy: reporting subtree (transitive + dotted-line), dotted-line manager, and skip-level resolution", () => {
+  const services = createFoundationServices({ seedManagerHierarchy: true });
+  const ids = chainIds(services);
+  const resolver = services.authorityResolution;
+  const scope = { tenantId: ph03Ids.tenant, entityId: ph03Ids.entity };
+
+  // Subtree is transitive over the primary reporting line: L2's subtree = {L1, leaf}.
+  const l2Subtree = resolver.resolveReportingSubtree(scope, ids.l2);
+  assert.equal(l2Subtree.length, 2);
+  assert.ok(l2Subtree.includes(ids.leaf) && l2Subtree.includes(ids.l1));
+
+  // Dotted-line: leaf's dotted-line manager is L3, so leaf also appears in L3's subtree.
+  const l3Subtree = resolver.resolveReportingSubtree(scope, ids.l3);
+  assert.ok(l3Subtree.includes(ids.leaf), "dotted-line reportee appears in the dotted-line manager's subtree");
+
+  // Dotted-line resolution returns the secondary manager.
+  const dotted = resolver.resolveDottedLineManager(scope, { mechanism: "REPORTING_CHAIN", subjectEmployeeId: ids.leaf });
+  assert.equal(dotted.selectedAssignees[0].employeeId, ids.l3);
+
+  // An employee with no dotted-line manager fails closed.
+  assert.throws(
+    () => resolver.resolveDottedLineManager(scope, { mechanism: "REPORTING_CHAIN", subjectEmployeeId: ids.l1 }),
+    (error) => error.code === "PRECONDITION_FAILED"
+  );
+
+  // Skip-level: leaf's chain is L1(direct), L2, L3, L4, L5 — skip-level excludes the direct L1.
+  const skip = resolver.resolveSkipLevelManagers(scope, ids.leaf);
+  assert.ok(!skip.includes(ids.l1), "the direct reporting manager is not skip-level");
+  assert.ok(skip.includes(ids.l2) && skip.includes(ids.l5));
+});

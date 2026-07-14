@@ -297,31 +297,31 @@ export interface CrRiskSignalRow {
 
 const INSERT_BATCH =
   "INSERT INTO bulk_correction_batches (tenant_id, entity_id, batch_number, initiated_by, total_rows, valid_rows, invalid_rows, status, reason) " +
-  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8::g02_bulk_status, $9) RETURNING *";
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *";
 
 const UPDATE_BATCH_STATUS =
-  "UPDATE bulk_correction_batches SET status = $3::g02_bulk_status, valid_rows = $4, invalid_rows = $5, approved_by = $6, updated_at = now() " +
+  "UPDATE bulk_correction_batches SET status = $3, valid_rows = $4, invalid_rows = $5, approved_by = $6, updated_at = now() " +
   "WHERE tenant_id = $1 AND id = $2 AND is_deleted = false RETURNING *";
 
 const SELECT_BATCH = "SELECT * FROM bulk_correction_batches WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
 
 const APPEND_RISK_SIGNAL =
   "INSERT INTO cr_risk_signals (tenant_id, entity_id, change_request_id, signal_type, severity, score_contribution, detail) " +
-  "VALUES ($1, $2, $3, $4::g02_risk_signal_type, $5::g02_risk_severity, $6, $7::jsonb) RETURNING *";
+  "VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb) RETURNING *";
 
 const SELECT_RISK_SIGNALS =
   "SELECT * FROM cr_risk_signals WHERE tenant_id = $1 AND change_request_id = $2 ORDER BY detected_at ASC";
 
 /** Review mutates ONLY the review fields — never the detection payload (append-only, rule 9). */
 const RECORD_SIGNAL_REVIEW =
-  "UPDATE cr_risk_signals SET reviewed_by = $3, review_outcome = $4::g02_risk_review_outcome WHERE tenant_id = $1 AND id = $2 RETURNING *";
+  "UPDATE cr_risk_signals SET reviewed_by = $3, review_outcome = $4 WHERE tenant_id = $1 AND id = $2 RETURNING *";
 
 const UPDATE_REQUEST_RISK =
-  "UPDATE change_requests SET risk_score = $3, risk_band = $4::g02_risk_band, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *";
+  "UPDATE change_requests SET risk_score = $3, risk_band = $4, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *";
 
 const COMMIT_CHILD_ROW =
-  "UPDATE change_requests SET status = 'COMMITTED'::g02_cr_status, committed_at = now(), updated_at = now() " +
-  "WHERE tenant_id = $1 AND id = $2 AND status = 'APPROVED'::g02_cr_status RETURNING *";
+  "UPDATE change_requests SET status = 'COMMITTED', committed_at = now(), updated_at = now() " +
+  "WHERE tenant_id = $1 AND id = $2 AND status = 'APPROVED' RETURNING *";
 
 export class PgChangeGovernanceRepository {
   constructor(private readonly pool: Pool) {}

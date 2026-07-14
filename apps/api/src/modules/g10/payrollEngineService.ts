@@ -330,6 +330,11 @@ export class PayrollEngineService {
   /** FR-16 AC1: approval requires a different user than the run maker (SoD). */
   approveEngineRun(actor: ActorContext, runId: string): EnginePayrollRun {
     this.authorization.check(actor, "g10.payroll.approve", actor);
+    // PAYROLL_APPROVE capability: approving & locking a run is a payroll_approver (checker)
+    // action, distinct from the run maker (SoD) per auth-matrix.yaml g10.run.approve.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "payroll_approver" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Approving a payroll run requires the payroll_approver capability (PAYROLL_APPROVE)", { field: "actor" });
+    }
     const run = this.requireRun(actor, runId);
     this.assertRunMutable(run);
     if (run.status !== "COMPUTED") {
@@ -408,6 +413,11 @@ export class PayrollEngineService {
   /** FR-14 seam: mark the run's bank file transmitted — reopen is blocked afterwards. */
   markRunTransmitted(actor: ActorContext, runId: string): EnginePayrollRun {
     this.authorization.check(actor, "g10.payroll.disburse", actor);
+    // PAYROLL_DISBURSE capability: transmitting the bank file is a payroll_disburser action,
+    // distinct from the run maker and approver (3-way SoD) per auth-matrix.yaml g10.bankfile.sign_transmit.
+    if (!actor.permissions?.includes("*") && !actor.roles?.some((role) => role === "payroll_disburser" || role === "system")) {
+      throw new FoundationError("FORBIDDEN", "Transmitting the payroll bank file requires the payroll_disburser capability (PAYROLL_DISBURSE)", { field: "actor" });
+    }
     const run = this.requireRun(actor, runId);
     if (run.status !== "LOCKED") {
       throw new FoundationError("PRECONDITION_FAILED", "Only a LOCKED run can be transmitted");

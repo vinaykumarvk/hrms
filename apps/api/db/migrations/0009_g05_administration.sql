@@ -12,22 +12,22 @@
 --    Served/deemed-served precedence gates relieving (invariant 5.6-15 / ERR-G05-NOT-SERVED).
 -- -------------------------------------------------------------------------------------
 CREATE TABLE order_acknowledgements (
-    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id              uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id              uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    transfer_order_id      uuid NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
-    employee_id            uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    id                     text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id              text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id              text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    transfer_order_id      text NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
+    employee_id            text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
     served_on_date         date NOT NULL,
-    delivery_channel       g05_ack_channel NOT NULL,
-    served_by              uuid REFERENCES users(id) ON DELETE SET NULL,   -- null for system channels
-    acknowledgement_status g05_ack_status NOT NULL DEFAULT 'SERVED',
+    delivery_channel       text NOT NULL,
+    served_by              text REFERENCES users(id) ON DELETE SET NULL,   -- null for system channels
+    acknowledgement_status text NOT NULL DEFAULT 'SERVED',
     acknowledged_at        timestamptz,
     deemed_served_reason   text,                                           -- JOB-G05-SERVE-DEEM basis + reason
-    proof_document_id      uuid REFERENCES documents(id) ON DELETE SET NULL,
+    proof_document_id      text REFERENCES documents(id) ON DELETE SET NULL,
     created_at             timestamptz NOT NULL DEFAULT now(),
     updated_at             timestamptz NOT NULL DEFAULT now(),
-    created_by             uuid,
-    updated_by             uuid,
+    created_by             text,
+    updated_by             text,
     is_deleted             boolean NOT NULL DEFAULT false,
     -- Deemed service must be evidence-backed: the recorded basis is mandatory on the flip.
     CONSTRAINT ck_order_acks_deemed_reason CHECK (acknowledgement_status <> 'DEEMED_SERVED' OR deemed_served_reason IS NOT NULL)
@@ -44,31 +44,31 @@ CREATE INDEX ix_order_acks_doc      ON order_acknowledgements(proof_document_id)
 -- 2. charge_handovers (handover/assumption of charge incl. under-protest)  [BRD §5.2.10]
 -- -------------------------------------------------------------------------------------
 CREATE TABLE charge_handovers (
-    id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                 uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id                 uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    transfer_order_id         uuid NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
-    phase                     g05_charge_phase NOT NULL,
-    relinquishing_employee_id uuid REFERENCES employees(id) ON DELETE RESTRICT,
-    receiving_employee_id     uuid REFERENCES employees(id) ON DELETE RESTRICT, -- successor/link officer/custody-of-office
-    charge_type               g05_charge_type NOT NULL DEFAULT 'FULL',
+    id                        text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                 text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                 text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    transfer_order_id         text NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
+    phase                     text NOT NULL,
+    relinquishing_employee_id text REFERENCES employees(id) ON DELETE RESTRICT,
+    receiving_employee_id     text REFERENCES employees(id) ON DELETE RESTRICT, -- successor/link officer/custody-of-office
+    charge_type               text NOT NULL DEFAULT 'FULL',
     handover_date             date NOT NULL,
     assets_handed             jsonb,                                            -- inventory with asset ids
-    cash_imprest_amount       numeric(14,2),                                    -- VAL-CURRENCY
+    cash_imprest_amount       bigint,                                    -- VAL-CURRENCY
     pending_files_count       integer,
-    handover_note_document_id uuid REFERENCES documents(id) ON DELETE SET NULL,
-    status                    g05_charge_handover_status NOT NULL DEFAULT 'DRAFT',
+    handover_note_document_id text REFERENCES documents(id) ON DELETE SET NULL,
+    status                    text NOT NULL DEFAULT 'DRAFT',
     under_protest             boolean NOT NULL DEFAULT false,                   -- FR-G05-016
     dispute_sla_due_at        timestamptz,                                      -- JOB-G05-DISPUTE-SLA
-    forced_action_type        g05_forced_action_type,                           -- HANDOVER_UNDER_PROTEST when forced
+    forced_action_type        text,                           -- HANDOVER_UNDER_PROTEST when forced
     forced_action_reason      text,
-    forced_action_by          uuid REFERENCES users(id) ON DELETE SET NULL,
-    accepted_by               uuid REFERENCES users(id) ON DELETE SET NULL,
+    forced_action_by          text REFERENCES users(id) ON DELETE SET NULL,
+    accepted_by               text REFERENCES users(id) ON DELETE SET NULL,
     accepted_at               timestamptz,
     created_at                timestamptz NOT NULL DEFAULT now(),
     updated_at                timestamptz NOT NULL DEFAULT now(),
-    created_by                uuid,
-    updated_by                uuid,
+    created_by                text,
+    updated_by                text,
     is_deleted                boolean NOT NULL DEFAULT false,
     CONSTRAINT ck_charge_handovers_forced_reason CHECK (forced_action_type IS NULL OR forced_action_reason IS NOT NULL),
     -- Relinquisher and acceptor must be different persons (P02 SoD).
@@ -87,13 +87,13 @@ CREATE INDEX ix_charge_handovers_doc         ON charge_handovers(handover_note_d
 -- 3. deputation_records (deputation terms, tenure caps, repatriation)  [BRD §5.2.13]
 -- -------------------------------------------------------------------------------------
 CREATE TABLE deputation_records (
-    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id             uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id             uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    transfer_order_id     uuid NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
-    employee_id           uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    borrowing_org_unit_id uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT, -- may be EXTERNAL type
-    lending_org_unit_id   uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
+    id                    text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id             text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id             text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    transfer_order_id     text NOT NULL REFERENCES transfer_orders(id) ON DELETE RESTRICT,
+    employee_id           text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    borrowing_org_unit_id text NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT, -- may be EXTERNAL type
+    lending_org_unit_id   text NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
     deputation_terms      jsonb,                                                     -- pay protection, allowance %, terms ref
     start_date            date NOT NULL,
     initial_tenure_months integer NOT NULL,
@@ -101,12 +101,12 @@ CREATE TABLE deputation_records (
     max_tenure_months     integer,                                                   -- policy cap (ERR-G05-DEPUTATION-CAP)
     extension_count       integer NOT NULL DEFAULT 0,
     repatriation_due_date date,
-    repatriation_status   g05_repatriation_status NOT NULL DEFAULT 'ACTIVE',
-    repatriation_order_id uuid REFERENCES transfer_orders(id) ON DELETE SET NULL,    -- reverse REPATRIATION-class order
+    repatriation_status   text NOT NULL DEFAULT 'ACTIVE',
+    repatriation_order_id text REFERENCES transfer_orders(id) ON DELETE SET NULL,    -- reverse REPATRIATION-class order
     created_at            timestamptz NOT NULL DEFAULT now(),
     updated_at            timestamptz NOT NULL DEFAULT now(),
-    created_by            uuid,
-    updated_by            uuid,
+    created_by            text,
+    updated_by            text,
     is_deleted            boolean NOT NULL DEFAULT false,
     CONSTRAINT ck_deputation_records_end   CHECK (current_end_date >= start_date),
     CONSTRAINT ck_deputation_records_repat CHECK (repatriation_due_date IS NULL OR repatriation_due_date >= start_date),
@@ -125,25 +125,25 @@ CREATE INDEX ix_deputation_records_repat_due ON deputation_records(repatriation_
 -- 4. quarter_allotments (estate retention + penal-rate flip)  [BRD §5.2.21]
 -- -------------------------------------------------------------------------------------
 CREATE TABLE quarter_allotments (
-    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id                uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    employee_id              uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    transfer_order_id        uuid REFERENCES transfer_orders(id) ON DELETE SET NULL,  -- transfer occasioning retention
+    id                       text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    employee_id              text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    transfer_order_id        text REFERENCES transfer_orders(id) ON DELETE SET NULL,  -- transfer occasioning retention
     quarter_ref              varchar(60) NOT NULL,                                    -- accommodation identifier
-    org_unit_id              uuid NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT, -- estate-owning office
+    org_unit_id              text NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT, -- estate-owning office
     retention_allowed        boolean NOT NULL DEFAULT false,                          -- Authority-approved
-    retention_status         g05_quarter_retention_status NOT NULL DEFAULT 'OCCUPIED',
+    retention_status         text NOT NULL DEFAULT 'OCCUPIED',
     vacate_by_date           date,                                                    -- statutory vacation deadline
     vacated_on               date,
-    licence_fee_rate         numeric(14,2),                                           -- INR/month (normal/penal; VAL-CURRENCY)
-    penal_licence_fee_rate   numeric(14,2),                                           -- rate applied on overstay
+    licence_fee_rate         bigint,                                           -- INR/month (normal/penal; VAL-CURRENCY)
+    penal_licence_fee_rate   bigint,                                           -- rate applied on overstay
     penal_rate_applies       boolean NOT NULL DEFAULT false,                          -- JOB-G05-QTR-OVERSTAY
     licence_fee_recovery_ref varchar(60),                                             -- G10 recovery signal ref
     created_at               timestamptz NOT NULL DEFAULT now(),
     updated_at               timestamptz NOT NULL DEFAULT now(),
-    created_by               uuid,
-    updated_by               uuid,
+    created_by               text,
+    updated_by               text,
     is_deleted               boolean NOT NULL DEFAULT false
 );
 CREATE INDEX ix_quarter_allotments_tenant   ON quarter_allotments(tenant_id);
@@ -160,9 +160,9 @@ CREATE INDEX ix_quarter_allotments_vacate   ON quarter_allotments(vacate_by_date
 --    never as magic numbers in the service. Seeded defaults are Org-Admin-configurable.
 -- -------------------------------------------------------------------------------------
 CREATE TABLE g05_joining_time_rules (
-    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    band              g05_distance_band NOT NULL,
+    id                text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id         text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    band              text NOT NULL,
     same_station      boolean NOT NULL DEFAULT false,   -- LOCAL is matched by same-station, not km
     min_distance_km   integer NOT NULL DEFAULT 0,
     max_distance_km   integer,                          -- exclusive upper bound; NULL = unbounded
@@ -178,7 +178,7 @@ CREATE INDEX ix_g05_joining_time_rules_tenant ON g05_joining_time_rules(tenant_i
 
 -- Seeded §16.4 defaults per tenant (LOCAL 0 / SHORT <200km 3 / MEDIUM 200–500km 5 / LONG 500–1000km 7 / OUTSTATION >1000km 10).
 INSERT INTO g05_joining_time_rules (tenant_id, band, same_station, min_distance_km, max_distance_km, joining_time_days)
-SELECT t.id, v.band::g05_distance_band, v.same_station, v.min_km, v.max_km, v.days
+SELECT t.id, v.band::text, v.same_station, v.min_km, v.max_km, v.days
 FROM tenants t
 CROSS JOIN (VALUES
     ('LOCAL',      true,  0,    0,    0),
@@ -193,9 +193,9 @@ CROSS JOIN (VALUES
 --    cascade; one active row per tenant with seeded defaults).
 -- -------------------------------------------------------------------------------------
 CREATE TABLE g05_administration_policy (
-    id                                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                           uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    default_delivery_channel            g05_ack_channel NOT NULL DEFAULT 'IN_APP',
+    id                                  text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                           text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    default_delivery_channel            text NOT NULL DEFAULT 'IN_APP',
     deemed_service_window_days          integer NOT NULL DEFAULT 7,   -- JOB-G05-SERVE-DEEM
     dispute_sla_hours                   integer NOT NULL DEFAULT 72,  -- JOB-G05-DISPUTE-SLA
     permissible_retention_months        integer NOT NULL DEFAULT 2,   -- ERR-G05-QUARTER-OVERSTAY basis

@@ -99,15 +99,30 @@ test("G07 training: an employee can self-nominate; a random unrelated employee c
   });
   assert.equal(strangerNominatesRohan.status, 403);
 
-  // But Arjun IS Rohan's resolved reporting-chain manager, so he can nominate his report (per
-  // FR-G07-009 AC1). Note: this repo does not yet enforce the BRD's UNIQUE(session, employee)
-  // business rule, so a second nomination for the same pair is accepted rather than 409 —
-  // a separate, pre-existing gap outside this fix's scope (see the coverage report).
+  // UNIQUE(session, employee) is now enforced: a second nomination for the same pair is rejected
+  // (409) even when raised by the resolved reporting-chain manager (Arjun). The manager can still
+  // nominate their report — on a distinct session, asserted below.
+  const managerReNominateSameSession = call(api, actor(arjun.id, ["g07.nomination.submit"]), {
+    method: "POST",
+    path: "/api/v1/training/nominations",
+    headers: { "Idempotency-Key": "idem-g07-manager-renominate-001" },
+    body: { sessionId, employeeId: rohan.id },
+  });
+  assert.equal(managerReNominateSameSession.status, 409);
+
+  // FR-G07-009 AC1: Arjun IS Rohan's resolved reporting-chain manager, so he can nominate his
+  // report on a distinct session.
+  const secondSession = call(api, actor("probe", ["*"]), {
+    method: "POST",
+    path: "/api/v1/training/sessions",
+    headers: { "Idempotency-Key": "idem-g07-second-session-001" },
+    body: { programCode: "PROG-G07-UNIQUE-VALIDATION", title: "Validation second session", capacity: 5 },
+  }).body.session;
   const managerNominatesReport = call(api, actor(arjun.id, ["g07.nomination.submit"]), {
     method: "POST",
     path: "/api/v1/training/nominations",
     headers: { "Idempotency-Key": "idem-g07-manager-nominate-001" },
-    body: { sessionId, employeeId: rohan.id },
+    body: { sessionId: secondSession.id, employeeId: rohan.id },
   });
   assert.equal(managerNominatesReport.status, 201);
 });

@@ -8,35 +8,32 @@
 
 -- SECTION 1 — ENUM TYPES (frozen; g02_ prefix)
 -- =====================================================================================
-CREATE TYPE g02_risk_band           AS ENUM ('LOW','MEDIUM','HIGH','BLOCKED');
-CREATE TYPE g02_bulk_status         AS ENUM ('UPLOADED','VALIDATED','PENDING_APPROVAL','APPROVED','REJECTED',
-                                             'COMMITTED','PARTIAL_FAILED');
-CREATE TYPE g02_risk_signal_type    AS ENUM ('DUPLICATE_BANK_ACCOUNT','PRE_PAYROLL_CUTOFF','PRE_SEPARATION_WINDOW',
-                                             'DEVICE_VELOCITY','MULTI_EMPLOYEE_SAME_DEVICE',
-                                             'AUTH_CHANNEL_THEN_FINANCIAL','OFF_HOURS_BURST');
-CREATE TYPE g02_risk_severity       AS ENUM ('INFO','WARN','HIGH','BLOCK');
-CREATE TYPE g02_risk_review_outcome AS ENUM ('CLEARED','CONFIRMED_FRAUD','ESCALATED');
+
+
+
+
+
 
 -- SECTION 2 — E12 bulk_correction_batches (FR-G02-009)
 -- =====================================================================================
 CREATE TABLE bulk_correction_batches (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),             -- bulk_batch_id
-    tenant_id       uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id       uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,             -- bulk_batch_id
+    tenant_id       text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id       text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
     batch_number    varchar(24) NOT NULL,                                   -- BLK-2026-0007
-    initiated_by    uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    initiated_by    text NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     source_file_ref varchar(200),                                           -- uploaded CSV/XLSX (G13)
     total_rows      integer NOT NULL DEFAULT 0,
     valid_rows      integer NOT NULL DEFAULT 0,
     invalid_rows    integer NOT NULL DEFAULT 0,
-    status          g02_bulk_status NOT NULL DEFAULT 'UPLOADED',
+    status          text NOT NULL DEFAULT 'UPLOADED',
     dry_run_report_ref varchar(200),
     reason          varchar(1000),
-    approved_by     uuid REFERENCES users(id) ON DELETE SET NULL,
+    approved_by     text REFERENCES users(id) ON DELETE SET NULL,
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
-    created_by      uuid,
-    updated_by      uuid,
+    created_by      text,
+    updated_by      text,
     is_deleted      boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_bcb_number UNIQUE (tenant_id, batch_number),
     CONSTRAINT ck_bcb_rowcounts CHECK (total_rows >= 0 AND valid_rows >= 0 AND invalid_rows >= 0)
@@ -52,8 +49,8 @@ COMMENT ON TABLE bulk_correction_batches IS
 -- =====================================================================================
 ALTER TABLE change_requests
     ADD COLUMN risk_score    smallint,
-    ADD COLUMN risk_band     g02_risk_band,
-    ADD COLUMN bulk_batch_id uuid REFERENCES bulk_correction_batches(id) ON DELETE SET NULL,
+    ADD COLUMN risk_band     text,
+    ADD COLUMN bulk_batch_id text REFERENCES bulk_correction_batches(id) ON DELETE SET NULL,
     ADD CONSTRAINT ck_cr_risk_score CHECK (risk_score IS NULL OR (risk_score BETWEEN 0 AND 100));
 CREATE INDEX ix_cr_bulk_batch ON change_requests(bulk_batch_id);
 
@@ -63,19 +60,19 @@ CREATE INDEX ix_cr_bulk_batch ON change_requests(bulk_batch_id);
 -- decision mutates ONLY reviewed_by/review_outcome — detection rows are never updated or
 -- deleted. No updated_at/is_deleted columns by design.
 CREATE TABLE cr_risk_signals (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),          -- risk_signal_id
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id          uuid NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
-    change_request_id  uuid NOT NULL REFERENCES change_requests(id) ON DELETE RESTRICT,
-    signal_type        g02_risk_signal_type NOT NULL,
-    severity           g02_risk_severity NOT NULL,
+    id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,          -- risk_signal_id
+    tenant_id          text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id          text NOT NULL REFERENCES entities(id) ON DELETE RESTRICT,
+    change_request_id  text NOT NULL REFERENCES change_requests(id) ON DELETE RESTRICT,
+    signal_type        text NOT NULL,
+    severity           text NOT NULL,
     score_contribution smallint NOT NULL DEFAULT 0,
     detail             jsonb,                                               -- evidence (matched employee_ids for mule)
     detected_at        timestamptz NOT NULL DEFAULT now(),
-    reviewed_by        uuid REFERENCES users(id) ON DELETE SET NULL,        -- Fraud Reviewer (capability flag)
-    review_outcome     g02_risk_review_outcome,
+    reviewed_by        text REFERENCES users(id) ON DELETE SET NULL,        -- Fraud Reviewer (capability flag)
+    review_outcome     text,
     created_at         timestamptz NOT NULL DEFAULT now(),
-    created_by         uuid
+    created_by         text
 );
 CREATE INDEX ix_crrisk_tenant ON cr_risk_signals(tenant_id);
 CREATE INDEX ix_crrisk_cr     ON cr_risk_signals(change_request_id);

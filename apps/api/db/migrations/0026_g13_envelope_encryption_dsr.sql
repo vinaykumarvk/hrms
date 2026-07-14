@@ -27,41 +27,41 @@
 --     crypto-shred is always domain-local (DI-6 / FR-018 BR-2).
 
 -- SECTION 1 — ENUM TYPES (g13_ prefix; UPPER_SNAKE values, CONVENTIONS §4) -------------
-CREATE TYPE g13_key_scope      AS ENUM ('SHARED_CMK','DEDICATED_CMK');
-CREATE TYPE g13_storage_class  AS ENUM ('HOT','WARM','COLD','WORM_LOCKED');
-CREATE TYPE g13_dsr_type       AS ENUM ('ACCESS','ERASURE','RECTIFICATION','PORTABILITY');
-CREATE TYPE g13_dsr_status     AS ENUM ('RECEIVED','UNDER_REVIEW','EXEMPTED','PARTIALLY_FULFILLED','FULFILLED','REJECTED');
-CREATE TYPE g13_erasure_method AS ENUM ('CRYPTO_SHRED','PHYSICAL_PURGE','EXEMPT_RETAINED');
+
+
+
+
+
 
 -- documents.dpdp_erasure_state (0001) uses the platform erasure_method enum; add the G13
 -- lattice outcomes additively so EXEMPT_RETAINED / PHYSICAL_PURGE are recordable there.
-ALTER TYPE erasure_method ADD VALUE IF NOT EXISTS 'PHYSICAL_PURGE';
-ALTER TYPE erasure_method ADD VALUE IF NOT EXISTS 'EXEMPT_RETAINED';
+
+
 
 -- SECTION 2 — E19 storage_objects (BRD G13 FR-005) --------------------------------------
 -- Envelope encryption: per-object AES-256-GCM DEK; ONLY wrapped_dek + kms_key_id stored.
 CREATE TABLE storage_objects (
-    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id         uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id         text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id         text REFERENCES entities(id) ON DELETE RESTRICT,
     bucket            varchar(120) NOT NULL,
     object_key        varchar(512) NOT NULL,
     content_hash      char(64) NOT NULL,
     dedup_index_key   char(64) NOT NULL,                       -- HMAC(content_hash, domain_secret) — no oracle (R9)
     security_domain   varchar(40) NOT NULL DEFAULT 'DEFAULT',  -- dedup/key boundary (R1/R9)
-    key_scope         g13_key_scope NOT NULL DEFAULT 'SHARED_CMK',
+    key_scope         text NOT NULL DEFAULT 'SHARED_CMK',
     dek_shared        boolean NOT NULL DEFAULT false,          -- ref by >1 doc => no crypto-shred (R1/DI-6)
     size_bytes        bigint NOT NULL,
     encryption_alg    varchar(40) NOT NULL DEFAULT 'AES-256-GCM',
     kms_key_id        varchar(160) NOT NULL,                   -- master-key reference (never key bytes)
     wrapped_dek       bytea NOT NULL,                          -- DEK wrapped by the master key; ''::bytea after crypto-shred
-    storage_class     g13_storage_class NOT NULL DEFAULT 'HOT',
+    storage_class     text NOT NULL DEFAULT 'HOT',
     worm_retain_until timestamptz,                             -- gov EXTENSION — object-lock retention
     ref_count         integer NOT NULL DEFAULT 1,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
-    created_by        uuid,
-    updated_by        uuid,
+    created_by        text,
+    updated_by        text,
     is_deleted        boolean NOT NULL DEFAULT false
 );
 CREATE INDEX ix_storage_objects_tenant ON storage_objects(tenant_id);
@@ -70,24 +70,24 @@ CREATE INDEX ix_storage_objects_key    ON storage_objects(kms_key_id);          
 
 -- SECTION 3 — E22 data_subject_requests (BRD G13 FR-018, R8 precedence lattice) ---------
 CREATE TABLE data_subject_requests (
-    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id                uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-    entity_id                uuid REFERENCES entities(id) ON DELETE RESTRICT,
+    id                       text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id                text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    entity_id                text REFERENCES entities(id) ON DELETE RESTRICT,
     dsr_no                   varchar(40) NOT NULL,
-    data_subject_employee_id uuid NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
-    request_type             g13_dsr_type NOT NULL,
-    consent_ref_id           uuid,                                -- DPDPA basis (consent_records — logical ref)
+    data_subject_employee_id text NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    request_type             text NOT NULL,
+    consent_ref_id           text,                                -- DPDPA basis (consent_records — logical ref)
     received_at              timestamptz NOT NULL DEFAULT now(),  -- statutory clock starts (AC1)
-    status                   g13_dsr_status NOT NULL DEFAULT 'RECEIVED',
+    status                   text NOT NULL DEFAULT 'RECEIVED',
     legal_basis_exemption    varchar(200),                        -- statutory retention/hold/WORM override (VAL-G13-LATTICE)
     affected_document_count  integer,
     resolution_note          text,
-    erasure_method           g13_erasure_method,                  -- CRYPTO_SHRED/PHYSICAL_PURGE/EXEMPT_RETAINED
-    adjudicated_by           uuid,                                -- DPO — logical ref; executor must differ (AC7 SoD)
+    erasure_method           text,                  -- CRYPTO_SHRED/PHYSICAL_PURGE/EXEMPT_RETAINED
+    adjudicated_by           text,                                -- DPO — logical ref; executor must differ (AC7 SoD)
     created_at               timestamptz NOT NULL DEFAULT now(),
     updated_at               timestamptz NOT NULL DEFAULT now(),
-    created_by               uuid,
-    updated_by               uuid,
+    created_by               text,
+    updated_by               text,
     is_deleted               boolean NOT NULL DEFAULT false,
     CONSTRAINT uq_dsr_no UNIQUE (tenant_id, dsr_no)
 );

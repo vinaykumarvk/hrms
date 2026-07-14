@@ -239,7 +239,7 @@ const CLAIM_PARTITION_EVENTS =
   "pinned_mapping_version = COALESCE(o.pinned_mapping_version, (" +
   "  SELECT m.mapping_version FROM sr_event_mapping m" +
   "  WHERE m.tenant_id = o.tenant_id AND m.leave_type_code = o.leave_type_code" +
-  "    AND m.event_type = (CASE o.event_type WHEN 'LEAVE_APPROVED' THEN 'APPROVED' WHEN 'LEAVE_CANCELLED' THEN 'CANCELLED' ELSE 'AMENDED' END)::g04_mapping_event_type" +
+  "    AND m.event_type = (CASE o.event_type WHEN 'LEAVE_APPROVED' THEN 'APPROVED' WHEN 'LEAVE_CANCELLED' THEN 'CANCELLED' ELSE 'AMENDED' END)" +
   "    AND m.status = 'PUBLISHED' AND m.is_deleted = false" +
   "    AND m.effective_from <= o.spell_start AND COALESCE(m.effective_to, 'infinity'::date) >= o.spell_start" +
   "  ORDER BY m.mapping_version DESC LIMIT 1" +

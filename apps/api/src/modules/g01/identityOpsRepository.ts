@@ -395,13 +395,13 @@ const INSERT_MERGE_OUTBOX =
 
 const INSERT_BATCH =
   "INSERT INTO employee_import_batches (tenant_id, entity_id, template_version, validation_profile, total_rows, status, created_by) " +
-  "VALUES ($1, $2, $3, $4::g01_validation_profile, $5, 'UPLOADED', $6) RETURNING id";
+  "VALUES ($1, $2, $3, $4, $5, 'UPLOADED', $6) RETURNING id";
 
 const INSERT_STAGING_ROW =
   "INSERT INTO import_staging_rows (tenant_id, entity_id, batch_id, row_number, raw_payload, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id";
 
 const UPDATE_ROW_VALIDATION =
-  "UPDATE import_staging_rows SET validation_status = $3::g01_row_status, validation_errors = $4, row_version = row_version + 1, updated_at = now() " +
+  "UPDATE import_staging_rows SET validation_status = $3, validation_errors = $4, row_version = row_version + 1, updated_at = now() " +
   "WHERE tenant_id = $1 AND id = $2";
 
 const UPDATE_ROW_COMMITTED =
@@ -409,22 +409,22 @@ const UPDATE_ROW_COMMITTED =
   "WHERE tenant_id = $1 AND id = $2";
 
 const UPDATE_BATCH_COUNTS =
-  "UPDATE employee_import_batches SET valid_rows = $3, provisional_rows = $4, error_rows = $5, status = $6::g01_import_status, committed_at = CASE WHEN $6 = 'COMMITTED' THEN now() ELSE committed_at END, committed_by = $7, row_version = row_version + 1, updated_at = now() " +
+  "UPDATE employee_import_batches SET valid_rows = $3, provisional_rows = $4, error_rows = $5, status = $6, committed_at = CASE WHEN $6 = 'COMMITTED' THEN now() ELSE committed_at END, committed_by = $7, row_version = row_version + 1, updated_at = now() " +
   "WHERE tenant_id = $1 AND id = $2";
 
 const APPLY_SEPARATION =
-  "UPDATE employees SET employment_status = $3::employment_status, separation_date = $4::date, separation_reason = $5, row_version = row_version + 1, updated_at = now(), updated_by = $6 " +
+  "UPDATE employees SET employment_status = $3, separation_date = $4::date, separation_reason = $5, row_version = row_version + 1, updated_at = now(), updated_by = $6 " +
   "WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
 
 const APPLY_RECORD_STATE =
-  "UPDATE employees SET record_state = $3::record_state, row_version = row_version + 1, updated_at = now(), updated_by = $4 WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
+  "UPDATE employees SET record_state = $3, row_version = row_version + 1, updated_at = now(), updated_by = $4 WHERE tenant_id = $1 AND id = $2 AND is_deleted = false";
 
 const SELECT_ACTIVE_HOLD =
   "SELECT id FROM legal_holds WHERE tenant_id = $1 AND employee_id = $2 AND status = 'ACTIVE' AND is_deleted = false LIMIT 1";
 
 const INSERT_LEGAL_HOLD =
   "INSERT INTO legal_holds (tenant_id, entity_id, employee_id, hold_type, reason, status, placed_by, created_by) " +
-  "VALUES ($1, $2, $3, $4::g01_hold_type, $5, 'ACTIVE', $6, $6) RETURNING id";
+  "VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, $6) RETURNING id";
 
 const RELEASE_LEGAL_HOLD =
   "UPDATE legal_holds SET status = 'RELEASED', released_at = now(), updated_by = $3, row_version = row_version + 1, updated_at = now() " +
