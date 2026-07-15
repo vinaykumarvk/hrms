@@ -1,32 +1,77 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { EmployeeDependentRecord, HrmsApiError, HrmsClient } from "../../api/hrmsClient";
 import { OperationalState } from "../../app/OperationalStates";
+import { DataTable, DataTableColumnDef } from "../../components/ui/DataTable";
+import { useForm, required } from "../../lib/useForm";
+import { useDataTable } from "../../lib/useDataTable";
+import { FormField, FormActions } from "../../components/ui/Form";
 
-/** Canonical view state for the employee dependents satellite list. */
+/* ── Types ─────────────────────────────────────────────────── */
+
 type DependentsState =
   | { kind: "loading" }
   | { kind: "error"; errorCode: string }
   | { kind: "empty"; employeeId: string }
   | { kind: "ready"; employeeId: string; dependents: EmployeeDependentRecord[] };
 
-/** Terminal feedback for the add-dependent submit. */
 type SubmitPhase =
   | { kind: "idle" }
-  | { kind: "submitting" }
   | { kind: "success"; fullName: string }
   | { kind: "error"; errorCode: string };
 
 const RELATIONSHIPS: EmployeeDependentRecord["relationship"][] = [
-  "SPOUSE",
-  "SON",
-  "DAUGHTER",
-  "FATHER",
-  "MOTHER",
-  "BROTHER",
-  "SISTER",
-  "GUARDIAN",
-  "OTHER",
+  "SPOUSE", "SON", "DAUGHTER", "FATHER", "MOTHER",
+  "BROTHER", "SISTER", "GUARDIAN", "OTHER",
 ];
+
+/* ── Columns ───────────────────────────────────────────────── */
+
+type DependentColumn = "name" | "relationship" | "heir" | "dob";
+
+const DEPENDENT_COLUMNS: DataTableColumnDef<EmployeeDependentRecord, DependentColumn>[] = [
+  {
+    id: "name",
+    header: "Name",
+    sortable: true,
+    resolve: (d) => <span className="font-medium">{d.fullName}</span>,
+    sortValue: (d) => d.fullName,
+    filterValue: (d) => d.fullName,
+  },
+  {
+    id: "relationship",
+    header: "Relationship",
+    sortable: true,
+    resolve: (d) => (
+      <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+        {d.relationship}
+      </span>
+    ),
+    sortValue: (d) => d.relationship,
+    filterValue: (d) => d.relationship,
+  },
+  {
+    id: "heir",
+    header: "Heir",
+    resolve: (d) => (d.isLegalHeir ? "✓" : "—"),
+    sortValue: (d) => (d.isLegalHeir ? 1 : 0),
+    filterValue: (d) => (d.isLegalHeir ? "yes" : "no"),
+    className: "text-center",
+  },
+  {
+    id: "dob",
+    header: "Date of Birth",
+    resolve: (d) => (d.dob ?? "—"),
+    sortValue: (d) => d.dob ?? "",
+    filterValue: (d) => d.dob ?? "",
+  },
+];
+
+const FILTER_COLS = [
+  { id: "name", label: "Name", type: "text" as const },
+  { id: "relationship", label: "Relationship", type: "text" as const },
+];
+
+/* ── Loader ────────────────────────────────────────────────── */
 
 async function loadDependents(client: HrmsClient, employeeId?: string): Promise<DependentsState> {
   try {
@@ -35,81 +80,74 @@ async function loadDependents(client: HrmsClient, employeeId?: string): Promise<
       const employees = await client.listEmployees();
       targetId = employees.items[0]?.id;
     }
-    if (!targetId) {
-      return { kind: "error", errorCode: "NOT_FOUND" };
-    }
+    if (!targetId) return { kind: "error", errorCode: "NOT_FOUND" };
     const dependents = await client.listEmployeeDependents(targetId);
     return dependents.items.length === 0
       ? { kind: "empty", employeeId: targetId }
       : { kind: "ready", employeeId: targetId, dependents: dependents.items };
   } catch (error) {
-    return { kind: "error", errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR" };
+    return {
+      kind: "error",
+      errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR",
+    };
   }
 }
+
+/* ── Component ─────────────────────────────────────────────── */
 
 export interface EmployeeDependentsPanelProps {
   client: HrmsClient;
   employeeId?: string;
 }
 
-/**
- * PH-07E G01 dependents satellite surface: lists GET /employees/{id}/dependents and adds rows
- * through POST /employees/{id}/dependents (PH-07A route). The dependent national id renders only
- * as the server-masked value; nothing is unmasked client-side.
- */
 export function EmployeeDependentsPanel({ client, employeeId }: EmployeeDependentsPanelProps) {
   const [state, setState] = useState<DependentsState>({ kind: "loading" });
   const [refreshToken, setRefreshToken] = useState(0);
-  const [fullName, setFullName] = useState("");
-  const [relationship, setRelationship] = useState<EmployeeDependentRecord["relationship"]>("SPOUSE");
-  const [dob, setDob] = useState("");
-  const [isLegalHeir, setIsLegalHeir] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<SubmitPhase>({ kind: "idle" });
+  const [submitPhase, setSubmitPhase] = useState<SubmitPhase>({ kind: "idle" });
+  const [tableState, tableCallbacks] = useDataTable<DependentColumn>();
+
+  const form = useForm({
+    fullName: { initial: "", validate: required("Full name is required.") },
+    relationship: { initial: "SPOUSE" as EmployeeDependentRecord["relationship"] },
+    dob: { initial: "" },
+    isLegalHeir: { initial: false },
+  });
 
   useEffect(() => {
     let mounted = true;
     setState({ kind: "loading" });
     void loadDependents(client, employeeId).then((next) => {
-      if (mounted) {
-        setState(next);
-      }
+      if (mounted) setState(next);
     });
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false };
   }, [client, employeeId, refreshToken]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (state.kind !== "ready" && state.kind !== "empty") {
-      return;
-    }
-    if (!fullName.trim()) {
-      setValidationError("The dependent full name is required.");
-      return;
-    }
-    setValidationError(null);
-    setPhase({ kind: "submitting" });
-    void client
-      .addEmployeeDependent(
+  const handleFormSubmit = form.handleSubmit(async (values) => {
+    if (state.kind !== "ready" && state.kind !== "empty") return;
+    setSubmitPhase({ kind: "idle" });
+    try {
+      const result = await client.addEmployeeDependent(
         state.employeeId,
-        { fullName: fullName.trim(), relationship, dob: dob || undefined, isLegalHeir },
-        crypto.randomUUID()
-      )
-      .then((result) => {
-        setPhase({ kind: "success", fullName: result.dependent.fullName });
-        setFullName("");
-        setDob("");
-        setIsLegalHeir(false);
-        setRefreshToken((token) => token + 1);
-      })
-      .catch((error: unknown) => {
-        setPhase({ kind: "error", errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR" });
+        {
+          fullName: values.fullName.trim(),
+          relationship: values.relationship,
+          dob: values.dob || undefined,
+          isLegalHeir: values.isLegalHeir,
+        },
+        crypto.randomUUID(),
+      );
+      setSubmitPhase({ kind: "success", fullName: result.dependent.fullName });
+      form.reset({ fullName: "", dob: "", isLegalHeir: false });
+      setRefreshToken((t) => t + 1);
+    } catch (error: unknown) {
+      setSubmitPhase({
+        kind: "error",
+        errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR",
       });
-  }
+    }
+  });
 
-  const submitting = phase.kind === "submitting";
+  const dependents = state.kind === "ready" ? state.dependents : [];
 
   return (
     <section className="record-panel g01-dependents-panel" aria-label="G01 employee dependents">
@@ -118,75 +156,101 @@ export function EmployeeDependentsPanel({ client, employeeId }: EmployeeDependen
           <p className="eyebrow">G01 Profile</p>
           <h2>Dependents</h2>
         </div>
+        {state.kind === "ready" && (
+          <span className="text-xs text-gray-500">
+            {dependents.length} dependent{dependents.length !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
+
       {state.kind === "loading" ? (
-        <OperationalState kind="loading" title="Loading dependents" detail="Fetching the employee dependent satellite rows." />
-      ) : null}
-      {state.kind === "error" ? (
-        <OperationalState
-          kind="error"
-          title="Could not load dependents"
-          detail={`The dependent list failed with error code ${state.errorCode}.`}
+        <OperationalState kind="loading" title="Loading dependents" detail="Fetching employee dependent satellite rows." />
+      ) : state.kind === "error" ? (
+        <OperationalState kind="error" title="Could not load dependents" detail={`Error code ${state.errorCode}.`} />
+      ) : state.kind === "empty" ? (
+        <OperationalState kind="empty" title="No dependents" detail="No dependent rows recorded for this employee yet." />
+      ) : (
+        <DataTable
+          items={dependents}
+          columns={DEPENDENT_COLUMNS}
+          state={tableState}
+          callbacks={tableCallbacks}
+          filterColumns={FILTER_COLS}
+          emptyMessage="No dependents recorded."
+          filteredEmptyMessage="No dependents match the current filters."
         />
-      ) : null}
-      {state.kind === "empty" ? (
-        <OperationalState kind="empty" title="No dependents" detail="No dependent rows are recorded for this employee yet." />
-      ) : null}
-      {state.kind === "ready" ? (
-        <ul className="satellite-list" aria-label="Employee dependent rows">
-          {state.dependents.map((dependent) => (
-            <li key={dependent.id}>
-              <strong>{dependent.fullName}</strong> ({dependent.relationship})
-              {dependent.isLegalHeir ? " — legal heir" : ""}
-              {dependent.nationalIdMasked ? ` — id ${dependent.nationalIdMasked}` : ""}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {state.kind === "ready" || state.kind === "empty" ? (
-        <form aria-label="Add dependent form" onSubmit={handleSubmit}>
-          <label htmlFor="g01-dependent-name">Full name</label>
-          <input
-            autoComplete="off"
+      )}
+
+      {(state.kind === "ready" || state.kind === "empty") && (
+        <form aria-label="Add dependent form" onSubmit={handleFormSubmit}>
+          <FormField
             id="g01-dependent-name"
-            name="fullName"
-            onChange={(event) => setFullName(event.target.value)}
-            type="text"
-            value={fullName}
-          />
-          <label htmlFor="g01-dependent-relationship">Relationship</label>
-          <select
-            id="g01-dependent-relationship"
-            name="relationship"
-            onChange={(event) => setRelationship(event.target.value as EmployeeDependentRecord["relationship"])}
-            value={relationship}
+            label="Full Name"
+            required
+            error={form.touched.fullName ? form.errors.fullName : undefined}
           >
-            {RELATIONSHIPS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <label htmlFor="g01-dependent-dob">Date of birth (optional)</label>
-          <input id="g01-dependent-dob" name="dob" onChange={(event) => setDob(event.target.value)} type="date" value={dob} />
-          <label htmlFor="g01-dependent-heir">
             <input
-              checked={isLegalHeir}
-              id="g01-dependent-heir"
-              name="isLegalHeir"
-              onChange={(event) => setIsLegalHeir(event.target.checked)}
+              id="g01-dependent-name"
+              type="text"
+              autoComplete="off"
+              className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              value={form.values.fullName}
+              onChange={(e) => form.setValue("fullName", e.target.value)}
+              onBlur={() => form.touchField("fullName")}
+            />
+          </FormField>
+
+          <FormField id="g01-dependent-relationship" label="Relationship">
+            <select
+              id="g01-dependent-relationship"
+              className="w-full rounded-md border px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              value={form.values.relationship}
+              onChange={(e) => form.setValue("relationship", e.target.value as EmployeeDependentRecord["relationship"])}
+            >
+              {RELATIONSHIPS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField id="g01-dependent-dob" label="Date of Birth" hint="Optional">
+            <input
+              id="g01-dependent-dob"
+              type="date"
+              className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              value={form.values.dob}
+              onChange={(e) => form.setValue("dob", e.target.value)}
+            />
+          </FormField>
+
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
               type="checkbox"
+              className="rounded accent-blue-600"
+              checked={form.values.isLegalHeir}
+              onChange={(e) => form.setValue("isLegalHeir", e.target.checked)}
             />
             Legal heir
           </label>
-          <button disabled={submitting} type="submit">
-            {submitting ? "Adding…" : "Add dependent"}
-          </button>
+
+          <FormActions
+            isSubmitting={form.isSubmitting}
+            submitDisabled={!form.isDirty}
+            onSubmitLabel="Add dependent"
+          />
+
+          {submitPhase.kind === "error" && (
+            <p role="alert" className="mt-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+              Failed — {submitPhase.errorCode}
+            </p>
+          )}
+          {submitPhase.kind === "success" && (
+            <p role="status" className="mt-2 rounded-md bg-green-50 px-3 py-2 text-xs text-green-700">
+              {submitPhase.fullName} added.
+            </p>
+          )}
         </form>
-      ) : null}
-      {validationError ? <p role="alert">{validationError}</p> : null}
-      {phase.kind === "error" ? <p role="alert">Adding the dependent failed with error code {phase.errorCode}.</p> : null}
-      {phase.kind === "success" ? <p role="status">Dependent {phase.fullName} added and recorded in the attribute history.</p> : null}
+      )}
     </section>
   );
 }

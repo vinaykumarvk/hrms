@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { HrmsApiError, HrmsClient, PersonalDetailChangeRecord, PersonalDetailDecisionVerb } from "../../api/hrmsClient";
 import { OperationalState } from "../../app/OperationalStates";
+import { DataTable, DataTableColumnDef } from "../../components/ui/DataTable";
+import { useDataTable } from "../../lib/useDataTable";
 import { ChangeRequestDiffView } from "./ChangeRequestDiffView";
 
-/** Canonical view state for the pending change-request queue. */
+/* ── Types ─────────────────────────────────────────────────── */
+
 type QueueState =
   | { kind: "loading" }
   | { kind: "error"; errorCode: string }
@@ -12,26 +15,169 @@ type QueueState =
 
 export interface ChangeRequestApproverQueueProps {
   client: HrmsClient;
-  /** Bump to refetch the queue (e.g. after the editor creates a request). */
   refreshToken: number;
-  /** Invoked after a decision is accepted so the workspace can refresh dependent panels. */
   onDecided: () => void;
 }
 
-/**
- * PH-07E G02 approver queue: lists IN_REVIEW change requests from
- * GET /api/v1/personal-details/change-requests and wires Approve / Reject / Send back to the
- * PH-07C decision routes. Reject and send-back require a comment (VAL-COMMENT); a missing comment
- * is caught client-side and any server-side breach surfaces the ERR-REASON-REQ envelope. SoD
- * breaches (maker acting as checker) surface ERR-G02-SOD from the API.
- */
-export function ChangeRequestApproverQueue({ client, refreshToken, onDecided }: ChangeRequestApproverQueueProps) {
+/* ── Columns ───────────────────────────────────────────────── */
+
+type QueueColumn = "requestNo" | "fieldCode" | "employeeId" | "sensitivity" | "revision" | "actions";
+
+function ApproverRowActions({
+  request,
+  client,
+  onDecided,
+}: {
+  request: PersonalDetailChangeRecord;
+  client: HrmsClient;
+  onDecided: () => void;
+}) {
+  const [comment, setComment] = useState("");
+  const [deciding, setDeciding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [openDiff, setOpenDiff] = useState(false);
+
+  function decide(verb: PersonalDetailDecisionVerb) {
+    const trimmed = comment.trim();
+    if ((verb === "reject" || verb === "send-back") && !trimmed) {
+      setError("ERR-REASON-REQ: comment required");
+      return;
+    }
+    setDeciding(true);
+    setError(null);
+    void client
+      .decidePersonalDetailChangeRequest(request.id, verb, trimmed || undefined, crypto.randomUUID())
+      .then(() => {
+        setDeciding(false);
+        onDecided();
+      })
+      .catch((err: unknown) => {
+        setDeciding(false);
+        setError(err instanceof HrmsApiError ? err.displayCode : "UNKNOWN_ERROR");
+      });
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <input
+        type="text"
+        className="w-full rounded border px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+        placeholder="Comment (required for reject/send-back)"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+      />
+      <div className="flex flex-wrap gap-1">
+        <button
+          onClick={() => decide("approve")}
+          disabled={deciding}
+          className="rounded bg-green-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+        >
+          Approve
+        </button>
+        <button
+          onClick={() => decide("reject")}
+          disabled={deciding}
+          className="rounded bg-red-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+        >
+          Reject
+        </button>
+        <button
+          onClick={() => decide("send-back")}
+          disabled={deciding}
+          className="rounded bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+        >
+          Send back
+        </button>
+        <button
+          onClick={() => setOpenDiff((v) => !v)}
+          className="rounded border px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50"
+        >
+          {openDiff ? "Hide diff" : "View diff"}
+        </button>
+      </div>
+      {error && <p className="text-[10px] text-red-600">{error}</p>}
+      {openDiff && <ChangeRequestDiffView client={client} requestId={request.id} />}
+    </div>
+  );
+}
+
+function createApproverColumns(
+  client: HrmsClient,
+  onDecided: () => void
+): DataTableColumnDef<PersonalDetailChangeRecord, QueueColumn>[] {
+  return [
+    {
+      id: "requestNo",
+      header: "Request",
+      sortable: true,
+      resolve: (r) => <span className="font-medium tabular-nums">{r.requestNo}</span>,
+      sortValue: (r) => r.requestNo,
+      filterValue: (r) => r.requestNo,
+    },
+    {
+      id: "fieldCode",
+      header: "Field",
+      sortable: true,
+      resolve: (r) => (
+        <span className="inline-flex rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-700">
+          {r.fieldCode}
+        </span>
+      ),
+      sortValue: (r) => r.fieldCode,
+      filterValue: (r) => r.fieldCode,
+    },
+    {
+      id: "employeeId",
+      header: "Employee",
+      resolve: (r) => r.employeeId,
+      sortValue: (r) => r.employeeId,
+      filterValue: (r) => r.employeeId,
+    },
+    {
+      id: "sensitivity",
+      header: "Sensitivity",
+      resolve: (r) => (
+        <span
+          className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+            r.sensitivity === "HIGH" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-700"
+          }`}
+        >
+          {r.sensitivity}
+        </span>
+      ),
+      sortValue: (r) => r.sensitivity,
+      filterValue: (r) => r.sensitivity,
+    },
+    {
+      id: "revision",
+      header: "Rev",
+      resolve: (r) => <span className="tabular-nums">{r.revisionNo}</span>,
+      sortValue: (r) => r.revisionNo,
+      className: "text-center",
+    },
+    {
+      id: "actions",
+      header: "Action",
+      resolve: (r) => <ApproverRowActions request={r} client={client} onDecided={onDecided} />,
+    },
+  ];
+}
+
+const FILTER_COLS = [
+  { id: "requestNo", label: "Request", type: "text" as const },
+  { id: "fieldCode", label: "Field", type: "text" as const },
+  { id: "sensitivity", label: "Sensitivity", type: "text" as const },
+];
+
+/* ── Component ─────────────────────────────────────────────── */
+
+export function ChangeRequestApproverQueue({
+  client,
+  refreshToken,
+  onDecided,
+}: ChangeRequestApproverQueueProps) {
   const [state, setState] = useState<QueueState>({ kind: "loading" });
-  const [comments, setComments] = useState<Record<string, string>>({});
-  const [decidingId, setDecidingId] = useState<string | null>(null);
-  const [decisionError, setDecisionError] = useState<{ requestNo: string; errorCode: string } | null>(null);
-  const [decisionNotice, setDecisionNotice] = useState<string | null>(null);
-  const [openDiffId, setOpenDiffId] = useState<string | null>(null);
+  const [tableState, tableCallbacks] = useDataTable<QueueColumn>(10);
 
   useEffect(() => {
     let mounted = true;
@@ -39,47 +185,17 @@ export function ChangeRequestApproverQueue({ client, refreshToken, onDecided }: 
     client
       .listPersonalDetailChangeRequests()
       .then((result) => {
-        if (!mounted) {
-          return;
-        }
-        const pending = result.items.filter((request) => request.status === "IN_REVIEW");
+        if (!mounted) return;
+        const pending = result.items.filter((r) => r.status === "IN_REVIEW");
         setState(pending.length === 0 ? { kind: "empty" } : { kind: "ready", requests: pending });
       })
       .catch((error: unknown) => {
-        if (mounted) {
-          setState({ kind: "error", errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR" });
-        }
+        if (mounted) setState({ kind: "error", errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR" });
       });
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false };
   }, [client, refreshToken]);
 
-  function decide(request: PersonalDetailChangeRecord, verb: PersonalDetailDecisionVerb) {
-    const comment = (comments[request.id] ?? "").trim();
-    if ((verb === "reject" || verb === "send-back") && !comment) {
-      // Mirrors the API's mandatory-reason rule so the obvious case never leaves the browser.
-      setDecisionError({ requestNo: request.requestNo, errorCode: "ERR-REASON-REQ" });
-      return;
-    }
-    setDecidingId(request.id);
-    setDecisionError(null);
-    setDecisionNotice(null);
-    void client
-      .decidePersonalDetailChangeRequest(request.id, verb, comment || undefined, crypto.randomUUID())
-      .then((result) => {
-        setDecidingId(null);
-        setDecisionNotice(`${result.request.requestNo} moved to ${result.request.status}.`);
-        onDecided();
-      })
-      .catch((error: unknown) => {
-        setDecidingId(null);
-        setDecisionError({
-          requestNo: request.requestNo,
-          errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR",
-        });
-      });
-  }
+  const columns = useMemo(() => createApproverColumns(client, onDecided), [client, onDecided]);
 
   return (
     <section className="record-panel g02-approver-queue" aria-label="G02 approver queue">
@@ -88,63 +204,30 @@ export function ChangeRequestApproverQueue({ client, refreshToken, onDecided }: 
           <p className="eyebrow">G02 Change</p>
           <h2>Approver Queue</h2>
         </div>
+        {state.kind === "ready" && (
+          <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+            {state.requests.length} pending
+          </span>
+        )}
       </div>
+
       {state.kind === "loading" ? (
-        <OperationalState kind="loading" title="Loading pending requests" detail="Fetching IN_REVIEW change requests awaiting a decision." />
-      ) : null}
-      {state.kind === "error" ? (
-        <OperationalState
-          kind="error"
-          title="Could not load the queue"
-          detail={`The change-request list failed with error code ${state.errorCode}.`}
+        <OperationalState kind="loading" title="Loading queue" detail="Fetching IN_REVIEW change requests." />
+      ) : state.kind === "error" ? (
+        <OperationalState kind="error" title="Could not load queue" detail={`Error code ${state.errorCode}.`} />
+      ) : state.kind === "empty" ? (
+        <OperationalState kind="empty" title="No pending requests" detail="No change requests waiting for a decision." />
+      ) : (
+        <DataTable
+          items={state.requests}
+          columns={columns}
+          state={tableState}
+          callbacks={tableCallbacks}
+          filterColumns={FILTER_COLS}
+          emptyMessage="No pending requests."
+          filteredEmptyMessage="No requests match the current filters."
         />
-      ) : null}
-      {state.kind === "empty" ? (
-        <OperationalState kind="empty" title="No pending requests" detail="No change requests are waiting for a decision." />
-      ) : null}
-      {state.kind === "ready" ? (
-        <ul className="approver-queue-list" aria-label="Pending change requests">
-          {state.requests.map((request) => (
-            <li key={request.id}>
-              <div>
-                <strong>{request.requestNo}</strong> — {request.fieldCode} for {request.employeeId} ({request.sensitivity} routing,
-                revision {request.revisionNo})
-              </div>
-              <label htmlFor={`g02-comment-${request.id}`}>Decision comment (mandatory for reject / send back)</label>
-              <input
-                autoComplete="off"
-                id={`g02-comment-${request.id}`}
-                name="decisionComment"
-                onChange={(event) => setComments((current) => ({ ...current, [request.id]: event.target.value }))}
-                type="text"
-                value={comments[request.id] ?? ""}
-              />
-              <div className="queue-actions">
-                <button disabled={decidingId !== null} onClick={() => decide(request, "approve")} type="button">
-                  {decidingId === request.id ? "Deciding…" : "Approve"}
-                </button>
-                <button disabled={decidingId !== null} onClick={() => decide(request, "reject")} type="button">
-                  Reject
-                </button>
-                <button disabled={decidingId !== null} onClick={() => decide(request, "send-back")} type="button">
-                  Send back
-                </button>
-                <button onClick={() => setOpenDiffId((current) => (current === request.id ? null : request.id))} type="button">
-                  {openDiffId === request.id ? "Hide diff" : "View diff"}
-                </button>
-              </div>
-              {openDiffId === request.id ? <ChangeRequestDiffView client={client} requestId={request.id} /> : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {decisionError ? (
-        <p role="alert">
-          The decision on {decisionError.requestNo} failed with error code {decisionError.errorCode}
-          {decisionError.errorCode === "ERR-REASON-REQ" ? ": a decision comment is mandatory for reject and send back." : "."}
-        </p>
-      ) : null}
-      {decisionNotice ? <p role="status">{decisionNotice}</p> : null}
+      )}
     </section>
   );
 }
