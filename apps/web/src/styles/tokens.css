@@ -1,27 +1,178 @@
 @import "tailwindcss";
 
+/* ================================================================
+   HRMS Design Tokens — v2
+   Every visual value lives here. No raw colors, radii, spacing, or
+   shadow values anywhere else in the codebase.
+   ================================================================ */
+
 :root {
+  /* ── Color Palette ───────────────────────────────────────── */
+
+  /* Brand — emerald/teal */
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
+  --color-brand-900: #064e3b;
+
+  /* Navy — login hero gradient */
+  --color-navy-50: #edf7f5;
+  --color-navy-100: #b7d6dc;
+  --color-navy-200: #9ec3ca;
+  --color-navy-300: #72d7c6;
+  --color-navy-500: #086b68;
+  --color-navy-600: #0b4960;
+  --color-navy-700: #092e4b;
+
+  /* Neutral */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f8fafc;
+  --color-neutral-100: #f1f5f9;
+  --color-neutral-200: #e2e8f0;
+  --color-neutral-300: #cbd5e1;
+  --color-neutral-400: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1e293b;
+  --color-neutral-900: #0f172a;
+
+  /* Danger / Error */
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-200: #fecaca;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
+  /* Info / Link / Selected */
+  --color-info-50: #eff6ff;
+  --color-info-100: #dcecff;
+  --color-info-200: #bfdbfe;
+  --color-info-300: #6d8dcc;
+  --color-info-600: #315a9d;
+  --color-info-700: #315a9d;
+  --color-info-800: #173f78;
+
+  /* Success */
+  --color-success-50: #edf7f5;
+  --color-success-100: #b9ddd6;
+  --color-success-600: #167565;
+  --color-success-700: #235f55;
+
+  /* ── Semantic Tokens (Light Theme) ───────────────────────── */
+
   --color-background: #f5f7fa;
-  --color-surface: #ffffff;
+  --color-surface: var(--color-neutral-0);
   --color-surface-muted: #edf2f5;
-  --color-text: #172c3b;
-  --color-text-muted: #53606f;
+  --color-surface-elevated: var(--color-neutral-0);
+
   --color-border: #c8d0dc;
+  --color-border-strong: var(--color-neutral-300);
+  --color-border-dashed: #aeb8c5;
+
+  --color-text: #172c3b;
+  --color-text-secondary: #53606f;
+  --color-text-muted: var(--color-neutral-500);
+  --color-text-heading: var(--color-neutral-900);
+
+  --color-link: var(--color-info-600);
+  --color-link-hover: var(--color-info-800);
+
   --color-brand: #0b6f63;
   --color-brand-strong: #084f49;
+  --color-accent: var(--color-brand-600);
+  --color-accent-hover: var(--color-brand-700);
+
   --color-focus: #075fcc;
+
   --color-danger: #9d2c2c;
   --color-danger-surface: #fff1f1;
-  --color-success: #235f55;
-  --color-success-surface: #edf7f5;
-  --radius-sm: 0.375rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 0.875rem;
+
+  --color-success: var(--color-success-700);
+  --color-success-surface: var(--color-success-50);
+
+  --color-selected-bg: var(--color-info-100);
+  --color-selected-border: var(--color-info-300);
+
+  /* ── Typography ──────────────────────────────────────────── */
+
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* Type scale */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.8125rem;  /* 13px */
+  --text-base: 0.875rem; /* 14px */
+  --text-md: 0.9375rem;  /* 15px */
+  --text-lg: 1rem;       /* 16px */
+  --text-xl: 1.125rem;   /* 18px */
+  --text-2xl: 1.5rem;    /* 24px */
+  --text-3xl: 2rem;      /* 32px */
+  --text-4xl: 2.25rem;   /* 36px */
+
+  /* Weight */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+
+  /* Leading */
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  /* Tracking */
+  --tracking-tight: -0.035em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+
+  /* ── Spacing Scale ───────────────────────────────────────── */
+
+  --space-1: 0.25rem;   /*  4px */
+  --space-2: 0.5rem;    /*  8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-7: 1.75rem;   /* 28px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+
+  /* ── Radii ───────────────────────────────────────────────── */
+
+  --radius-sm: 0.375rem;  /*  6px */
+  --radius-md: 0.625rem;  /* 10px */
+  --radius-lg: 0.875rem;  /* 14px */
+  --radius-xl: 0.75rem;   /* 12px */
+
+  /* ── Shadows ─────────────────────────────────────────────── */
+
   --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.08);
   --shadow-md: 0 12px 30px rgb(15 23 42 / 0.16);
+  --shadow-focus-ring: 0 0 0 3px rgba(7, 95, 204, 0.2);
+
+  /* ── Durations ───────────────────────────────────────────── */
+
   --duration-fast: 150ms;
   --duration-normal: 220ms;
+
+  /* ── Touch Targets ───────────────────────────────────────── */
+
+  --min-touch: 2.75rem; /* 44px — WCAG 2.5.5 minimum */
 }
+
+/* ── Tailwind v4 Theme Bridge ───────────────────────────────── */
 
 @theme inline {
   --color-background: var(--color-background);
@@ -38,6 +189,8 @@
   --radius-lg: var(--radius-lg);
 }
 
+/* ── Global Rules ──────────────────────────────────────────── */
+
 *:focus-visible {
   outline: 3px solid var(--color-focus);
   outline-offset: 2px;
@@ -51,3 +204,6 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Dark theme (future use) ───────────────────────────────── */
+/* :root.dark or @media (prefers-color-scheme: dark) { ... } */
