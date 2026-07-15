@@ -1,13 +1,14 @@
-import { FormEvent, useState } from "react";
 import { AparFormView, HrmsApiError, HrmsClient } from "../../api/hrmsClient";
+import { FormField, FormActions } from "../../components/ui/Form";
+import { useForm, required } from "../../lib/useForm";
+
+/* ── Types ─────────────────────────────────────────────────── */
 
 type SubmitPhase =
   | { kind: "idle" }
-  | { kind: "submitting" }
   | { kind: "success"; form: AparFormView }
   | { kind: "error"; errorCode: string; message: string };
 
-/** G08 error envelopes rendered readable; sealed-cover and window codes come from PH-08D. */
 const G08_ERROR_MESSAGES: Record<string, string> = {
   PRECONDITION_FAILED: "The APAR form is not at the status this tier action requires.",
   "ERR-G08-WEIGHTAGE": "Goal weightages fail the WSUM check; lock the goals first.",
@@ -26,193 +27,278 @@ function toErrorPhase(error: unknown): SubmitPhase {
   return { kind: "error", errorCode, message: describeG08Error(errorCode) };
 }
 
-export interface AparTierFormsProps {
-  client: HrmsClient;
-  /**
-   * P02 permission grants from the session. Each tier form renders only for the
-   * actor that holds its tier (SoD): an appraisee without g08.apar.report /
-   * g08.apar.review never sees the RO/RvO authoring controls.
-   */
-  permissions: readonly string[];
-  /** Pre-filled form id for the demo persona; the field stays editable. */
-  defaultFormId?: string;
-}
-
 const TIER_PERMISSIONS = {
   self: "g08.apar.self.submit",
   reporting: "g08.apar.report",
   review: "g08.apar.review",
 } as const;
 
-/**
- * PH-08F G08 APAR tier forms: self-appraisal (appraisee), reporting officer
- * assessment (RO tier: grade + narrative via :report), and reviewing officer
- * review (RvO tier: concur + remarks via :review). Each form is bound to the
- * tier the actor holds through P02 permissions and submits through the
- * injected client with a fresh Idempotency-Key.
- */
+/* ── Props ─────────────────────────────────────────────────── */
+
+export interface AparTierFormsProps {
+  client: HrmsClient;
+  permissions: readonly string[];
+  defaultFormId?: string;
+}
+
+/* ── Component ─────────────────────────────────────────────── */
+
 export function AparTierForms({ client, permissions, defaultFormId = "" }: AparTierFormsProps) {
-  const [formId, setFormId] = useState(defaultFormId);
-
-  const [selfPhase, setSelfPhase] = useState<SubmitPhase>({ kind: "idle" });
-
-  const [grade, setGrade] = useState("");
-  const [narrative, setNarrative] = useState("");
-  const [reportingValidation, setReportingValidation] = useState<string | null>(null);
-  const [reportingPhase, setReportingPhase] = useState<SubmitPhase>({ kind: "idle" });
-
-  const [concur, setConcur] = useState(true);
-  const [remarks, setRemarks] = useState("");
-  const [reviewValidation, setReviewValidation] = useState<string | null>(null);
-  const [reviewPhase, setReviewPhase] = useState<SubmitPhase>({ kind: "idle" });
-
   const canSubmitSelf = permissions.includes(TIER_PERMISSIONS.self);
   const canReport = permissions.includes(TIER_PERMISSIONS.reporting);
   const canReview = permissions.includes(TIER_PERMISSIONS.review);
 
-  function requireFormId(setValidation: (message: string | null) => void): boolean {
-    if (!formId.trim()) {
-      setValidation("The APAR form id is required.");
-      return false;
-    }
-    return true;
-  }
+  const sharedForm = useForm({
+    formId: { initial: defaultFormId, validate: required("APAR form id is required.") },
+  });
 
-  function handleSelfSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!formId.trim()) {
-      setSelfPhase({ kind: "error", errorCode: "VALIDATION_FAILED", message: "The APAR form id is required." });
-      return;
-    }
-    setSelfPhase({ kind: "submitting" });
-    void client
-      .submitAparSelf(formId.trim(), crypto.randomUUID())
-      .then((result) => setSelfPhase({ kind: "success", form: result.form }))
-      .catch((error: unknown) => setSelfPhase(toErrorPhase(error)));
-  }
+  const selfForm = useForm<{ phase: SubmitPhase }>({
+    phase: { initial: { kind: "idle" } as SubmitPhase },
+  });
 
-  function handleReportingSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!requireFormId(setReportingValidation)) {
-      return;
-    }
-    if (!grade.trim() || !narrative.trim()) {
-      setReportingValidation("The reporting officer must record both a grade and a narrative.");
-      return;
-    }
-    setReportingValidation(null);
-    setReportingPhase({ kind: "submitting" });
-    void client
-      .recordAparReporting(formId.trim(), { grade: grade.trim(), narrative: narrative.trim() }, crypto.randomUUID())
-      .then((result) => setReportingPhase({ kind: "success", form: result.form }))
-      .catch((error: unknown) => setReportingPhase(toErrorPhase(error)));
-  }
+  const reportForm = useForm<{ grade: string; narrative: string; phase: SubmitPhase }>({
+    grade: { initial: "", validate: required("Grade is required.") },
+    narrative: { initial: "", validate: required("Narrative is required.") },
+    phase: { initial: { kind: "idle" } as SubmitPhase },
+  });
 
-  function handleReviewSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!requireFormId(setReviewValidation)) {
-      return;
+  const reviewForm = useForm<{ concur: boolean; remarks: string; phase: SubmitPhase }>({
+    concur: { initial: true },
+    remarks: { initial: "", validate: required("Remarks are required.") },
+    phase: { initial: { kind: "idle" } as SubmitPhase },
+  });
+
+  /* ── Handlers ─────────────────────────────────────────────── */
+
+  const handleSelf = selfForm.handleSubmit(async () => {
+    selfForm.setValue("phase", { kind: "idle" });
+    try {
+      const result = await client.submitAparSelf(sharedForm.values.formId.trim(), crypto.randomUUID());
+      selfForm.setValue("phase", { kind: "success", form: result.form });
+    } catch (e: unknown) {
+      selfForm.setValue("phase", toErrorPhase(e));
     }
-    if (!remarks.trim()) {
-      setReviewValidation("The reviewing officer must record remarks.");
-      return;
+  });
+
+  const handleReport = reportForm.handleSubmit(async (values) => {
+    reportForm.setValue("phase", { kind: "idle" });
+    try {
+      const result = await client.recordAparReporting(
+        sharedForm.values.formId.trim(),
+        { grade: values.grade.trim(), narrative: values.narrative.trim() },
+        crypto.randomUUID(),
+      );
+      reportForm.setValue("phase", { kind: "success", form: result.form });
+    } catch (e: unknown) {
+      reportForm.setValue("phase", toErrorPhase(e));
     }
-    setReviewValidation(null);
-    setReviewPhase({ kind: "submitting" });
-    void client
-      .recordAparReview(formId.trim(), { concur, remarks: remarks.trim() }, crypto.randomUUID())
-      .then((result) => setReviewPhase({ kind: "success", form: result.form }))
-      .catch((error: unknown) => setReviewPhase(toErrorPhase(error)));
-  }
+  });
+
+  const handleReview = reviewForm.handleSubmit(async (values) => {
+    reviewForm.setValue("phase", { kind: "idle" });
+    try {
+      const result = await client.recordAparReview(
+        sharedForm.values.formId.trim(),
+        { concur: values.concur, remarks: values.remarks.trim() },
+        crypto.randomUUID(),
+      );
+      reviewForm.setValue("phase", { kind: "success", form: result.form });
+    } catch (e: unknown) {
+      reviewForm.setValue("phase", toErrorPhase(e));
+    }
+  });
+
+  /* ── No-access state ──────────────────────────────────────── */
 
   if (!canSubmitSelf && !canReport && !canReview) {
     return (
-      <section className="record-panel apar-tier-forms" aria-label="G08 APAR tier forms" data-state="empty">
-        <p>Your session holds no APAR authoring tier (self, reporting, or reviewing). Nothing to author here.</p>
+      <section className="record-panel" aria-label="G08 APAR tier forms" data-state="empty">
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Your session holds no APAR authoring tier. Nothing to author here.
+        </p>
       </section>
     );
   }
 
+  /* ── Render ───────────────────────────────────────────────── */
+
   return (
-    <section className="record-panel apar-tier-forms" aria-label="G08 APAR tier forms">
+    <section className="record-panel" aria-label="G08 APAR tier forms">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">G08 APAR</p>
           <h2>Appraisal Tiers</h2>
         </div>
       </div>
-      <label htmlFor="apar-form-id">APAR form id</label>
-      <input autoComplete="off" id="apar-form-id" name="formId" onChange={(event) => setFormId(event.target.value)} type="text" value={formId} />
 
-      {canSubmitSelf ? (
-        <form aria-label="APAR self-appraisal form" onSubmit={handleSelfSubmit}>
-          <h3>Self-appraisal (appraisee tier)</h3>
-          <p>Submitting moves the form from SELF_APPRAISAL to the reporting officer&apos;s desk.</p>
-          <button disabled={selfPhase.kind === "submitting"} type="submit">
-            {selfPhase.kind === "submitting" ? "Submitting self-appraisal…" : "Submit self-appraisal"}
-          </button>
-          {selfPhase.kind === "error" ? (
-            <p role="alert">
-              Self-appraisal failed with error code {selfPhase.errorCode}: {selfPhase.message}
-            </p>
-          ) : null}
-          {selfPhase.kind === "success" ? (
-            <p role="status">
-              Form {selfPhase.form.formNo} submitted; status is now {selfPhase.form.status}.
-            </p>
-          ) : null}
-        </form>
-      ) : null}
+      {/* Shared form-id input */}
+      <FormField
+        id="apar-form-id"
+        label="APAR Form ID"
+        required
+        error={sharedForm.touched.formId ? sharedForm.errors.formId : undefined}
+      >
+        <input
+          id="apar-form-id"
+          name="formId"
+          type="text"
+          autoComplete="off"
+          className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+          value={sharedForm.values.formId}
+          onChange={(e) => sharedForm.setValue("formId", e.target.value)}
+          onBlur={() => sharedForm.touchField("formId")}
+        />
+      </FormField>
 
-      {canReport ? (
-        <form aria-label="APAR reporting officer assessment form" onSubmit={handleReportingSubmit}>
-          <h3>Reporting officer assessment (RO tier)</h3>
-          <label htmlFor="apar-ro-grade">Grade</label>
-          <input autoComplete="off" id="apar-ro-grade" name="grade" onChange={(event) => setGrade(event.target.value)} type="text" value={grade} />
-          <label htmlFor="apar-ro-narrative">Narrative</label>
-          <textarea id="apar-ro-narrative" name="narrative" onChange={(event) => setNarrative(event.target.value)} rows={3} value={narrative} />
-          <button disabled={reportingPhase.kind === "submitting"} type="submit">
-            {reportingPhase.kind === "submitting" ? "Recording assessment…" : "Record reporting assessment"}
-          </button>
-          {reportingValidation ? <p role="alert">{reportingValidation}</p> : null}
-          {reportingPhase.kind === "error" ? (
-            <p role="alert">
-              Reporting assessment failed with error code {reportingPhase.errorCode}: {reportingPhase.message}
+      <div className="mt-5 grid gap-5">
+        {/* ── SELF tier ──────────────────────────────────────── */}
+        {canSubmitSelf && (
+          <form onSubmit={handleSelf} className="rounded-lg border border-[var(--color-border)] p-4">
+            <h3 className="text-sm font-semibold text-[var(--color-text-heading)] mb-1">Self-appraisal</h3>
+            <p className="text-xs text-[var(--color-text-muted)] mb-3">
+              Submitting moves the form to the reporting officer's desk.
             </p>
-          ) : null}
-          {reportingPhase.kind === "success" ? (
-            <p role="status">
-              Form {reportingPhase.form.formNo} assessed; status is now {reportingPhase.form.status}.
-            </p>
-          ) : null}
-        </form>
-      ) : null}
 
-      {canReview ? (
-        <form aria-label="APAR reviewing officer review form" onSubmit={handleReviewSubmit}>
-          <h3>Reviewing officer review (RvO tier)</h3>
-          <label htmlFor="apar-rvo-concur">
-            <input checked={concur} id="apar-rvo-concur" name="concur" onChange={(event) => setConcur(event.target.checked)} type="checkbox" />
-            Concur with the reporting officer&apos;s assessment
-          </label>
-          <label htmlFor="apar-rvo-remarks">Remarks</label>
-          <textarea id="apar-rvo-remarks" name="remarks" onChange={(event) => setRemarks(event.target.value)} rows={3} value={remarks} />
-          <button disabled={reviewPhase.kind === "submitting"} type="submit">
-            {reviewPhase.kind === "submitting" ? "Recording review…" : "Record reviewing decision"}
-          </button>
-          {reviewValidation ? <p role="alert">{reviewValidation}</p> : null}
-          {reviewPhase.kind === "error" ? (
-            <p role="alert">
-              Review failed with error code {reviewPhase.errorCode}: {reviewPhase.message}
+            <FormActions
+              isSubmitting={selfForm.isSubmitting}
+              submitDisabled={!!sharedForm.errors.formId}
+              onSubmitLabel={selfForm.isSubmitting ? "Submitting…" : "Submit self-appraisal"}
+            />
+
+            {selfForm.values.phase.kind === "error" && (
+              <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+                {selfForm.values.phase.errorCode}: {selfForm.values.phase.message}
+              </p>
+            )}
+            {selfForm.values.phase.kind === "success" && (
+              <p role="status" className="mt-3 rounded-md bg-green-50 px-3 py-2 text-xs text-green-700">
+                Form {selfForm.values.phase.form.formNo} submitted — status: {selfForm.values.phase.form.status}
+              </p>
+            )}
+          </form>
+        )}
+
+        {/* ── REPORTING tier ─────────────────────────────────── */}
+        {canReport && (
+          <form onSubmit={handleReport} className="rounded-lg border border-[var(--color-border)] p-4">
+            <h3 className="text-sm font-semibold text-[var(--color-text-heading)] mb-1">Reporting Officer Assessment</h3>
+            <p className="text-xs text-[var(--color-text-muted)] mb-3">
+              Grade and narrative required. Submitted to the reviewing officer.
             </p>
-          ) : null}
-          {reviewPhase.kind === "success" ? (
-            <p role="status">
-              Form {reviewPhase.form.formNo} reviewed; status is now {reviewPhase.form.status}.
+
+            <div className="grid gap-3">
+              <FormField
+                id="apar-ro-grade"
+                label="Grade"
+                required
+                error={reportForm.touched.grade ? reportForm.errors.grade : undefined}
+              >
+                <input
+                  id="apar-ro-grade"
+                  type="text"
+                  autoComplete="off"
+                  className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  value={reportForm.values.grade}
+                  onChange={(e) => reportForm.setValue("grade", e.target.value)}
+                  onBlur={() => reportForm.touchField("grade")}
+                />
+              </FormField>
+
+              <FormField
+                id="apar-ro-narrative"
+                label="Narrative"
+                required
+                error={reportForm.touched.narrative ? reportForm.errors.narrative : undefined}
+              >
+                <textarea
+                  id="apar-ro-narrative"
+                  rows={3}
+                  className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  value={reportForm.values.narrative}
+                  onChange={(e) => reportForm.setValue("narrative", e.target.value)}
+                  onBlur={() => reportForm.touchField("narrative")}
+                />
+              </FormField>
+            </div>
+
+            <div className="mt-3">
+              <FormActions
+                isSubmitting={reportForm.isSubmitting}
+                submitDisabled={!!sharedForm.errors.formId || !reportForm.isDirty}
+                onSubmitLabel="Record reporting assessment"
+              />
+            </div>
+
+            {reportForm.values.phase.kind === "error" && (
+              <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+                {reportForm.values.phase.errorCode}: {reportForm.values.phase.message}
+              </p>
+            )}
+            {reportForm.values.phase.kind === "success" && (
+              <p role="status" className="mt-3 rounded-md bg-green-50 px-3 py-2 text-xs text-green-700">
+                Form {reportForm.values.phase.form.formNo} assessed — status: {reportForm.values.phase.form.status}
+              </p>
+            )}
+          </form>
+        )}
+
+        {/* ── REVIEW tier ────────────────────────────────────── */}
+        {canReview && (
+          <form onSubmit={handleReview} className="rounded-lg border border-[var(--color-border)] p-4">
+            <h3 className="text-sm font-semibold text-[var(--color-text-heading)] mb-1">Reviewing Officer Review</h3>
+            <p className="text-xs text-[var(--color-text-muted)] mb-3">
+              Concur or dissent with remarks. Final tier before acceptance body.
             </p>
-          ) : null}
-        </form>
-      ) : null}
+
+            <div className="grid gap-3">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reviewForm.values.concur}
+                  onChange={(e) => reviewForm.setValue("concur", e.target.checked)}
+                  className="size-4 rounded border-gray-300 accent-blue-600"
+                />
+                Concur with the reporting officer's assessment
+              </label>
+
+              <FormField
+                id="apar-rvo-remarks"
+                label="Remarks"
+                required
+                error={reviewForm.touched.remarks ? reviewForm.errors.remarks : undefined}
+              >
+                <textarea
+                  id="apar-rvo-remarks"
+                  rows={3}
+                  className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  value={reviewForm.values.remarks}
+                  onChange={(e) => reviewForm.setValue("remarks", e.target.value)}
+                  onBlur={() => reviewForm.touchField("remarks")}
+                />
+              </FormField>
+            </div>
+
+            <div className="mt-3">
+              <FormActions
+                isSubmitting={reviewForm.isSubmitting}
+                submitDisabled={!!sharedForm.errors.formId || !reviewForm.isDirty}
+                onSubmitLabel="Record reviewing decision"
+              />
+            </div>
+
+            {reviewForm.values.phase.kind === "error" && (
+              <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+                {reviewForm.values.phase.errorCode}: {reviewForm.values.phase.message}
+              </p>
+            )}
+            {reviewForm.values.phase.kind === "success" && (
+              <p role="status" className="mt-3 rounded-md bg-green-50 px-3 py-2 text-xs text-green-700">
+                Form {reviewForm.values.phase.form.formNo} reviewed — status: {reviewForm.values.phase.form.status}
+              </p>
+            )}
+          </form>
+        )}
+      </div>
     </section>
   );
 }
