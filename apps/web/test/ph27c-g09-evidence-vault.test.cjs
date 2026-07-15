@@ -7,7 +7,7 @@ const client = fs.readFileSync("apps/web/src/api/hrmsClient.ts", "utf8");
 const fixture = fs.readFileSync("apps/web/src/api/fixtureHrmsClient.ts", "utf8");
 const app = fs.readFileSync("apps/web/src/App.tsx", "utf8");
 test("PH-27C evidence-vault list is a real controlled surface using the client with canonical states", () => {
-  for (const m of ["<form", "onSubmit={handleSubmit}", "onClick=", "event.preventDefault()", "useState", "listCaseEvidence"]) {
+  for (const m of ["<form", "onSubmit={handleSubmit}", "onChange=", "event.preventDefault()", "useState", "listCaseEvidence"]) {
     assert.equal(comp.includes(m), true, `list missing ${m}`);
   }
   for (const m of ['"loading"', '"error"', '"empty"', "OperationalState"]) {

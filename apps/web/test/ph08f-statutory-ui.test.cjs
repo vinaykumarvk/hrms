@@ -348,11 +348,11 @@ test("PH-08F G08 tier forms render only the tiers the actor holds (SoD in the UI
   const client = createFixtureHrmsClient();
   const appraiseeMarkup = renderToStaticMarkup(React.createElement(AparTierForms, { client, permissions: ["g08.apar.self.submit"] }));
   assert.match(appraiseeMarkup, /Self-appraisal/);
-  assert.doesNotMatch(appraiseeMarkup, /Reporting officer assessment/);
-  assert.doesNotMatch(appraiseeMarkup, /Reviewing officer review/);
+  assert.doesNotMatch(appraiseeMarkup, /Reporting Officer Assessment/);
+  assert.doesNotMatch(appraiseeMarkup, /Reviewing Officer Review/);
   const roMarkup = renderToStaticMarkup(React.createElement(AparTierForms, { client, permissions: ["g08.apar.report", "g08.apar.review"] }));
-  assert.match(roMarkup, /Reporting officer assessment/);
-  assert.match(roMarkup, /Reviewing officer review/);
+  assert.match(roMarkup, /Reporting Officer Assessment/);
+  assert.match(roMarkup, /Reviewing Officer Review/);
   assert.doesNotMatch(roMarkup, /Self-appraisal \(appraisee tier\)/);
   const noTierMarkup = renderToStaticMarkup(React.createElement(AparTierForms, { client, permissions: [] }));
   assert.match(noTierMarkup, /data-state="empty"/);

@@ -36,6 +36,7 @@ export interface FormState<T extends FormFields> {
 type FormAction<T extends FormFields> =
   | { type: "SET_FIELD"; field: keyof T; value: unknown }
   | { type: "TOUCH_FIELD"; field: keyof T }
+  | { type: "TOUCH_ALL"; touched: Partial<Record<keyof T, boolean>> }
   | { type: "SET_ERRORS"; errors: FormErrors<T> }
   | { type: "SUBMIT_START" }
   | { type: "SUBMIT_END" }
@@ -57,6 +58,8 @@ function formReducer<T extends FormFields>(
       };
     case "TOUCH_FIELD":
       return { ...state, touched: { ...state.touched, [action.field]: true } };
+    case "TOUCH_ALL":
+      return { ...state, touched: action.touched };
     case "SET_ERRORS":
       return { ...state, errors: action.errors, isSubmitting: false };
     case "SUBMIT_START":
@@ -138,7 +141,7 @@ export function useForm<T extends { [K in keyof T]: FieldConfig<unknown> }>(fiel
         for (const key of Object.keys(fields)) {
           allTouched[key as keyof T] = true;
         }
-        dispatch({ type: "TOUCH_FIELD", field: null as unknown as keyof T });
+        dispatch({ type: "TOUCH_ALL", touched: allTouched });
 
         if (!validateAll()) {
           dispatch({ type: "SUBMIT_END" });

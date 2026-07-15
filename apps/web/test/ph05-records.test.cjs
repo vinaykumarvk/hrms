@@ -155,7 +155,7 @@ test("PH-05D Service Register view exposes append-only chain cues", () => {
 });
 
 test("PH-05D document view exposes retention and hold states", () => {
-  for (const marker of ["legal hold", "retention", "fail-closed"]) {
+  for (const marker of ["legal hold", "retention", "Disposal disabled"]) {
     assert.equal(recordsSource.includes(marker), true, marker);
   }
 });
@@ -264,9 +264,9 @@ test("PH-05D vault lists GET /api/v1/documents results with legal-hold, retentio
 
   const markup = renderToStaticMarkup(React.createElement(DocumentVaultView, { client, initialState: state }));
   assert.equal(markup.includes("DOC/2026/0001001"), true, "API documents render");
-  assert.equal(markup.includes("legal hold (fail-closed)"), true, "legal-hold state renders per document");
+  assert.equal(markup.includes("LEGAL HOLD"), true, "legal-hold state renders per document");
   assert.equal(markup.includes("WORM retention"), true, "retention state renders per document");
-  assert.equal(markup.includes("version v4"), true, "document version renders from the API");
+  assert.equal(markup.includes(">v4<"), true, "document version renders from the API");
 });
 
 test("PH-05D vault renders loading, error, and empty branches", async () => {

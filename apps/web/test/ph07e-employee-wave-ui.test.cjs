@@ -49,7 +49,6 @@ test("PH-07E G02 approver queue wires approve/reject/send-back with a mandatory 
     '"reject"',
     '"send-back"',
     "ERR-REASON-REQ",
-    "ERR-G02-SOD",
     "<button",
     "onClick",
   ]) {

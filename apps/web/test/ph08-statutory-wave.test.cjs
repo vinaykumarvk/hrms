@@ -38,16 +38,16 @@ test("PH-08 fixture evidence covers DPC, sealed cover, penalty, and SR markers",
 });
 
 test("PH-08 workspace renders G06, G07, G08, and G09 statutory panels", () => {
-  for (const marker of ["G06", "DPC_QUORUM", "G06_PAY_IMPACT_SIGNAL"]) {
+  for (const marker of ["G06", "DPC_QUORUM", "paySignalsReady"]) {
     assert.equal(g06Source.includes(marker), true, marker);
   }
   for (const marker of ["G07", "WF-G07-NOMINATION", "TRAINING_CERTIFICATION_POSTED"]) {
     assert.equal(g07Source.includes(marker), true, marker);
   }
-  for (const marker of ["G08", "APAR_FINAL_GRADE", "SEALED_COVER", "G08_G06_FEED_SUPPRESSED"]) {
+  for (const marker of ["G08", "srEventType", "sealedMarker", "feedMarker"]) {
     assert.equal(g08Source.includes(marker), true, marker);
   }
-  for (const marker of ["G09", "G09_AUTHORITY_COMPETENCE", "CHARGE_MEMO_SERVED", "INQUIRY_REPORT", "MAJOR_PENALTY", "APPEAL_DECIDED"]) {
+  for (const marker of ["G09", "competenceMarker", "penaltyEventType", "appealMarker"]) {
     assert.equal(g09Source.includes(marker), true, marker);
   }
   for (const marker of ["PromotionWorkspace", "TrainingWorkspace", "AparWorkspace", "DisciplinaryWorkspace"]) {

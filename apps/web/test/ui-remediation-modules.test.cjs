@@ -19,7 +19,7 @@ test("UIR-07 all routed module destinations remain substantive", () => {
 
 test("UIR-07 shared form table target and overflow rules cover remaining raw module controls", () => {
   const styles = read("apps/web/src/styles.css");
-  assert.match(styles, /button,[\s\S]*min-height: 2\.75rem/);
+  assert.match(styles, /button,[\s\S]*min-height: var\(--min-touch\)/);
   assert.match(styles, /\.content-surface table[\s\S]*overflow-x: auto/);
   assert.match(styles, /\.record-panel form/);
 });

@@ -31,7 +31,7 @@ test("PH-07 workspace renders G02, G03, and G04 wave panels", () => {
     assert.equal(g02Source.includes(marker), true, marker);
   }
   assert.equal(g03Source.includes("READY_FOR_G10"), true);
-  for (const marker of ["G04", "DEAD_LETTERED", "G12 append"]) {
+  for (const marker of ["G04", "deadLettered", "G12 append"]) {
     assert.equal(g04Source.includes(marker), true, marker);
   }
   for (const marker of ["PersonalDetailsWorkspace", "LeaveSrRelayWorkspace"]) {

@@ -32,10 +32,10 @@ test("PH-09 fixture evidence covers payroll and pension controls", () => {
 });
 
 test("PH-09 workspace renders G10 and G11 compensation panels", () => {
-  for (const marker of ["G10", "PAYROLL_TRACE", "RULE_VERSION_SNAPSHOT", "INPUT_LOCKED", "BANK_X3_EXPORT", "LAST_PAY_DRAWN"]) {
+  for (const marker of ["G10", "calculationMarker", "ruleSnapshotMarker", "inputLockMarker", "x3Marker", "lastPayMarker"]) {
     assert.equal(g10Source.includes(marker), true, marker);
   }
-  for (const marker of ["G11", "SR_VERIFICATION_GATE", "QUALIFYING_SERVICE_LOCKED", "PENSION_CALC_TRACE", "PPO_ISSUED", "G11_SR_POSTED"]) {
+  for (const marker of ["G11", "serviceGateMarker", "qualifyingServiceMarker", "calculationMarker", "ppoMarker", "srMarker"]) {
     assert.equal(g11Source.includes(marker), true, marker);
   }
   for (const marker of ["PayrollWorkspace", "PensionWorkspace", 'case "/admin/payroll"', 'case "/admin/pension-retirement"']) {

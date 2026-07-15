@@ -33,6 +33,7 @@ export function KpiCard({
 
   return (
     <article
+      data-suppressed={suppressed ? "true" : undefined}
       className={cn(
         "group relative overflow-hidden rounded-xl border bg-white p-5 transition-shadow hover:shadow-md",
         className
@@ -51,6 +52,9 @@ export function KpiCard({
               </span>
             ) : (
               <>
+                <span className="sr-only">
+                  {value?.toLocaleString() ?? "—"}{unit ? ` ${unit}` : ""}
+                </span>
                 <span className="text-3xl font-bold tracking-tight text-gray-900 tabular-nums">
                   {value?.toLocaleString() ?? "—"}
                 </span>

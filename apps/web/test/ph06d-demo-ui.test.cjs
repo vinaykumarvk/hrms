@@ -70,7 +70,7 @@ test("PH-06D interactive surfaces render canonical loading/error/empty states", 
     ["LeaveApplyForm", leaveFormSource],
     ["TransferInitiateForm", transferFormSource],
   ]) {
-    for (const marker of ['"submitting"', '"error"', '"success"', "role=\"alert\""]) {
+    for (const marker of ["isSubmitting", '"error"', '"success"', "role=\"alert\""]) {
       assert.equal(source.includes(marker), true, `${name} missing ${marker}`);
     }
   }
