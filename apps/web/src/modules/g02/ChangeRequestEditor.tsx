@@ -1,100 +1,91 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect } from "react";
 import { HrmsApiError, HrmsClient, PersonalDetailChangeRecord } from "../../api/hrmsClient";
+import { FormField, FormActions } from "../../components/ui/Form";
+import { useForm, required, minLength } from "../../lib/useForm";
 
-/** Terminal feedback for the create-request submit. */
-type SubmitPhase =
-  | { kind: "idle" }
-  | { kind: "submitting" }
-  | { kind: "success"; requestNo: string; sensitivity: "LOW" | "HIGH" }
-  | { kind: "error"; errorCode: string };
-
-const FIELD_CODES: PersonalDetailChangeRecord["fieldCode"][] = ["displayName", "pan", "aadhaarMasked"];
+const FIELD_CODES: PersonalDetailChangeRecord["fieldCode"][] = [
+  "displayName",
+  "pan",
+  "aadhaarMasked",
+];
 
 export interface ChangeRequestEditorProps {
   client: HrmsClient;
-  /** Invoked after a successful create so the workspace can refresh the approver queue. */
   onCreated: () => void;
 }
 
+type SubmitPhase =
+  | { kind: "idle" }
+  | { kind: "success"; requestNo: string; sensitivity: "LOW" | "HIGH" }
+  | { kind: "error"; errorCode: string };
+
 /**
- * PH-07E G02 change-request editor: a controlled form that POSTs
- * /api/v1/personal-details/change-requests through the injected client with a fresh
- * Idempotency-Key per attempt. Sensitivity routing stays server-side (field_sensitivity_catalog);
- * the editor only reports what the API decided.
+ * G02 change-request editor using the useForm hook for validation and state.
  */
 export function ChangeRequestEditor({ client, onCreated }: ChangeRequestEditorProps) {
-  const [employeeId, setEmployeeId] = useState("");
-  const [fieldCode, setFieldCode] = useState<PersonalDetailChangeRecord["fieldCode"]>("displayName");
-  const [newValue, setNewValue] = useState("");
-  const [reason, setReason] = useState("");
-  const [evidenceTitle, setEvidenceTitle] = useState("");
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<SubmitPhase>({ kind: "idle" });
+  const form = useForm({
+    employeeId: {
+      initial: "",
+      validate: required("Employee ID is required."),
+    },
+    fieldCode: { initial: "displayName" as PersonalDetailChangeRecord["fieldCode"] },
+    newValue: {
+      initial: "",
+      validate: (v) => {
+        if (!v) return "A new value is required.";
+        return minLength(2)(v);
+      },
+    },
+    reason: {
+      initial: "",
+      validate: required("A reason is required for every change request."),
+    },
+    evidenceTitle: { initial: "" },
+    submitPhase: { initial: { kind: "idle" as const } as SubmitPhase },
+  });
 
-  // Prefill the employee id from the first employee visible in the caller's scope.
+  // Prefill employee id from first visible employee
   useEffect(() => {
     let mounted = true;
-    void client
-      .listEmployees()
-      .then((employees) => {
-        if (mounted) {
-          setEmployeeId((current) => current || (employees.items[0]?.id ?? ""));
-        }
-      })
-      .catch(() => {
-        // The field stays editable; submit-side validation reports a missing employee id.
-      });
-    return () => {
-      mounted = false;
-    };
+    void client.listEmployees().then((employees) => {
+      if (mounted && !form.values.employeeId) {
+        form.setValue("employeeId", employees.items[0]?.id ?? "");
+      }
+    });
+    return () => { mounted = false };
   }, [client]);
 
-  function validate(): string | null {
-    if (!employeeId.trim()) {
-      return "Employee id is required.";
-    }
-    if (!newValue.trim()) {
-      return "A new value is required.";
-    }
-    if (!reason.trim()) {
-      return "A reason is required for every change request.";
-    }
-    return null;
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const problem = validate();
-    if (problem) {
-      setValidationError(problem);
-      return;
-    }
-    setValidationError(null);
-    setPhase({ kind: "submitting" });
-    void client
-      .createPersonalDetailChangeRequest(
+  const handleFormSubmit = form.handleSubmit(async (values) => {
+    form.setValue("submitPhase", { kind: "idle" });
+    try {
+      const result = await client.createPersonalDetailChangeRequest(
         {
-          employeeId: employeeId.trim(),
-          fieldCode,
-          newValue: newValue.trim(),
-          reason: reason.trim(),
-          evidenceTitle: evidenceTitle.trim() || undefined,
+          employeeId: values.employeeId.trim(),
+          fieldCode: values.fieldCode,
+          newValue: values.newValue.trim(),
+          reason: values.reason.trim(),
+          evidenceTitle: values.evidenceTitle.trim() || undefined,
         },
-        crypto.randomUUID()
-      )
-      .then((result) => {
-        setPhase({ kind: "success", requestNo: result.request.requestNo, sensitivity: result.request.sensitivity });
-        setNewValue("");
-        setReason("");
-        setEvidenceTitle("");
-        onCreated();
-      })
-      .catch((error: unknown) => {
-        setPhase({ kind: "error", errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR" });
+        crypto.randomUUID(),
+      );
+      form.setValue("submitPhase", {
+        kind: "success",
+        requestNo: result.request.requestNo,
+        sensitivity: result.request.sensitivity,
       });
-  }
+      form.setValue("newValue", "");
+      form.setValue("reason", "");
+      form.setValue("evidenceTitle", "");
+      onCreated();
+    } catch (error: unknown) {
+      form.setValue("submitPhase", {
+        kind: "error",
+        errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR",
+      });
+    }
+  });
 
-  const submitting = phase.kind === "submitting";
+  const phase = form.values.submitPhase;
 
   return (
     <section className="record-panel g02-editor-panel" aria-label="G02 change-request editor">
@@ -103,61 +94,112 @@ export function ChangeRequestEditor({ client, onCreated }: ChangeRequestEditorPr
           <p className="eyebrow">G02 Change</p>
           <h2>New Change Request</h2>
         </div>
+        {phase.kind === "success" && (
+          <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+            {phase.requestNo}
+          </span>
+        )}
       </div>
-      <form aria-label="Change request form" onSubmit={handleSubmit}>
-        <label htmlFor="g02-employee-id">Employee id</label>
-        <input
-          autoComplete="off"
+
+      <form aria-label="Change request form" onSubmit={handleFormSubmit}>
+        <FormField
           id="g02-employee-id"
-          name="employeeId"
-          onChange={(event) => setEmployeeId(event.target.value)}
-          type="text"
-          value={employeeId}
-        />
-        <label htmlFor="g02-field-code">Field</label>
-        <select
-          id="g02-field-code"
-          name="fieldCode"
-          onChange={(event) => setFieldCode(event.target.value as PersonalDetailChangeRecord["fieldCode"])}
-          value={fieldCode}
+          label="Employee ID"
+          required
+          error={form.touched.employeeId ? form.errors.employeeId : undefined}
         >
-          {FIELD_CODES.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-        <label htmlFor="g02-new-value">New value</label>
-        <input
-          autoComplete="off"
+          <input
+            id="g02-employee-id"
+            type="text"
+            autoComplete="off"
+            className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            value={form.values.employeeId}
+            onChange={(e) => form.setValue("employeeId", e.target.value)}
+            onBlur={() => form.touchField("employeeId")}
+          />
+        </FormField>
+
+        <FormField id="g02-field-code" label="Field to Change">
+          <select
+            id="g02-field-code"
+            className="w-full rounded-md border px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            value={form.values.fieldCode}
+            onChange={(e) => form.setValue("fieldCode", e.target.value as PersonalDetailChangeRecord["fieldCode"])}
+          >
+            {FIELD_CODES.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        </FormField>
+
+        <FormField
           id="g02-new-value"
-          name="newValue"
-          onChange={(event) => setNewValue(event.target.value)}
-          type="text"
-          value={newValue}
-        />
-        <label htmlFor="g02-reason">Reason</label>
-        <input autoComplete="off" id="g02-reason" name="reason" onChange={(event) => setReason(event.target.value)} type="text" value={reason} />
-        <label htmlFor="g02-evidence-title">Evidence document title (optional)</label>
-        <input
-          autoComplete="off"
+          label="New Value"
+          required
+          hint="Enter the corrected value for this field."
+          error={form.touched.newValue ? form.errors.newValue : undefined}
+        >
+          <input
+            id="g02-new-value"
+            type="text"
+            autoComplete="off"
+            className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            value={form.values.newValue}
+            onChange={(e) => form.setValue("newValue", e.target.value)}
+            onBlur={() => form.touchField("newValue")}
+          />
+        </FormField>
+
+        <FormField
+          id="g02-reason"
+          label="Reason for Change"
+          required
+          hint="Describe why this change is needed."
+          error={form.touched.reason ? form.errors.reason : undefined}
+        >
+          <input
+            id="g02-reason"
+            type="text"
+            autoComplete="off"
+            className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            value={form.values.reason}
+            onChange={(e) => form.setValue("reason", e.target.value)}
+            onBlur={() => form.touchField("reason")}
+          />
+        </FormField>
+
+        <FormField
           id="g02-evidence-title"
-          name="evidenceTitle"
-          onChange={(event) => setEvidenceTitle(event.target.value)}
-          type="text"
-          value={evidenceTitle}
+          label="Evidence Document Title"
+          hint="Optional — reference any supporting documents."
+        >
+          <input
+            id="g02-evidence-title"
+            type="text"
+            autoComplete="off"
+            className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            value={form.values.evidenceTitle}
+            onChange={(e) => form.setValue("evidenceTitle", e.target.value)}
+          />
+        </FormField>
+
+        <FormActions
+          isSubmitting={form.isSubmitting}
+          submitDisabled={!form.isDirty}
+          onSubmitLabel="Submit change request"
         />
-        <button disabled={submitting} type="submit">
-          {submitting ? "Submitting…" : "Submit change request"}
-        </button>
+
+        {phase.kind === "error" && (
+          <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+            Change request failed — {phase.errorCode}
+          </p>
+        )}
+        {phase.kind === "success" && (
+          <p role="status" className="mt-3 rounded-md bg-green-50 px-3 py-2 text-xs text-green-700">
+            Request {phase.requestNo} submitted ({phase.sensitivity} sensitivity).
+          </p>
+        )}
       </form>
-      {validationError ? <p role="alert">{validationError}</p> : null}
-      {phase.kind === "error" ? <p role="alert">The change request failed with error code {phase.errorCode}.</p> : null}
-      {phase.kind === "success" ? (
-        <p role="status">
-          Change request {phase.requestNo} submitted; the field-sensitivity catalog routed it as {phase.sensitivity}.
-        </p>
-      ) : null}
     </section>
   );
 }
