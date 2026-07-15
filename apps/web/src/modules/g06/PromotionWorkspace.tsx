@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { HrmsClient, PromotionSliceSummary } from "../../api/hrmsClient";
 import { OperationalState } from "../../app/OperationalStates";
 import { loadSliceView, SliceViewState } from "../sliceViewState";
+import { SummaryStat, StatGrid } from "../g14/Charts";
 
 export type PromotionViewState = SliceViewState<PromotionSliceSummary>;
 
-/** Loads the G06 summary from GET /api/v1/promotions/summary via the injected client. */
 export function loadPromotionView(client: HrmsClient): Promise<PromotionViewState> {
   return loadSliceView(
     () => client.getPromotionSlice(),
@@ -15,7 +15,6 @@ export function loadPromotionView(client: HrmsClient): Promise<PromotionViewStat
 
 export interface PromotionWorkspaceProps {
   client: HrmsClient;
-  /** Pre-resolved view state for tests/server rendering; the live fetch replaces it on mount. */
   initialState?: PromotionViewState;
 }
 
@@ -25,58 +24,52 @@ export function PromotionWorkspace({ client, initialState }: PromotionWorkspaceP
   useEffect(() => {
     let mounted = true;
     setState({ kind: "loading" });
-    void loadPromotionView(client).then((next) => {
-      if (mounted) {
-        setState(next);
-      }
-    });
-    return () => {
-      mounted = false;
-    };
+    void loadPromotionView(client).then((next) => { if (mounted) setState(next); });
+    return () => { mounted = false };
   }, [client]);
 
   if (state.kind === "loading") {
-    return <OperationalState kind="loading" title="Loading Promotions" detail="Fetching the G06 promotion and seniority summary." />;
+    return <OperationalState kind="loading" title="Loading Promotions" detail="Fetching G06 promotion and seniority summary." />;
   }
   if (state.kind === "error") {
-    return (
-      <OperationalState
-        kind="error"
-        title="Could not load Promotions"
-        detail={`The G06 summary fetch failed with error code ${state.errorCode}.`}
-      />
-    );
+    return <OperationalState kind="error" title="Could not load Promotions" detail={`Error code ${state.errorCode}.`} />;
   }
   if (state.kind === "empty") {
-    return <OperationalState kind="empty" title="No promotion records" detail="No G06 seniority lists, DPC orders, or MACP effects are in scope." />;
+    return <OperationalState kind="empty" title="No promotion records" detail="No G06 seniority lists, DPC orders, or MACP effects in scope." />;
   }
 
   const slice = state.slice;
+
   return (
-    <article className="workspace-card" aria-label="G06 promotion statutory workspace">
-      <header>
-        <span className="module-code">G06</span>
-        <h2>Promotion and Seniority</h2>
-      </header>
-      <dl className="metric-grid">
+    <article className="record-panel" aria-label="G06 promotion statutory workspace">
+      <div className="panel-heading">
         <div>
-          <dt>Seniority Lists</dt>
-          <dd>{slice.seniorityLists}</dd>
+          <p className="eyebrow">G06 Promotions</p>
+          <h2>Promotion and Seniority</h2>
         </div>
-        <div>
-          <dt>Orders</dt>
-          <dd>{slice.promotionOrders}</dd>
-        </div>
-        <div>
-          <dt>MACP</dt>
-          <dd>{slice.macpEffected}</dd>
-        </div>
-        <div>
-          <dt>G10 Signals</dt>
-          <dd>{slice.paySignalsReady}</dd>
-        </div>
-      </dl>
-      <p className="evidence-line">{`DPC_QUORUM / DPC_RECUSAL / ${slice.srEventType} / G06_PAY_IMPACT_SIGNAL`}</p>
+        <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
+          {slice.promotionOrders} order{slice.promotionOrders !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      <StatGrid columns={4}>
+        <SummaryStat label="Seniority Lists" value={slice.seniorityLists} />
+        <SummaryStat label="Promotion Orders" value={slice.promotionOrders} />
+        <SummaryStat label="MACP Effected" value={slice.macpEffected} />
+        <SummaryStat label="Pay Signals" value={slice.paySignalsReady} />
+      </StatGrid>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <span className="inline-flex rounded bg-gray-100 px-2 py-0.5 text-[10px] font-mono text-gray-600">
+          {slice.srEventType}
+        </span>
+        <span className="inline-flex rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-mono text-indigo-700">
+          DPC_QUORUM
+        </span>
+        <span className="inline-flex rounded bg-gray-100 px-2 py-0.5 text-[10px] font-mono text-gray-600">
+          DPC_RECUSAL
+        </span>
+      </div>
     </article>
   );
 }

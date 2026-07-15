@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { HrmsClient, TrainingSliceSummary } from "../../api/hrmsClient";
 import { OperationalState } from "../../app/OperationalStates";
 import { loadSliceView, SliceViewState } from "../sliceViewState";
+import { SummaryStat, StatGrid } from "../g14/Charts";
 
 export type TrainingViewState = SliceViewState<TrainingSliceSummary>;
 
-/** Loads the G07 summary from GET /api/v1/training/summary via the injected client. */
 export function loadTrainingView(client: HrmsClient): Promise<TrainingViewState> {
   return loadSliceView(
     () => client.getTrainingSlice(),
@@ -15,7 +15,6 @@ export function loadTrainingView(client: HrmsClient): Promise<TrainingViewState>
 
 export interface TrainingWorkspaceProps {
   client: HrmsClient;
-  /** Pre-resolved view state for tests/server rendering; the live fetch replaces it on mount. */
   initialState?: TrainingViewState;
 }
 
@@ -25,58 +24,68 @@ export function TrainingWorkspace({ client, initialState }: TrainingWorkspacePro
   useEffect(() => {
     let mounted = true;
     setState({ kind: "loading" });
-    void loadTrainingView(client).then((next) => {
-      if (mounted) {
-        setState(next);
-      }
-    });
-    return () => {
-      mounted = false;
-    };
+    void loadTrainingView(client).then((next) => { if (mounted) setState(next); });
+    return () => { mounted = false };
   }, [client]);
 
   if (state.kind === "loading") {
-    return <OperationalState kind="loading" title="Loading Training" detail="Fetching the G07 training and certification summary." />;
+    return <OperationalState kind="loading" title="Loading Training" detail="Fetching G07 training and certification summary." />;
   }
   if (state.kind === "error") {
-    return (
-      <OperationalState
-        kind="error"
-        title="Could not load Training"
-        detail={`The G07 summary fetch failed with error code ${state.errorCode}.`}
-      />
-    );
+    return <OperationalState kind="error" title="Could not load Training" detail={`Error code ${state.errorCode}.`} />;
   }
   if (state.kind === "empty") {
-    return <OperationalState kind="empty" title="No training sessions" detail="No G07 training sessions are in scope." />;
+    return <OperationalState kind="empty" title="No training sessions" detail="No G07 training sessions in scope." />;
   }
 
   const slice = state.slice;
+  const completeRate = slice.sessions > 0 ? Math.round(slice.completed / slice.sessions * 100) : 0;
+
   return (
-    <article className="workspace-card" aria-label="G07 training statutory workspace">
-      <header>
-        <span className="module-code">G07</span>
-        <h2>Training and Certification</h2>
-      </header>
-      <dl className="metric-grid">
+    <article className="record-panel" aria-label="G07 training statutory workspace">
+      <div className="panel-heading">
         <div>
-          <dt>Sessions</dt>
-          <dd>{slice.sessions}</dd>
+          <p className="eyebrow">G07 Training</p>
+          <h2>Training and Certification</h2>
         </div>
-        <div>
-          <dt>Approved</dt>
-          <dd>{slice.approved}</dd>
+        <span className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-700">
+          {slice.sessions} session{slice.sessions !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      <StatGrid columns={4}>
+        <SummaryStat label="Total Sessions" value={slice.sessions} />
+        <SummaryStat label="Approved" value={slice.approved} />
+        <SummaryStat label="Completed" value={slice.completed} />
+        <SummaryStat label="SR Posted" value={slice.srPosted} />
+      </StatGrid>
+
+      {slice.sessions > 0 && (
+        <div className="mt-4">
+          <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+            <span>Completion progress</span>
+            <span>{completeRate}% completed</span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 transition-all"
+              style={{ width: `${completeRate}%` }}
+            />
+          </div>
         </div>
-        <div>
-          <dt>Completed</dt>
-          <dd>{slice.completed}</dd>
-        </div>
-        <div>
-          <dt>SR Posted</dt>
-          <dd>{slice.srPosted}</dd>
-        </div>
-      </dl>
-      <p className="evidence-line">{`WF-G07-NOMINATION / TRAINING_CERTIFICATION_POSTED / ${slice.srEventType}`}</p>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <span className="inline-flex rounded bg-gray-100 px-2 py-0.5 text-[10px] font-mono text-gray-600">
+          WF-G07-NOMINATION
+        </span>
+        <span className="inline-flex rounded bg-teal-100 px-2 py-0.5 text-[10px] font-mono text-teal-700">
+          {slice.srEventType}
+        </span>
+        <span className="inline-flex rounded bg-gray-100 px-2 py-0.5 text-[10px] font-mono text-gray-600">
+          TRAINING_CERTIFICATION_POSTED
+        </span>
+      </div>
     </article>
   );
 }

@@ -1,8 +1,8 @@
-import { ReactNode, useMemo, useRef, useState } from "react";
+import { ReactNode, useMemo, useRef, useState, useEffect } from "react";
 import {
   ArrowLeftRight, BadgeCheck, BookOpen, CalendarDays, ChartNoAxesCombined,
   ClipboardCheck, FolderLock, GraduationCap, Inbox, IndianRupee, Landmark,
-  Menu, RefreshCw, Scale, UserRoundPen, Users, Workflow,
+  Menu, Moon, RefreshCw, Scale, Sun, UserRoundPen, Users, Workflow,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Drawer } from "../components/ui/Drawer";
@@ -28,6 +28,23 @@ const icons = {
   workflow: Workflow,
 };
 
+const THEME_KEY = "hrms.theme";
+
+function getStoredTheme(): "light" | "dark" | null {
+  try {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === "dark" || stored === "light") return stored;
+  } catch { /* localStorage blocked */ }
+  return null;
+}
+
+function applyThemeClass(theme: "light" | "dark" | null) {
+  const root = document.documentElement;
+  root.classList.remove("light", "dark");
+  if (theme === "dark") root.classList.add("dark");
+  if (theme === "light") root.classList.add("light");
+}
+
 export interface AppShellProps {
   permissions: readonly string[];
   sessionUser?: string;
@@ -43,6 +60,11 @@ export function AppShell({ permissions, sessionUser, activeWorkspace, activePath
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const restoreMenuFocusRef = useRef(true);
+
+  const [theme, setTheme] = useState<"light" | "dark" | null>(getStoredTheme);
+
+  useEffect(() => { applyThemeClass(theme); }, [theme]);
+
   const visibleNavigation = useMemo(
     () => primaryNavigation.filter((item) => item.workspace === activeWorkspace && canAccess(permissions, item.requiredPermission)),
     [activeWorkspace, permissions]
@@ -54,26 +76,65 @@ export function AppShell({ permissions, sessionUser, activeWorkspace, activePath
     onNavigate(path);
   };
 
+  const toggleTheme = () => {
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      try { localStorage.setItem(THEME_KEY, next); } catch {}
+      return next;
+    });
+  };
+
+  const isDark = theme === "dark";
+
   return (
     <main className="hrms-app" aria-label="HRMS shell">
       <header className="hrms-topbar">
-        <Button aria-expanded={menuOpen} aria-label="Open menu" className="mobile-menu-button" onClick={() => { restoreMenuFocusRef.current = true; setMenuOpen(true); }} ref={menuButtonRef} type="button" variant="secondary">
+        <Button
+          aria-expanded={menuOpen}
+          aria-label="Open navigation menu"
+          className="mobile-menu-button"
+          onClick={() => { restoreMenuFocusRef.current = true; setMenuOpen(true); }}
+          ref={menuButtonRef}
+          type="button"
+          variant="secondary"
+        >
           <Menu aria-hidden="true" className="size-5" />
         </Button>
+
         <div className="app-heading">
           <p className="eyebrow">Government HRMS</p>
           <h1>Operations Workspace</h1>
         </div>
-        <WorkspaceSwitcher activeWorkspace={activeWorkspace} permissions={permissions} onWorkspaceChange={onWorkspaceChange} />
-        {sessionUser ? (
-          <div className="session-status">
-            <span>Signed in as {sessionUser}</span>
-            {onSignOut ? <Button type="button" variant="secondary" onClick={onSignOut}>Sign out</Button> : null}
-          </div>
-        ) : null}
+
+        <div className="topbar-actions">
+          <Button
+            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            className="theme-toggle"
+            onClick={toggleTheme}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            type="button"
+            variant="secondary"
+          >
+            {isDark ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}
+          </Button>
+
+          <WorkspaceSwitcher activeWorkspace={activeWorkspace} permissions={permissions} onWorkspaceChange={onWorkspaceChange} />
+
+          {sessionUser ? (
+            <div className="session-status">
+              <span className="session-user-label">Signed in as {sessionUser}</span>
+              {onSignOut ? <Button type="button" variant="secondary" className="sign-out-btn" onClick={onSignOut}>Sign out</Button> : null}
+            </div>
+          ) : null}
+        </div>
       </header>
 
-      <Drawer open={menuOpen} onOpenChange={setMenuOpen} returnFocusRef={restoreMenuFocusRef.current ? menuButtonRef : undefined} title={`${labelForWorkspace(activeWorkspace)} navigation`}>
+      <Drawer
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        returnFocusRef={restoreMenuFocusRef.current ? menuButtonRef : undefined}
+        title={`${labelForWorkspace(activeWorkspace)} navigation`}
+      >
         <Navigation activePath={activePath} items={visibleNavigation} onNavigate={navigate} />
       </Drawer>
 

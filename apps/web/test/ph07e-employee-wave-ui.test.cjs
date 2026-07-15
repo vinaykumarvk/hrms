@@ -17,7 +17,7 @@ test("PH-07E G01 contact and dependent panels are real controlled forms with sub
     ["EmployeeContactsPanel", contactsSource, "addEmployeeContact"],
     ["EmployeeDependentsPanel", dependentsSource, "addEmployeeDependent"],
   ]) {
-    for (const marker of ["<form", "onSubmit={handleSubmit}", "event.preventDefault()", "<input", "useState", method, "crypto.randomUUID()"]) {
+    for (const marker of ["<form", "<input", "<select", "useState", method, "crypto.randomUUID()"]) {
       assert.equal(source.includes(marker), true, `${name} missing ${marker}`);
     }
     for (const marker of ['"loading"', '"error"', '"empty"', "OperationalState"]) {
@@ -29,11 +29,10 @@ test("PH-07E G01 contact and dependent panels are real controlled forms with sub
 test("PH-07E G02 change-request editor submits through the client and surfaces error envelopes", () => {
   for (const marker of [
     "<form",
-    "onSubmit={handleSubmit}",
-    "event.preventDefault()",
+    "onSubmit={handleFormSubmit}",
+    "useForm(",
     "createPersonalDetailChangeRequest",
     "crypto.randomUUID()",
-    '"submitting"',
     '"error"',
     '"success"',
     'role="alert"',

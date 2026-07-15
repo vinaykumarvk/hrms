@@ -14,8 +14,8 @@ const transferOrdersSource = fs.readFileSync("apps/web/src/modules/g05/TransferO
 test("PH-06D G03 leave-apply form is a real controlled form submitting through the client", () => {
   for (const marker of [
     "<form",
-    "onSubmit={handleSubmit}",
-    "event.preventDefault()",
+    "onSubmit={handleFormSubmit}",
+    "useForm(",
     "<input",
     "<select",
     "useState",
@@ -38,10 +38,9 @@ test("PH-06D G03 approver inbox wires Approve/Reject buttons to the decision rou
 test("PH-06D G05 initiate-transfer form posts /api/v1/transfers/orders through the client", () => {
   for (const marker of [
     "<form",
-    "onSubmit={handleSubmit}",
-    "event.preventDefault()",
+    "onSubmit={handleFormSubmit}",
+    "useForm(",
     "<input",
-    "useState",
     "initiateTransferOrder",
     "crypto.randomUUID()",
   ]) {

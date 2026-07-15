@@ -119,7 +119,7 @@ test("PH-08F G08 tier forms are gated by the actor's tier permission (SoD)", () 
 });
 
 test("PH-08F G07 nomination form renders capacity/eligibility feedback from the server", () => {
-  for (const marker of ["<form", "onSubmit={handleSubmit}", "nominateForTraining", "WAITLISTED", "waitlistPosition", 'role="alert"']) {
+  for (const marker of ["<form", "onSubmit={handleFormSubmit}", "useForm(", "nominateForTraining", "WAITLISTED", "waitlistPosition", 'role="alert"']) {
     assert.equal(g07NominationSource.includes(marker), true, `TrainingNominationForm missing ${marker}`);
   }
 });

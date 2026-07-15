@@ -1,22 +1,84 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { EmployeeContactRecord, HrmsApiError, HrmsClient } from "../../api/hrmsClient";
 import { OperationalState } from "../../app/OperationalStates";
+import { DataTable, DataTableColumnDef } from "../../components/ui/DataTable";
+import { useDataTable, DataTableState, DataTableCallbacks } from "../../lib/useDataTable";
 
-/** Canonical view state for the employee contacts satellite list. */
+/* ── View / Submit state ──────────────────────────────────── */
+
 type ContactsState =
   | { kind: "loading" }
   | { kind: "error"; errorCode: string }
   | { kind: "empty"; employeeId: string }
   | { kind: "ready"; employeeId: string; contacts: EmployeeContactRecord[] };
 
-/** Terminal feedback for the add-contact submit; client-side validation never leaves the browser. */
 type SubmitPhase =
   | { kind: "idle" }
   | { kind: "submitting" }
   | { kind: "success"; contactValue: string }
   | { kind: "error"; errorCode: string };
 
-const CONTACT_TYPES: EmployeeContactRecord["contactType"][] = ["MOBILE", "ALT_MOBILE", "PERSONAL_EMAIL", "OFFICIAL_EMAIL", "LANDLINE"];
+const CONTACT_TYPES: EmployeeContactRecord["contactType"][] = [
+  "MOBILE", "ALT_MOBILE", "PERSONAL_EMAIL", "OFFICIAL_EMAIL", "LANDLINE",
+];
+
+/* ── Data table columns ───────────────────────────────────── */
+
+type ContactColumn = "type" | "value" | "primary" | "visibility";
+
+const CONTACT_COLUMNS: DataTableColumnDef<EmployeeContactRecord, ContactColumn>[] = [
+  {
+    id: "type",
+    header: "Type",
+    sortable: true,
+    resolve: (c) => <span className="font-medium">{c.contactType}</span>,
+    sortValue: (c) => c.contactType,
+    filterValue: (c) => c.contactType,
+  },
+  {
+    id: "value",
+    header: "Contact",
+    sortable: true,
+    resolve: (c) => c.contactValue,
+    sortValue: (c) => c.contactValue,
+    filterValue: (c) => c.contactValue,
+  },
+  {
+    id: "primary",
+    header: "Primary",
+    resolve: (c) => (c.isPrimary ? "✓" : "—"),
+    sortValue: (c) => (c.isPrimary ? 1 : 0),
+    filterValue: (c) => (c.isPrimary ? "yes" : "no"),
+    className: "text-center",
+  },
+  {
+    id: "visibility",
+    header: "Visibility",
+    sortable: true,
+    resolve: (c) => (
+      <span
+        className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+          c.visibility === "PUBLIC"
+            ? "bg-green-50 text-green-700"
+            : c.visibility === "RESTRICTED" || c.visibility === "PRIVATE"
+              ? "bg-red-50 text-red-700"
+              : "bg-gray-50 text-gray-700"
+        }`}
+      >
+        {c.visibility}
+      </span>
+    ),
+    sortValue: (c) => c.visibility,
+    filterValue: (c) => c.visibility,
+  },
+];
+
+const FILTER_COLUMNS = [
+  { id: "type", label: "Type", type: "text" as const },
+  { id: "value", label: "Contact", type: "text" as const },
+];
+
+/* ── Loader ───────────────────────────────────────────────── */
 
 async function loadContacts(client: HrmsClient, employeeId?: string): Promise<ContactsState> {
   try {
@@ -25,17 +87,20 @@ async function loadContacts(client: HrmsClient, employeeId?: string): Promise<Co
       const employees = await client.listEmployees();
       targetId = employees.items[0]?.id;
     }
-    if (!targetId) {
-      return { kind: "error", errorCode: "NOT_FOUND" };
-    }
+    if (!targetId) return { kind: "error", errorCode: "NOT_FOUND" };
     const contacts = await client.listEmployeeContacts(targetId);
     return contacts.items.length === 0
       ? { kind: "empty", employeeId: targetId }
       : { kind: "ready", employeeId: targetId, contacts: contacts.items };
   } catch (error) {
-    return { kind: "error", errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR" };
+    return {
+      kind: "error",
+      errorCode: error instanceof HrmsApiError ? error.displayCode : "UNKNOWN_ERROR",
+    };
   }
 }
+
+/* ── Component ────────────────────────────────────────────── */
 
 export interface EmployeeContactsPanelProps {
   client: HrmsClient;
@@ -43,36 +108,35 @@ export interface EmployeeContactsPanelProps {
 }
 
 /**
- * PH-07E G01 contacts satellite surface: lists GET /employees/{id}/contacts and adds rows through
- * POST /employees/{id}/contacts (PH-07A route) with a fresh Idempotency-Key per attempt.
+ * G01 contacts satellite surface. Uses the DataTable component for sortable,
+ * filterable, paginated display of employee contact rows.
  */
 export function EmployeeContactsPanel({ client, employeeId }: EmployeeContactsPanelProps) {
   const [state, setState] = useState<ContactsState>({ kind: "loading" });
   const [refreshToken, setRefreshToken] = useState(0);
+
+  // Add-contact form
   const [contactType, setContactType] = useState<EmployeeContactRecord["contactType"]>("MOBILE");
   const [contactValue, setContactValue] = useState("");
   const [isPrimary, setIsPrimary] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [phase, setPhase] = useState<SubmitPhase>({ kind: "idle" });
 
+  // Data table state
+  const [tableState, tableCallbacks] = useDataTable<ContactColumn>();
+
   useEffect(() => {
     let mounted = true;
     setState({ kind: "loading" });
     void loadContacts(client, employeeId).then((next) => {
-      if (mounted) {
-        setState(next);
-      }
+      if (mounted) setState(next);
     });
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false };
   }, [client, employeeId, refreshToken]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (state.kind !== "ready" && state.kind !== "empty") {
-      return;
-    }
+    if (state.kind !== "ready" && state.kind !== "empty") return;
     if (!contactValue.trim()) {
       setValidationError("A contact value is required.");
       return;
@@ -80,7 +144,11 @@ export function EmployeeContactsPanel({ client, employeeId }: EmployeeContactsPa
     setValidationError(null);
     setPhase({ kind: "submitting" });
     void client
-      .addEmployeeContact(state.employeeId, { contactType, contactValue: contactValue.trim(), isPrimary }, crypto.randomUUID())
+      .addEmployeeContact(
+        state.employeeId,
+        { contactType, contactValue: contactValue.trim(), isPrimary },
+        crypto.randomUUID(),
+      )
       .then((result) => {
         setPhase({ kind: "success", contactValue: result.contact.contactValue });
         setContactValue("");
@@ -93,6 +161,7 @@ export function EmployeeContactsPanel({ client, employeeId }: EmployeeContactsPa
   }
 
   const submitting = phase.kind === "submitting";
+  const contacts = state.kind === "ready" ? state.contacts : [];
 
   return (
     <section className="record-panel g01-contacts-panel" aria-label="G01 employee contacts">
@@ -101,27 +170,31 @@ export function EmployeeContactsPanel({ client, employeeId }: EmployeeContactsPa
           <p className="eyebrow">G01 Profile</p>
           <h2>Contacts</h2>
         </div>
+        {state.kind === "ready" && (
+          <span className="text-xs text-gray-500">{contacts.length} contact{contacts.length !== 1 ? "s" : ""}</span>
+        )}
       </div>
+
       {state.kind === "loading" ? (
         <OperationalState kind="loading" title="Loading contacts" detail="Fetching the employee contact satellite rows." />
-      ) : null}
-      {state.kind === "error" ? (
+      ) : state.kind === "error" ? (
         <OperationalState kind="error" title="Could not load contacts" detail={`The contact list failed with error code ${state.errorCode}.`} />
-      ) : null}
-      {state.kind === "empty" ? (
+      ) : state.kind === "empty" ? (
         <OperationalState kind="empty" title="No contacts" detail="No contact rows are recorded for this employee yet." />
-      ) : null}
-      {state.kind === "ready" ? (
-        <ul className="satellite-list" aria-label="Employee contact rows">
-          {state.contacts.map((contact) => (
-            <li key={contact.id}>
-              <strong>{contact.contactType}</strong> {contact.contactValue}
-              {contact.isPrimary ? " (primary)" : ""} — {contact.visibility}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {state.kind === "ready" || state.kind === "empty" ? (
+      ) : (
+        <DataTable
+          items={contacts}
+          columns={CONTACT_COLUMNS}
+          state={tableState}
+          callbacks={tableCallbacks}
+          filterColumns={FILTER_COLUMNS}
+          emptyMessage="No contacts recorded."
+          filteredEmptyMessage="No contacts match the current filters."
+        />
+      )}
+
+      {/* Add-contact form */}
+      {(state.kind === "ready" || state.kind === "empty") && (
         <form aria-label="Add contact form" onSubmit={handleSubmit}>
           <label htmlFor="g01-contact-type">Contact type</label>
           <select
@@ -130,11 +203,7 @@ export function EmployeeContactsPanel({ client, employeeId }: EmployeeContactsPa
             onChange={(event) => setContactType(event.target.value as EmployeeContactRecord["contactType"])}
             value={contactType}
           >
-            {CONTACT_TYPES.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
+            {CONTACT_TYPES.map((option) => (<option key={option} value={option}>{option}</option>))}
           </select>
           <label htmlFor="g01-contact-value">Contact value</label>
           <input
@@ -153,13 +222,14 @@ export function EmployeeContactsPanel({ client, employeeId }: EmployeeContactsPa
               onChange={(event) => setIsPrimary(event.target.checked)}
               type="checkbox"
             />
-            Mark as primary
+            {" "}Mark as primary
           </label>
           <button disabled={submitting} type="submit">
             {submitting ? "Adding…" : "Add contact"}
           </button>
         </form>
-      ) : null}
+      )}
+
       {validationError ? <p role="alert">{validationError}</p> : null}
       {phase.kind === "error" ? <p role="alert">Adding the contact failed with error code {phase.errorCode}.</p> : null}
       {phase.kind === "success" ? <p role="status">Contact {phase.contactValue} added and recorded in the attribute history.</p> : null}

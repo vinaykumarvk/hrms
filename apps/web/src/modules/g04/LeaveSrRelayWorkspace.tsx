@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { HrmsClient, LeaveSrRelaySliceSummary } from "../../api/hrmsClient";
 import { OperationalState } from "../../app/OperationalStates";
 import { loadSliceView, SliceViewState } from "../sliceViewState";
+import { SummaryStat, StatGrid } from "../g14/Charts";
 
 export type LeaveSrRelayViewState = SliceViewState<LeaveSrRelaySliceSummary>;
 
-/** Loads the G04 relay reconciliation report from GET /api/v1/leave-sr/reconciliation via the injected client. */
 export function loadLeaveSrRelayView(client: HrmsClient): Promise<LeaveSrRelayViewState> {
   return loadSliceView(
     () => client.getLeaveSrRelaySlice(),
@@ -15,7 +15,6 @@ export function loadLeaveSrRelayView(client: HrmsClient): Promise<LeaveSrRelayVi
 
 export interface LeaveSrRelayWorkspaceProps {
   client: HrmsClient;
-  /** Pre-resolved view state for tests/server rendering; the live fetch replaces it on mount. */
   initialState?: LeaveSrRelayViewState;
 }
 
@@ -26,68 +25,78 @@ export function LeaveSrRelayWorkspace({ client, initialState }: LeaveSrRelayWork
     let mounted = true;
     setState({ kind: "loading" });
     void loadLeaveSrRelayView(client).then((next) => {
-      if (mounted) {
-        setState(next);
-      }
+      if (mounted) setState(next);
     });
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false };
   }, [client]);
 
   if (state.kind === "loading") {
-    return <OperationalState kind="loading" title="Loading Leave-SR Relay" detail="Fetching the G04 outbox reconciliation report." />;
+    return <OperationalState kind="loading" title="Loading Leave-SR Relay" detail="Fetching G04 reconciliation report." />;
   }
   if (state.kind === "error") {
-    return (
-      <OperationalState
-        kind="error"
-        title="Could not load the Leave-SR Relay"
-        detail={`The G04 reconciliation fetch failed with error code ${state.errorCode}.`}
-      />
-    );
+    return <OperationalState kind="error" title="Could not load Leave-SR Relay" detail={`Error code ${state.errorCode}.`} />;
   }
   if (state.kind === "empty") {
     return <OperationalState kind="empty" title="No relay entries" detail="The G04 outbox has no leave events to reconcile." />;
   }
 
   const slice = state.slice;
+  const deadLetterRate = slice.total > 0 ? (slice.deadLettered / slice.total * 100) : 0;
+
   return (
-    <article
-      className="record-panel vertical-slice-panel"
-      aria-label="G04 leave service register relay"
-      data-relay-owner="G04"
-      data-dead-letter-state="DEAD_LETTERED"
-    >
+    <article className="record-panel" aria-label="G04 leave service register relay">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">G04 Relay</p>
           <h2>Leave to Service Register</h2>
         </div>
-        <strong>{slice.relayOwner}</strong>
+        <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+          {slice.relayOwner}
+        </span>
       </div>
-      <dl className="record-facts">
-        <div>
-          <dt>Total</dt>
-          <dd>{slice.total}</dd>
+
+      <StatGrid columns={4}>
+        <SummaryStat label="Total Events" value={slice.total} />
+        <SummaryStat label="Posted" value={slice.posted} />
+        <SummaryStat
+          label="DLQ"
+          value={
+            slice.deadLettered > 0 ? (
+              <span className="text-amber-600">{slice.deadLettered}</span>
+            ) : slice.deadLettered
+          }
+        />
+        <SummaryStat label="Discarded" value={slice.discarded} />
+      </StatGrid>
+
+      {/* Progress bar */}
+      {slice.total > 0 && (
+        <div className="mt-4">
+          <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+            <span>Relay progress</span>
+            <span>{slice.posted} of {slice.total} ({Math.round(slice.posted / slice.total * 100)}%)</span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all"
+              style={{ width: `${(slice.posted / slice.total) * 100}%` }}
+            />
+          </div>
         </div>
-        <div>
-          <dt>Posted</dt>
-          <dd>{slice.posted}</dd>
-        </div>
-        <div>
-          <dt>DLQ</dt>
-          <dd>{slice.deadLettered}</dd>
-        </div>
-        <div>
-          <dt>Discarded</dt>
-          <dd>{slice.discarded}</dd>
-        </div>
-      </dl>
-      <ul className="slice-evidence" aria-label="G04 relay evidence">
-        <li>Replay and discard require custodian action</li>
-        <li>G12 append is idempotent by source reference</li>
-      </ul>
+      )}
+
+      {deadLetterRate > 0 && (
+        <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          {slice.deadLettered} event{slice.deadLettered !== 1 ? "s" : ""} dead-lettered ({deadLetterRate.toFixed(1)}%).
+          Replay and discard require custodian action. G12 append is idempotent by source reference.
+        </p>
+      )}
+
+      {deadLetterRate === 0 && slice.total > 0 && (
+        <p className="mt-3 text-xs text-gray-400">
+          All events posted successfully. G12 append is idempotent by source reference.
+        </p>
+      )}
     </article>
   );
 }

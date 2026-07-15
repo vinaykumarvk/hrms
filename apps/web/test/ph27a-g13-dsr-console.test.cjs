@@ -11,7 +11,7 @@ const fixture = fs.readFileSync("apps/web/src/api/fixtureHrmsClient.ts", "utf8")
 const app = fs.readFileSync("apps/web/src/App.tsx", "utf8");
 
 test("PH-27A DSR console is a real controlled form using the client with canonical states", () => {
-  for (const marker of ["<form", "onSubmit={handleSubmit}", "event.preventDefault()", "useState", "listDataSubjectRequests", "adjudicateDsr", "crypto.randomUUID()"]) {
+  for (const marker of ["<form", "onSubmit={handleFormSubmit}", "useForm(", "useState", "listDataSubjectRequests", "adjudicateDsr", "crypto.randomUUID()"]) {
     assert.equal(comp.includes(marker), true, `console missing ${marker}`);
   }
   for (const marker of ['"loading"', '"error"', '"empty"', "OperationalState"]) {
