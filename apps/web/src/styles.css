@@ -1002,4 +1002,137 @@ a {
     border-right: 1px solid var(--color-border);
     padding: var(--space-4);
   }
+
+  .session-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .session-user-label {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+  }
+
+  .sign-out-btn {
+    white-space: nowrap;
+  }
+}
+
+/* ── Topbar Actions (Theme + Switcher + Session) ──────────── */
+
+.topbar-actions {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.theme-toggle {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-width: var(--min-touch);
+  padding: 0;
+}
+
+/* ── Dark Mode Shell Adjustments ──────────────────────────── */
+
+:root.dark .hrms-topbar {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+:root.dark .sidebar {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+:root.dark .workspace-tab,
+:root.dark .sidebar a {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root.dark .workspace-tab.active {
+  background: var(--color-selected-bg);
+  border-color: var(--color-selected-border);
+  color: var(--color-link);
+}
+
+:root.dark .nav-link:hover {
+  background: var(--color-surface-elevated);
+}
+
+:root.dark .nav-link.active,
+:root.dark .nav-link[aria-current="page"] {
+  background: var(--color-selected-bg);
+  border-color: var(--color-selected-border);
+  color: var(--color-link);
+}
+
+:root.dark .record-panel,
+:root.dark .workspace-grid article {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+:root.dark .workspace-label {
+  color: var(--color-text-muted);
+}
+
+:root.dark .eyebrow {
+  color: var(--color-text-muted);
+}
+
+:root.dark .panel-heading p {
+  color: var(--color-text-muted);
+}
+
+:root.dark .session-user-label {
+  color: var(--color-text-muted);
+}
+
+:root.dark .workspace-grid article:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Mobile Drawer Dark Mode ──────────────────────────────── */
+
+:root.dark .drawer-overlay {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+:root.dark .drawer-panel {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+/* ── Mobile responsive: narrow topbar polish ──────────────── */
+
+@media (max-width: 480px) {
+  .hrms-topbar {
+    padding: var(--space-3) var(--space-4);
+    gap: var(--space-3);
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .session-status {
+    display: none;
+  }
+
+  .workspace-switcher {
+    flex: 1;
+  }
+
+  .workspace-tab {
+    font-size: var(--text-sm);
+    padding: var(--space-1) var(--space-2);
+  }
 }

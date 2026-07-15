@@ -205,5 +205,77 @@
   }
 }
 
-/* ── Dark theme (future use) ───────────────────────────────── */
-/* :root.dark or @media (prefers-color-scheme: dark) { ... } */
+/* ── Dark Theme ──────────────────────────────────────────── */
+/* Toggle: add class="dark" to <html>. Persisted in localStorage as 'hrms.theme'. */
+
+:root.dark {
+  --color-background: #0f172a;
+  --color-surface: #1e293b;
+  --color-surface-muted: #1a2332;
+  --color-surface-elevated: #273548;
+
+  --color-border: #334155;
+  --color-border-strong: #475569;
+  --color-border-dashed: #3b4a60;
+
+  --color-text: #e2e8f0;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  --color-text-heading: #f1f5f9;
+
+  --color-link: #60a5fa;
+  --color-link-hover: #93bbfd;
+
+  --color-brand: #34d399;
+  --color-brand-strong: #6ee7b7;
+  --color-accent: #34d399;
+  --color-accent-hover: #6ee7b7;
+
+  --color-focus: #60a5fa;
+
+  --color-danger: #fca5a5;
+  --color-danger-surface: rgba(239, 68, 68, 0.12);
+
+  --color-success: #6ee7b7;
+  --color-success-surface: rgba(16, 185, 129, 0.1);
+
+  --color-selected-bg: rgba(59, 130, 246, 0.15);
+  --color-selected-border: #3b82f6;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 12px 30px rgba(0, 0, 0, 0.4);
+  --shadow-focus-ring: 0 0 0 3px rgba(96, 165, 250, 0.25);
+}
+
+/* Auto dark mode from OS preference (when no manual toggle) */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --color-background: #0f172a;
+    --color-surface: #1e293b;
+    --color-surface-muted: #1a2332;
+    --color-surface-elevated: #273548;
+    --color-border: #334155;
+    --color-border-strong: #475569;
+    --color-border-dashed: #3b4a60;
+    --color-text: #e2e8f0;
+    --color-text-secondary: #94a3b8;
+    --color-text-muted: #64748b;
+    --color-text-heading: #f1f5f9;
+    --color-link: #60a5fa;
+    --color-link-hover: #93bbfd;
+    --color-brand: #34d399;
+    --color-brand-strong: #6ee7b7;
+    --color-accent: #34d399;
+    --color-accent-hover: #6ee7b7;
+    --color-focus: #60a5fa;
+    --color-danger: #fca5a5;
+    --color-danger-surface: rgba(239, 68, 68, 0.12);
+    --color-success: #6ee7b7;
+    --color-success-surface: rgba(16, 185, 129, 0.1);
+    --color-selected-bg: rgba(59, 130, 246, 0.15);
+    --color-selected-border: #3b82f6;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 12px 30px rgba(0, 0, 0, 0.4);
+    --shadow-focus-ring: 0 0 0 3px rgba(96, 165, 250, 0.25);
+  }
+}
